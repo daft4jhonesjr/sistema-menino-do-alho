@@ -1562,11 +1562,13 @@ def _diagnosticar_vinculo_falhou(doc):
         }
 
 
-def _listar_documentos_recem_chegados():
+def _listar_documentos_recem_chegados(processar_agora=True):
     """Varre documentos_entrada/, boletos/ e notas_fiscais/. Lista PDFs não vinculados a nenhuma venda.
     Processa pendentes primeiro. Exibição só se o path NÃO estiver em nenhuma Venda (caminho_boleto ou caminho_nf).
     IGNORA arquivos na pasta bonificacoes."""
-    resultado_processamento = _processar_documentos_pendentes()
+    resultado_processamento = {"sucesso": 0, "falha": 0, "erros": []}
+    if processar_agora:
+        resultado_processamento = _processar_documentos_pendentes()
     base_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'documentos_entrada')
     pastas = [
         ('BOLETO', os.path.join(base_dir, 'boletos'), 'Boleto'),
@@ -2204,7 +2206,8 @@ def dashboard():
     filtro_ano_venda = extract('year', Venda.data_venda) == ano_ativo
     
     # Processa e lista documentos recém-chegados (PDFs últimas 24h ou não processados)
-    documentos_recem_chegados, resultado_processamento = _listar_documentos_recem_chegados()
+    # MUDANÇA: Usar False para NÃO processar ao carregar a página
+    documentos_recem_chegados, resultado_processamento = _listar_documentos_recem_chegados(processar_agora=False)
     vinculos_novos = resultado_processamento.get('vinculos_novos', 0)
     pendentes = len(documentos_recem_chegados)
     processados = resultado_processamento.get('processados', 0)
