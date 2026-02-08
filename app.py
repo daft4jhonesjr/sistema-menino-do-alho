@@ -4905,6 +4905,12 @@ def debug_vincular():
         }), 500
 
 
+# --- VACINA PARA O POSTGRESQL ---
+# Isso garante que a conexão seja limpa se der erro, evitando o PendingRollbackError
+@app.teardown_appcontext
+def shutdown_session(exception=None):
+    db.session.remove()
+
 if __name__ == '__main__':
     def _local_ip():
         try:
