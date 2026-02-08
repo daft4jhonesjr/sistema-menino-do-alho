@@ -1,0 +1,830 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Menino do Alho{% endblock %}
+
+{% block head_extras %}
+<style>
+    /* Animação da seção retrátil de documentos */
+    #lista-documentos {
+        transition: max-height 0.3s ease, opacity 0.3s ease;
+        overflow: hidden;
+    }
+    #chevron-documentos {
+        transition: transform 0.3s ease;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <h2 class="text-3xl font-bold text-emerald-700 mb-2">Dashboard</h2>
+    <p class="text-gray-600">Visão geral do sistema</p>
+</div>
+
+<!-- Primeira linha: Faturamento Total em destaque (100% largura) -->
+<div class="mb-6">
+    <div class="w-full rounded-xl border border-slate-700/20 bg-gradient-to-br from-slate-800 to-slate-900 shadow-xl p-6 md:p-8 border-l-4 border-emerald-500">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+                <p class="text-slate-300 text-sm font-medium uppercase tracking-wide">Faturamento Total</p>
+                <p class="text-4xl md:text-5xl font-bold text-white mt-2">{{ faturamento_total|formato_moeda }}</p>
+            </div>
+            <i data-lucide="banknote" class="w-14 h-14 text-emerald-400 flex-shrink-0"></i>
+        </div>
+    </div>
+</div>
+
+<!-- Segunda linha: Pendente, Pago, Lucro (3 colunas) -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 border-l-4 border-amber-500">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-gray-600 text-sm font-medium">Financeiro - Pendente</p>
+                <p class="text-3xl font-bold text-amber-600 mt-2">{{ total_pendente|formato_moeda }}</p>
+            </div>
+            <i data-lucide="clock" class="w-10 h-10 text-amber-500"></i>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 border-l-4 border-emerald-500">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-gray-600 text-sm font-medium">Financeiro - Pago</p>
+                <p class="text-3xl font-bold text-emerald-600 mt-2">{{ total_pago|formato_moeda }}</p>
+            </div>
+            <i data-lucide="check-circle" class="w-10 h-10 text-emerald-500"></i>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 border-l-4 {% if total_lucro >= 0 %}border-emerald-500{% else %}border-red-500{% endif %}">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-gray-600 text-sm font-medium">Lucro Total do Período</p>
+                <p class="text-3xl font-bold mt-2 {% if total_lucro >= 0 %}text-emerald-600{% else %}text-red-600{% endif %}">{{ total_lucro|formato_moeda }}</p>
+            </div>
+            <i data-lucide="trending-up" class="w-10 h-10 {% if total_lucro >= 0 %}text-emerald-500{% else %}text-red-500{% endif %}"></i>
+        </div>
+    </div>
+</div>
+
+<!-- Terceira linha: Faturamento por empresa, Margem e Ticket Médio -->
+<div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 border-l-4 border-blue-500">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-gray-600 text-sm font-medium">Faturamento PATY</p>
+                <p class="text-2xl font-bold text-blue-600 mt-1">{{ total_paty|formato_moeda }}</p>
+                {% if faturamento_total and faturamento_total > 0 %}
+                <small class="text-gray-500 font-medium" style="font-size: 0.8rem;">({{ "%.1f"|format((total_paty / faturamento_total) * 100) }}%)</small>
+                {% endif %}
+            </div>
+            <i data-lucide="building-2" class="w-8 h-8 text-blue-500"></i>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 border-l-4 border-emerald-500">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-gray-600 text-sm font-medium">Faturamento DESTAK</p>
+                <p class="text-2xl font-bold text-emerald-600 mt-1">{{ total_destak|formato_moeda }}</p>
+                {% if faturamento_total and faturamento_total > 0 %}
+                <small class="text-gray-500 font-medium" style="font-size: 0.8rem;">({{ "%.1f"|format((total_destak / faturamento_total) * 100) }}%)</small>
+                {% endif %}
+            </div>
+            <i data-lucide="building" class="w-8 h-8 text-emerald-500"></i>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 border-l-4 border-gray-400">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-gray-600 text-sm font-medium">Vendas Avulsas</p>
+                <p class="text-2xl font-bold text-gray-600 mt-1">{{ total_nenhum|formato_moeda }}</p>
+                {% if faturamento_total and faturamento_total > 0 %}
+                <small class="text-gray-500 font-medium" style="font-size: 0.8rem;">({{ "%.1f"|format((total_nenhum / faturamento_total) * 100) }}%)</small>
+                {% endif %}
+            </div>
+            <i data-lucide="user" class="w-8 h-8 text-gray-500"></i>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 border-l-4 border-indigo-500">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-gray-600 text-sm font-medium">Margem de Lucro</p>
+                <p class="text-2xl font-bold mt-1 {% if margem_porcentagem >= 0 %}text-indigo-600{% else %}text-red-600{% endif %}">{{ "%.2f"|format(margem_porcentagem) }}%</p>
+            </div>
+            <i data-lucide="pie-chart" class="w-8 h-8 {% if margem_porcentagem >= 0 %}text-indigo-500{% else %}text-red-500{% endif %}"></i>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 border-l-4 border-cyan-500">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-gray-600 text-sm font-medium">Ticket Médio</p>
+                <p class="text-2xl font-bold text-cyan-600 mt-1">{{ ticket_medio|formato_moeda }}</p>
+            </div>
+            <i data-lucide="shopping-cart" class="w-8 h-8 text-cyan-500"></i>
+        </div>
+    </div>
+</div>
+
+<!-- Documentos Recém-Chegados -->
+<section class="mb-8">
+    <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+        <button type="button" id="btn-toggle-documentos" class="flex items-center gap-2 cursor-pointer bg-transparent border-none p-0 text-left" aria-expanded="false" aria-controls="lista-documentos">
+            <h3 class="text-xl font-bold text-emerald-700 flex items-center mb-0">
+                <i data-lucide="inbox" class="w-5 h-5 mr-2"></i>Documentos Recém-Chegados
+            </h3>
+            <i data-lucide="chevron-down" class="w-5 h-5 text-emerald-600 transition-transform duration-300" id="chevron-documentos" style="transform: rotate(-90deg);"></i>
+        </button>
+        <div class="flex flex-wrap items-center gap-4">
+            <div class="text-sm text-gray-600 bg-gray-50 px-3 py-2 rounded-lg border border-gray-200">
+                <span class="font-medium">Status:</span> 
+                <span class="text-blue-600">{{ total_documentos }} boletos lidos</span>, 
+                <span class="text-emerald-600">{{ documentos_vinculados }} vinculados com sucesso</span>
+                {% if erros > 0 %}
+                , <span class="text-red-600">{{ erros }} com erro de cadastro</span>
+                {% endif %}
+            </div>
+            <form action="{{ url_for('organizar_e_vincular') }}" method="post" class="inline">
+                <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2.5 text-base font-semibold text-white shadow-md hover:bg-emerald-700 hover:shadow-lg transition focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2">
+                    <i data-lucide="refresh-cw" class="w-5 h-5"></i>Organizar e Vincular Tudo
+                </button>
+            </form>
+        </div>
+    </div>
+    <div id="lista-documentos" class="overflow-hidden transition-all duration-300" style="max-height: 0px; opacity: 0;">
+    {% if documentos_recem_chegados %}
+    <div class="space-y-4">
+        {% for item in documentos_recem_chegados %}
+        {% set doc = item.doc %}
+        {% set nome = item.nome_arquivo %}
+        {% set ok = item.leitura_ok %}
+        {% set nf_nao = item.nf_nao_encontrada %}
+        <div class="rounded-xl border shadow-sm overflow-hidden flex flex-col md:flex-row md:items-center {% if ok and not nf_nao %}bg-emerald-50/50 border-emerald-200{% elif nf_nao %}bg-amber-50/50 border-amber-200{% else %}bg-amber-50/50 border-amber-200{% endif %}">
+            <div class="flex items-center gap-4 p-4 md:flex-1">
+                <div class="flex-shrink-0 w-12 h-12 rounded-lg flex items-center justify-center {% if doc.tipo == 'BOLETO' %}bg-blue-100 text-blue-700{% else %}bg-emerald-100 text-emerald-700{% endif %}">
+                    {% if doc.tipo == 'BOLETO' %}
+                    <i data-lucide="file-text" class="w-6 h-6" aria-hidden="true"></i>
+                    {% else %}
+                    <i data-lucide="receipt" class="w-6 h-6" aria-hidden="true"></i>
+                    {% endif %}
+                </div>
+                <div class="min-w-0 flex-1">
+                    <p class="font-semibold text-gray-900 truncate">{% if item.etiqueta_pasta %}<span class="text-gray-500 font-medium">[{{ item.etiqueta_pasta }}]</span> {% endif %}{{ nome }}</p>
+                    {% if not ok %}
+                    <p class="text-sm text-amber-700 font-medium mt-0.5">Leitura incompleta — Verifique o arquivo manualmente.</p>
+                    {% elif item.diagnostico %}
+                    {% set diag = item.diagnostico %}
+                    {% if diag.cenario == 'B' %}
+                    <p class="text-sm text-orange-700 font-medium mt-0.5" title="NF: {{ diag.nf_lida or doc.numero_nf or 'N/A' }}">{{ diag.mensagem }}</p>
+                    {% elif diag.cenario == 'A' %}
+                    <p class="text-sm text-blue-700 font-medium mt-0.5" title="NF: {{ diag.nf_lida or doc.numero_nf or 'N/A' }}">{{ diag.mensagem }}</p>
+                    {% else %}
+                    <p class="text-sm text-amber-700 font-medium mt-0.5" title="NF: {{ diag.nf_lida or doc.numero_nf or 'N/A' }}">{{ diag.mensagem }}</p>
+                    {% endif %}
+                    {% elif nf_nao %}
+                    <p class="text-sm text-amber-700 font-medium mt-0.5">NF {{ doc.numero_nf or '?' }} lida, mas não encontrada nas Vendas.</p>
+                    {% endif %}
+                    <p class="text-sm text-gray-600 mt-0.5">
+                        {% if ok %}
+                        {% if doc.cnpj %}<span class="font-medium text-emerald-700">Pagador: {{ doc.cnpj }}</span>{% endif %}
+                        {% if doc.numero_nf %} · NF {{ doc.numero_nf }}{% endif %}
+                        {% if doc.razao_social %} · {{ doc.razao_social }}{% endif %}
+                        {% if doc.data_vencimento %} · Venc. {{ doc.data_vencimento.strftime('%d/%m/%Y') }}{% endif %}
+                        {% if not (doc.cnpj or doc.numero_nf or doc.razao_social or doc.data_vencimento) %}—{% endif %}
+                        {% else %}
+                        {% if doc.cnpj %}<span class="font-medium text-emerald-700">Pagador: {{ doc.cnpj }}</span>{% endif %}
+                        {% if doc.numero_nf %} · NF {{ doc.numero_nf }}{% endif %}
+                        {% if doc.razao_social %} · {{ doc.razao_social }}{% endif %}
+                        {% if doc.data_vencimento %} · Venc. {{ doc.data_vencimento.strftime('%d/%m/%Y') }}{% endif %}
+                        {% if not (doc.cnpj or doc.numero_nf or doc.razao_social or doc.data_vencimento) %}—{% endif %}
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 p-4 md:p-4 md:border-l md:border-gray-200 md:border-t-0 border-t border-gray-200 flex-wrap">
+                <a href="{{ url_for('visualizar_documento', id=doc.id) }}" target="_blank" class="inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition">
+                    <i data-lucide="external-link" class="w-4 h-4 mr-2"></i>Visualizar
+                </a>
+                {% if item.diagnostico and item.diagnostico.cliente_id %}
+                <a href="{{ url_for('editar_cliente', id=item.diagnostico.cliente_id) }}" class="inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition" title="Verificar dados do cliente no cadastro">
+                    <i data-lucide="user-check" class="w-4 h-4 mr-2"></i>Ver Cliente
+                </a>
+                {% endif %}
+                {% if nf_nao %}
+                {% set criar_venda_params = {} %}
+                {% if doc.razao_social %}{% set _ = criar_venda_params.update({'cliente': doc.razao_social}) %}{% endif %}
+                {% if doc.numero_nf %}{% set _ = criar_venda_params.update({'nf': doc.numero_nf}) %}{% endif %}
+                {% if doc.data_vencimento %}{% set _ = criar_venda_params.update({'data': doc.data_vencimento.strftime('%Y-%m-%d')}) %}{% endif %}
+                <a href="{{ url_for('listar_vendas', **criar_venda_params) }}" class="inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium bg-gray-600 text-white hover:bg-gray-700 transition">
+                    <i data-lucide="plus-circle" class="w-4 h-4 mr-2"></i>Criar venda
+                </a>
+                {% endif %}
+                <button type="button" class="btn-vincular-doc inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 transition" data-doc-id="{{ doc.id }}" data-doc-nome="{{ nome }}" {% if item.diagnostico %}title="NF: {{ item.diagnostico.nf_lida or doc.numero_nf or 'N/A' }}"{% elif doc.numero_nf %}title="NF: {{ doc.numero_nf }}"{% endif %}>
+                    <i data-lucide="link" class="w-4 h-4 mr-2"></i>Vincular à Venda
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-gray-500 py-6 rounded-xl border border-gray-200 bg-gray-50 text-center">Nenhum documento pendente. Nada precisa da sua atenção no momento.</p>
+    {% endif %}
+    </div>
+</section>
+
+<!-- Modal Vincular à Venda -->
+<div id="modal-vincular-doc" class="fixed inset-0 z-50 hidden" aria-hidden="true">
+    <div class="absolute inset-0 bg-black/50" data-dismiss="modal-vincular-doc"></div>
+    <div class="absolute inset-0 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h4 class="text-lg font-bold text-emerald-700">Vincular à Venda</h4>
+                <p id="modal-vincular-doc-nome" class="text-sm text-gray-600 mt-1 truncate"></p>
+            </div>
+            <form id="form-vincular-doc" method="post" action="#" class="flex flex-col flex-1 min-h-0">
+                <input type="hidden" name="doc_id" id="input-vincular-doc-id" />
+                <div class="p-6 flex-1 overflow-y-auto">
+                    <label for="select-vincular-pedido" class="block text-sm font-medium text-gray-700 mb-2">Pedido</label>
+                    <select id="select-vincular-pedido" name="venda_id" required class="w-full rounded-lg border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                        <option value="">Selecione um pedido…</option>
+                    </select>
+                </div>
+                <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
+                    <button type="button" class="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50" data-dismiss="modal-vincular-doc">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">Vincular</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Detalhamento Mensal (card acima do gráfico) -->
+{% if detalhamento_mensal %}
+<div class="bg-white shadow-sm mb-4 rounded-xl border border-gray-100 overflow-hidden">
+    <div class="p-5">
+        <h5 class="text-gray-600 mb-3 flex items-center text-base font-semibold">
+            <i data-lucide="calendar" class="w-5 h-5 mr-2 text-emerald-600"></i>Detalhamento Mensal
+        </h5>
+        <div class="flex flex-wrap gap-3">
+            {% for item in detalhamento_mensal %}
+            <button type="button" onclick="abrirDetalhesMes({{ item.ano }}, {{ item.mes_numero }})" class="flex items-center px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 hover:bg-emerald-50 hover:border-emerald-300 cursor-pointer transition">
+                <span class="font-bold text-gray-900 mr-2">{{ item.mes }}</span>
+                <span class="font-bold text-emerald-600">{{ item.lucro|formato_moeda }}</span>
+            </button>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Gráfico de Evolução Mensal (Lucro vs. Volume) -->
+<div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-6">
+    <h3 class="text-xl font-bold text-emerald-700 mb-4 flex items-center">
+        <i data-lucide="trending-up" class="w-5 h-5 mr-2"></i>Evolução Mensal: Lucro vs. Volume de Vendas
+    </h3>
+    {% if labels_meses %}
+    <div class="relative" style="height: 320px;">
+        <canvas id="graficoEvolucao"></canvas>
+    </div>
+    {% else %}
+    <p class="text-gray-500 text-center py-8">Nenhum dado disponível para exibir a evolução mensal.</p>
+    {% endif %}
+</div>
+
+<!-- Grid: Top 10 Clientes e Produtos lado a lado -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- Top 10 Clientes por Lucro -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+        <h3 class="text-xl font-bold text-emerald-700 mb-4 flex items-center">
+            <i data-lucide="trending-up" class="w-5 h-5 mr-2"></i>Top 10 Clientes por Lucro
+        </h3>
+    {% if vendas_por_cliente %}
+        <div class="overflow-x-auto rounded-xl border border-gray-200">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total Vendido</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Lucro Total</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for cliente, total_vendido, lucro_total in vendas_por_cliente %}
+                    <tr class="hover:bg-emerald-50 transition">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ cliente }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{{ total_vendido|formato_moeda }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-emerald-600 text-right">{{ lucro_total|formato_moeda }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p class="text-gray-500 text-center py-8">Nenhuma venda registrada ainda.</p>
+    {% endif %}
+    </div>
+
+    <!-- Top 10 Produtos por Lucro -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+        <h3 class="text-xl font-bold text-emerald-700 mb-4 flex items-center">
+            <i data-lucide="trending-up" class="w-5 h-5 mr-2"></i>Top 10 Produtos por Lucro
+        </h3>
+    {% if vendas_por_produto %}
+        <div class="overflow-x-auto rounded-xl border border-gray-200">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Produto</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Quantidade</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total Vendido</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Lucro Total</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for produto, quantidade, total_vendido, lucro_total in vendas_por_produto %}
+                    <tr class="hover:bg-emerald-50 transition">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ produto }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{{ quantidade }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{{ total_vendido|formato_moeda }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-emerald-600 text-right">{{ lucro_total|formato_moeda }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p class="text-gray-500 text-center py-8">Nenhuma venda registrada ainda.</p>
+    {% endif %}
+    </div>
+</div>
+
+<!-- Modal: Detalhes Mensais -->
+<div id="modal-detalhes-mes-overlay" class="fixed inset-0 bg-black/50 z-50 hidden" onclick="fecharModalDetalhesMes()"></div>
+<div id="modal-detalhes-mes" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden pointer-events-none">
+    <div class="bg-white rounded-xl shadow-xl border border-gray-200 max-w-6xl w-full max-h-[90vh] flex flex-col pointer-events-auto overflow-hidden">
+        <!-- Cabeçalho -->
+        <div class="bg-emerald-700 text-white rounded-t-xl">
+            <div class="flex items-center justify-between px-6 py-4">
+                <h3 id="modal-detalhes-mes-titulo" class="text-xl font-bold flex items-center">
+                    <i data-lucide="calendar" class="w-6 h-6 mr-2"></i>Relatório Mensal
+                </h3>
+                <button type="button" onclick="fecharModalDetalhesMes()" class="p-2 hover:bg-emerald-600 rounded-full transition">
+                    <i data-lucide="x" class="w-6 h-6"></i>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Loading -->
+        <div id="modal-detalhes-mes-loading" class="px-6 py-12 text-center text-gray-500">
+            <i data-lucide="loader-2" class="w-10 h-10 text-emerald-700 mb-3 mx-auto animate-spin"></i>
+            <p>Carregando detalhes do mês...</p>
+        </div>
+        
+        <!-- Conteúdo -->
+        <div id="modal-detalhes-mes-conteudo" class="flex-1 overflow-auto p-6 hidden">
+            <!-- Cards de Resumo -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div class="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl border border-emerald-200 shadow-sm p-5">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-emerald-600 text-sm font-medium">Lucro Líquido</p>
+                            <p id="modal-mes-total-lucro" class="text-3xl font-bold text-emerald-700 mt-1">R$ 0,00</p>
+                        </div>
+                        <i data-lucide="trending-up" class="w-12 h-12 text-emerald-500"></i>
+                    </div>
+                </div>
+                <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl border border-blue-200 shadow-sm p-5">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-blue-600 text-sm font-medium">Faturamento Total</p>
+                            <p id="modal-mes-total-vendido" class="text-3xl font-bold text-blue-700 mt-1">R$ 0,00</p>
+                        </div>
+                        <i data-lucide="banknote" class="w-12 h-12 text-blue-500"></i>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Seção 1: Top Clientes do Mês -->
+            <div class="mb-6">
+                <h4 class="text-lg font-bold text-gray-800 mb-3 flex items-center">
+                    <i data-lucide="users" class="w-5 h-5 mr-2 text-emerald-600"></i>Top Clientes do Mês
+                </h4>
+                <div id="modal-mes-top-clientes" class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cliente</th>
+                                    <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Qtd Compras</th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total Gasto</th>
+                                </tr>
+                            </thead>
+                            <tbody id="modal-mes-top-clientes-tbody" class="bg-white divide-y divide-gray-200">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Seção 2: Todas as Vendas -->
+            <div>
+                <h4 class="text-lg font-bold text-gray-800 mb-3 flex items-center">
+                    <i data-lucide="shopping-bag" class="w-5 h-5 mr-2 text-emerald-600"></i>Todas as Vendas do Mês
+                </h4>
+                <div id="modal-mes-vendas-wrapper" class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Data</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cliente</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Produto</th>
+                                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Qtd</th>
+                                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Valor Total</th>
+                                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Lucro</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">NF</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Situação</th>
+                                </tr>
+                            </thead>
+                            <tbody id="modal-mes-vendas-tbody" class="bg-white divide-y divide-gray-200">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <p id="modal-mes-vendas-vazio" class="text-gray-500 text-center py-6 hidden">Nenhuma venda encontrada para este mês.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<!-- Chart.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+<script>
+// Gráfico de Evolução Mensal (Lucro vs. Volume)
+(function() {
+    var canvas = document.getElementById('graficoEvolucao');
+    if (!canvas) return;
+    
+    var ctx = canvas.getContext('2d');
+    var labelsMeses = {{ labels_meses|tojson|safe }};
+    var dataLucro = {{ data_lucro|tojson|safe }};
+    var dataCaixas = {{ data_caixas|tojson|safe }};
+    
+    if (!labelsMeses || labelsMeses.length === 0) return;
+    
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labelsMeses,
+            datasets: [
+                {
+                    label: 'Quantidade de Caixas',
+                    data: dataCaixas,
+                    type: 'bar',
+                    backgroundColor: 'rgba(59, 130, 246, 0.6)',
+                    borderColor: 'rgba(59, 130, 246, 1)',
+                    borderWidth: 1,
+                    yAxisID: 'y1',
+                    order: 2
+                },
+                {
+                    label: 'Lucro Total (R$)',
+                    data: dataLucro,
+                    type: 'line',
+                    borderColor: 'rgba(4, 120, 87, 1)',
+                    backgroundColor: 'rgba(4, 120, 87, 0.1)',
+                    borderWidth: 3,
+                    tension: 0.4,
+                    fill: true,
+                    yAxisID: 'y',
+                    order: 1,
+                    pointRadius: 5,
+                    pointHoverRadius: 7,
+                    pointBackgroundColor: 'rgba(4, 120, 87, 1)',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top',
+                    labels: {
+                        usePointStyle: true,
+                        padding: 15,
+                        font: {
+                            size: 13,
+                            weight: '500'
+                        }
+                    }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    padding: 12,
+                    titleFont: {
+                        size: 14,
+                        weight: 'bold'
+                    },
+                    bodyFont: {
+                        size: 13
+                    },
+                    callbacks: {
+                        label: function(context) {
+                            var label = context.dataset.label || '';
+                            if (label) {
+                                label += ': ';
+                            }
+                            if (context.dataset.yAxisID === 'y') {
+                                // Lucro (moeda)
+                                label += new Intl.NumberFormat('pt-BR', {
+                                    style: 'currency',
+                                    currency: 'BRL'
+                                }).format(context.parsed.y);
+                            } else {
+                                // Quantidade (número inteiro)
+                                label += context.parsed.y.toLocaleString('pt-BR') + ' caixas';
+                            }
+                            return label;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    type: 'linear',
+                    position: 'left',
+                    title: {
+                        display: true,
+                        text: 'Lucro Total (R$)',
+                        color: 'rgba(4, 120, 87, 1)',
+                        font: {
+                            size: 13,
+                            weight: 'bold'
+                        }
+                    },
+                    ticks: {
+                        callback: function(value) {
+                            return 'R$ ' + value.toLocaleString('pt-BR', {
+                                minimumFractionDigits: 0,
+                                maximumFractionDigits: 0
+                            });
+                        },
+                        color: 'rgba(4, 120, 87, 0.8)'
+                    },
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.05)'
+                    }
+                },
+                y1: {
+                    type: 'linear',
+                    position: 'right',
+                    title: {
+                        display: true,
+                        text: 'Quantidade de Caixas',
+                        color: 'rgba(59, 130, 246, 1)',
+                        font: {
+                            size: 13,
+                            weight: 'bold'
+                        }
+                    },
+                    ticks: {
+                        callback: function(value) {
+                            return value.toLocaleString('pt-BR');
+                        },
+                        color: 'rgba(59, 130, 246, 0.8)'
+                    },
+                    grid: {
+                        drawOnChartArea: false
+                    }
+                },
+                x: {
+                    grid: {
+                        display: false
+                    },
+                    ticks: {
+                        font: {
+                            size: 12
+                        }
+                    }
+                }
+            }
+        }
+    });
+})();
+
+// Modal de vínculo de documentos
+(function() {
+    var modal = document.getElementById('modal-vincular-doc');
+    var form = document.getElementById('form-vincular-doc');
+    var inputDocId = document.getElementById('input-vincular-doc-id');
+    var selectPedido = document.getElementById('select-vincular-pedido');
+    var docNomeEl = document.getElementById('modal-vincular-doc-nome');
+
+    function showModal() { modal.classList.remove('hidden'); }
+    function hideModal() { modal.classList.add('hidden'); }
+
+    function loadPedidos() {
+        selectPedido.innerHTML = '<option value="">Carregando…</option>';
+        fetch('/api/pedidos', { headers: { 'Accept': 'application/json' } })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                selectPedido.innerHTML = '<option value="">Selecione um pedido…</option>';
+                (data.pedidos || []).forEach(function(p) {
+                    var opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.textContent = p.label;
+                    selectPedido.appendChild(opt);
+                });
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+            })
+            .catch(function() {
+                selectPedido.innerHTML = '<option value="">Erro ao carregar pedidos.</option>';
+            });
+    }
+
+    document.querySelectorAll('.btn-vincular-doc').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var id = btn.getAttribute('data-doc-id');
+            var nome = btn.getAttribute('data-doc-nome') || '';
+            inputDocId.value = id;
+            docNomeEl.textContent = nome;
+            loadPedidos();
+            showModal();
+        });
+    });
+
+    document.querySelectorAll('[data-dismiss="modal-vincular-doc"]').forEach(function(el) {
+        el.addEventListener('click', hideModal);
+    });
+
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        var vendaId = selectPedido.value;
+        if (!vendaId) return;
+        form.action = '/documento/' + (inputDocId.value || '') + '/vincular';
+        form.submit();
+    });
+})();
+
+// Toggle da seção "Documentos Recém-Chegados"
+(function() {
+    var btn = document.getElementById('btn-toggle-documentos');
+    var lista = document.getElementById('lista-documentos');
+    var chevron = document.getElementById('chevron-documentos');
+    if (!btn || !lista || !chevron) return;
+    
+    btn.addEventListener('click', function() {
+        var isExpanded = btn.getAttribute('aria-expanded') === 'true';
+        if (isExpanded) {
+            // Fechar
+            lista.style.maxHeight = lista.scrollHeight + 'px';
+            lista.offsetHeight; // Force reflow
+            lista.style.maxHeight = '0px';
+            lista.style.opacity = '0';
+            chevron.style.transform = 'rotate(-90deg)';
+            btn.setAttribute('aria-expanded', 'false');
+        } else {
+            // Abrir
+            lista.style.maxHeight = lista.scrollHeight + 'px';
+            lista.style.opacity = '1';
+            chevron.style.transform = 'rotate(0deg)';
+            btn.setAttribute('aria-expanded', 'true');
+            // Remover max-height após a animação para permitir conteúdo dinâmico
+            setTimeout(function() {
+                lista.style.maxHeight = 'none';
+            }, 300);
+        }
+    });
+})();
+
+// Modal de Detalhes Mensais
+function abrirDetalhesMes(ano, mes) {
+    var overlay = document.getElementById('modal-detalhes-mes-overlay');
+    var modal = document.getElementById('modal-detalhes-mes');
+    var loading = document.getElementById('modal-detalhes-mes-loading');
+    var conteudo = document.getElementById('modal-detalhes-mes-conteudo');
+    var titulo = document.getElementById('modal-detalhes-mes-titulo');
+    
+    // Mostrar modal e loading
+    overlay.classList.remove('hidden');
+    modal.classList.remove('hidden');
+    loading.classList.remove('hidden');
+    conteudo.classList.add('hidden');
+    
+    // Limpar conteúdo anterior
+    document.getElementById('modal-mes-top-clientes-tbody').innerHTML = '';
+    document.getElementById('modal-mes-vendas-tbody').innerHTML = '';
+    
+    // Buscar dados do mês
+    fetch('/api/dashboard/detalhes_mes/' + ano + '/' + mes)
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+            loading.classList.add('hidden');
+            conteudo.classList.remove('hidden');
+            
+            if (data.erro) {
+                titulo.innerHTML = '<i data-lucide="alert-circle" class="w-6 h-6 mr-2"></i>Erro';
+                document.getElementById('modal-mes-vendas-vazio').textContent = data.erro;
+                document.getElementById('modal-mes-vendas-vazio').classList.remove('hidden');
+                document.getElementById('modal-mes-vendas-wrapper').classList.add('hidden');
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+                return;
+            }
+            
+            // Atualizar título
+            titulo.innerHTML = '<i data-lucide="calendar" class="w-6 h-6 mr-2"></i>Relatório de ' + data.mes_nome + '/' + data.ano;
+            
+            // Atualizar totais
+            document.getElementById('modal-mes-total-lucro').textContent = formatoMoeda(data.totais.total_lucro || 0);
+            document.getElementById('modal-mes-total-vendido').textContent = formatoMoeda(data.totais.total_vendido || 0);
+            
+            // Preencher Top Clientes
+            var tbodyClientes = document.getElementById('modal-mes-top-clientes-tbody');
+            if (data.top_clientes && data.top_clientes.length > 0) {
+                data.top_clientes.forEach(function(cliente, index) {
+                    var tr = document.createElement('tr');
+                    tr.className = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+                    tr.innerHTML =
+                        '<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">' + cliente.nome + '</td>' +
+                        '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">' + cliente.qtd_compras + '</td>' +
+                        '<td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 text-right">' + formatoMoeda(cliente.total_gasto) + '</td>';
+                    tbodyClientes.appendChild(tr);
+                });
+            } else {
+                tbodyClientes.innerHTML = '<tr><td colspan="3" class="px-6 py-4 text-center text-gray-500">Nenhum cliente encontrado</td></tr>';
+            }
+            
+            // Preencher Vendas
+            var tbodyVendas = document.getElementById('modal-mes-vendas-tbody');
+            var wrapperVendas = document.getElementById('modal-mes-vendas-wrapper');
+            var vazioVendas = document.getElementById('modal-mes-vendas-vazio');
+            
+            if (data.vendas && data.vendas.length > 0) {
+                wrapperVendas.classList.remove('hidden');
+                vazioVendas.classList.add('hidden');
+                
+                data.vendas.forEach(function(venda, index) {
+                    var tr = document.createElement('tr');
+                    tr.className = (index % 2 === 0 ? 'bg-white' : 'bg-gray-50') + ' hover:bg-emerald-50 transition';
+                    
+                    var lucroClass = venda.lucro >= 0 ? 'text-emerald-600' : 'text-red-600';
+                    var sitClass = venda.situacao === 'PAGO' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800';
+                    
+                    tr.innerHTML =
+                        '<td class="px-4 py-3 text-sm text-gray-900">' + venda.data + '</td>' +
+                        '<td class="px-4 py-3 text-sm text-gray-900">' + venda.cliente + '</td>' +
+                        '<td class="px-4 py-3 text-sm text-gray-900">' + venda.produto + '</td>' +
+                        '<td class="px-4 py-3 text-sm text-gray-900 text-right">' + venda.quantidade + '</td>' +
+                        '<td class="px-4 py-3 text-sm font-medium text-gray-900 text-right">' + formatoMoeda(venda.valor_total) + '</td>' +
+                        '<td class="px-4 py-3 text-sm font-medium text-right ' + lucroClass + '">' + formatoMoeda(venda.lucro) + '</td>' +
+                        '<td class="px-4 py-3 text-sm text-gray-900">' + venda.nf + '</td>' +
+                        '<td class="px-4 py-3"><span class="px-3 py-1 text-xs font-semibold rounded-full ' + sitClass + '">' + venda.situacao + '</span></td>';
+                    tbodyVendas.appendChild(tr);
+                });
+            } else {
+                wrapperVendas.classList.add('hidden');
+                vazioVendas.classList.remove('hidden');
+            }
+            
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        })
+        .catch(function(error) {
+            loading.classList.add('hidden');
+            conteudo.classList.remove('hidden');
+            titulo.innerHTML = '<i data-lucide="alert-circle" class="w-6 h-6 mr-2"></i>Erro';
+            document.getElementById('modal-mes-vendas-vazio').textContent = 'Erro ao carregar detalhes do mês. Tente novamente.';
+            document.getElementById('modal-mes-vendas-vazio').classList.remove('hidden');
+            document.getElementById('modal-mes-vendas-wrapper').classList.add('hidden');
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        });
+}
+
+function fecharModalDetalhesMes() {
+    document.getElementById('modal-detalhes-mes-overlay').classList.add('hidden');
+    document.getElementById('modal-detalhes-mes').classList.add('hidden');
+}
+
+// Função helper para formatar moeda (reutilizar se já existir)
+function formatoMoeda(valor) {
+    if (typeof Intl !== 'undefined' && Intl.NumberFormat) {
+        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor || 0);
+    }
+    return 'R$ ' + (valor || 0).toFixed(2).replace('.', ',');
+}
+</script>
+{% endblock %}

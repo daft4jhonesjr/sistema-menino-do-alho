@@ -1,0 +1,440 @@
+{% extends "base.html" %}
+
+{% block title %}Clientes - Menino do Alho{% endblock %}
+
+{% block content %}
+<div class="mb-6 flex justify-between items-center flex-wrap gap-4">
+    <div>
+        <h2 class="text-3xl font-bold text-emerald-700 mb-2">Clientes</h2>
+        <p class="text-gray-600">Gerenciar cadastro de clientes</p>
+    </div>
+    <div class="flex gap-3 items-center flex-wrap">
+        <div class="relative w-full md:w-64">
+            <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"></i>
+            <input type="text" id="searchInput" placeholder="Buscar cliente..." class="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm">
+        </div>
+        <button type="button" id="bulk-delete-btn" class="hidden bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-xl transition duration-200 ease-in-out flex items-center" data-endpoint="{{ url_for('bulk_delete_clientes') }}" data-redirect="{{ url_for('listar_clientes') }}">
+            <i data-lucide="trash-2" class="w-4 h-4 mr-2"></i>Excluir Selecionados
+        </button>
+        {% if current_user.is_authenticated and current_user.is_admin() %}
+        <a href="{{ url_for('importar_clientes') }}" class="bg-white border border-gray-200 text-gray-700 px-5 py-2.5 rounded-xl shadow-sm hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-700 transition flex items-center font-medium">
+            <i data-lucide="upload" class="w-4 h-4 mr-2"></i>Importar Lista
+        </a>
+        {% endif %}
+        <button type="button" id="btn-abrir-modal-novo-cliente" class="bg-emerald-700 text-white px-5 py-2.5 rounded-xl shadow-sm hover:bg-emerald-600 transition flex items-center font-medium">
+            <i data-lucide="plus" class="w-4 h-4 mr-2"></i>Novo Cliente
+        </button>
+    </div>
+</div>
+
+<div class="relative">
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200" data-bulk-module="clientes">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left">
+                            <input type="checkbox" id="bulk-select-all" class="bulk-select-all rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" title="Selecionar todos">
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome Cliente</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Razão Social</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CNPJ</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cidade</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for cliente in clientes %}
+                    <tr class="{% if loop.index0 % 2 == 0 %}bg-white{% else %}bg-gray-50{% endif %} hover:bg-emerald-50 transition">
+                        <td class="px-4 py-4">
+                            <input type="checkbox" class="bulk-row rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" value="{{ cliente.id }}">
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ cliente.id }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        <button type="button" onclick="abrirModalVendas('cliente', {{ cliente.id }})"
+                                class="text-emerald-700 hover:underline font-bold transition text-left cursor-pointer">
+                            {{ cliente.nome_cliente }}
+                        </button>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ cliente.razao_social or '-' }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ (cliente.cnpj | format_cnpj) or '-' }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ cliente.cidade or '-' }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <button type="button" class="btn-editar-cliente text-emerald-600 hover:text-emerald-800 mr-4 inline-flex items-center cursor-pointer bg-transparent border-none p-0"
+                                data-id="{{ cliente.id }}"
+                                data-nome="{{ cliente.nome_cliente }}"
+                                data-razao="{{ cliente.razao_social or '' }}"
+                                data-cnpj="{{ cliente.cnpj or '' }}"
+                                data-cidade="{{ cliente.cidade or '' }}"
+                                title="Editar cliente">
+                            <i data-lucide="pencil" class="w-4 h-4"></i>
+                        </button>
+                        <form action="{{ url_for('excluir_cliente', id=cliente.id) }}" method="POST" class="inline" onsubmit="return confirm('Tem certeza que deseja excluir este cliente?');">
+                            <button type="submit" class="text-red-600 hover:text-red-800 inline-flex items-center">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" class="px-6 py-8 text-center text-gray-500">Nenhum cliente cadastrado.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+</div>
+
+<!-- Modal Novo Cliente -->
+<div id="modal-novo-cliente-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
+    <div class="fixed inset-0 bg-black/50" id="modal-novo-cliente-overlay"></div>
+    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white rounded-xl shadow-sm border border-gray-200 z-50" onclick="event.stopPropagation()">
+        <div class="sticky top-0 flex justify-between items-center px-8 py-5 bg-emerald-700 text-white rounded-t-xl z-10">
+            <h3 class="text-xl font-bold flex items-center">
+                <i data-lucide="users" class="w-5 h-5 mr-2"></i>Novo Cliente
+            </h3>
+            <button type="button" class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-emerald-600 text-white font-bold transition" id="modal-novo-cliente-fechar" title="Fechar">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+        <div class="p-8">
+            <div id="modal-novo-cliente-erro" class="hidden mb-4 p-4 bg-red-50 border border-red-200 rounded-xl text-red-800 text-sm"></div>
+            <form id="form-novo-cliente" action="{{ url_for('novo_cliente') }}" method="POST">
+                <div class="mb-5">
+                    <label for="modal-nome_cliente" class="block text-sm font-medium text-gray-700 mb-2">Nome Cliente <span class="text-red-500">*</span></label>
+                    <input type="text" id="modal-nome_cliente" name="nome_cliente" required class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                </div>
+                <div class="mb-5">
+                    <label for="modal-razao_social" class="block text-sm font-medium text-gray-700 mb-2">Razão Social</label>
+                    <input type="text" id="modal-razao_social" name="razao_social" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                </div>
+                <div class="mb-5">
+                    <label for="modal-cnpj" class="block text-sm font-medium text-gray-700 mb-2">CNPJ</label>
+                    <input type="text" id="modal-cnpj" name="cnpj" placeholder="00.000.000/0000-00" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                </div>
+                <div class="mb-6">
+                    <label for="modal-cidade" class="block text-sm font-medium text-gray-700 mb-2">Cidade</label>
+                    <input type="text" id="modal-cidade" name="cidade" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                </div>
+                <div class="flex gap-4">
+                    <button type="submit" class="bg-emerald-700 text-white px-6 py-2.5 rounded-xl hover:bg-emerald-600 transition flex items-center font-medium" id="modal-novo-cliente-salvar">
+                        <i data-lucide="check" class="w-4 h-4 mr-2"></i>Salvar
+                    </button>
+                    <button type="button" class="bg-gray-200 text-gray-700 px-6 py-2.5 rounded-xl hover:bg-gray-300 transition flex items-center font-medium" id="modal-novo-cliente-cancelar">
+                        <i data-lucide="x" class="w-4 h-4 mr-2"></i>Cancelar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Editar Cliente -->
+<div id="modal-editar-cliente-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
+    <div class="fixed inset-0 bg-black/50" id="modal-editar-cliente-overlay"></div>
+    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white rounded-xl shadow-sm border border-gray-200 z-50" onclick="event.stopPropagation()">
+        <div class="sticky top-0 flex justify-between items-center px-8 py-5 bg-emerald-700 text-white rounded-t-xl z-10">
+            <h3 class="text-xl font-bold flex items-center">
+                <i data-lucide="pencil" class="w-5 h-5 mr-2"></i>Editar Cliente
+            </h3>
+            <button type="button" class="modal-editar-cliente-fechar w-10 h-10 flex items-center justify-center rounded-full hover:bg-emerald-600 text-white font-bold transition" title="Fechar">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+        <div class="p-8">
+            <form id="form-editar-cliente" method="POST" action="" data-action-base="{{ url_for('editar_cliente', id=0) }}">
+                <div class="mb-5">
+                    <label for="edit_nome" class="block text-sm font-medium text-gray-700 mb-2">Nome Cliente <span class="text-red-500">*</span></label>
+                    <input type="text" id="edit_nome" name="nome_cliente" required class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                </div>
+                <div class="mb-5">
+                    <label for="edit_razao" class="block text-sm font-medium text-gray-700 mb-2">Razão Social</label>
+                    <input type="text" id="edit_razao" name="razao_social" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                </div>
+                <div class="mb-5">
+                    <label for="edit_cnpj" class="block text-sm font-medium text-gray-700 mb-2">CNPJ</label>
+                    <input type="text" id="edit_cnpj" name="cnpj" placeholder="00.000.000/0000-00" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                </div>
+                <div class="mb-6">
+                    <label for="edit_cidade" class="block text-sm font-medium text-gray-700 mb-2">Cidade</label>
+                    <input type="text" id="edit_cidade" name="cidade" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                </div>
+                <div class="flex gap-4">
+                    <button type="submit" class="bg-emerald-700 text-white px-6 py-2.5 rounded-xl hover:bg-emerald-600 transition flex items-center font-medium" id="btn-salvar-editar-cliente">
+                        <i data-lucide="check" class="w-4 h-4 mr-2"></i>Salvar
+                    </button>
+                    <button type="button" class="modal-editar-cliente-fechar bg-gray-200 text-gray-700 px-6 py-2.5 rounded-xl hover:bg-gray-300 transition flex items-center font-medium">
+                        <i data-lucide="x" class="w-4 h-4 mr-2"></i>Cancelar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    var btn = document.getElementById('bulk-delete-btn');
+    var selectAll = document.getElementById('bulk-select-all');
+    var rows = document.querySelectorAll('.bulk-row');
+    var endpoint = btn && btn.getAttribute('data-endpoint');
+    var redirect = btn && btn.getAttribute('data-redirect');
+
+    function updateBtn() {
+        var n = document.querySelectorAll('.bulk-row:checked').length;
+        if (n > 0) {
+            btn.classList.remove('hidden');
+            btn.classList.add('flex');
+        } else {
+            btn.classList.add('hidden');
+            btn.classList.remove('flex');
+            if (selectAll) selectAll.checked = false;
+        }
+    }
+
+    if (selectAll && rows.length) {
+        selectAll.addEventListener('change', function() {
+            rows.forEach(function(r) { r.checked = selectAll.checked; });
+            updateBtn();
+        });
+    }
+    rows.forEach(function(r) {
+        r.addEventListener('change', updateBtn);
+    });
+
+    if (btn && endpoint && redirect) {
+        btn.addEventListener('click', function() {
+            var ids = [].map.call(document.querySelectorAll('.bulk-row:checked'), function(c) { return parseInt(c.value, 10); });
+            if (!ids.length) return;
+            if (!confirm('Você selecionou ' + ids.length + ' itens. Deseja excluir permanentemente?')) return;
+            btn.disabled = true;
+            fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body: JSON.stringify({ ids: ids })
+            }).then(function(r) { return r.json(); }).then(function(data) {
+                alert(data.mensagem || (data.ok ? 'Excluído(s) com sucesso.' : 'Erro ao excluir.'));
+                window.location.href = redirect;
+            }).catch(function() {
+                alert('Erro ao excluir. Tente novamente.');
+                btn.disabled = false;
+            });
+        });
+    }
+})();
+
+(function() {
+    var wrap = document.getElementById('modal-novo-cliente-wrap');
+    var btnAbrir = document.getElementById('btn-abrir-modal-novo-cliente');
+    var overlay = document.getElementById('modal-novo-cliente-overlay');
+    var btnFechar = document.getElementById('modal-novo-cliente-fechar');
+    var btnCancelar = document.getElementById('modal-novo-cliente-cancelar');
+    var form = document.getElementById('form-novo-cliente');
+    var erroDiv = document.getElementById('modal-novo-cliente-erro');
+    var btnSalvar = document.getElementById('modal-novo-cliente-salvar');
+
+    function abrir() {
+        if (wrap) {
+            wrap.classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        }
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+    function fechar() {
+        if (wrap) {
+            wrap.classList.add('hidden');
+            document.body.style.overflow = '';
+        }
+        erroDiv.classList.add('hidden');
+        erroDiv.textContent = '';
+    }
+
+    if (btnAbrir) btnAbrir.addEventListener('click', abrir);
+    if (overlay) overlay.addEventListener('click', fechar);
+    if (btnFechar) btnFechar.addEventListener('click', fechar);
+    if (btnCancelar) btnCancelar.addEventListener('click', fechar);
+
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            erroDiv.classList.add('hidden');
+            erroDiv.textContent = '';
+            btnSalvar.disabled = true;
+            var fd = new FormData(form);
+            fetch(form.action, {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                body: fd
+            })
+                .then(function(r) { return r.json().then(function(j) { return { status: r.status, json: j }; }); })
+                .then(function(x) {
+                    if (x.json.ok) {
+                        fechar();
+                        window.location.reload();
+                        return;
+                    }
+                    erroDiv.textContent = x.json.mensagem || 'Erro ao cadastrar.';
+                    erroDiv.classList.remove('hidden');
+                    btnSalvar.disabled = false;
+                })
+                .catch(function() {
+                    erroDiv.textContent = 'Erro ao cadastrar. Tente novamente.';
+                    erroDiv.classList.remove('hidden');
+                    btnSalvar.disabled = false;
+                });
+        });
+    }
+})();
+
+(function() {
+    function mascaraCNPJ(valor) {
+        var digits = (valor || '').replace(/\D/g, '').slice(0, 14);
+        if (digits.length <= 2) return digits;
+        if (digits.length <= 5) return digits.slice(0, 2) + '.' + digits.slice(2);
+        if (digits.length <= 8) return digits.slice(0, 2) + '.' + digits.slice(2, 5) + '.' + digits.slice(5);
+        if (digits.length <= 12) return digits.slice(0, 2) + '.' + digits.slice(2, 5) + '.' + digits.slice(5, 8) + '/' + digits.slice(8, 12);
+        return digits.slice(0, 2) + '.' + digits.slice(2, 5) + '.' + digits.slice(5, 8) + '/' + digits.slice(8, 12) + '-' + digits.slice(12, 14);
+    }
+
+    var wrap = document.getElementById('modal-editar-cliente-wrap');
+    var form = document.getElementById('form-editar-cliente');
+    var overlay = document.getElementById('modal-editar-cliente-overlay');
+    var btnsFechar = document.querySelectorAll('.modal-editar-cliente-fechar');
+    var editCnpj = document.getElementById('edit_cnpj');
+    var actionBase = form && form.getAttribute('data-action-base');
+    if (!actionBase) actionBase = '';
+
+    if (editCnpj) {
+        editCnpj.addEventListener('input', function() {
+            var start = this.selectionStart;
+            var val = this.value;
+            var digits = val.replace(/\D/g, '');
+            var formatted = mascaraCNPJ(digits);
+            this.value = formatted;
+            var newLen = formatted.length;
+            var oldLen = val.length;
+            var diff = newLen - oldLen;
+            var newStart = Math.max(0, Math.min(start + diff, newLen));
+            this.setSelectionRange(newStart, newStart);
+        });
+    }
+
+    function abrirModal(btn) {
+        var id = btn.getAttribute('data-id');
+        var nome = btn.getAttribute('data-nome') || '';
+        var razao = btn.getAttribute('data-razao') || '';
+        var cnpj = btn.getAttribute('data-cnpj') || '';
+        var cidade = btn.getAttribute('data-cidade') || '';
+        form.action = actionBase.replace(/\/0$/, '/') + id;
+        document.getElementById('edit_nome').value = nome;
+        document.getElementById('edit_razao').value = razao;
+        document.getElementById('edit_cnpj').value = mascaraCNPJ(cnpj);
+        document.getElementById('edit_cidade').value = cidade;
+        wrap.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+    function fecharModal() {
+        wrap.classList.add('hidden');
+        document.body.style.overflow = '';
+    }
+
+    document.querySelectorAll('.btn-editar-cliente').forEach(function(btn) {
+        btn.addEventListener('click', function() { abrirModal(btn); });
+    });
+    if (overlay) overlay.addEventListener('click', fecharModal);
+    btnsFechar.forEach(function(btn) { btn.addEventListener('click', fecharModal); });
+
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            if (!confirm('Tem certeza que deseja alterar os dados deste cliente?')) return;
+            form.submit();
+        });
+    }
+})();
+
+// Busca instantânea na tabela de clientes com debounce
+(function() {
+    var searchInput = document.getElementById('searchInput');
+    var tableBody = document.querySelector('table tbody');
+    
+    if (!searchInput || !tableBody) return;
+    
+    // Variável para armazenar o timeout do debounce
+    var timeout = null;
+    
+    // Função para normalizar texto (remove acentos e converte para minúsculas)
+    function normalizarTexto(texto) {
+        if (!texto) return '';
+        return texto
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '');
+    }
+    
+    // Função que executa a busca
+    function executarBusca() {
+        var termo = normalizarTexto(searchInput.value);
+        var rows = tableBody.querySelectorAll('tr');
+        
+        rows.forEach(function(row) {
+            // Pega as células de Nome Cliente (3ª coluna) e Razão Social (4ª coluna)
+            var cells = row.querySelectorAll('td');
+            if (cells.length < 4) {
+                // Se não tiver células suficientes (ex: linha vazia), mostra
+                row.style.display = '';
+                return;
+            }
+            
+            var nomeCliente = normalizarTexto(cells[2] ? cells[2].textContent.trim() : '');
+            var razaoSocial = normalizarTexto(cells[3] ? cells[3].textContent.trim() : '');
+            
+            // Verifica se o termo está no nome ou na razão social
+            if (termo === '' || nomeCliente.includes(termo) || razaoSocial.includes(termo)) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+        
+        // Atualiza ícones do Lucide após filtrar
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+    
+    // Event listener com debounce (300ms)
+    searchInput.addEventListener('input', function() {
+        // Cancela o timeout anterior se existir
+        if (timeout !== null) {
+            clearTimeout(timeout);
+        }
+        
+        // Cria um novo timeout para executar a busca após 300ms
+        timeout = setTimeout(function() {
+            executarBusca();
+            timeout = null;
+        }, 300);
+    });
+    
+    // Também escuta keyup para melhor compatibilidade (mas com debounce)
+    searchInput.addEventListener('keyup', function() {
+        // Cancela o timeout anterior se existir
+        if (timeout !== null) {
+            clearTimeout(timeout);
+        }
+        
+        // Cria um novo timeout para executar a busca após 300ms
+        timeout = setTimeout(function() {
+            executarBusca();
+            timeout = null;
+        }, 300);
+    });
+    
+    // Inicializa ícone de busca
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?><nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="NFe26260114187040000107550020000034841327708489" versao="4.00"><ide><cUF>26</cUF><cNF>32770848</cNF><natOp>VENDA DE MERCADORIA ADQUIRIDA OU RECEBIDA DE TERCE</natOp><mod>55</mod><serie>2</serie><nNF>3484</nNF><dhEmi>2026-01-16T16:20:31-03:00</dhEmi><dhSaiEnt>2026-01-16T16:20:31-03:00</dhSaiEnt><tpNF>1</tpNF><idDest>1</idDest><cMunFG>2611101</cMunFG><tpImp>1</tpImp><tpEmis>1</tpEmis><cDV>9</cDV><tpAmb>1</tpAmb><finNFe>1</finNFe><indFinal>0</indFinal><indPres>9</indPres><indIntermed>0</indIntermed><procEmi>0</procEmi><verProc>4.00</verProc></ide><emit><CNPJ>14187040000107</CNPJ><xNome>DESTAK EMBALAGENS LTDA</xNome><xFant>PREMIUM EMBALAGENS</xFant><enderEmit><xLgr>RUA RIO BEBERIBE, S/N</xLgr><nro>*</nro><xBairro>JOSE E MARIA</xBairro><cMun>2611101</cMun><xMun>PETROLINA</xMun><UF>PE</UF><CEP>56320370</CEP><cPais>1058</cPais><xPais>BRASIL</xPais><fone>8788630407</fone></enderEmit><IE>045552797</IE><CRT>3</CRT></emit><dest><CNPJ>18984560000355</CNPJ><xNome>VITORIA ATACAREJO DISTRIBUIDORA DE ALIMENTOS LTDA</xNome><enderDest><xLgr>ROD BR 407, 110</xLgr><nro>*</nro><xBairro>CENTRO</xBairro><cMun>2600203</cMun><xMun>AFRaNIO</xMun><UF>PE</UF><CEP>56360000</CEP><cPais>1058</cPais><xPais>BRASIL</xPais><fone>87988048486</fone></enderDest><indIEDest>1</indIEDest><IE>069388768</IE></dest><entrega><CNPJ>18984560000355</CNPJ><xLgr>ROD BR 407, 110</xLgr><nro>*</nro><xBairro>CENTRO</xBairro><cMun>2600203</cMun><xMun>AFRaNIO</xMun><UF>PE</UF></entrega><autXML><CNPJ>13937073000156</CNPJ></autXML><det nItem="1"><prod><cProd>8352.0</cProd><cEAN>20033255</cEAN><xProd>ALHO FRESCOS 60/65 - CX 10KG CAL 7/8</xProd><NCM>07032090</NCM><cBenef>PE058002</cBenef><CFOP>5102</CFOP><uCom>CX</uCom><qCom>15.0000</qCom><vUnCom>160.00000000</vUnCom><vProd>2400.00</vProd><cEANTrib>20033255</cEANTrib><uTrib>CX</uTrib><qTrib>15.0000</qTrib><vUnTrib>160.00000000</vUnTrib><indTot>1</indTot></prod><imposto><ICMS><ICMS00><orig>1</orig><CST>00</CST><modBC>3</modBC><vBC>2400.00</vBC><pICMS>20.50</pICMS><vICMS>492.00</vICMS></ICMS00></ICMS><PIS><PISNT><CST>06</CST></PISNT></PIS><COFINS><COFINSNT><CST>06</CST></COFINSNT></COFINS><IBSCBS><CST>000</CST><cClassTrib>000001</cClassTrib><gIBSCBS><vBC>1908.00</vBC><gIBSUF><pIBSUF>0.1000</pIBSUF><vIBSUF>1.91</vIBSUF></gIBSUF><gIBSMun><pIBSMun>0.0000</pIBSMun><vIBSMun>0.00</vIBSMun></gIBSMun><vIBS>1.91</vIBS><gCBS><pCBS>0.9000</pCBS><vCBS>17.17</vCBS></gCBS></gIBSCBS></IBSCBS></imposto><vItem>2419.08</vItem></det><total><ICMSTot><vBC>2400.00</vBC><vICMS>492.00</vICMS><vICMSDeson>0.00</vICMSDeson><vFCP>0.00</vFCP><vBCST>0.00</vBCST><vST>0.00</vST><vFCPST>0.00</vFCPST><vFCPSTRet>0.00</vFCPSTRet><vProd>2400.00</vProd><vFrete>0.00</vFrete><vSeg>0.00</vSeg><vDesc>0.00</vDesc><vII>0.00</vII><vIPI>0.00</vIPI><vIPIDevol>0.00</vIPIDevol><vPIS>0.00</vPIS><vCOFINS>0.00</vCOFINS><vOutro>0.00</vOutro><vNF>2400.00</vNF></ICMSTot><IBSCBSTot><vBCIBSCBS>1908.00</vBCIBSCBS><gIBS><gIBSUF><vDif>0.00</vDif><vDevTrib>0.00</vDevTrib><vIBSUF>1.91</vIBSUF></gIBSUF><gIBSMun><vDif>0.00</vDif><vDevTrib>0.00</vDevTrib><vIBSMun>0.00</vIBSMun></gIBSMun><vIBS>1.91</vIBS><vCredPres>0.00</vCredPres><vCredPresCondSus>0.00</vCredPresCondSus></gIBS><gCBS><vDif>0.00</vDif><vDevTrib>0.00</vDevTrib><vCBS>17.17</vCBS><vCredPres>0.00</vCredPres><vCredPresCondSus>0.00</vCredPresCondSus></gCBS></IBSCBSTot><vNFTot>2419.08</vNFTot></total><transp><modFrete>0</modFrete><transporta><xNome>O MESMO</xNome></transporta><vol><qVol>1</qVol><esp>VOLUME</esp><pesoL>150.000</pesoL><pesoB>157.500</pesoB></vol></transp><pag><detPag><tPag>90</tPag><vPag>0.00</vPag></detPag></pag><infAdic><infCpl>Trib aprox R$: 0,00 Federal e 0,00 Estadual Fonte: #CLI: 2364-VITORIA ATACAREJO VEND: 1 ROTA: 001#ALHO E FRUTAS SECAS SAO PRODUTOS PERECIVEIS, NAO ACEITAMOS DEVOLUCOES 48 HORAS APOS# O RECEBIMENTO.#Compl. end: .</infCpl></infAdic><infRespTec><CNPJ>04266874000146</CNPJ><xContato>Paulo Rogerio de Oliveira Rios</xContato><email>paulorios@protonsistemas.com.br</email><fone>7521013744</fone></infRespTec></infNFe><Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><SignedInfo><CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/><SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/><Reference URI="#NFe26260114187040000107550020000034841327708489"><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/><Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/></Transforms><DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/><DigestValue>XGH1TR4P52FoEF1fvD0EY5eA6go=</DigestValue></Reference></SignedInfo><SignatureValue>LQmQMns6W4gPXld11lEcnNDKsbC+bRdNsoitptSfs/PZtvDsJnWwt1z5elx7jyIJVNGCV51pRhcp&#13;
+OZ/DxrHxWfHSLXusec/leU9HwqSnP/biz/bHLTtQEDTFhXEDcuBhntAnuSnF+5ODQNL30LWL+9Al&#13;
+qX99wMcdTPQry1lN6X+p3Jbkg2QFAeSzS2eJKCljIyKAsP8+TjjkKP2NHRYxbPkKpTaCojasf6Rs&#13;
+FvAnkdYuqdlB3EQ26zeEOYy/iWYHTXvekRM8/YppvYc2sVso3mfhpr9EPrsX7KTK2gD2QSs8uUhy&#13;
+tHd2fjexbMj7QUpg40X+WNaZoLe5ttPE+IsDIw==</SignatureValue><KeyInfo><X509Data><X509Certificate>MIIHUjCCBTqgAwIBAgIITVklAxJG42owDQYJKoZIhvcNAQELBQAwWTELMAkGA1UEBhMCQlIxEzAR&#13;
+BgNVBAoTCklDUC1CcmFzaWwxFTATBgNVBAsTDEFDIFNPTFVUSSB2NTEeMBwGA1UEAxMVQUMgU09M&#13;
+VVRJIE11bHRpcGxhIHY1MB4XDTI1MDMxMjE0NDgwMFoXDTI2MDMxMjE0NDgwMFowgeUxCzAJBgNV&#13;
+BAYTAkJSMRMwEQYDVQQKEwpJQ1AtQnJhc2lsMQswCQYDVQQIEwJQRTESMBAGA1UEBxMJUGV0cm9s&#13;
+aW5hMR4wHAYDVQQLExVBQyBTT0xVVEkgTXVsdGlwbGEgdjUxFzAVBgNVBAsTDjI4OTc4NjMxMDAw&#13;
+MTA3MRwwGgYDVQQLExNDZXJ0aWZpY2FkbyBEaWdpdGFsMRowGAYDVQQLExFDZXJ0aWZpY2FkbyBQ&#13;
+SiBBMTEtMCsGA1UEAxMkREVTVEFLIEVNQkFMQUdFTSBMVERBOjE0MTg3MDQwMDAwMTA3MIIBIjAN&#13;
+BgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqO5H8Uc2ZswiGRQ3Lu0657HAZcQQf2lX+R5dM9WH&#13;
+nZfvYAlS1ZsPcaSxn+O1Mh4CeKjOL2VvGDQLgyr7BO4kipGJCavit+ZB+vFb/r+5/CLFF6Ird57G&#13;
+1PNwXAL6yQDeLGN1Yr4KoZ0DHVjpj8TZgwiz74BX3ZxZu4A6evfdxoSHU7KwZtZTnKefKQYx59SG&#13;
+S8UvrUhseta/JpXIdrrhVTRzCRqCT6ngSvxfvtxo3g4Iv0suZO87irFg/r5VUKUZjzFMS8ZwU2ae&#13;
+ASbf3h/BttoU77K2SzOQCT3gm4x+1k6IudeZV+1+7j4oJ8FcOjq1h1ZmNk0RE5dGXdigsgo8rQID&#13;
+AQABo4ICjzCCAoswCQYDVR0TBAIwADAfBgNVHSMEGDAWgBTFUu0lgAnfnILIn0fG3bRfMd25sTBU&#13;
+BggrBgEFBQcBAQRIMEYwRAYIKwYBBQUHMAKGOGh0dHA6Ly9jY2QuYWNzb2x1dGkuY29tLmJyL2xj&#13;
+ci9hYy1zb2x1dGktbXVsdGlwbGEtdjUucDdiMIHKBgNVHREEgcIwgb+BGnRoaWFsYS5yaWJlaXJv&#13;
+MjVAZ21haWwuY29toDMGBWBMAQMCoCoTKEFOREVSU09OIERQQVVMQSBNIE1FREVJUk9TIERVREEg&#13;
+Q0FSVkFMSE+gGQYFYEwBAwOgEBMOMTQxODcwNDAwMDAxMDegOAYFYEwBAwSgLxMtMDkwODE5ODcw&#13;
+MTUyMzYxNDQ4MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwoBcGBWBMAQMHoA4TDDAwMDAwMDAw&#13;
+MDAwMDBdBgNVHSAEVjBUMFIGBmBMAQIBJjBIMEYGCCsGAQUFBwIBFjpodHRwOi8vY2NkLmFjc29s&#13;
+dXRpLmNvbS5ici9kb2NzL2RwYy1hYy1zb2x1dGktbXVsdGlwbGEucGRmMB0GA1UdJQQWMBQGCCsG&#13;
+AQUFBwMCBggrBgEFBQcDBDCBjAYDVR0fBIGEMIGBMD6gPKA6hjhodHRwOi8vY2NkLmFjc29sdXRp&#13;
+LmNvbS5ici9sY3IvYWMtc29sdXRpLW11bHRpcGxhLXY1LmNybDA/oD2gO4Y5aHR0cDovL2NjZDIu&#13;
+YWNzb2x1dGkuY29tLmJyL2xjci9hYy1zb2x1dGktbXVsdGlwbGEtdjUuY3JsMB0GA1UdDgQWBBT+&#13;
+9o9IMG5yIcxNy6Wwjd4w18uvLjAOBgNVHQ8BAf8EBAMCBeAwDQYJKoZIhvcNAQELBQADggIBAHjB&#13;
+Bu5ofG5tPD5m/3yTOJMWVCH2AUoDUe5+Xylm76bau6m3kYRoIdJW40h0T999AK5vo9YfN17G5L53&#13;
+Gd/JJ2Ci0cEuB+/oFqC4EKgh29OLCA/FKST9xF1GLyHog8EXl3aoQURSaK0guVRWSpJFrCFJSQbM&#13;
+vtqC8us4sWa+/wgzNa3yE8jiavQpB+MxVEh0u5Asvrx5TGc7Vg3FIqCdMGyXS+lF+6E0doD8jHPT&#13;
+oQclPFhYdgWn5Ds/I3Xtra85opldCK4nixLeKux4QFkkvEasKDTfAugY+2MLk8I1wFll8SZKUkk1&#13;
+89yzMcdMIF6aeyBvVggps5JfseoQJmUvW3u5TE89pQgHwBJdn5nQq0uR4bIlY6B3/0NRcZ8r6KuP&#13;
+2v6onikNqpvsLFvvXuVl7Af6Z06PQf5rOaFOHpeIDPpWnhtNcFwuhVx+6xOw11YMaRV+1R7Yx9Lk&#13;
+Gm+3o26xpiX9Q19aiY5w+UDl7vr0lCip3BndAYOoZ2Cf+ExClFN7/oFZ9ftVa2/Pjr0lDW2XAsp+&#13;
+g6oouvPTa2VyINLf3YJJooA4d2aYFXIT/ngqdYRLB95/tUIhCXWY0p17qerqlaAE/iBx5escDWo1&#13;
+6nXbfqCOUOoXgfPah6ZJG3Z3GjA1CJFcrAnPHM80IHZkEIkXwMB8pp8hJAjazij0I+FtRaNs</X509Certificate></X509Data></KeyInfo></Signature></NFe><protNFe versao="4.00"><infProt Id="NFe1"><tpAmb>1</tpAmb>
+<verAplic>NFEPE_P_4.3.5</verAplic>
+<chNFe>26260114187040000107550020000034841327708489</chNFe>
+<dhRecbto>2026-01-16T16:20:41-03:00</dhRecbto><nProt>126260006289918</nProt>
+<digVal>XGH1TR4P52FoEF1fvD0EY5eA6go=</digVal><cStat>100</cStat>
+<xMotivo>Autorizado o uso da NF-e</xMotivo>
+</infProt></protNFe></nfeProc>

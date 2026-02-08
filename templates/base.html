@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="font-sans antialiased">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Menino do Alho - Gestão de Vendas e Estoque{% endblock %}</title>
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    
+    <!-- Meta tags para iOS (iPhone/iPad) -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="AlhoGestão">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icon-192x192.png') }}">
+    
+    <!-- Theme color para navegadores -->
+    <meta name="theme-color" content="#198754">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; }
+        
+        /* Estilos para agrupamento visual de vendas por NF */
+        .venda-grupo-par {
+            background-color: #f8f9fa !important; /* Cinza muito claro */
+        }
+        
+        .venda-grupo-impar {
+            background-color: #ffffff !important; /* Branco */
+        }
+        
+        /* Borda de separação no início de cada novo grupo (quando NF muda) */
+        .venda-grupo-separador {
+            border-top: 2px solid #dee2e6 !important;
+        }
+        
+        /* Garantir que o hover funcione mesmo com background customizado */
+        .venda-grupo-par:hover,
+        .venda-grupo-impar:hover {
+            background-color: #d1fae5 !important; /* Verde claro do hover */
+        }
+    </style>
+    <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+    {% block head_extras %}{% endblock %}
+</head>
+<body class="bg-emerald-50 min-h-screen flex flex-col">
+    <!-- Header -->
+    <header class="bg-white border-b border-gray-200 shadow-sm">
+        <div class="container mx-auto px-4 py-5 text-center">
+            <div class="flex items-center justify-center mb-1">
+                <i data-lucide="leaf" class="w-10 h-10 text-emerald-700 mr-3"></i>
+                <h1 class="text-3xl font-bold text-emerald-700">Menino do Alho</h1>
+            </div>
+            <p class="text-gray-600">Gestão de Vendas e Estoque</p>
+        </div>
+    </header>
+
+    <!-- Navigation Bar -->
+    <nav class="bg-emerald-700 shadow-sm">
+        <div class="container mx-auto px-4">
+            <div class="flex flex-wrap justify-center gap-1 py-2 items-center">
+                <a href="{{ url_for('dashboard') }}" class="px-4 py-2.5 text-white hover:bg-emerald-600 rounded-lg transition flex items-center text-sm font-medium">
+                    <i data-lucide="layout-dashboard" class="w-4 h-4 mr-2"></i>Dashboard
+                </a>
+                <a href="{{ url_for('listar_clientes') }}" class="px-4 py-2.5 text-white hover:bg-emerald-600 rounded-lg transition flex items-center text-sm font-medium">
+                    <i data-lucide="users" class="w-4 h-4 mr-2"></i>Clientes
+                </a>
+                <a href="{{ url_for('listar_produtos') }}" class="px-4 py-2.5 text-white hover:bg-emerald-600 rounded-lg transition flex items-center text-sm font-medium relative">
+                    <i data-lucide="package" class="w-4 h-4 mr-2"></i>Entrada de Produtos
+                    {% if count_outros and count_outros > 0 %}
+                    <span class="ml-1.5 inline-flex items-center justify-center text-amber-300" title="{{ count_outros }} produto(s) em OUTROS sem categoria definida">
+                        <i data-lucide="alert-triangle" class="w-4 h-4"></i>
+                    </span>
+                    {% endif %}
+                </a>
+                <a href="{{ url_for('listar_vendas') }}" class="px-4 py-2.5 text-white hover:bg-emerald-600 rounded-lg transition flex items-center text-sm font-medium">
+                    <i data-lucide="shopping-cart" class="w-4 h-4 mr-2"></i>Vendas
+                </a>
+                {% if current_user.is_authenticated and current_user.is_admin() %}
+                <a href="{{ url_for('gerenciar_usuarios') }}" class="px-4 py-2.5 text-white hover:bg-emerald-600 rounded-lg transition flex items-center text-sm font-medium">
+                    <i data-lucide="user-cog" class="w-4 h-4 mr-2"></i>Gerenciar Usuários
+                </a>
+                {% endif %}
+                
+                <!-- Seletor de Ano -->
+                <div class="relative" id="ano-selector-wrap">
+                    <button type="button" id="btn-ano-selector" class="px-4 py-2.5 bg-emerald-800 text-white hover:bg-emerald-600 rounded-lg transition flex items-center text-sm font-medium gap-2">
+                        <i data-lucide="calendar" class="w-4 h-4"></i>
+                        <span>Ano: <strong>{{ ano_ativo }}</strong></span>
+                        <i data-lucide="chevron-down" class="w-3 h-3 transition-transform" id="ano-chevron"></i>
+                    </button>
+                    <div id="ano-dropdown" class="hidden absolute right-0 mt-1 w-32 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                        {% for ano in anos_disponiveis %}
+                        <a href="{{ url_for('alterar_ano', ano=ano) }}" class="block px-4 py-2 text-sm hover:bg-emerald-50 transition {% if ano == ano_ativo %}bg-emerald-100 text-emerald-700 font-semibold{% else %}text-gray-700{% endif %}">
+                            {{ ano }}{% if ano == ano_ativo %} ✓{% endif %}
+                        </a>
+                        {% endfor %}
+                    </div>
+                </div>
+                
+                <a href="#" class="px-4 py-2.5 text-white/80 hover:bg-emerald-600 hover:text-white rounded-lg transition flex items-center text-sm font-medium">
+                    <i data-lucide="user" class="w-4 h-4 mr-2"></i>{{ current_user.username if current_user.is_authenticated else 'Conta' }}
+                </a>
+                <a href="{{ url_for('logout') }}" class="px-4 py-2.5 text-white/80 hover:bg-emerald-600 hover:text-white rounded-lg transition flex items-center text-sm font-medium">
+                    <i data-lucide="log-out" class="w-4 h-4 mr-2"></i>Sair
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="container mx-auto px-4 mt-4">
+                {% for category, message in messages %}
+                    <div class="mb-4 p-4 rounded-xl border border-gray-200 shadow-sm {% if category == 'error' %}bg-red-50 text-red-700 border-red-200{% elif category == 'warning' %}bg-amber-50 text-amber-800 border-amber-200{% else %}bg-emerald-50 text-emerald-800 border-emerald-200{% endif %} flex items-center">
+                        <i data-lucide="{% if category == 'error' %}alert-circle{% elif category == 'warning' %}alert-triangle{% else %}check-circle{% endif %}" class="w-5 h-5 mr-3 flex-shrink-0"></i>
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 py-6 flex-1">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-gray-200 mt-auto py-4 shadow-sm">
+        <div class="container mx-auto px-4 text-center text-gray-600 text-sm">
+            <p>&copy; 2026 Menino do Alho - Sistema de Gestão</p>
+        </div>
+    </footer>
+
+    <!-- Modal: Vendas por Produto/Cliente -->
+    <div id="modal-vendas-overlay" class="fixed inset-0 bg-black/50 z-40 hidden" onclick="fecharModalVendas()"></div>
+    <div id="modal-vendas" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden pointer-events-none">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 max-w-3xl w-full max-h-[85vh] flex flex-col pointer-events-auto overflow-hidden">
+            <div class="bg-emerald-700 text-white rounded-t-xl">
+                <div class="flex items-center justify-between px-6 py-4">
+                    <h3 id="modal-vendas-titulo" class="text-lg font-bold flex items-center">
+                        <i data-lucide="shopping-bag" class="w-5 h-5 mr-2"></i>Vendas
+                    </h3>
+                    <button type="button" id="modal-vendas-fechar" onclick="fecharModalVendas()" class="p-2 hover:bg-emerald-600 rounded-full transition">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+                <div id="modal-vendas-cliente-info" class="px-6 pb-4 text-sm text-emerald-50 hidden">
+                    <div class="flex flex-wrap gap-4">
+                        <span><strong>CNPJ:</strong> <span id="modal-cliente-cnpj">-</span></span>
+                        <span><strong>Razão Social:</strong> <span id="modal-cliente-razao">-</span></span>
+                    </div>
+                </div>
+            </div>
+            <div id="modal-vendas-loading" class="px-6 py-12 text-center text-gray-500 hidden">
+                <i data-lucide="loader-2" class="w-10 h-10 text-emerald-700 mb-3 mx-auto animate-spin"></i>
+                <p>Carregando...</p>
+            </div>
+            <div id="modal-vendas-conteudo" class="flex-1 overflow-auto p-6 hidden">
+                <!-- Cards de Totais (apenas para clientes) -->
+                <div id="modal-vendas-totais" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 hidden">
+                    <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl border border-blue-200 shadow-sm p-5">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-blue-600 text-sm font-medium">Total Comprado</p>
+                                <p id="modal-total-vendido" class="text-2xl font-bold text-blue-700 mt-1">R$ 0,00</p>
+                            </div>
+                            <i data-lucide="shopping-cart" class="w-10 h-10 text-blue-500"></i>
+                        </div>
+                    </div>
+                    <div class="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl border border-emerald-200 shadow-sm p-5">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-emerald-600 text-sm font-medium">Lucro Gerado</p>
+                                <p id="modal-total-lucro" class="text-2xl font-bold text-emerald-700 mt-1">R$ 0,00</p>
+                            </div>
+                            <i data-lucide="trending-up" class="w-10 h-10 text-emerald-500"></i>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="modal-vendas-tabela-wrapper" class="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Data</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">NF</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Produto</th>
+                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Qtd</th>
+                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Preço Unit.</th>
+                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Valor</th>
+                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Lucro</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Empresa</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Situação</th>
+                            </tr>
+                        </thead>
+                        <tbody id="modal-vendas-tbody" class="bg-white divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+                
+                <!-- Botão Carregar Mais -->
+                <div id="modal-vendas-carregar-mais-wrapper" class="mt-4 text-center hidden">
+                    <button type="button" id="btn-carregar-mais-vendas" class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 transition focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2">
+                        <i data-lucide="chevron-down" class="w-4 h-4"></i>Carregar Mais Vendas
+                    </button>
+                </div>
+                
+                <p id="modal-vendas-vazio" class="text-gray-500 text-center py-6 hidden">Nenhuma venda encontrada.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    })();
+    // Variáveis globais para paginação do modal
+    var modalVendasTipo = null;
+    var modalVendasId = null;
+    var modalVendasPaginaAtual = 1;
+    var modalVendasNfAnterior = null;
+
+    // Função helper para formatar moeda brasileira (global)
+    function formatoMoeda(valor) {
+        if (valor === null || valor === undefined || isNaN(valor)) return 'R$ 0,00';
+        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
+    }
+
+    function abrirModalVendas(tipo, id) {
+        var overlay = document.getElementById('modal-vendas-overlay');
+        var modal = document.getElementById('modal-vendas');
+        var titulo = document.getElementById('modal-vendas-titulo');
+        var loading = document.getElementById('modal-vendas-loading');
+        var conteudo = document.getElementById('modal-vendas-conteudo');
+        var tbody = document.getElementById('modal-vendas-tbody');
+        var vazio = document.getElementById('modal-vendas-vazio');
+
+        // Resetar variáveis de paginação
+        modalVendasTipo = tipo;
+        modalVendasId = id;
+        modalVendasPaginaAtual = 1;
+        modalVendasNfAnterior = null;
+
+        overlay.classList.remove('hidden');
+        modal.classList.remove('hidden');
+        loading.classList.remove('hidden');
+        conteudo.classList.add('hidden');
+        vazio.classList.add('hidden');
+        document.getElementById('modal-vendas-tabela-wrapper').classList.remove('hidden');
+        document.getElementById('modal-vendas-cliente-info').classList.add('hidden');
+        document.getElementById('modal-vendas-totais').classList.add('hidden');
+        document.getElementById('modal-vendas-carregar-mais-wrapper').classList.add('hidden');
+        tbody.innerHTML = '';
+        titulo.innerHTML = '<i data-lucide="loader-2" class="w-5 h-5 mr-2 animate-spin"></i>Carregando...';
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+
+        // Carregar primeira página
+        carregarVendasModal(1, true);
+    }
+
+    function carregarVendasModal(page, isPrimeiraPagina) {
+        var loading = document.getElementById('modal-vendas-loading');
+        var conteudo = document.getElementById('modal-vendas-conteudo');
+        var tbody = document.getElementById('modal-vendas-tbody');
+        var vazio = document.getElementById('modal-vendas-vazio');
+        var titulo = document.getElementById('modal-vendas-titulo');
+        var btnCarregarMais = document.getElementById('btn-carregar-mais-vendas');
+        var wrapperCarregarMais = document.getElementById('modal-vendas-carregar-mais-wrapper');
+
+        if (isPrimeiraPagina) {
+            loading.classList.remove('hidden');
+            conteudo.classList.add('hidden');
+        } else {
+            // Mostrar loading no botão durante carregamento
+            btnCarregarMais.disabled = true;
+            btnCarregarMais.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>Carregando...';
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
+
+        var params = new URLSearchParams();
+        if (modalVendasTipo === 'produto') params.set('produto_id', modalVendasId);
+        else if (modalVendasTipo === 'cliente') params.set('cliente_id', modalVendasId);
+        params.set('page', page);
+        params.set('per_page', 10);
+
+        fetch('/api/vendas_por_filtro?' + params.toString())
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                loading.classList.add('hidden');
+                conteudo.classList.remove('hidden');
+                
+                if (isPrimeiraPagina) {
+                    titulo.innerHTML = '<i data-lucide="shopping-bag" class="w-5 h-5 mr-2"></i>' + (data.titulo || 'Vendas');
+                    
+                    // Exibir informações do cliente se disponíveis
+                    var clienteInfoDiv = document.getElementById('modal-vendas-cliente-info');
+                    if (data.cliente_info) {
+                        document.getElementById('modal-cliente-cnpj').textContent = data.cliente_info.cnpj || '-';
+                        document.getElementById('modal-cliente-razao').textContent = data.cliente_info.razao_social || '-';
+                        clienteInfoDiv.classList.remove('hidden');
+                    } else {
+                        clienteInfoDiv.classList.add('hidden');
+                    }
+                    
+                    // Exibir totais se disponíveis (apenas para clientes)
+                    var totaisDiv = document.getElementById('modal-vendas-totais');
+                    if (data.totais) {
+                        document.getElementById('modal-total-vendido').textContent = formatoMoeda(data.totais.total_vendido || 0);
+                        document.getElementById('modal-total-lucro').textContent = formatoMoeda(data.totais.total_lucro || 0);
+                        totaisDiv.classList.remove('hidden');
+                    } else {
+                        totaisDiv.classList.add('hidden');
+                    }
+                }
+                
+                var tabelaWrapper = document.getElementById('modal-vendas-tabela-wrapper');
+                vazio.textContent = 'Nenhuma venda encontrada.';
+
+                if (!data.vendas || data.vendas.length === 0) {
+                    if (isPrimeiraPagina) {
+                        tabelaWrapper.classList.add('hidden');
+                        vazio.classList.remove('hidden');
+                    }
+                    wrapperCarregarMais.classList.add('hidden');
+                    if (typeof lucide !== 'undefined') lucide.createIcons();
+                    return;
+                }
+                
+                tabelaWrapper.classList.remove('hidden');
+                vazio.classList.add('hidden');
+                
+                // Adicionar vendas à tabela
+                var nfAnterior = modalVendasNfAnterior;
+                var ultimoIndex = tbody.children.length;
+                
+                data.vendas.forEach(function(v, index) {
+                    var tr = document.createElement('tr');
+                    
+                    // Determinar classe de grupo baseado em grupo_cor ou alternância de NF
+                    var grupoCor = v.grupo_cor || 1;
+                    var classeGrupo = grupoCor === 1 ? 'venda-grupo-par' : 'venda-grupo-impar';
+                    
+                    // Adicionar borda superior se é a primeira linha de um novo grupo
+                    var nfAtual = v.nf || '-';
+                    var isNovaNF = nfAnterior !== null && nfAtual !== nfAnterior;
+                    if (isNovaNF && (ultimoIndex + index) > 0) {
+                        classeGrupo += ' venda-grupo-separador';
+                    }
+                    
+                    tr.className = classeGrupo + ' hover:bg-emerald-50 transition';
+                    
+                    var precoUnitStr = formatoMoeda(v.preco_unitario || 0);
+                    var valorStr = formatoMoeda(v.valor || 0);
+                    var lucro = typeof v.lucro === 'number' ? v.lucro : 0;
+                    var lucroStr = formatoMoeda(lucro);
+                    var lucroClass = lucro >= 0 ? 'text-emerald-600' : 'text-red-600';
+                    var sitClass = v.situacao === 'PAGO' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800';
+                    tr.innerHTML =
+                        '<td class="px-4 py-3 text-sm text-gray-900">' + (v.data || '-') + '</td>' +
+                        '<td class="px-4 py-3 text-sm text-gray-900">' + (v.nf || '-') + '</td>' +
+                        '<td class="px-4 py-3 text-sm text-gray-900">' + (v.produto || '-') + '</td>' +
+                        '<td class="px-4 py-3 text-sm text-gray-900 text-right">' + (v.quantidade || 0) + '</td>' +
+                        '<td class="px-4 py-3 text-sm text-gray-900 text-right">' + precoUnitStr + '</td>' +
+                        '<td class="px-4 py-3 text-sm font-medium text-gray-900 text-right">' + valorStr + '</td>' +
+                        '<td class="px-4 py-3 text-sm font-medium text-right ' + lucroClass + '">' + lucroStr + '</td>' +
+                        '<td class="px-4 py-3 text-sm text-gray-900">' + (v.empresa || '-') + '</td>' +
+                        '<td class="px-4 py-3"><span class="px-3 py-1 text-xs font-semibold rounded-full ' + sitClass + '">' + (v.situacao || 'PENDENTE') + '</span></td>';
+                    tbody.appendChild(tr);
+                    
+                    nfAnterior = nfAtual;
+                });
+                
+                // Atualizar nfAnterior global para próxima página
+                if (data.vendas.length > 0) {
+                    modalVendasNfAnterior = data.vendas[data.vendas.length - 1].nf || null;
+                }
+                
+                // Mostrar/ocultar botão "Carregar Mais"
+                if (data.pagination && data.pagination.has_next) {
+                    wrapperCarregarMais.classList.remove('hidden');
+                    modalVendasPaginaAtual = page;
+                } else {
+                    wrapperCarregarMais.classList.add('hidden');
+                }
+                
+                // Restaurar botão
+                btnCarregarMais.disabled = false;
+                btnCarregarMais.innerHTML = '<i data-lucide="chevron-down" class="w-4 h-4"></i>Carregar Mais Vendas';
+                
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+            })
+            .catch(function() {
+                loading.classList.add('hidden');
+                conteudo.classList.remove('hidden');
+                if (isPrimeiraPagina) {
+                    document.getElementById('modal-vendas-tabela-wrapper').classList.add('hidden');
+                    vazio.classList.remove('hidden');
+                    vazio.textContent = 'Erro ao carregar vendas. Tente novamente.';
+                    titulo.innerHTML = '<i data-lucide="shopping-bag" class="w-5 h-5 mr-2"></i>Vendas';
+                }
+                wrapperCarregarMais.classList.add('hidden');
+                btnCarregarMais.disabled = false;
+                btnCarregarMais.innerHTML = '<i data-lucide="chevron-down" class="w-4 h-4"></i>Carregar Mais Vendas';
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+            });
+    }
+
+    // Event listener para botão "Carregar Mais"
+    (function() {
+        var btnCarregarMais = document.getElementById('btn-carregar-mais-vendas');
+        if (btnCarregarMais) {
+            btnCarregarMais.addEventListener('click', function() {
+                if (modalVendasTipo && modalVendasId) {
+                    carregarVendasModal(modalVendasPaginaAtual + 1, false);
+                }
+            });
+        }
+    })();
+    function fecharModalVendas() {
+        document.getElementById('modal-vendas-overlay').classList.add('hidden');
+        document.getElementById('modal-vendas').classList.add('hidden');
+    }
+    
+    // Dropdown Seletor de Ano
+    (function() {
+        var btn = document.getElementById('btn-ano-selector');
+        var dropdown = document.getElementById('ano-dropdown');
+        var chevron = document.getElementById('ano-chevron');
+        if (!btn || !dropdown) return;
+        
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var isOpen = !dropdown.classList.contains('hidden');
+            if (isOpen) {
+                dropdown.classList.add('hidden');
+                if (chevron) chevron.style.transform = 'rotate(0deg)';
+            } else {
+                dropdown.classList.remove('hidden');
+                if (chevron) chevron.style.transform = 'rotate(180deg)';
+            }
+        });
+        
+        // Fechar ao clicar fora
+        document.addEventListener('click', function(e) {
+            if (!btn.contains(e.target) && !dropdown.contains(e.target)) {
+                dropdown.classList.add('hidden');
+                if (chevron) chevron.style.transform = 'rotate(0deg)';
+            }
+        });
+        
+        // Fechar com Escape
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                dropdown.classList.add('hidden');
+                if (chevron) chevron.style.transform = 'rotate(0deg)';
+            }
+        });
+    })();
+    </script>
+
+    {% block scripts %}{% endblock %}
+    <script>(function(){ if (typeof lucide !== 'undefined') lucide.createIcons(); })();</script>
+    
+    <!-- Service Worker Registration -->
+    <script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+            navigator.serviceWorker.register('{{ url_for("service_worker") }}')
+                .then(function(registration) {
+                    console.log('[SW] Service Worker registrado com sucesso:', registration.scope);
+                    
+                    // Verificar atualizações periodicamente
+                    setInterval(function() {
+                        registration.update();
+                    }, 60000); // Verificar a cada minuto
+                })
+                .catch(function(error) {
+                    console.log('[SW] Erro ao registrar Service Worker:', error);
+                });
+            
+            // Escutar mensagens do Service Worker
+            navigator.serviceWorker.addEventListener('message', function(event) {
+                console.log('[SW] Mensagem recebida:', event.data);
+            });
+        });
+    }
+    </script>
+</body>
+</html>

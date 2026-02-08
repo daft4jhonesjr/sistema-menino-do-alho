@@ -1,0 +1,347 @@
+{% extends "base.html" %}
+
+{% block title %}Importar Vendas - Menino do Alho{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <h2 class="text-3xl font-bold text-verde-floresta mb-2">Importar Vendas</h2>
+    <p class="text-gray-600">Faça upload de um arquivo Excel (.xlsx) ou CSV (.csv)</p>
+</div>
+
+{% if erros_detalhados is defined and erros_detalhados %}
+<div class="mb-6 bg-red-50 border-2 border-red-300 rounded-lg p-5 shadow-sm" id="import-feedback-box">
+    <div class="flex items-start">
+        <div class="flex-shrink-0">
+            <i class="fas fa-exclamation-triangle text-red-600 text-2xl"></i>
+        </div>
+        <div class="ml-4 flex-1">
+            <h3 class="text-lg font-bold text-red-800 mb-2">Ops! Encontramos alguns probleminhas</h3>
+            {% if sucesso is defined and sucesso > 0 %}
+            <p class="text-red-700 mb-3">Importação parcial: <strong>{{ sucesso }}</strong> nova(s) venda(s) importada(s).{% if ignorados|default(0) > 0 %} <strong>{{ ignorados }}</strong> ignorada(s) (duplicadas).{% endif %} <strong>{{ erros }}</strong> erro(s). Corrija os itens abaixo e importe novamente.</p>
+            {% else %}
+            <p class="text-red-700 mb-3"><strong>{{ erros }}</strong> erro(s) encontrado(s).{% if ignorados|default(0) > 0 %} <strong>{{ ignorados }}</strong> ignorada(s) (duplicadas).{% endif %} Confira as mensagens abaixo, ajuste sua planilha e importe novamente.</p>
+            {% endif %}
+            <ul class="space-y-2 max-h-64 overflow-y-auto pr-2">
+                {% for msg in erros_detalhados %}
+                <li class="text-sm text-red-800 flex items-start"><span class="text-red-500 mr-2">•</span> {{ msg }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="bg-white rounded-lg shadow-md p-6 max-w-2xl">
+    <form method="POST" enctype="multipart/form-data">
+        <div class="mb-4">
+            <label for="arquivo" class="block text-sm font-medium text-gray-700 mb-2">
+                Selecione o arquivo <span class="text-red-500">*</span>
+            </label>
+            <input type="file" id="arquivo" name="arquivo" 
+                   accept=".xlsx,.xls,.csv" 
+                   required
+                   class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
+            <p class="mt-2 text-sm text-gray-500">
+                Formatos aceitos: .xlsx, .xls, .csv
+            </p>
+        </div>
+
+        <div class="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <h3 class="font-semibold text-blue-900 mb-2">
+                <i class="fas fa-info-circle mr-2"></i>Formato esperado:
+            </h3>
+            <ul class="text-sm text-blue-800 space-y-1">
+                <li>• <strong>cliente</strong> ou <strong>nome_cliente</strong> (obrigatório): Nome do cliente cadastrado</li>
+                <li>• <strong>cnpj</strong> (opcional): CNPJ do cliente (alternativa ao nome)</li>
+                <li>• <strong>produto</strong> ou <strong>nome_produto</strong> (obrigatório): Nome completo do produto</li>
+                <li>• <strong>quantidade</strong> ou <strong>quantidade_venda</strong> (obrigatório): Quantidade vendida</li>
+                <li>• <strong>preco_venda</strong> ou <strong>preco</strong> (obrigatório): Preço de venda unitário</li>
+                <li>• <strong>nf</strong> ou <strong>nota_fiscal</strong> (opcional): Número da nota fiscal</li>
+                <li>• <strong>data_venda</strong> ou <strong>data</strong> (opcional): Data da venda</li>
+                <li>• <strong>empresa_faturadora</strong> (opcional): DESTAK, PATY ou NENHUM (vendas sem nota fiscal)</li>
+                <li>• <strong>situacao</strong> (opcional): PENDENTE ou PAGO</li>
+            </ul>
+            <p class="mt-3 text-sm text-blue-900 font-semibold">
+                <i class="fas fa-exclamation-triangle mr-2"></i>
+                Importante: O sistema validará se o cliente e produto existem, e se há estoque suficiente antes de importar.
+            </p>
+        </div>
+
+        <!-- Pré-visualização dos Dados -->
+        <div id="preview-container" class="mb-6 hidden">
+            <h3 class="text-lg font-semibold text-verde-floresta mb-3">
+                <i class="fas fa-eye mr-2"></i>Pré-visualização dos Dados
+            </h3>
+            <div class="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200">
+                <div class="overflow-x-auto">
+                    <table id="preview-table" class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr id="preview-header"></tr>
+                        </thead>
+                        <tbody id="preview-body" class="bg-white divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+                <div class="px-4 py-2 bg-gray-50 border-t border-gray-200">
+                    <p class="text-xs text-gray-600">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        Mostrando as primeiras <span id="preview-row-count">5</span> linhas do arquivo
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex gap-4">
+            <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-md transition-colors flex items-center">
+                <i data-lucide="upload" class="w-4 h-4 mr-2"></i>Importar
+            </button>
+            <a href="{{ url_for('listar_vendas') }}" class="px-4 py-2 bg-gray-300 text-gray-700 font-medium rounded-md hover:bg-gray-400 transition-colors flex items-center">
+                <i data-lucide="x" class="w-4 h-4 mr-2"></i>Cancelar
+            </a>
+        </div>
+    </form>
+</div>
+
+<!-- SheetJS Library -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const fileInput = document.getElementById('arquivo');
+    const previewContainer = document.getElementById('preview-container');
+    const previewHeader = document.getElementById('preview-header');
+    const previewBody = document.getElementById('preview-body');
+    const previewRowCount = document.getElementById('preview-row-count');
+    
+    // Ordem das colunas desejada: CLIENTE, NF, PRODUTO, PREÇO VENDA, QTD VENDA, DATA, EMPRESA, SITUAÇÃO
+    const columnOrder = [
+        'cliente', 'nome_cliente',
+        'nf', 'nota_fiscal', 'nota',
+        'produto', 'nome_produto', 'nome',
+        'preco_venda', 'preco', 'preço',
+        'quantidade', 'quantidade_venda', 'qtd', 'qtd_venda',
+        'data_venda', 'data',
+        'empresa_faturadora', 'empresa',
+        'situacao', 'situação', 'status'
+    ];
+    
+    // Mapeamento de nomes de colunas para exibição
+    const columnDisplayNames = {
+        'cliente': 'CLIENTE',
+        'nome_cliente': 'CLIENTE',
+        'nf': 'NF',
+        'nota_fiscal': 'NF',
+        'nota': 'NF',
+        'produto': 'PRODUTO',
+        'nome_produto': 'PRODUTO',
+        'nome': 'PRODUTO',
+        'preco_venda': 'PREÇO VENDA',
+        'preco': 'PREÇO VENDA',
+        'preço': 'PREÇO VENDA',
+        'quantidade': 'QTD VENDA',
+        'quantidade_venda': 'QTD VENDA',
+        'qtd': 'QTD VENDA',
+        'qtd_venda': 'QTD VENDA',
+        'data_venda': 'DATA',
+        'data': 'DATA',
+        'empresa_faturadora': 'EMPRESA',
+        'empresa': 'EMPRESA',
+        'situacao': 'SITUAÇÃO',
+        'situação': 'SITUAÇÃO',
+        'status': 'SITUAÇÃO'
+    };
+    
+    // Função para normalizar nome de coluna
+    function normalizarNomeColuna(s) {
+        if (!s) return '';
+        s = String(s).trim().toLowerCase();
+        s = s.replace(/\s+/g, '_');
+        s = s.replace('ç', 'c').replace('ã', 'a').replace('á', 'a').replace('à', 'a');
+        return s;
+    }
+    
+    // Função para formatar preço (padrão brasileiro)
+    function formatarPreco(val) {
+        if (!val) return 'R$ 0,00';
+        const num = parseFloat(val);
+        if (isNaN(num)) return 'R$ 0,00';
+        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(num);
+    }
+    
+    // Função para formatar situação
+    function formatarSituacao(val) {
+        if (!val) return 'PENDENTE';
+        const s = String(val).trim().toUpperCase();
+        return s === 'PAGO' ? 'PAGO' : 'PENDENTE';
+    }
+    
+    // Função para obter classe CSS da situação
+    function getSituacaoClass(val) {
+        const s = formatarSituacao(val);
+        return s === 'PAGO' 
+            ? 'px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800'
+            : 'px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800';
+    }
+    
+    // Função para processar e exibir os dados
+    function processAndDisplayData(jsonData) {
+        if (jsonData.length === 0) {
+            previewContainer.classList.add('hidden');
+            return;
+        }
+        
+        // Normalizar nomes das colunas (primeira linha)
+        const headers = jsonData[0].map(h => normalizarNomeColuna(h));
+        
+        // Mapear todas as colunas disponíveis
+        const columnIndices = {};
+        headers.forEach((header, index) => {
+            columnIndices[header] = index;
+        });
+        
+        // Ordenar colunas conforme a ordem desejada
+        const foundColumns = [];
+        columnOrder.forEach(colName => {
+            const normalized = normalizarNomeColuna(colName);
+            if (columnIndices.hasOwnProperty(normalized) && !foundColumns.includes(normalized)) {
+                foundColumns.push(normalized);
+            }
+        });
+        
+        // Adicionar outras colunas que não estão na ordem
+        headers.forEach((header) => {
+            if (!foundColumns.includes(header)) {
+                foundColumns.push(header);
+            }
+        });
+        
+        // Criar cabeçalho da tabela
+        previewHeader.innerHTML = '';
+        foundColumns.forEach(colName => {
+            const th = document.createElement('th');
+            th.className = 'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider';
+            th.textContent = columnDisplayNames[colName] || colName.toUpperCase();
+            previewHeader.appendChild(th);
+        });
+        
+        // Criar corpo da tabela (máximo 5 linhas)
+        previewBody.innerHTML = '';
+        const maxRows = Math.min(5, jsonData.length - 1);
+        previewRowCount.textContent = maxRows;
+        
+        for (let i = 1; i <= maxRows && i < jsonData.length; i++) {
+            const row = jsonData[i];
+            const tr = document.createElement('tr');
+            tr.className = 'hover:bg-gray-50';
+            
+            foundColumns.forEach(colName => {
+                const td = document.createElement('td');
+                const colIndex = columnIndices[colName];
+                const cellValue = colIndex !== undefined && row[colIndex] !== undefined 
+                    ? String(row[colIndex]) 
+                    : '';
+                
+                // Formatação especial por tipo de coluna
+                const normalizedCol = normalizarNomeColuna(colName);
+                if (normalizedCol.includes('preco') || normalizedCol.includes('preço')) {
+                    td.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium';
+                    td.textContent = formatarPreco(cellValue);
+                } else if (normalizedCol.includes('situacao') || normalizedCol.includes('situação') || normalizedCol.includes('status')) {
+                    td.className = 'px-6 py-4 whitespace-nowrap';
+                    const situacao = formatarSituacao(cellValue);
+                    const span = document.createElement('span');
+                    span.className = getSituacaoClass(cellValue);
+                    span.textContent = situacao;
+                    td.appendChild(span);
+                } else if (normalizedCol.includes('quantidade') || normalizedCol.includes('qtd')) {
+                    td.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right';
+                    td.textContent = cellValue || '0';
+                } else {
+                    td.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-900';
+                    td.textContent = cellValue || '-';
+                }
+                
+                tr.appendChild(td);
+            });
+            
+            previewBody.appendChild(tr);
+        }
+        
+        previewContainer.classList.remove('hidden');
+    }
+    
+    fileInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        
+        if (!file) {
+            previewContainer.classList.add('hidden');
+            return;
+        }
+        
+        const reader = new FileReader();
+        
+        if (file.name.endsWith('.csv')) {
+            reader.onload = function(e) {
+                try {
+                    const text = e.target.result;
+                    const lines = text.split('\n').filter(line => line.trim());
+                    
+                    if (lines.length === 0) {
+                        previewContainer.classList.add('hidden');
+                        return;
+                    }
+                    
+                    // Parse CSV simples
+                    const parseCSVLine = (line) => {
+                        const result = [];
+                        let current = '';
+                        let inQuotes = false;
+                        
+                        for (let i = 0; i < line.length; i++) {
+                            const char = line[i];
+                            
+                            if (char === '"') {
+                                inQuotes = !inQuotes;
+                            } else if ((char === ',' || char === ';') && !inQuotes) {
+                                result.push(current.trim());
+                                current = '';
+                            } else {
+                                current += char;
+                            }
+                        }
+                        result.push(current.trim());
+                        return result;
+                    };
+                    
+                    const jsonData = lines.map(line => parseCSVLine(line));
+                    processAndDisplayData(jsonData);
+                    
+                } catch (error) {
+                    console.error('Erro ao ler CSV:', error);
+                    previewContainer.classList.add('hidden');
+                    alert('Erro ao ler o arquivo CSV. Verifique se o formato está correto.');
+                }
+            };
+            reader.readAsText(file);
+        } else {
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                    processAndDisplayData(jsonData);
+                    
+                } catch (error) {
+                    console.error('Erro ao ler arquivo:', error);
+                    previewContainer.classList.add('hidden');
+                    alert('Erro ao ler o arquivo. Verifique se o formato está correto.');
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+    });
+});
+</script>
+{% endblock %}

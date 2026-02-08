@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recibo de Venda - Menino do Alho</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Arial', sans-serif;
+            font-size: 12pt;
+            line-height: 1.4;
+            color: #000;
+            background: #fff;
+        }
+        
+        .container {
+            width: 100%;
+            max-width: 21cm;
+            margin: 0 auto;
+            padding: 1cm;
+            max-height: 28cm;
+            overflow: hidden;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #000;
+            padding-bottom: 15px;
+        }
+        
+        .header h1 {
+            font-size: 24pt;
+            font-weight: bold;
+            color: #047857;
+            margin-bottom: 10px;
+        }
+        
+        .empresa-info {
+            font-size: 10pt;
+            color: #333;
+        }
+        
+        .cliente-section {
+            margin: 20px 0;
+            padding: 10px;
+            background: #f9fafb;
+            border-left: 3px solid #047857;
+        }
+        
+        .cliente-section h2 {
+            font-size: 12pt;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #047857;
+        }
+        
+        .cliente-section p {
+            font-size: 10pt;
+            margin: 3px 0;
+        }
+        
+        .tabela-produtos {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        
+        .tabela-produtos th {
+            background: #047857;
+            color: #fff;
+            padding: 8px;
+            text-align: left;
+            font-size: 10pt;
+            font-weight: bold;
+            border: 1px solid #000;
+        }
+        
+        .tabela-produtos td {
+            padding: 8px;
+            border: 1px solid #000;
+            font-size: 10pt;
+        }
+        
+        .tabela-produtos .text-right {
+            text-align: right;
+        }
+        
+        .tabela-produtos .text-center {
+            text-align: center;
+        }
+        
+        .total-section {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f0fdf4;
+            border: 2px solid #047857;
+            text-align: right;
+        }
+        
+        .total-section .label {
+            font-size: 12pt;
+            font-weight: bold;
+            margin-right: 20px;
+        }
+        
+        .total-section .valor {
+            font-size: 16pt;
+            font-weight: bold;
+            color: #047857;
+        }
+        
+        .rodape {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #ccc;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .rodape .data {
+            font-size: 10pt;
+        }
+        
+        .rodape .assinatura {
+            font-size: 10pt;
+            text-align: center;
+            width: 200px;
+        }
+        
+        .rodape .assinatura .linha {
+            border-top: 1px solid #000;
+            margin-top: 50px;
+            padding-top: 5px;
+        }
+        
+        .no-print {
+            display: none;
+        }
+        
+        @media print {
+            @page {
+                size: A4;
+                margin: 1cm;
+            }
+            
+            body {
+                font-size: 12pt;
+            }
+            
+            .no-print {
+                display: none !important;
+            }
+            
+            .container {
+                max-height: 28cm;
+                overflow: hidden;
+            }
+            
+            .header h1 {
+                font-size: 22pt;
+            }
+        }
+        
+        @media screen {
+            .no-print {
+                display: block;
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                z-index: 1000;
+            }
+            
+            .btn-print {
+                background: #047857;
+                color: #fff;
+                padding: 10px 20px;
+                border: none;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 14pt;
+                font-weight: bold;
+            }
+            
+            .btn-print:hover {
+                background: #065f46;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="no-print">
+        <button class="btn-print" onclick="window.print()">
+            🖨️ Imprimir Recibo
+        </button>
+    </div>
+    
+    <div class="container">
+        <!-- Cabeçalho -->
+        <div class="header">
+            <h1>MENINO DO ALHO</h1>
+            <div class="empresa-info">
+                <p><strong>Empresa Faturadora:</strong> {{ venda.empresa_faturadora }}</p>
+                <p><strong>Nota Fiscal:</strong> {{ venda.nf or 'N/A' }}</p>
+                <p><strong>Data da Venda:</strong> {{ venda.data_venda.strftime('%d/%m/%Y') }}</p>
+            </div>
+        </div>
+        
+        <!-- Dados do Cliente -->
+        <div class="cliente-section">
+            <h2>DADOS DO CLIENTE</h2>
+            <p><strong>Nome:</strong> {{ venda.cliente.nome_cliente }}</p>
+            {% if venda.cliente.razao_social %}
+            <p><strong>Razão Social:</strong> {{ venda.cliente.razao_social }}</p>
+            {% endif %}
+            {% if venda.cliente.cnpj %}
+            <p><strong>CNPJ:</strong> {{ venda.cliente.cnpj }}</p>
+            {% endif %}
+            {% if venda.cliente.cidade %}
+            <p><strong>Cidade:</strong> {{ venda.cliente.cidade }}</p>
+            {% endif %}
+        </div>
+        
+        <!-- Tabela de Produtos -->
+        <table class="tabela-produtos">
+            <thead>
+                <tr>
+                    <th>Produto</th>
+                    <th class="text-center">Quantidade</th>
+                    <th class="text-right">Preço Unitário</th>
+                    <th class="text-right">Valor Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>{{ venda.produto.nome_produto }}</td>
+                    <td class="text-center">{{ venda.quantidade_venda }}</td>
+                    <td class="text-right">{{ venda.preco_venda|formato_moeda }}</td>
+                    <td class="text-right">{{ venda.calcular_total()|formato_moeda }}</td>
+                </tr>
+            </tbody>
+        </table>
+        
+        <!-- Total -->
+        <div class="total-section">
+            <span class="label">VALOR TOTAL:</span>
+            <span class="valor">{{ venda.calcular_total()|formato_moeda }}</span>
+        </div>
+        
+        <!-- Rodapé -->
+        <div class="rodape">
+            <div class="data">
+                <p><strong>Data de Emissão:</strong> {{ data_emissao.strftime('%d/%m/%Y') }}</p>
+            </div>
+            <div class="assinatura">
+                <div class="linha">
+                    <p>Assinatura</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Auto-print quando carregar (opcional - pode remover se não quiser)
+        // window.onload = function() {
+        //     window.print();
+        // }
+    </script>
+</body>
+</html>

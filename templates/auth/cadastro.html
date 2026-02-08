@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="font-sans antialiased">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cadastro - Menino do Alho</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] } } } };</script>
+    <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+</head>
+<body class="bg-emerald-50 min-h-screen flex flex-col items-center justify-center p-4">
+    <div class="w-full max-w-md">
+        <div class="text-center mb-8">
+            <div class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-emerald-700 text-white mb-4">
+                <i data-lucide="leaf" class="w-8 h-8"></i>
+            </div>
+            <h1 class="text-2xl font-bold text-emerald-700">Menino do Alho</h1>
+            <p class="text-gray-600 mt-1">Criar nova conta</p>
+        </div>
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+            <h2 class="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                <i data-lucide="user-plus" class="w-5 h-5 mr-2 text-emerald-600"></i>Cadastro
+            </h2>
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="mb-4 p-3 rounded-lg text-sm flex items-center {% if category == 'error' %}bg-red-50 text-red-700 border border-red-200{% else %}bg-emerald-50 text-emerald-800 border border-emerald-200{% endif %}">
+                            <i data-lucide="{% if category == 'error' %}alert-circle{% else %}check-circle{% endif %}" class="w-4 h-4 mr-2 flex-shrink-0"></i>
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            <form method="POST" action="{{ url_for('cadastro') }}" class="space-y-4">
+                <div>
+                    <label for="username" class="block text-sm font-medium text-gray-700 mb-1">Usuário</label>
+                    <input type="text" id="username" name="username" required autofocus
+                           class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm"
+                           placeholder="Escolha um usuário" value="{{ request.form.get('username', '') }}">
+                </div>
+                <div>
+                    <label for="password" class="block text-sm font-medium text-gray-700 mb-1">Senha</label>
+                    <input type="password" id="password" name="password" required
+                           class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm"
+                           placeholder="Digite a senha">
+                </div>
+                <div>
+                    <label for="confirmar" class="block text-sm font-medium text-gray-700 mb-1">Confirmar Senha</label>
+                    <input type="password" id="confirmar" name="confirmar" required
+                           class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm"
+                           placeholder="Repita a senha">
+                </div>
+                <div>
+                    <label for="codigo_seguranca" class="block text-sm font-medium text-gray-700 mb-1">Código de Segurança</label>
+                    <input type="password" id="codigo_seguranca" name="codigo_seguranca" required
+                           class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm"
+                           placeholder="Digite o código autorizado">
+                </div>
+                <button type="submit" class="w-full bg-emerald-700 text-white py-2.5 rounded-xl hover:bg-emerald-600 transition font-medium flex items-center justify-center">
+                    <i data-lucide="user-plus" class="w-4 h-4 mr-2"></i>Cadastrar
+                </button>
+            </form>
+            <p class="mt-4 text-center text-sm text-gray-500">
+                Já tem conta? <a href="{{ url_for('login') }}" class="text-emerald-600 hover:text-emerald-700 font-medium">Entrar</a>
+            </p>
+        </div>
+    </div>
+    <script>if (typeof lucide !== 'undefined') lucide.createIcons();</script>
+</body>
+</html>

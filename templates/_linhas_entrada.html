@@ -1,0 +1,59 @@
+{% if produtos_agrupados %}
+{% for tipo, produtos in produtos_agrupados.items() %}
+{% for item in produtos %}
+{% set produto = item.produto %}
+<tr class="hover:bg-emerald-50 transition {% if produto.estoque_atual <= 0 %}bg-red-50{% elif produto.estoque_atual < 10 %}bg-amber-50{% endif %}" data-tipo="{{ tipo }}">
+    <td class="px-4 py-4">
+        <input type="checkbox" class="bulk-row rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" value="{{ produto.id }}">
+    </td>
+    <td class="px-6 py-4 text-sm font-medium text-gray-900">
+        <button type="button" onclick="abrirModalVendas('produto', {{ produto.id }})"
+                class="text-emerald-700 hover:underline font-bold transition text-left cursor-pointer">
+            {{ produto.nome_produto }}
+        </button>
+    </td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{{ produto.preco_custo | formato_moeda }}</td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-right">
+        {{ item.quantidade_entrada_exibicao }}
+    </td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">{{ (produto.preco_custo * item.quantidade_entrada_exibicao) | formato_moeda }}</td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm font-bold {% if produto.estoque_atual <= 0 %}text-red-600{% elif produto.estoque_atual < 10 %}text-amber-600{% else %}text-emerald-600{% endif %} text-right">
+        {{ produto.estoque_atual }}
+    </td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-right {% if produto.lucro_realizado() > 0 %}text-emerald-600{% elif produto.lucro_realizado() < 0 %}text-red-600{% else %}text-amber-600{% endif %}" title="{% if produto.quantidade_vendida() > 0 %}Lucro de {{ produto.lucro_medio_por_unidade() | formato_moeda }} por unidade{% else %}Nenhuma venda{% endif %}">
+        {{ produto.lucro_realizado() | formato_moeda }}
+    </td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ produto.data_chegada.strftime('%d/%m/%Y') }}</td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ produto.tipo }}</td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ produto.fornecedor }}</td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ produto.nacionalidade }}</td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ produto.tamanho }}</td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ produto.marca }}</td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ produto.caminhoneiro }}</td>
+    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+        <button type="button" class="btn-editar-produto text-emerald-600 hover:text-emerald-800 mr-4 inline-flex items-center cursor-pointer bg-transparent border-none p-0"
+                data-id="{{ produto.id }}"
+                data-preco-custo="{{ produto.preco_custo }}"
+                data-preco-venda-alvo="{{ produto.preco_venda_alvo or '' }}"
+                data-quantidade-entrada="0"
+                data-data-chegada="{{ produto.data_chegada.strftime('%Y-%m-%d') }}"
+                data-tipo="{{ produto.tipo }}"
+                data-fornecedor="{{ produto.fornecedor }}"
+                data-nacionalidade="{{ produto.nacionalidade }}"
+                data-tamanho="{{ produto.tamanho }}"
+                data-marca="{{ produto.marca }}"
+                data-caminhoneiro="{{ produto.caminhoneiro }}"
+                data-estoque-atual="{{ produto.estoque_atual }}"
+                title="Editar produto">
+            <i data-lucide="pencil" class="w-4 h-4"></i>
+        </button>
+        <form action="{{ url_for('excluir_produto', id=produto.id) }}" method="POST" class="inline" onsubmit="return confirm('Tem certeza que deseja excluir este produto?');">
+            <button type="submit" class="text-red-600 hover:text-red-800 inline-flex items-center">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+        </form>
+    </td>
+</tr>
+{% endfor %}
+{% endfor %}
+{% endif %}

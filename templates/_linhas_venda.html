@@ -1,0 +1,118 @@
+{% if pedidos %}
+{% for pedido in pedidos %}
+{% set zebra_class = 'bg-white' if loop.index % 2 == 0 else 'bg-emerald-50/50' %}
+{% set zebra_bg_class = 'bg-white' if loop.index % 2 == 0 else 'bg-emerald-50/30' %}
+{% set row_vencida = pedido.is_vencido %}
+{% set pedido_unique_id = 'pedido-' ~ pedido.primeira_venda_id %}
+<!-- Linha de Resumo do Pedido (Expansível) -->
+<tr class="pedido-resumo cursor-pointer transition {{ 'linha-vencida-abatimento' if row_vencida else zebra_class }} {{ 'hover:bg-red-100' if row_vencida else 'hover:bg-emerald-100' }}" data-pedido-id="{{ pedido_unique_id }}" data-venda-ids="{{ pedido.vendas|map(attribute='id')|list|tojson }}" data-lucro-total="{{ pedido.total_lucro }}">
+    <td class="px-3 py-4 text-center" onclick="event.stopPropagation();">
+        <input type="checkbox" class="bulk-row-check rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" data-venda-ids="{{ pedido.vendas|map(attribute='id')|list|tojson }}" data-lucro-total="{{ pedido.total_lucro }}">
+    </td>
+    <td class="px-4 py-4 text-center">
+        <i data-lucide="chevron-down" class="w-5 h-5 text-emerald-700 pedido-chevron transition-transform"></i>
+    </td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ pedido.data_venda.strftime('%d/%m/%Y') }}</td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">{{ pedido.cliente_nome }}</td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ pedido.nf }}</td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{% if pedido.total_quantidade %}{{ (pedido.total_valor / pedido.total_quantidade)|formato_moeda }}{% else %}<span class="text-gray-400">---</span>{% endif %}</td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 text-right">{{ pedido.total_quantidade }}</td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 text-right">{{ pedido.total_valor|formato_moeda }}</td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-right {% if pedido.total_lucro >= 0 %}text-emerald-600{% else %}text-red-600{% endif %}">{{ pedido.total_lucro|formato_moeda }}</td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+        {% if pedido.data_vencimento %}
+            {{ pedido.data_vencimento.strftime('%d/%m/%Y') }}
+            {% if row_vencida %}
+                <i data-lucide="alert-triangle" class="w-4 h-4 inline-block ml-1 text-red-600 alerta-vencido-pulse" title="Vencido — pagamento pendente"></i>
+            {% endif %}
+        {% else %}
+            <span class="text-gray-400">---</span>
+        {% endif %}
+    </td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ pedido.empresa_faturadora }}</td>
+    <td class="px-6 py-4 whitespace-nowrap">
+        {% if pedido.situacao == 'PENDENTE' %}
+        <button type="button" class="badge-situacao-toggle px-3 py-1 text-xs font-semibold rounded-full bg-amber-100 text-amber-800 cursor-pointer hover:bg-amber-200 hover:ring-2 hover:ring-amber-400 transition focus:outline-none focus:ring-2 focus:ring-amber-400" data-venda-id="{{ pedido.primeira_venda_id }}" data-nf="{{ pedido.nf if pedido.nf and pedido.nf != '-' else 'N/A' }}" data-situacao="PENDENTE" data-cliente="{{ pedido.cliente_nome }}" data-valor="{{ pedido.total_valor|formato_moeda }}" title="Clique para marcar como pago">{{ pedido.situacao }}</button>
+        {% else %}
+        <button type="button" class="badge-situacao-toggle px-3 py-1 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-800 cursor-pointer hover:bg-emerald-200 hover:ring-2 hover:ring-emerald-400 transition focus:outline-none focus:ring-2 focus:ring-emerald-400" data-venda-id="{{ pedido.primeira_venda_id }}" data-nf="{{ pedido.nf if pedido.nf and pedido.nf != '-' else 'N/A' }}" data-situacao="PAGO" data-cliente="{{ pedido.cliente_nome }}" data-valor="{{ pedido.total_valor|formato_moeda }}" title="Clique para reverter para pendente">{{ pedido.situacao }}</button>
+        {% endif %}
+    </td>
+    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium" onclick="event.stopPropagation();">
+        <div class="flex items-center justify-end gap-2 flex-nowrap min-w-0">
+            {# NOTA FISCAL: Renderizar ícone se existir caminho_nf #}
+            {% if pedido.caminho_nf %}
+                {% set _doc_nf = pedido.doc_nf %}
+                {% set _url_nf = url_for('ver_nf_venda', id=pedido.primeira_venda_id) %}
+                {% set _tip_nf = 'Visualizar Nota Fiscal' if _doc_nf else 'Visualizar Nota Fiscal (vínculo órfão)' %}
+                <a href="{{ _url_nf }}" target="_blank" class="flex-shrink-0 p-1.5 rounded {{ 'text-blue-600 hover:text-blue-800 hover:bg-blue-50' if _doc_nf else 'text-orange-600 hover:text-orange-800 hover:bg-orange-50 cursor-help' }} inline-flex" title="{{ _tip_nf }}">
+                    <i data-lucide="receipt" class="w-4 h-4" aria-hidden="true"></i>
+                </a>
+            {% endif %}
+            
+            {# BOLETO: Renderizar ícone se existir caminho_boleto #}
+            {% if pedido.caminho_boleto %}
+                {% set _doc_boleto = pedido.doc_boleto %}
+                {% set _url_boleto = url_for('ver_boleto_venda', id=pedido.primeira_venda_id) %}
+                {% set _tip_boleto = 'Visualizar Boleto' if _doc_boleto else 'Visualizar Boleto (vínculo órfão)' %}
+                <a href="{{ _url_boleto }}" target="_blank" class="flex-shrink-0 p-1.5 rounded {{ 'text-blue-600 hover:text-blue-800 hover:bg-blue-50' if _doc_boleto else 'text-orange-600 hover:text-orange-800 hover:bg-orange-50 cursor-help' }} inline-flex" title="{{ _tip_boleto }}">
+                    <i data-lucide="paperclip" class="w-4 h-4" aria-hidden="true"></i>
+                </a>
+            {% endif %}
+            
+            {# RECIBO: Sempre disponível #}
+            <a href="{{ url_for('recibo_venda', id=pedido.primeira_venda_id) }}" target="_blank" class="flex-shrink-0 p-1.5 rounded text-blue-600 hover:text-blue-800 hover:bg-blue-50 inline-flex" title="Imprimir Recibo do Pedido"><i data-lucide="printer" class="w-4 h-4" aria-hidden="true"></i></a>
+            <form action="{{ url_for('excluir_venda', id=pedido.primeira_venda_id) }}" method="POST" class="inline flex-shrink-0 form-excluir-pedido" 
+                  data-cliente="{{ pedido.cliente_nome }}" 
+                  data-nf="{{ pedido.nf }}" 
+                  data-data="{{ pedido.data_venda.strftime('%d/%m/%Y') }}">
+                <button type="submit" class="p-1.5 rounded text-red-600 hover:text-red-800 hover:bg-red-50 inline-flex" title="Excluir Pedido Completo"><i data-lucide="trash-2" class="w-4 h-4" aria-hidden="true"></i></button>
+            </form>
+        </div>
+    </td>
+</tr>
+<!-- Linha de Detalhes (Oculta por padrão) -->
+<tr class="pedido-detalhes hidden {{ zebra_class }}" data-pedido-id="{{ pedido_unique_id }}">
+    <td colspan="13" class="px-0 py-0">
+        <div class="{{ zebra_bg_class }} border-l-4 border-emerald-300 px-6 py-4">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-100">
+                    <tr>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Produto</th>
+                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Qtd</th>
+                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Preço Unit.</th>
+                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Total</th>
+                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Lucro</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase w-24">Ações</th>
+                    </tr>
+                </thead>
+                <tbody class="{{ zebra_bg_class }} divide-y divide-gray-200">
+                    {% for venda in pedido.vendas %}
+                    <tr class="hover:bg-emerald-100/50 transition">
+                        <td class="px-4 py-3 text-sm text-gray-900">{{ venda.produto.nome_produto }}</td>
+                        <td class="px-4 py-3 text-sm text-gray-900 text-right">{{ venda.quantidade_venda }}</td>
+                        <td class="px-4 py-3 text-sm text-gray-900 text-right">{{ venda.preco_venda|formato_moeda }}</td>
+                        <td class="px-4 py-3 text-sm font-medium text-gray-900 text-right">{{ venda.calcular_total()|formato_moeda }}</td>
+                        <td class="px-4 py-3 text-sm font-medium text-right {% if venda.calcular_lucro() >= 0 %}text-emerald-600{% else %}text-red-600{% endif %}">{{ venda.calcular_lucro()|formato_moeda }}</td>
+                        <td class="px-4 py-3 text-sm font-medium">
+                            <button type="button" class="btn-editar-venda text-emerald-600 hover:text-emerald-800 inline-flex bg-transparent border-none p-0 cursor-pointer" title="Editar"
+                                data-id="{{ venda.id }}"
+                                data-cliente-id="{{ venda.cliente_id }}"
+                                data-produto-id="{{ venda.produto_id }}"
+                                data-qtd="{{ venda.quantidade_venda }}"
+                                data-preco="{{ venda.preco_venda }}"
+                                data-nf="{{ venda.nf or '' }}"
+                                data-data="{{ venda.data_venda.strftime('%Y-%m-%d') }}"
+                                data-empresa="{{ venda.empresa_faturadora or '' }}"
+                                data-situacao="{{ venda.situacao or 'PENDENTE' }}">
+                            <i data-lucide="pencil" class="w-4 h-4"></i>
+                        </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </td>
+</tr>
+{% endfor %}
+{% endif %}

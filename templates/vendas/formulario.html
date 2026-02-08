@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block title %}{% if venda %}Editar{% else %}Nova{% endif %} Venda - Menino do Alho{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <h2 class="text-3xl font-bold text-verde-floresta mb-2">
+        {% if venda %}Editar Venda{% else %}Nova Venda{% endif %}
+    </h2>
+    <p class="text-gray-600">Registre uma nova venda</p>
+</div>
+
+<div class="bg-white rounded-lg shadow-md p-6 max-w-3xl">
+    <form method="POST" action="{% if venda %}{{ url_for('editar_venda', id=venda.id) }}{% else %}{{ url_for('nova_venda') }}{% endif %}">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="mb-4">
+                <label for="cliente_id" class="block text-sm font-medium text-gray-700 mb-2">
+                    Cliente <span class="text-red-500">*</span>
+                </label>
+                <select id="cliente_id" name="cliente_id" required
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
+                    <option value="">Selecione o cliente...</option>
+                    {% for cliente in clientes %}
+                    <option value="{{ cliente.id }}" {% if venda and venda.cliente_id == cliente.id %}selected{% endif %}>
+                        {{ cliente.nome_cliente }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="mb-4">
+                <label for="produto_id" class="block text-sm font-medium text-gray-700 mb-2">
+                    Produto <span class="text-red-500">*</span>
+                </label>
+                <select id="produto_id" name="produto_id" required
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
+                    <option value="">Selecione o produto...</option>
+                    {% for produto in produtos %}
+                    <option value="{{ produto.id }}" 
+                            data-estoque="{{ produto.estoque_atual }}"
+                            data-preco="{{ produto.preco_custo }}"
+                            {% if venda and venda.produto_id == produto.id %}selected{% endif %}>
+                        {{ produto.nome_produto }} (Estoque: {{ produto.estoque_atual }})
+                    </option>
+                    {% endfor %}
+                </select>
+                <p id="estoque-info" class="mt-1 text-sm text-gray-500"></p>
+            </div>
+
+            <div class="mb-4">
+                <label for="quantidade_venda" class="block text-sm font-medium text-gray-700 mb-2">
+                    Quantidade <span class="text-red-500">*</span>
+                </label>
+                <input type="number" id="quantidade_venda" name="quantidade_venda" 
+                       value="{{ venda.quantidade_venda if venda else '1' }}" 
+                       min="1" required
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
+            </div>
+
+            <div class="mb-4">
+                <label for="preco_venda" class="block text-sm font-medium text-gray-700 mb-2">
+                    Preço de Venda <span class="text-red-500">*</span>
+                </label>
+                <input type="number" id="preco_venda" name="preco_venda" 
+                       value="{{ venda.preco_venda if venda else '' }}" 
+                       step="0.01" min="0" required
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
+            </div>
+
+            <div class="mb-4">
+                <label for="nf" class="block text-sm font-medium text-gray-700 mb-2">
+                    Nota Fiscal
+                </label>
+                <input type="text" id="nf" name="nf" 
+                       value="{{ venda.nf if venda else '' }}"
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
+            </div>
+
+            <div class="mb-4">
+                <label for="data_venda" class="block text-sm font-medium text-gray-700 mb-2">
+                    Data da Venda
+                </label>
+                <input type="date" id="data_venda" name="data_venda" 
+                       value="{% if venda %}{{ venda.data_venda.strftime('%Y-%m-%d') }}{% endif %}"
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
+            </div>
+
+            <div class="mb-4">
+                <label for="empresa_faturadora" class="block text-sm font-medium text-gray-700 mb-2">
+                    Empresa Faturadora <span class="text-red-500">*</span>
+                </label>
+                <select id="empresa_faturadora" name="empresa_faturadora" required
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
+                    <option value="">Selecione...</option>
+                    <option value="DESTAK" {% if venda and venda.empresa_faturadora == 'DESTAK' %}selected{% endif %}>DESTAK</option>
+                    <option value="PATY" {% if venda and venda.empresa_faturadora == 'PATY' %}selected{% endif %}>PATY</option>
+                    <option value="NENHUM" {% if venda and venda.empresa_faturadora == 'NENHUM' %}selected{% endif %}>NENHUM</option>
+                </select>
+            </div>
+
+            <div class="mb-4">
+                <label for="situacao" class="block text-sm font-medium text-gray-700 mb-2">
+                    Situação <span class="text-red-500">*</span>
+                </label>
+                <select id="situacao" name="situacao" required
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
+                    <option value="PENDENTE" {% if venda and venda.situacao == 'PENDENTE' %}selected{% endif %}>PENDENTE</option>
+                    <option value="PAGO" {% if venda and venda.situacao == 'PAGO' %}selected{% endif %}>PAGO</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="flex gap-4 mt-6">
+            <button type="submit" class="bg-verde-floresta text-white px-6 py-2 rounded-lg hover:bg-green-800 transition">
+                <i class="fas fa-save mr-2"></i>Salvar
+            </button>
+            <a href="{{ url_for('listar_vendas') }}" class="bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400 transition">
+                <i class="fas fa-times mr-2"></i>Cancelar
+            </a>
+        </div>
+    </form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const produtoSelect = document.getElementById('produto_id');
+    const quantidadeInput = document.getElementById('quantidade_venda');
+    const precoInput = document.getElementById('preco_venda');
+    const estoqueInfo = document.getElementById('estoque-info');
+    
+    produtoSelect.addEventListener('change', function() {
+        const selectedOption = this.options[this.selectedIndex];
+        const estoque = selectedOption.getAttribute('data-estoque');
+        const preco = selectedOption.getAttribute('data-preco');
+        
+        if (estoque) {
+            estoqueInfo.textContent = `Estoque disponível: ${estoque} unidades`;
+            estoqueInfo.className = 'mt-1 text-sm ' + (parseInt(estoque) > 0 ? 'text-green-600' : 'text-red-600');
+            
+            if (preco && !precoInput.value) {
+                precoInput.value = parseFloat(preco).toFixed(2);
+            }
+        } else {
+            estoqueInfo.textContent = '';
+        }
+    });
+    
+    quantidadeInput.addEventListener('input', function() {
+        const produtoSelect = document.getElementById('produto_id');
+        const selectedOption = produtoSelect.options[produtoSelect.selectedIndex];
+        const estoque = parseInt(selectedOption.getAttribute('data-estoque') || 0);
+        const quantidade = parseInt(this.value || 0);
+        
+        if (quantidade > estoque) {
+            estoqueInfo.textContent = `⚠️ Estoque insuficiente! Disponível: ${estoque}`;
+            estoqueInfo.className = 'mt-1 text-sm text-red-600 font-semibold';
+        } else if (estoque > 0) {
+            estoqueInfo.textContent = `Estoque disponível: ${estoque} unidades`;
+            estoqueInfo.className = 'mt-1 text-sm text-green-600';
+        }
+    });
+    
+    // Trigger inicial
+    if (produtoSelect.value) {
+        produtoSelect.dispatchEvent(new Event('change'));
+    }
+    
+    // Definir data atual se não houver valor
+    const dataVendaInput = document.getElementById('data_venda');
+    if (!dataVendaInput.value) {
+        const today = new Date().toISOString().split('T')[0];
+        dataVendaInput.value = today;
+    }
+});
+</script>
+{% endblock %}

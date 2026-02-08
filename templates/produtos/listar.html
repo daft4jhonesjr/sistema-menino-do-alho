@@ -1,0 +1,1025 @@
+{% extends "base.html" %}
+
+{% block title %}Produtos - Menino do Alho{% endblock %}
+
+{% block head_extras %}
+<style>
+    .categoria-chevron {
+        transition: transform 0.2s ease-in-out;
+    }
+    .categoria-content {
+        transition: opacity 0.2s ease-in-out;
+    }
+    .categoria-header {
+        user-select: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-6 flex justify-between items-center flex-wrap gap-4">
+    <div>
+        <h2 class="text-3xl font-bold text-emerald-700 mb-2">Entrada de Produtos</h2>
+        <p class="text-gray-600">Gerenciar estoque de produtos</p>
+    </div>
+    <div class="flex gap-3 items-center flex-wrap">
+        <button type="button" id="bulk-delete-btn" class="hidden bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-xl transition duration-200 ease-in-out flex items-center" data-endpoint="{{ url_for('bulk_delete_produtos') }}" data-redirect="{{ url_for('listar_produtos', ordem_data=ordem_data) }}">
+            <i data-lucide="trash-2" class="w-4 h-4 mr-2"></i>Excluir Selecionados
+        </button>
+        {% if current_user.is_authenticated and current_user.is_admin() %}
+        <a href="{{ url_for('importar_produtos') }}" class="bg-white border border-gray-200 text-gray-700 px-5 py-2.5 rounded-xl shadow-sm hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-700 transition flex items-center font-medium">
+            <i data-lucide="upload" class="w-4 h-4 mr-2"></i>Importar Lista
+        </a>
+        {% endif %}
+        <button type="button" id="btn-abrir-modal-nova-entrada" class="bg-emerald-700 text-white px-5 py-2.5 rounded-xl shadow-sm hover:bg-emerald-600 transition flex items-center font-medium">
+            <i data-lucide="plus" class="w-4 h-4 mr-2"></i>Nova Entrada
+        </button>
+    </div>
+</div>
+
+<div class="mb-4 flex flex-wrap items-center gap-3">
+    <span class="text-sm font-medium text-gray-700">Ordenar por data de chegada:</span>
+    <a href="{{ url_for('listar_produtos', ordem_data='crescente') }}" class="px-4 py-2 rounded-xl text-sm font-medium transition {{ 'bg-emerald-700 text-white' if ordem_data == 'crescente' else 'bg-white border border-gray-200 text-gray-700 hover:bg-emerald-50 hover:border-emerald-200' }}">
+        <i data-lucide="arrow-up" class="w-4 h-4 inline-block mr-1.5 align-middle"></i>Data crescente
+    </a>
+    <a href="{{ url_for('listar_produtos', ordem_data='decrescente') }}" class="px-4 py-2 rounded-xl text-sm font-medium transition {{ 'bg-emerald-700 text-white' if ordem_data == 'decrescente' else 'bg-white border border-gray-200 text-gray-700 hover:bg-emerald-50 hover:border-emerald-200' }}">
+        <i data-lucide="arrow-down" class="w-4 h-4 inline-block mr-1.5 align-middle"></i>Data decrescente
+    </a>
+</div>
+
+<div class="relative">
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        {% if produtos_agrupados %}
+            {% for tipo, produtos in produtos_agrupados.items() %}
+            {% set bg_color = 'bg-emerald-700' if tipo == 'ALHO' else 'bg-gray-600' if tipo == 'SACOLA' else 'bg-amber-700' if tipo == 'CAFE' else 'bg-slate-600' %}
+            {% set is_open = loop.first %}
+            
+            <!-- Cabeçalho da Categoria -->
+            <div class="categoria-header cursor-pointer {{ bg_color }} text-white px-6 py-4 flex items-center justify-between hover:opacity-90 transition" data-tipo="{{ tipo }}">
+                <div class="flex items-center gap-3">
+                    <i data-lucide="chevron-down" class="categoria-chevron w-5 h-5 transition-transform {% if not is_open %}rotate-[-90deg]{% endif %}"></i>
+                    <h3 class="text-lg font-bold">{{ tipo }}</h3>
+                    <span class="text-sm opacity-90">({{ produtos|length }} item{{ 's' if produtos|length != 1 else '' }})</span>
+                </div>
+                {% if tipo == 'OUTROS' and produtos_outros %}
+                <button type="button" onclick="event.stopPropagation(); abrirModalCorrigirCategoria();" class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-white text-sm font-medium transition shrink-0">
+                    <i data-lucide="edit-3" class="w-4 h-4"></i>Corrigir Categoria
+                </button>
+                {% endif %}
+            </div>
+            
+            <!-- Tabela da Categoria -->
+            <div class="categoria-content {% if not is_open %}hidden{% endif %}" data-tipo="{{ tipo }}">
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200" data-bulk-module="produtos">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-3 text-left">
+                                    <input type="checkbox" class="bulk-select-all rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" title="Selecionar todos" data-tipo="{{ tipo }}">
+                                </th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Produto</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">PREÇO</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Qtd Entrada</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">VALOR TOTAL</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Estoque Atual</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Lucro Realizado</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data Chegada</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fornecedor</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nacionalidade</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tamanho</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Marca</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Caminhoneiro</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200" data-tipo-tbody="{{ tipo }}">
+                            {% for item in produtos %}
+                            {% set produto = item.produto %}
+                            <tr class="hover:bg-emerald-50 transition {% if produto.estoque_atual <= 0 %}bg-red-50{% elif produto.estoque_atual < 10 %}bg-amber-50{% endif %}" data-tipo="{{ tipo }}">
+                                <td class="px-4 py-4">
+                                    <input type="checkbox" class="bulk-row rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" value="{{ produto.id }}">
+                                </td>
+                                <td class="px-6 py-4 text-sm font-medium text-gray-900">
+                                <button type="button" onclick="abrirModalVendas('produto', {{ produto.id }})"
+                                        class="text-emerald-700 hover:underline font-bold transition text-left cursor-pointer">
+                                    {{ produto.nome_produto }}
+                                </button>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{{ produto.preco_custo | formato_moeda }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-right">
+                                {{ item.quantidade_entrada_exibicao }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">{{ (produto.preco_custo * item.quantidade_entrada_exibicao) | formato_moeda }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-bold {% if produto.estoque_atual <= 0 %}text-red-600{% elif produto.estoque_atual < 10 %}text-amber-600{% else %}text-emerald-600{% endif %} text-right">
+                                {{ produto.estoque_atual }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-right {% if produto.lucro_realizado() > 0 %}text-emerald-600{% elif produto.lucro_realizado() < 0 %}text-red-600{% else %}text-amber-600{% endif %}" title="{% if produto.quantidade_vendida() > 0 %}Lucro de {{ produto.lucro_medio_por_unidade() | formato_moeda }} por unidade{% else %}Nenhuma venda{% endif %}">
+                                {{ produto.lucro_realizado() | formato_moeda }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ produto.data_chegada.strftime('%d/%m/%Y') }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ produto.tipo }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ produto.fornecedor }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ produto.nacionalidade }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ produto.tamanho }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ produto.marca }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ produto.caminhoneiro }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                <button type="button" class="btn-editar-produto text-emerald-600 hover:text-emerald-800 mr-4 inline-flex items-center cursor-pointer bg-transparent border-none p-0"
+                                        data-id="{{ produto.id }}"
+                                        data-preco-custo="{{ produto.preco_custo }}"
+                                        data-preco-venda-alvo="{{ produto.preco_venda_alvo or '' }}"
+                                        data-quantidade-entrada="0"
+                                        data-data-chegada="{{ produto.data_chegada.strftime('%Y-%m-%d') }}"
+                                        data-tipo="{{ produto.tipo }}"
+                                        data-fornecedor="{{ produto.fornecedor }}"
+                                        data-nacionalidade="{{ produto.nacionalidade }}"
+                                        data-tamanho="{{ produto.tamanho }}"
+                                        data-marca="{{ produto.marca }}"
+                                        data-caminhoneiro="{{ produto.caminhoneiro }}"
+                                        data-estoque-atual="{{ produto.estoque_atual }}"
+                                        title="Editar produto">
+                                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                                </button>
+                                <form action="{{ url_for('excluir_produto', id=produto.id) }}" method="POST" class="inline" onsubmit="return confirm('Tem certeza que deseja excluir este produto?');">
+                                    <button type="submit" class="text-red-600 hover:text-red-800 inline-flex items-center">
+                                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <!-- Resumo Financeiro da categoria -->
+                {% set totais = totais_por_tipo.get(tipo, {}) %}
+                <div class="mt-4 mx-4 mb-4 p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+                    <h4 class="text-sm font-bold text-emerald-800 mb-3 flex items-center">
+                        <i data-lucide="pie-chart" class="w-4 h-4 mr-2"></i>Totais {{ tipo }}
+                    </h4>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div class="bg-white rounded-lg p-3 border border-emerald-100 shadow-sm">
+                            <p class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-0.5">Qtd Entrada</p>
+                            <p class="text-lg font-bold text-gray-900">{{ totais.get('total_qtd_entrada', 0)|int }} un</p>
+                        </div>
+                        <div class="bg-white rounded-lg p-3 border border-emerald-100 shadow-sm">
+                            <p class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-0.5">Investimento</p>
+                            <p class="text-lg font-bold text-gray-900">{{ totais.get('total_investido', 0)|formato_moeda }}</p>
+                            <p class="text-xs mt-1.5 space-y-0.5">
+                                <span class="text-blue-600 block">Destak: {{ totais.get('investimento_destak', 0)|formato_moeda }}</span>
+                                <span class="text-purple-600 block">Paty: {{ totais.get('investimento_paty', 0)|formato_moeda }}</span>
+                            </p>
+                        </div>
+                        <div class="bg-white rounded-lg p-3 border border-emerald-100 shadow-sm">
+                            <p class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-0.5">Estoque Atual</p>
+                            <p class="text-lg font-bold text-gray-900">{{ totais.get('total_estoque_atual', 0)|int }} un</p>
+                        </div>
+                        <div class="bg-white rounded-lg p-3 border border-emerald-100 shadow-sm">
+                            <p class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-0.5">Lucro Realizado</p>
+                            <p class="text-lg font-bold {% if (totais.get('total_lucro_realizado', 0)|default(0)) >= 0 %}text-emerald-600{% else %}text-red-600{% endif %}">{{ totais.get('total_lucro_realizado', 0)|formato_moeda }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+            
+            <!-- Botão Carregar Mais -->
+            {% if pagination and pagination.has_next %}
+            <div class="mt-6 flex justify-center pb-6">
+                <button id="btn-carregar-mais" class="bg-emerald-700 text-white px-8 py-3 rounded-xl hover:bg-emerald-600 transition font-semibold flex items-center shadow-sm">
+                    <i data-lucide="chevron-down" class="w-5 h-5 mr-2"></i>Carregar Mais Entradas
+                </button>
+            </div>
+            {% endif %}
+        {% else %}
+            <div class="px-6 py-8 text-center text-gray-500">Nenhum produto cadastrado.</div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Modal Nova Entrada -->
+<div id="modal-nova-entrada-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
+    <div class="fixed inset-0 bg-black/50" id="modal-nova-entrada-overlay"></div>
+    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-white rounded-xl shadow-sm border border-gray-200 z-50" onclick="event.stopPropagation()">
+        <div class="sticky top-0 flex justify-between items-center px-8 py-5 bg-emerald-700 text-white rounded-t-xl z-10">
+            <h3 class="text-xl font-bold flex items-center">
+                <i data-lucide="package" class="w-5 h-5 mr-2"></i>Nova Entrada de Produto
+            </h3>
+            <button type="button" class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-emerald-600 text-white font-bold transition" id="modal-nova-entrada-fechar" title="Fechar">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+        <div class="p-8">
+            <div id="modal-nova-entrada-erro" class="hidden mb-4 p-4 bg-red-50 border border-red-200 rounded-xl text-red-800 text-sm"></div>
+            <form id="form-nova-entrada" action="{{ url_for('novo_produto') }}" method="POST">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="col-span-2">
+                        <label for="preco_custo" class="block text-sm font-medium text-gray-700 mb-1">Preço de Custo (R$) <span class="text-red-500">*</span></label>
+                        <div class="relative rounded-md shadow-sm">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <span class="text-gray-500 sm:text-sm">R$</span>
+                            </div>
+                            <input type="number" step="0.01" name="preco_custo" id="preco_custo" required class="pl-10 w-full rounded-lg border-gray-300 focus:border-emerald-500 focus:ring-emerald-500 transition-colors shadow-sm" placeholder="0,00">
+                        </div>
+                    </div>
+                    <div class="col-span-1">
+                        <label for="quantidade_entrada" class="block text-sm font-medium text-gray-700 mb-1">Quantidade <span class="text-red-500">*</span></label>
+                        <input type="number" name="quantidade_entrada" id="quantidade_entrada" value="1" required class="w-full rounded-lg border-gray-300 focus:border-emerald-500 focus:ring-emerald-500 transition-colors shadow-sm">
+                    </div>
+                    <div class="col-span-1">
+                        <label for="data_chegada" class="block text-sm font-medium text-gray-700 mb-1">Data Chegada</label>
+                        <input type="date" name="data_chegada" id="data_chegada" class="w-full rounded-lg border-gray-300 focus:border-emerald-500 focus:ring-emerald-500 transition-colors shadow-sm">
+                    </div>
+                    <div class="mb-4">
+                        <label for="tipo" class="block text-sm font-medium text-gray-700 mb-2">Tipo <span class="text-red-500">*</span></label>
+                        <select id="tipo" name="tipo" required class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                            <option value="">Selecione...</option>
+                            <option value="ALHO">ALHO</option>
+                            <option value="SACOLA">SACOLA</option>
+                            <option value="CAFE">CAFE</option>
+                        </select>
+                    </div>
+                    <div class="mb-4">
+                        <label for="fornecedor" class="block text-sm font-medium text-gray-700 mb-2">Fornecedor <span class="text-red-500">*</span></label>
+                        <select id="fornecedor" name="fornecedor" required class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                            <option value="">Selecione...</option>
+                            <option value="DESTAK">DESTAK</option>
+                            <option value="PATY">PATY</option>
+                            <option value="SERVE BEM">SERVE BEM</option>
+                        </select>
+                    </div>
+                    <div class="mb-4" id="nacionalidade-wrap">
+                        <label for="nacionalidade" class="block text-sm font-medium text-gray-700 mb-2">Nacionalidade <span class="text-red-500" id="nacionalidade-asterisco">*</span></label>
+                        <input type="hidden" id="nacionalidade_hidden" value="N/A">
+                        <select id="nacionalidade" name="nacionalidade" required class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                            <option value="">Selecione...</option>
+                            <option value="ARGENTINO">ARGENTINO</option>
+                            <option value="NACIONAL">NACIONAL</option>
+                            <option value="CHINES">CHINES</option>
+                            <option value="NA">N/A (Não se aplica)</option>
+                        </select>
+                        <p class="mt-1 text-sm text-gray-500 hidden" id="nacionalidade-na-msg">N/A para SACOLA</p>
+                    </div>
+                    <div class="mb-4">
+                        <label for="tamanho" class="block text-sm font-medium text-gray-700 mb-2">Tamanho <span class="text-red-500">*</span></label>
+                        <select id="tamanho" name="tamanho" required data-initial="" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                            <option value="">Selecione...</option>
+                            {% for tam in ['4', '5', '6', '7', '8', '9', '10'] %}
+                            <option value="{{ tam }}">{{ tam }}</option>
+                            {% endfor %}
+                            <option value="NA">N/A (Não se aplica)</option>
+                        </select>
+                    </div>
+                    <div class="mb-4" id="marca-wrap">
+                        <label for="marca" class="block text-sm font-medium text-gray-700 mb-2">Marca <span class="text-red-500" id="marca-asterisco">*</span></label>
+                        <input type="hidden" id="marca_hidden" value="SOPACK">
+                        <input type="text" id="marca" name="marca" required placeholder="Ex: IMPORFOZ" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                    </div>
+                    <div class="mb-4">
+                        <label for="caminhoneiro" class="block text-sm font-medium text-gray-700 mb-2">Caminhoneiro <span class="text-red-500">*</span></label>
+                        <input type="text" id="caminhoneiro" name="caminhoneiro" required placeholder="Ex: ALEXANDRE" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                    </div>
+                </div>
+                <div class="flex gap-4 mt-6">
+                    <button type="submit" class="bg-emerald-700 text-white px-6 py-2.5 rounded-xl hover:bg-emerald-600 transition flex items-center font-medium" id="modal-nova-entrada-salvar">
+                        <i data-lucide="check" class="w-4 h-4 mr-2"></i>Salvar
+                    </button>
+                    <button type="button" class="bg-gray-200 text-gray-700 px-6 py-2.5 rounded-xl hover:bg-gray-300 transition flex items-center font-medium" id="modal-nova-entrada-cancelar">
+                        <i data-lucide="x" class="w-4 h-4 mr-2"></i>Cancelar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Corrigir Categoria (OUTROS) -->
+{% if produtos_outros %}
+<div id="modal-corrigir-categoria-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
+    <div class="fixed inset-0 bg-black/50" id="modal-corrigir-categoria-overlay"></div>
+    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl max-h-[85vh] overflow-hidden bg-white rounded-xl shadow-lg border border-gray-200 flex flex-col" onclick="event.stopPropagation()">
+        <div class="flex justify-between items-center px-6 py-4 bg-amber-600 text-white rounded-t-xl shrink-0">
+            <h3 class="text-lg font-bold flex items-center">
+                <i data-lucide="edit-3" class="w-5 h-5 mr-2"></i>Corrigir Categoria – Produtos em OUTROS
+            </h3>
+            <button type="button" id="modal-corrigir-categoria-fechar" class="p-2 hover:bg-amber-500 rounded-full transition">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+        <div class="p-6 overflow-y-auto flex-1">
+            <p class="text-gray-600 text-sm mb-4">Altere o tipo para ALHO, SACOLA ou CAFE e salve. Os itens sairão do grupo OUTROS.</p>
+            <div class="overflow-x-auto rounded-xl border border-gray-200">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Produto</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nova categoria</th>
+                        </tr>
+                    </thead>
+                    <tbody id="modal-corrigir-categoria-tbody" class="bg-white divide-y divide-gray-200">
+                        {% for p in produtos_outros %}
+                        <tr>
+                            <td class="px-4 py-3 text-sm text-gray-900">{{ p.nome_produto }}</td>
+                            <td class="px-4 py-3">
+                                <select class="corrigir-tipo-select w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500" data-id="{{ p.id }}">
+                                    <option value="">— Manter OUTROS —</option>
+                                    <option value="ALHO">ALHO</option>
+                                    <option value="SACOLA">SACOLA</option>
+                                    <option value="CAFE">CAFE</option>
+                                </select>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div id="modal-corrigir-categoria-erro" class="hidden mt-4 p-4 bg-red-50 border border-red-200 rounded-xl text-red-800 text-sm"></div>
+            <div class="flex gap-3 mt-6">
+                <button type="button" id="modal-corrigir-categoria-salvar" class="bg-amber-600 hover:bg-amber-500 text-white px-5 py-2.5 rounded-xl font-medium flex items-center transition">
+                    <i data-lucide="check" class="w-4 h-4 mr-2"></i>Salvar alterações
+                </button>
+                <button type="button" id="modal-corrigir-categoria-cancelar" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-5 py-2.5 rounded-xl font-medium flex items-center transition">
+                    <i data-lucide="x" class="w-4 h-4 mr-2"></i>Cancelar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Modal Editar Produto -->
+<div id="modal-editar-produto-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
+    <div class="fixed inset-0 bg-black/50" id="modal-editar-produto-overlay"></div>
+    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-white rounded-xl shadow-sm border border-gray-200 z-50" onclick="event.stopPropagation()">
+        <div class="sticky top-0 flex justify-between items-center px-8 py-5 bg-emerald-700 text-white rounded-t-xl z-10">
+            <h3 class="text-xl font-bold flex items-center">
+                <i data-lucide="pencil" class="w-5 h-5 mr-2"></i>Editar Produto
+            </h3>
+            <button type="button" class="modal-editar-produto-fechar w-10 h-10 flex items-center justify-center rounded-full hover:bg-emerald-600 text-white font-bold transition" title="Fechar">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+        <div class="p-8">
+            <form id="form-editar-produto" method="POST" action="" data-action-base="{{ url_for('editar_produto', id=0) }}">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="mb-4">
+                        <label for="edit_preco_custo" class="block text-sm font-medium text-gray-700 mb-2">Preço Custo <span class="text-red-500">*</span></label>
+                        <input type="number" id="edit_preco_custo" name="preco_custo" step="0.01" min="0" required class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                    </div>
+                    <div class="mb-4">
+                        <label for="edit_preco_venda_alvo" class="block text-sm font-medium text-gray-700 mb-2">Preço Venda Alvo</label>
+                        <input type="number" id="edit_preco_venda_alvo" name="preco_venda_alvo" step="0.01" min="0" placeholder="Opcional" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                    </div>
+                    <div class="mb-4">
+                        <label for="edit_quantidade_entrada" class="block text-sm font-medium text-gray-700 mb-2">Quantidade Adicional</label>
+                        <input type="number" id="edit_quantidade_entrada" name="quantidade_entrada" value="0" min="0" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                        <p class="mt-1 text-sm text-gray-500">Somará ao estoque atual se &gt; 0</p>
+                    </div>
+                    <div class="mb-4">
+                        <label for="edit_data_chegada" class="block text-sm font-medium text-gray-700 mb-2">Data Chegada</label>
+                        <input type="date" id="edit_data_chegada" name="data_chegada" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                    </div>
+                    <div class="mb-4">
+                        <label for="edit_tipo" class="block text-sm font-medium text-gray-700 mb-2">Tipo <span class="text-red-500">*</span></label>
+                        <select id="edit_tipo" name="tipo" required class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                            <option value="">Selecione...</option>
+                            <option value="ALHO">ALHO</option>
+                            <option value="SACOLA">SACOLA</option>
+                            <option value="CAFE">CAFE</option>
+                        </select>
+                    </div>
+                    <div class="mb-4">
+                        <label for="edit_fornecedor" class="block text-sm font-medium text-gray-700 mb-2">Fornecedor <span class="text-red-500">*</span></label>
+                        <select id="edit_fornecedor" name="fornecedor" required class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                            <option value="">Selecione...</option>
+                            <option value="DESTAK">DESTAK</option>
+                            <option value="PATY">PATY</option>
+                        </select>
+                    </div>
+                    <div class="mb-4">
+                        <label for="edit_nacionalidade" class="block text-sm font-medium text-gray-700 mb-2">Nacionalidade <span class="text-red-500">*</span></label>
+                        <select id="edit_nacionalidade" name="nacionalidade" required class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                            <option value="">Selecione...</option>
+                            <option value="N/A">N/A (Não se aplica)</option>
+                            <option value="ARGENTINO">ARGENTINO</option>
+                            <option value="NACIONAL">NACIONAL</option>
+                            <option value="CHINES">CHINES</option>
+                        </select>
+                    </div>
+                    <div class="mb-4">
+                        <label for="edit_tamanho" class="block text-sm font-medium text-gray-700 mb-2">Tamanho <span class="text-red-500">*</span></label>
+                        <select id="edit_tamanho" name="tamanho" required class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                            <option value="">Selecione...</option>
+                            {% for tam in ['4', '5', '6', '7', '8', '9', '10'] %}
+                            <option value="{{ tam }}">{{ tam }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-4">
+                        <label for="edit_marca" class="block text-sm font-medium text-gray-700 mb-2">Marca <span class="text-red-500">*</span></label>
+                        <input type="text" id="edit_marca" name="marca" required placeholder="Ex: IMPORFOZ" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                    </div>
+                    <div class="mb-4">
+                        <label for="edit_caminhoneiro" class="block text-sm font-medium text-gray-700 mb-2">Caminhoneiro <span class="text-red-500">*</span></label>
+                        <input type="text" id="edit_caminhoneiro" name="caminhoneiro" required placeholder="Ex: João" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                    </div>
+                </div>
+                <div class="flex gap-4 mt-6">
+                    <button type="submit" class="bg-emerald-700 text-white px-6 py-2.5 rounded-xl hover:bg-emerald-600 transition flex items-center font-medium" id="btn-salvar-editar-produto">
+                        <i data-lucide="check" class="w-4 h-4 mr-2"></i>Salvar
+                    </button>
+                    <button type="button" class="modal-editar-produto-fechar bg-gray-200 text-gray-700 px-6 py-2.5 rounded-xl hover:bg-gray-300 transition flex items-center font-medium">
+                        <i data-lucide="x" class="w-4 h-4 mr-2"></i>Cancelar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    var btn = document.getElementById('bulk-delete-btn');
+    var selectAll = document.getElementById('bulk-select-all');
+    var rows = document.querySelectorAll('.bulk-row');
+    var endpoint = btn && btn.getAttribute('data-endpoint');
+    var redirect = btn && btn.getAttribute('data-redirect');
+
+    function updateBtn() {
+        var n = document.querySelectorAll('.bulk-row:checked').length;
+        if (n > 0) {
+            btn.classList.remove('hidden');
+            btn.classList.add('flex');
+        } else {
+            btn.classList.add('hidden');
+            btn.classList.remove('flex');
+            if (selectAll) selectAll.checked = false;
+        }
+    }
+
+    // Bulk select por categoria
+    var selectAlls = document.querySelectorAll('.bulk-select-all');
+    selectAlls.forEach(function(selectAll) {
+        selectAll.addEventListener('change', function() {
+            var tipo = selectAll.getAttribute('data-tipo');
+            var categoriaContent = document.querySelector('.categoria-content[data-tipo="' + tipo + '"]');
+            if (categoriaContent) {
+                var categoriaRows = categoriaContent.querySelectorAll('.bulk-row');
+                categoriaRows.forEach(function(r) { r.checked = selectAll.checked; });
+                updateBtn();
+            }
+        });
+    });
+    
+    // Atualizar botão quando qualquer checkbox mudar
+    rows.forEach(function(r) {
+        r.addEventListener('change', updateBtn);
+    });
+
+    if (btn && endpoint && redirect) {
+        btn.addEventListener('click', function() {
+            var ids = [].map.call(document.querySelectorAll('.bulk-row:checked'), function(c) { return parseInt(c.value, 10); });
+            if (!ids.length) return;
+            if (!confirm('Você selecionou ' + ids.length + ' itens. Deseja excluir permanentemente?')) return;
+            btn.disabled = true;
+            fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body: JSON.stringify({ ids: ids })
+            }).then(function(r) { return r.json(); }).then(function(data) {
+                alert(data.mensagem || (data.ok ? 'Excluído(s) com sucesso.' : 'Erro ao excluir.'));
+                window.location.href = redirect;
+            }).catch(function() {
+                alert('Erro ao excluir. Tente novamente.');
+                btn.disabled = false;
+            });
+        });
+    }
+})();
+
+// Modal Editar Produto: abrir ao clicar no lápis, preencher com data-* e confirmar antes de enviar
+(function() {
+    var wrap = document.getElementById('modal-editar-produto-wrap');
+    var form = document.getElementById('form-editar-produto');
+    var overlay = document.getElementById('modal-editar-produto-overlay');
+    var btnsFechar = document.querySelectorAll('.modal-editar-produto-fechar');
+    var actionBase = form && form.getAttribute('data-action-base');
+    if (!actionBase) actionBase = '';
+    var editTipo = document.getElementById('edit_tipo');
+    var editTamanho = document.getElementById('edit_tamanho');
+    var OPCOES_NUMERICAS = ['4', '5', '6', '7', '8', '9', '10'];
+    var OPCOES_SACOLA = ['P', 'M', 'G', 'S/N'];
+
+    function atualizarTamanhoOptions() {
+        var tipo = editTipo && editTipo.value;
+        var opts = (tipo === 'SACOLA') ? OPCOES_SACOLA : OPCOES_NUMERICAS;
+        var valAtual = editTamanho && editTamanho.value;
+        editTamanho.innerHTML = '<option value="">Selecione...</option>' + opts.map(function(t) {
+            return '<option value="' + t + '"' + (t === valAtual ? ' selected' : '') + '>' + t + '</option>';
+        }).join('');
+        if (valAtual && opts.indexOf(valAtual) >= 0) editTamanho.value = valAtual;
+    }
+
+    function abrirModalEditarProduto(btn) {
+        var id = btn.getAttribute('data-id');
+        var precoCusto = btn.getAttribute('data-preco-custo') || '';
+        var precoVendaAlvo = btn.getAttribute('data-preco-venda-alvo') || '';
+        var quantidadeEntrada = btn.getAttribute('data-quantidade-entrada') || '0';
+        var dataChegada = btn.getAttribute('data-data-chegada') || '';
+        var tipo = btn.getAttribute('data-tipo') || '';
+        var fornecedor = btn.getAttribute('data-fornecedor') || '';
+        var nacionalidade = btn.getAttribute('data-nacionalidade') || '';
+        var tamanho = btn.getAttribute('data-tamanho') || '';
+        var marca = btn.getAttribute('data-marca') || '';
+        var caminhoneiro = btn.getAttribute('data-caminhoneiro') || '';
+        if (tipo === 'SACOLA') { nacionalidade = 'N/A'; marca = marca || 'SOPACK'; }
+
+        form.action = actionBase.replace(/\/0$/, '/') + id;
+
+        document.getElementById('edit_preco_custo').value = precoCusto;
+        document.getElementById('edit_preco_venda_alvo').value = precoVendaAlvo;
+        document.getElementById('edit_quantidade_entrada').value = quantidadeEntrada;
+        document.getElementById('edit_data_chegada').value = dataChegada;
+        document.getElementById('edit_marca').value = marca;
+        document.getElementById('edit_caminhoneiro').value = caminhoneiro;
+
+        if (editTipo) editTipo.value = tipo;
+        if (editTamanho) {
+            var opts = (tipo === 'SACOLA') ? OPCOES_SACOLA : OPCOES_NUMERICAS;
+            editTamanho.innerHTML = '<option value="">Selecione...</option>' + opts.map(function(t) {
+                return '<option value="' + t + '"' + (t === tamanho ? ' selected' : '') + '>' + t + '</option>';
+            }).join('');
+            if (tamanho && opts.indexOf(tamanho) >= 0) editTamanho.value = tamanho;
+            else if (tamanho) {
+                var opt = document.createElement('option');
+                opt.value = tamanho;
+                opt.textContent = tamanho;
+                opt.selected = true;
+                editTamanho.appendChild(opt);
+            }
+        }
+
+        var editFornecedor = document.getElementById('edit_fornecedor');
+        if (editFornecedor) {
+            var temOpcao = [].some.call(editFornecedor.options, function(o) { return o.value === fornecedor; });
+            if (!temOpcao && fornecedor) {
+                var optF = document.createElement('option');
+                optF.value = fornecedor;
+                optF.textContent = fornecedor;
+                editFornecedor.appendChild(optF);
+            }
+            editFornecedor.value = fornecedor;
+        }
+
+        var editNacionalidade = document.getElementById('edit_nacionalidade');
+        if (editNacionalidade) editNacionalidade.value = nacionalidade;
+
+        wrap.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+
+    function fecharModalEditarProduto() {
+        wrap.classList.add('hidden');
+        document.body.style.overflow = '';
+    }
+
+    document.querySelectorAll('.btn-editar-produto').forEach(function(btn) {
+        btn.addEventListener('click', function() { abrirModalEditarProduto(btn); });
+    });
+    if (overlay) overlay.addEventListener('click', fecharModalEditarProduto);
+    btnsFechar.forEach(function(b) { b.addEventListener('click', fecharModalEditarProduto); });
+
+    if (editTipo) editTipo.addEventListener('change', atualizarTamanhoOptions);
+
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            if (!confirm('Tem certeza que deseja atualizar este produto?')) return;
+            form.submit();
+        });
+    }
+})();
+
+(function() {
+    var wrap = document.getElementById('modal-nova-entrada-wrap');
+    var btnAbrir = document.getElementById('btn-abrir-modal-nova-entrada');
+    var overlay = document.getElementById('modal-nova-entrada-overlay');
+    var btnFechar = document.getElementById('modal-nova-entrada-fechar');
+    var btnCancelar = document.getElementById('modal-nova-entrada-cancelar');
+    var form = document.getElementById('form-nova-entrada');
+    var erroDiv = document.getElementById('modal-nova-entrada-erro');
+    var btnSalvar = document.getElementById('modal-nova-entrada-salvar');
+    var dataChegada = document.getElementById('data_chegada');
+    var tipoSelect = document.getElementById('tipo');
+    var nacionalidadeSelect = document.getElementById('nacionalidade');
+    var nacionalidadeHidden = document.getElementById('nacionalidade_hidden');
+    var nacionalidadeAsterisco = document.getElementById('nacionalidade-asterisco');
+    var nacionalidadeNaMsg = document.getElementById('nacionalidade-na-msg');
+    var tamanhoSelect = document.getElementById('tamanho');
+    var marcaInput = document.getElementById('marca');
+    var marcaHidden = document.getElementById('marca_hidden');
+    var marcaAsterisco = document.getElementById('marca-asterisco');
+    var OPCOES_NUMERICAS = ['4', '5', '6', '7', '8', '9', '10'];
+    var OPCOES_SACOLA = ['P', 'M', 'G', 'S/N'];
+
+    function abrir() {
+        if (wrap) {
+            wrap.classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        }
+        if (dataChegada && !dataChegada.value) {
+            dataChegada.value = new Date().toISOString().split('T')[0];
+        }
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+    function fechar() {
+        if (wrap) {
+            wrap.classList.add('hidden');
+            document.body.style.overflow = '';
+        }
+        erroDiv.classList.add('hidden');
+        erroDiv.textContent = '';
+    }
+
+    function isSacola() { return tipoSelect && tipoSelect.value === 'SACOLA'; }
+    function aplicarModoSacola() {
+        var initialTamanho = (tamanhoSelect && tamanhoSelect.getAttribute('data-initial')) ? tamanhoSelect.getAttribute('data-initial') : '';
+        var opts = [], keepVal = '';
+        if (!isSacola()) {
+            nacionalidadeSelect.disabled = false;
+            nacionalidadeHidden.removeAttribute('name');
+            nacionalidadeSelect.setAttribute('name', 'nacionalidade');
+            nacionalidadeSelect.required = true;
+            if (nacionalidadeAsterisco) nacionalidadeAsterisco.classList.remove('hidden');
+            if (nacionalidadeNaMsg) nacionalidadeNaMsg.classList.add('hidden');
+            // Limpar valores antigos (compatibilidade com "N/A" e "NA")
+            if (nacionalidadeSelect.value === 'N/A' || nacionalidadeSelect.value === 'NA') {
+                nacionalidadeSelect.value = '';
+            }
+            opts = OPCOES_NUMERICAS;
+            keepVal = OPCOES_NUMERICAS.indexOf(initialTamanho) >= 0 ? initialTamanho : '';
+            marcaInput.disabled = false;
+            marcaHidden.removeAttribute('name');
+            marcaInput.setAttribute('name', 'marca');
+            marcaInput.required = true;
+            marcaInput.value = '';
+            if (marcaAsterisco) marcaAsterisco.classList.remove('hidden');
+        } else {
+            nacionalidadeSelect.value = 'NA';
+            nacionalidadeSelect.disabled = true;
+            nacionalidadeSelect.removeAttribute('name');
+            nacionalidadeHidden.setAttribute('name', 'nacionalidade');
+            nacionalidadeHidden.value = 'NA';
+            nacionalidadeSelect.required = false;
+            if (nacionalidadeAsterisco) nacionalidadeAsterisco.classList.add('hidden');
+            if (nacionalidadeNaMsg) nacionalidadeNaMsg.classList.remove('hidden');
+            opts = OPCOES_SACOLA;
+            keepVal = OPCOES_SACOLA.indexOf(initialTamanho) >= 0 ? initialTamanho : '';
+            marcaInput.value = 'SOPACK';
+            marcaInput.disabled = true;
+            marcaInput.removeAttribute('name');
+            marcaHidden.setAttribute('name', 'marca');
+            marcaHidden.value = 'SOPACK';
+            marcaInput.required = false;
+            if (marcaAsterisco) marcaAsterisco.classList.add('hidden');
+        }
+        // Construir HTML do select de tamanho
+        var tamanhoHTML = '<option value="">Selecione...</option>';
+        
+        // Adicionar opção N/A apenas quando não for SACOLA
+        if (!isSacola()) {
+            tamanhoHTML += '<option value="NA"' + (keepVal === 'NA' ? ' selected' : '') + '>N/A (Não se aplica)</option>';
+        }
+        
+        // Adicionar opções numéricas ou de sacola
+        tamanhoHTML += opts.map(function(t) { 
+            return '<option value="' + t + '"' + (t === keepVal ? ' selected' : '') + '>' + t + '</option>'; 
+        }).join('');
+        
+        tamanhoSelect.innerHTML = tamanhoHTML;
+        if (keepVal) tamanhoSelect.value = keepVal;
+        tamanhoSelect.removeAttribute('data-initial');
+    }
+
+    // Função para aplicar automação de CAFÉ
+    function aplicarModoCafe() {
+        var fornecedorSelect = document.getElementById('fornecedor');
+        if (tipoSelect && tipoSelect.value && tipoSelect.value.toUpperCase().includes('CAFE')) {
+            // Define Fornecedor Fixo
+            if (fornecedorSelect) {
+                fornecedorSelect.value = 'SERVE BEM';
+            }
+            
+            // Define N/A para campos que não se aplicam
+            if (nacionalidadeSelect) {
+                nacionalidadeSelect.value = 'NA';
+            }
+            if (tamanhoSelect) {
+                tamanhoSelect.value = 'NA';
+            }
+        } else if (tipoSelect && tipoSelect.value && (tipoSelect.value === 'ALHO' || tipoSelect.value === '')) {
+            // Se voltar para ALHO, limpa os campos para obrigar o preenchimento correto
+            if (fornecedorSelect && fornecedorSelect.value === 'SERVE BEM') {
+                fornecedorSelect.value = '';
+            }
+            if (nacionalidadeSelect && nacionalidadeSelect.value === 'NA' && tipoSelect.value !== 'SACOLA') {
+                nacionalidadeSelect.value = '';
+            }
+            if (tamanhoSelect && tamanhoSelect.value === 'NA') {
+                tamanhoSelect.value = '';
+            }
+        }
+    }
+
+    if (btnAbrir) btnAbrir.addEventListener('click', abrir);
+    if (overlay) overlay.addEventListener('click', fechar);
+    if (btnFechar) btnFechar.addEventListener('click', fechar);
+    if (btnCancelar) btnCancelar.addEventListener('click', fechar);
+
+    if (tipoSelect) {
+        aplicarModoSacola();
+        aplicarModoCafe();
+        tipoSelect.addEventListener('change', function() {
+            tamanhoSelect.setAttribute('data-initial', tamanhoSelect.value || '');
+            if (tipoSelect.value === 'SACOLA' && marcaInput.getAttribute('name') === 'marca') marcaInput.setAttribute('data-initial', marcaInput.value || '');
+            aplicarModoSacola();
+            aplicarModoCafe(); // Aplicar automação de CAFÉ após aplicar modo SACOLA
+        });
+    }
+
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            erroDiv.classList.add('hidden');
+            erroDiv.textContent = '';
+            btnSalvar.disabled = true;
+            var fd = new FormData(form);
+            fetch(form.action, {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                body: fd
+            })
+                .then(function(r) { return r.json().then(function(j) { return { status: r.status, json: j }; }); })
+                .then(function(x) {
+                    if (x.json.ok) {
+                        fechar();
+                        window.location.reload();
+                        return;
+                    }
+                    erroDiv.textContent = x.json.mensagem || 'Erro ao cadastrar.';
+                    erroDiv.classList.remove('hidden');
+                    btnSalvar.disabled = false;
+                })
+                .catch(function() {
+                    erroDiv.textContent = 'Erro ao cadastrar. Tente novamente.';
+                    erroDiv.classList.remove('hidden');
+                    btnSalvar.disabled = false;
+                });
+        });
+    }
+})();
+
+// Modal Corrigir Categoria (OUTROS)
+function abrirModalCorrigirCategoria() {
+    var w = document.getElementById('modal-corrigir-categoria-wrap');
+    if (!w) return;
+    w.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+(function() {
+    var wrap = document.getElementById('modal-corrigir-categoria-wrap');
+    var overlay = document.getElementById('modal-corrigir-categoria-overlay');
+    var btnFechar = document.getElementById('modal-corrigir-categoria-fechar');
+    var btnCancelar = document.getElementById('modal-corrigir-categoria-cancelar');
+    var btnSalvar = document.getElementById('modal-corrigir-categoria-salvar');
+    var erroDiv = document.getElementById('modal-corrigir-categoria-erro');
+    function fechar() {
+        if (wrap) {
+            wrap.classList.add('hidden');
+            document.body.style.overflow = '';
+        }
+        if (erroDiv) { erroDiv.classList.add('hidden'); erroDiv.textContent = ''; }
+    }
+    if (overlay) overlay.addEventListener('click', fechar);
+    if (btnFechar) btnFechar.addEventListener('click', fechar);
+    if (btnCancelar) btnCancelar.addEventListener('click', fechar);
+    if (btnSalvar && wrap) {
+        btnSalvar.addEventListener('click', function() {
+            var selects = wrap.querySelectorAll('.corrigir-tipo-select');
+            var updates = [];
+            selects.forEach(function(s) {
+                var id = parseInt(s.getAttribute('data-id'), 10);
+                var tipo = (s.value || '').trim();
+                if (id && tipo && ['ALHO','SACOLA','CAFE'].indexOf(tipo) >= 0) { updates.push({ id: id, tipo: tipo }); }
+            });
+            if (!updates.length) {
+                if (erroDiv) { erroDiv.textContent = 'Selecione pelo menos um produto e escolha ALHO, SACOLA ou CAFE.'; erroDiv.classList.remove('hidden'); }
+                return;
+            }
+            if (erroDiv) { erroDiv.classList.add('hidden'); erroDiv.textContent = ''; }
+            btnSalvar.disabled = true;
+            fetch('{{ url_for("produtos_atualizar_tipo_batch") }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body: JSON.stringify({ updates: updates })
+            })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.ok) {
+                        fechar();
+                        window.location.href = '{{ url_for("listar_produtos", ordem_data=ordem_data) }}';
+                        return;
+                    }
+                    if (erroDiv) { erroDiv.textContent = data.mensagem || 'Erro ao atualizar.'; erroDiv.classList.remove('hidden'); }
+                    btnSalvar.disabled = false;
+                })
+                .catch(function() {
+                    if (erroDiv) { erroDiv.textContent = 'Erro ao enviar. Tente novamente.'; erroDiv.classList.remove('hidden'); }
+                    btnSalvar.disabled = false;
+                });
+        });
+    }
+})();
+
+// Accordion por Categoria (TIPO)
+(function() {
+    var headers = document.querySelectorAll('.categoria-header');
+    
+    headers.forEach(function(header) {
+        header.addEventListener('click', function() {
+            var tipo = header.getAttribute('data-tipo');
+            var content = document.querySelector('.categoria-content[data-tipo="' + tipo + '"]');
+            var chevron = header.querySelector('.categoria-chevron');
+            
+            if (content) {
+                var isHidden = content.classList.contains('hidden');
+                
+                if (isHidden) {
+                    // Expandir
+                    content.classList.remove('hidden');
+                    if (chevron) {
+                        chevron.style.transform = 'rotate(0deg)';
+                    }
+                } else {
+                    // Recolher
+                    content.classList.add('hidden');
+                    if (chevron) {
+                        chevron.style.transform = 'rotate(-90deg)';
+                    }
+                }
+                
+                // Atualizar ícones Lucide após mudança
+                if (typeof lucide !== 'undefined') {
+                    lucide.createIcons();
+                }
+            }
+        });
+    });
+    
+    // Inicializar ícones Lucide ao carregar
+    if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+    }
+})();
+</script>
+
+<!-- Script de Paginação "Carregar Mais" -->
+<script>
+(function() {
+    var btnCarregarMais = document.getElementById('btn-carregar-mais');
+    var paginaAtual = {{ pagination.page if pagination else 1 }};
+    var carregando = false;
+    
+    if (!btnCarregarMais) return;
+    
+    btnCarregarMais.addEventListener('click', function() {
+        if (carregando) return;
+        
+        carregando = true;
+        btnCarregarMais.disabled = true;
+        btnCarregarMais.innerHTML = '<i data-lucide="loader-2" class="w-5 h-5 mr-2 animate-spin"></i>Carregando...';
+        
+        // Construir URL com parâmetros da página atual
+        var urlParams = new URLSearchParams(window.location.search);
+        urlParams.set('page', paginaAtual + 1);
+        urlParams.set('ajax', '1');
+        
+        // Manter filtros e ordenação
+        var url = '{{ url_for("listar_produtos") }}?' + urlParams.toString();
+        
+        fetch(url, {
+            method: 'GET',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(function(response) {
+            if (!response.ok) {
+                throw new Error('Erro ao carregar produtos');
+            }
+            return response.text();
+        })
+        .then(function(html) {
+            if (!html || html.trim() === '') {
+                // Não há mais produtos, esconder botão
+                btnCarregarMais.parentElement.style.display = 'none';
+                carregando = false;
+                return;
+            }
+            
+            // Criar um tbody temporário para preservar a estrutura das linhas <tr>
+            var tempTable = document.createElement('table');
+            var tempTbody = document.createElement('tbody');
+            tempTable.appendChild(tempTbody);
+            tempTbody.innerHTML = html.trim();
+            
+            // Encontrar todas as linhas <tr> no HTML retornado
+            var novasLinhas = tempTbody.querySelectorAll('tr');
+            
+            if (novasLinhas.length === 0) {
+                // Não há mais produtos, esconder botão
+                btnCarregarMais.parentElement.style.display = 'none';
+                carregando = false;
+                return;
+            }
+            
+            var produtosCarregados = 0;
+            
+            // Inserir cada linha na tabela correta do tipo correspondente
+            Array.from(novasLinhas).forEach(function(linha) {
+                var tipo = linha.getAttribute('data-tipo');
+                if (!tipo) return;
+                
+                // Encontrar o tbody da tabela deste tipo
+                var tbodyTipo = document.querySelector('tbody[data-tipo-tbody="' + tipo + '"]');
+                
+                if (tbodyTipo) {
+                    // Tabela já existe, adicionar linha ao final
+                    tbodyTipo.appendChild(linha);
+                    produtosCarregados++;
+                } else {
+                    // Tabela não existe, criar nova seção de tipo
+                    // Isso não deveria acontecer normalmente, mas vamos tratar
+                    console.warn('Tipo não encontrado:', tipo);
+                }
+            });
+            
+            if (produtosCarregados === 0) {
+                // Não há mais produtos, esconder botão
+                btnCarregarMais.parentElement.style.display = 'none';
+                carregando = false;
+                return;
+            }
+            
+            // Incrementar página atual
+            paginaAtual++;
+            
+            // Re-inicializar ícones Lucide para as novas linhas
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+            
+            // Re-inicializar eventos de edição de produto para as novas linhas
+            document.querySelectorAll('.btn-editar-produto').forEach(function(btn) {
+                if (!btn.hasAttribute('data-pagination-initialized')) {
+                    btn.setAttribute('data-pagination-initialized', 'true');
+                    btn.addEventListener('click', function() {
+                        // A função abrirModalEditarProduto deve estar definida em outro lugar
+                        if (typeof abrirModalEditarProduto === 'function') {
+                            abrirModalEditarProduto(btn);
+                        }
+                    });
+                }
+            });
+            
+            // Verificar se ainda há mais páginas
+            if (produtosCarregados < 20) {
+                // Não há mais produtos, esconder botão
+                btnCarregarMais.parentElement.style.display = 'none';
+            } else {
+                btnCarregarMais.disabled = false;
+                btnCarregarMais.innerHTML = '<i data-lucide="chevron-down" class="w-5 h-5 mr-2"></i>Carregar Mais Entradas';
+                if (typeof lucide !== 'undefined') {
+                    lucide.createIcons();
+                }
+            }
+            
+            carregando = false;
+        })
+        .catch(function(error) {
+            console.error('Erro ao carregar mais produtos:', error);
+            alert('Erro ao carregar mais produtos. Tente novamente.');
+            btnCarregarMais.disabled = false;
+            btnCarregarMais.innerHTML = '<i data-lucide="chevron-down" class="w-5 h-5 mr-2"></i>Carregar Mais Entradas';
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+            carregando = false;
+        });
+    });
+})();
+</script>
+{% endblock %}
