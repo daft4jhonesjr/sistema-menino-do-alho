@@ -1684,9 +1684,12 @@ db.init_app(app)
 @event.listens_for(Engine, "connect")
 def set_sqlite_pragma(dbapi_connection, connection_record):
     """Ativa Write-Ahead Logging (WAL) no SQLite para suportar múltiplos workers simultaneamente."""
-    cursor = dbapi_connection.cursor()
-    cursor.execute("PRAGMA journal_mode=WAL")
-    cursor.close()
+    # Verificar se estamos usando SQLite antes de executar comandos PRAGMA
+    uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
+    if uri and uri.startswith("sqlite"):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.close()
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -1983,8 +1986,12 @@ with app.app_context():
     except Exception:
         db.session.rollback()
     # Verificar se caminho_pdf ainda existe (não foi dropado em migração anterior)
-    colunas_vendas = [r[1] for r in db.session.execute(text('PRAGMA table_info(vendas)')).fetchall()]
-    tem_caminho_pdf = 'caminho_pdf' in colunas_vendas
+    # PRAGMA é específico do SQLite, então só executar se estivermos usando SQLite
+    tem_caminho_pdf = False
+    uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
+    if uri and uri.startswith("sqlite"):
+        colunas_vendas = [r[1] for r in db.session.execute(text('PRAGMA table_info(vendas)')).fetchall()]
+        tem_caminho_pdf = 'caminho_pdf' in colunas_vendas
     if tem_caminho_pdf:
         # Migrar caminho_pdf -> caminho_boleto / caminho_nf
         try:
