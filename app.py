@@ -2156,7 +2156,7 @@ def dashboard():
     vinculos_novos = resultado_processamento.get('vinculos_novos', 0)
     pendentes = len(documentos_recem_chegados)
     processados = resultado_processamento.get('processados', 0)
-    erros = resultado_processamento.get('erros', 0)
+    erros = resultado_processamento.get('erros', [])  # erros é uma lista, não um número
     
     # Estatísticas de saúde do sistema de documentos
     total_documentos = Documento.query.count()
@@ -2167,8 +2167,8 @@ def dashboard():
         flash(f"✅ Sucesso: {vinculos_novos} documento(s) vinculado(s) automaticamente pela NF.", 'success')
     elif pendentes > 0:
         flash(f"Processamento concluído: {processados} documento(s) processado(s), {pendentes} boleto(s) ainda pendente(s) de correção.", 'warning')
-    if erros > 0:
-        flash(f"Erro ao processar {erros} documento(s).", 'error')
+    if len(erros) > 0:
+        flash(f"Erro ao processar {len(erros)} documento(s).", 'error')
 
     # KPI 1: Top 10 Clientes por Lucro (rentabilidade) - FILTRADO POR ANO
     vendas_por_cliente = db.session.query(
@@ -2319,7 +2319,7 @@ def dashboard():
                          documentos_sem_vinculo=documentos_sem_vinculo,
                          processados=processados,
                          vinculos_novos=vinculos_novos,
-                         erros=erros,
+                         erros=len(erros),  # Passar número de erros para o template
                          # Evolução mensal para gráfico
                          labels_meses=labels_meses,
                          data_lucro=data_lucro,
