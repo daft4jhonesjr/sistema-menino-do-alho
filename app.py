@@ -1562,85 +1562,31 @@ def _diagnosticar_vinculo_falhou(doc):
         }
 
 
-def _listar_documentos_recem_chegados(processar_agora=True):
-    """Varre documentos_entrada/, boletos/ e notas_fiscais/. Lista PDFs não vinculados a nenhuma venda.
-    Processa pendentes primeiro. Exibição só se o path NÃO estiver em nenhuma Venda (caminho_boleto ou caminho_nf).
-    IGNORA arquivos na pasta bonificacoes."""
-    resultado_processamento = {"sucesso": 0, "falha": 0, "erros": []}
-    if processar_agora:
-        resultado_processamento = _processar_documentos_pendentes()
-    base_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'documentos_entrada')
-    pastas = [
-        ('BOLETO', os.path.join(base_dir, 'boletos'), 'Boleto'),
-        ('NOTA_FISCAL', os.path.join(base_dir, 'notas_fiscais'), 'Nota Fiscal'),
-    ]
-    itens = []
-
-    def _coletar_pdfs(pasta_abs, path_rel_prefix, etiqueta):
-        if not os.path.exists(pasta_abs):
-            return
-        # Ignorar pasta bonificacoes
-        if 'bonificacoes' in pasta_abs.lower():
-            return
-        for nome in os.listdir(pasta_abs):
-            if not nome.lower().endswith('.pdf'):
-                continue
-            path_full = os.path.join(pasta_abs, nome)
-            if not os.path.isfile(path_full):
-                continue
-            
-            # VERIFICAÇÃO DE BONIFICAÇÃO: Ler conteúdo do PDF antes de processar
-            # Verificar apenas se não for boleto (boletos não têm natureza da operação)
-            # Verifica: notas fiscais, pasta entrada (pode conter notas), ou pasta de notas fiscais
-            is_boleto = etiqueta == 'Boleto' or 'boletos' in pasta_abs.lower()
-            if not is_boleto:
-                try:
-                    texto_primeira_pagina = _extrair_texto_primeira_pagina(path_full)
-                    if texto_primeira_pagina and _detectar_bonificacao(texto_primeira_pagina):
-                        # É bonificação - mover imediatamente
-                        sucesso, caminho_destino, mensagem = _mover_para_bonificacoes(path_full)
-                        if sucesso:
-                            print(f"[LISTAGEM] Bonificação detectada e movida: {nome}")
-                            # Remover documento do banco se existir
-                            path_rel = (path_rel_prefix + '/' + nome).replace('//', '/')
-                            doc_existente = Documento.query.filter_by(caminho_arquivo=path_rel).first()
-                            if doc_existente:
-                                db.session.delete(doc_existente)
-                                db.session.commit()
-                        else:
-                            print(f"[LISTAGEM] ERRO ao mover bonificação {nome}: {mensagem}")
-                        # Pular este arquivo - não adicionar à lista
-                        continue
-                except Exception as e:
-                    # Se houver erro ao ler PDF, continuar normalmente (não bloquear)
-                    print(f"[LISTAGEM] AVISO: Erro ao verificar bonificação em {nome}: {e}")
-            
-            path_rel = (path_rel_prefix + '/' + nome).replace('//', '/')
-            if Venda.query.filter(
-                or_(Venda.caminho_boleto == path_rel, Venda.caminho_nf == path_rel)
-            ).first() is not None:
-                continue
-            doc = Documento.query.filter_by(caminho_arquivo=path_rel).first()
-            if not doc or doc.venda_id is not None:
-                continue
-            campos = (doc.cnpj, doc.numero_nf, doc.razao_social, doc.data_vencimento)
-            leitura_ok = sum(1 for c in campos if c is not None and (str(c).strip() if isinstance(c, str) else True)) >= 2
-            diagnostico = _diagnosticar_vinculo_falhou(doc) if doc.numero_nf else None
-            itens.append({
-                'doc': doc,
-                'nome_arquivo': nome,
-                'leitura_ok': leitura_ok,
-                'nf_nao_encontrada': bool(doc.numero_nf and not doc.venda_id),
-                'etiqueta_pasta': etiqueta,
-                'diagnostico': diagnostico,
+def _listar_documentos_recem_chegados():
+    """Lista documentos na pasta de uploads sem processar tudo automaticamente."""
+    documentos = []
+    # MUDANÇA: Definimos um resultado vazio para não travar o site
+    resultado_processamento = {"sucesso": 0, "falha": 0, "erros": []} 
+    
+    UPLOAD_FOLDER = app.config.get('UPLOAD_FOLDER', 'uploads')
+    if not os.path.exists(UPLOAD_FOLDER):
+        os.makedirs(UPLOAD_FOLDER)
+        
+    # Apenas lista os arquivos, sem tentar ler o conteúdo deles agora
+    for filename in os.listdir(UPLOAD_FOLDER):
+        if filename.lower().endswith('.pdf'):
+            filepath = os.path.join(UPLOAD_FOLDER, filename)
+            # Adiciona apenas dados básicos
+            documentos.append({
+                'nome': filename,
+                'data_modificacao': datetime.fromtimestamp(os.path.getmtime(filepath)),
+                'tamanho': os.path.getsize(filepath)
             })
-
-    _coletar_pdfs(base_dir, 'documentos_entrada', 'Entrada')
-    for _tipo, pasta, etiqueta in pastas:
-        _coletar_pdfs(pasta, 'documentos_entrada/boletos' if _tipo == 'BOLETO' else 'documentos_entrada/notas_fiscais', etiqueta)
-
-    itens.sort(key=lambda x: (x['doc'].data_processamento, x['doc'].id), reverse=True)
-    return itens, resultado_processamento
+            
+    # Ordena por data (mais recente primeiro)
+    documentos.sort(key=lambda x: x['data_modificacao'], reverse=True)
+    
+    return documentos, resultado_processamento
 
 
 app = Flask(__name__)
@@ -2206,8 +2152,7 @@ def dashboard():
     filtro_ano_venda = extract('year', Venda.data_venda) == ano_ativo
     
     # Processa e lista documentos recém-chegados (PDFs últimas 24h ou não processados)
-    # MUDANÇA: Usar False para NÃO processar ao carregar a página
-    documentos_recem_chegados, resultado_processamento = _listar_documentos_recem_chegados(processar_agora=False)
+    documentos_recem_chegados, resultado_processamento = _listar_documentos_recem_chegados()
     vinculos_novos = resultado_processamento.get('vinculos_novos', 0)
     pendentes = len(documentos_recem_chegados)
     processados = resultado_processamento.get('processados', 0)
