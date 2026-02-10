@@ -1645,6 +1645,16 @@ login_manager.login_view = 'login'
 login_manager.login_message = 'Faça login para acessar esta página.'
 
 
+@app.teardown_appcontext
+def shutdown_session(exception=None):
+    """
+    Faxina automática: Toda vez que o site terminar de responder 
+    (ou se der erro), ele fecha a conexão com o banco e limpa a memória.
+    Isso evita o erro 'PendingRollbackError'.
+    """
+    db.session.remove()
+
+
 @app.after_request
 def add_cache_control_static(response):
     """Adiciona headers de cache longo para arquivos estáticos."""
@@ -4861,12 +4871,6 @@ def debug_vincular():
             'timestamp': datetime.now().isoformat()
         }), 500
 
-
-# --- VACINA PARA O POSTGRESQL ---
-# Isso garante que a conexão seja limpa se der erro, evitando o PendingRollbackError
-@app.teardown_appcontext
-def shutdown_session(exception=None):
-    db.session.remove()
 
 if __name__ == '__main__':
     def _local_ip():
