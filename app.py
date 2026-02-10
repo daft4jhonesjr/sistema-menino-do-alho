@@ -2246,14 +2246,23 @@ def dashboard():
     ticket_medio = (total_vendas / total_pedidos) if total_pedidos > 0 else 0
     
     # KPI 11: Evolução Mensal (Lucro vs. Volume) - FILTRADO POR ANO
+    # Verifica se é Postgres ou SQLite para escolher a função certa
+    uri = app.config.get('SQLALCHEMY_DATABASE_URI', '')
+    if 'postgres' in uri.lower():
+        # Versão PostgreSQL - usa to_char
+        coluna_mes = func.to_char(Venda.data_venda, 'YYYY-MM')
+    else:
+        # Versão SQLite - usa strftime
+        coluna_mes = func.strftime('%Y-%m', Venda.data_venda)
+    
     evolucao_mensal = db.session.query(
-        func.strftime('%Y-%m', Venda.data_venda).label('mes_ano'),
+        coluna_mes.label('mes_ano'),
         func.sum((Venda.preco_venda - Produto.preco_custo) * Venda.quantidade_venda).label('lucro_mensal'),
         func.sum(Venda.quantidade_venda).label('quantidade_mensal')
     ).join(Produto, Venda.produto_id == Produto.id)\
      .filter(filtro_ano_venda)\
-     .group_by('mes_ano')\
-     .order_by('mes_ano').all()
+     .group_by(coluna_mes)\
+     .order_by(coluna_mes).all()
     
     # Preparar dados para Chart.js
     labels_meses = []
