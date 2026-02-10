@@ -1645,6 +1645,16 @@ login_manager.login_view = 'login'
 login_manager.login_message = 'Faça login para acessar esta página.'
 
 
+# --- VACINA CONTRA TRAVAMENTO DO BANCO ---
+@app.before_request
+def limpar_sessao_anterior():
+    """Garante que não haja transações pendentes antes de cada requisição."""
+    try:
+        db.session.rollback()
+    except:
+        db.session.remove()
+
+
 @app.teardown_appcontext
 def shutdown_session(exception=None):
     """
