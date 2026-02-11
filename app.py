@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_file, current_app
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_compress import Compress
 from flask_caching import Cache
@@ -35,6 +35,7 @@ import shutil
 import hashlib
 import socket
 import traceback
+import threading
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 import pdfplumber
@@ -4264,11 +4265,14 @@ def api_receber_automatico():
     os.makedirs(pasta, exist_ok=True)
     caminho = os.path.join(pasta, filename)
     arquivo.save(caminho)
-    try:
-        _processar_documento(caminho)
-    except Exception as e:
-        return jsonify({'status': 'erro', 'mensagem': str(e)}), 500
-    return jsonify({'status': 'sucesso', 'mensagem': 'Recebido!'})
+
+    def processar_background(app, filepath):
+        with app.app_context():
+            _processar_documento(filepath)
+
+    thread = threading.Thread(target=processar_background, args=(current_app._get_current_object(), caminho))
+    thread.start()
+    return jsonify({'message': 'Processamento iniciado em segundo plano'}), 202
 
 
 @app.route('/processar_documentos', methods=['POST'])
