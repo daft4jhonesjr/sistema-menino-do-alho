@@ -4279,6 +4279,10 @@ def api_receber_automatico():
                             login_user(usuario)
                     _processar_documento(filepath)
                     print(f"[receber_automatico] Processamento concluído: {filepath}")
+                except Exception as e:
+                    db.session.rollback()
+                    print(f"[receber_automatico] ERRO ao processar {filepath}: {type(e).__name__}: {e}")
+                    traceback.print_exc()
                 finally:
                     db.session.remove()
         except Exception as e:
