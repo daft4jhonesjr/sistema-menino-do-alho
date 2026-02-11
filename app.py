@@ -4272,12 +4272,15 @@ def api_receber_automatico():
     def processar_background(app, filepath, uid):
         try:
             with app.app_context():
-                if uid:
-                    u = Usuario.query.get(uid)
-                    if u:
-                        login_user(u)
-                _processar_documento(filepath)
-            print(f"[receber_automatico] Processamento concluído: {filepath}")
+                try:
+                    if uid:
+                        usuario = Usuario.query.get(uid)
+                        if usuario:
+                            login_user(usuario)
+                    _processar_documento(filepath)
+                    print(f"[receber_automatico] Processamento concluído: {filepath}")
+                finally:
+                    db.session.remove()
         except Exception as e:
             print(f"[receber_automatico] ERRO ao processar {filepath}: {type(e).__name__}: {e}")
             traceback.print_exc()
