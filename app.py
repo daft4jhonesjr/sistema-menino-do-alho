@@ -1587,30 +1587,26 @@ def _diagnosticar_vinculo_falhou(doc):
         }
 
 
-def _listar_documentos_recem_chegados():
-    """Lista documentos na pasta de uploads sem processar tudo automaticamente."""
+def _listar_documentos_recem_chegados(user_id=None):
+    """Lista documentos da tabela Documento onde venda_id é None (arquivos soltos, sem vínculo).
+    Mostra todos os documentos órfãos, independente de status. Filtra por usuario_id se informado."""
+    resultado_processamento = {"sucesso": 0, "falha": 0, "erros": [], "vinculos_novos": 0, "processados": 0}
+    query = Documento.query.filter(Documento.venda_id.is_(None))
+    if user_id is not None:
+        query = query.filter(Documento.usuario_id == user_id)
+    docs = query.order_by(Documento.data_processamento.desc()).limit(5).all()
     documentos = []
-    # MUDANÇA: Definimos um resultado vazio para não travar o site
-    resultado_processamento = {"sucesso": 0, "falha": 0, "erros": []} 
-    
-    UPLOAD_FOLDER = app.config.get('UPLOAD_FOLDER', 'uploads')
-    if not os.path.exists(UPLOAD_FOLDER):
-        os.makedirs(UPLOAD_FOLDER)
-        
-    # Apenas lista os arquivos, sem tentar ler o conteúdo deles agora
-    for filename in os.listdir(UPLOAD_FOLDER):
-        if filename.lower().endswith('.pdf'):
-            filepath = os.path.join(UPLOAD_FOLDER, filename)
-            # Adiciona apenas dados básicos
-            documentos.append({
-                'nome': filename,
-                'data_modificacao': datetime.fromtimestamp(os.path.getmtime(filepath)),
-                'tamanho': os.path.getsize(filepath)
-            })
-            
-    # Ordena por data (mais recente primeiro)
-    documentos.sort(key=lambda x: x['data_modificacao'], reverse=True)
-    
+    for doc in docs:
+        diag = _diagnosticar_vinculo_falhou(doc)
+        nf_nao = diag is not None and diag.get('cenario') == 'C' and 'não localizada' in (diag.get('mensagem') or '')
+        documentos.append({
+            'doc': doc,
+            'nome_arquivo': os.path.basename(doc.caminho_arquivo or ''),
+            'leitura_ok': True,
+            'nf_nao_encontrada': nf_nao,
+            'etiqueta_pasta': doc.tipo or '',
+            'diagnostico': diag
+        })
     return documentos, resultado_processamento
 
 
@@ -2203,8 +2199,8 @@ def dashboard():
     # Filtro base para vendas do ano ativo
     filtro_ano_venda = extract('year', Venda.data_venda) == ano_ativo
     
-    # Processa e lista documentos recém-chegados (PDFs últimas 24h ou não processados)
-    documentos_recem_chegados, resultado_processamento = _listar_documentos_recem_chegados()
+    # Lista documentos sem vínculo (venda_id=None), filtrados pelo usuário atual
+    documentos_recem_chegados, resultado_processamento = _listar_documentos_recem_chegados(user_id=current_user.id)
     vinculos_novos = resultado_processamento.get('vinculos_novos', 0)
     pendentes = len(documentos_recem_chegados)
     processados = resultado_processamento.get('processados', 0)
