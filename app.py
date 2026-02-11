@@ -4947,6 +4947,29 @@ def forcar_leitura_pasta():
     return jsonify({'ressuscitados': ressuscitados, 'mensagem': f'{ressuscitados} arquivo(s) ressuscitado(s) e inserido(s) no banco.'})
 
 
+@app.route('/admin/limpar_fantasmas', methods=['GET', 'POST'])
+@login_required
+def limpar_fantasmas():
+    """Remove da tabela Documento os registros cujo arquivo físico não existe mais."""
+    if not current_user.is_admin():
+        return jsonify({'erro': 'Acesso negado. Apenas administradores.'}), 403
+    db.session.rollback()
+    base_path = os.path.dirname(os.path.abspath(__file__))
+    removidos = 0
+    try:
+        docs = Documento.query.all()
+        for doc in docs:
+            caminho_full = os.path.join(base_path, doc.caminho_arquivo or '')
+            if not os.path.exists(caminho_full):
+                db.session.delete(doc)
+                removidos += 1
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'erro': str(e), 'removidos': 0}), 500
+    return jsonify({'removidos': removidos, 'mensagem': f'{removidos} fantasma(s) removido(s) do banco.'})
+
+
 @app.route('/admin/limpar_vinculos_quebrados', methods=['POST'])
 @login_required
 def limpar_vinculos_quebrados():
