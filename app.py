@@ -4867,6 +4867,43 @@ def resgatar_orfaos():
     return redirect(url_for('dashboard'))
 
 
+@app.route('/admin/forcar_leitura_pasta', methods=['GET', 'POST'])
+@login_required
+def forcar_leitura_pasta():
+    """Rota de emergência: lê PDFs em boletos e notas_fiscais, cria registros Documento para os que não existem no banco."""
+    if not current_user.is_admin():
+        return jsonify({'erro': 'Acesso negado. Apenas administradores.'}), 403
+    base_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'documentos_entrada')
+    pastas = {
+        'BOLETO': os.path.join(base_dir, 'boletos'),
+        'NOTA_FISCAL': os.path.join(base_dir, 'notas_fiscais'),
+    }
+    ressuscitados = 0
+    try:
+        for tipo, pasta in pastas.items():
+            if not os.path.exists(pasta):
+                continue
+            for nome in os.listdir(pasta):
+                if not nome.lower().endswith('.pdf'):
+                    continue
+                caminho_relativo = os.path.join('documentos_entrada', 'boletos' if tipo == 'BOLETO' else 'notas_fiscais', nome).replace(os.sep, '/')
+                doc_existente = Documento.query.filter_by(caminho_arquivo=caminho_relativo).first()
+                if not doc_existente:
+                    doc = Documento(
+                        caminho_arquivo=caminho_relativo,
+                        tipo=tipo,
+                        usuario_id=current_user.id,
+                        data_processamento=date.today()
+                    )
+                    db.session.add(doc)
+                    ressuscitados += 1
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'erro': str(e), 'ressuscitados': 0}), 500
+    return jsonify({'ressuscitados': ressuscitados, 'mensagem': f'{ressuscitados} arquivo(s) ressuscitado(s) e inserido(s) no banco.'})
+
+
 @app.route('/admin/limpar_vinculos_quebrados', methods=['POST'])
 @login_required
 def limpar_vinculos_quebrados():
