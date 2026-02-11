@@ -4135,25 +4135,29 @@ def excluir_venda(id):
     
     vendas_do_pedido = query.all()
     
-    # Restaurar estoque de todos os produtos do pedido
-    logs = []
-    for v in vendas_do_pedido:
-        produto = v.produto
-        quantidade = v.quantidade_venda
-        nome_produto = produto.nome_produto  # Salvar antes de deletar
-        produto.estoque_atual += quantidade
-        logs.append(f"{quantidade} unidades devolvidas ao produto [{nome_produto}]")
-        db.session.delete(v)
-    
-    db.session.commit()
-    limpar_cache_dashboard()  # Limpar cache após excluir venda
-    
-    # Log detalhado usando variáveis salvas
-    print(f"Pedido excluído (Cliente: {nome_cliente}, NF: {nf_pedido or 'N/A'}, Data: {data_pedido.strftime('%d/%m/%Y')}):")
-    for log in logs:
-        print(f"  - {log}")
-    
-    flash(f'Pedido completo excluído com sucesso! {len(vendas_do_pedido)} item(ns) removido(s).', 'success')
+    try:
+        # Restaurar estoque de todos os produtos do pedido
+        logs = []
+        for v in vendas_do_pedido:
+            produto = v.produto
+            quantidade = v.quantidade_venda
+            nome_produto = produto.nome_produto  # Salvar antes de deletar
+            produto.estoque_atual += quantidade
+            logs.append(f"{quantidade} unidades devolvidas ao produto [{nome_produto}]")
+            db.session.delete(v)
+        
+        db.session.commit()
+        limpar_cache_dashboard()  # Limpar cache após excluir venda
+        
+        # Log detalhado usando variáveis salvas
+        print(f"Pedido excluído (Cliente: {nome_cliente}, NF: {nf_pedido or 'N/A'}, Data: {data_pedido.strftime('%d/%m/%Y')}):")
+        for log in logs:
+            print(f"  - {log}")
+        
+        flash(f'Pedido completo excluído com sucesso! {len(vendas_do_pedido)} item(ns) removido(s).', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro ao excluir pedido: {str(e)}', 'error')
     return redirect(url_for('listar_vendas'))
 
 
