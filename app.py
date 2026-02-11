@@ -4299,17 +4299,20 @@ def api_receber_automatico():
                     db.session.remove()
         except Exception as e:
             try:
-                with app.app_context():
-                    db.session.rollback()
+                db.session.rollback()
             except Exception:
                 pass
             print(f'Erro no processamento background: {e}')
             print(f"[receber_automatico] ERRO ao processar {filepath}: {type(e).__name__}: {e}")
             traceback.print_exc()
 
-    thread = threading.Thread(target=processar_background, args=(current_app._get_current_object(), caminho, user_id))
-    thread.start()
-    return jsonify({'message': 'Processamento iniciado em segundo plano'}), 202
+    try:
+        thread = threading.Thread(target=processar_background, args=(current_app._get_current_object(), caminho, user_id))
+        thread.start()
+        return jsonify({'message': 'Processamento iniciado em segundo plano'}), 202
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'erro', 'mensagem': str(e)}), 500
 
 
 @app.route('/processar_documentos', methods=['POST'])
@@ -4892,6 +4895,7 @@ def resgatar_orfaos():
     if not current_user.is_admin():
         flash('Acesso negado. Apenas administradores podem executar esta ação.', 'error')
         return redirect(url_for('dashboard'))
+    db.session.rollback()
     try:
         orfaos = Documento.query.filter(Documento.usuario_id.is_(None)).all()
         count = len(orfaos)
@@ -4911,6 +4915,7 @@ def forcar_leitura_pasta():
     """Rota de emergência: lê PDFs em boletos e notas_fiscais, cria registros Documento para os que não existem no banco."""
     if not current_user.is_admin():
         return jsonify({'erro': 'Acesso negado. Apenas administradores.'}), 403
+    db.session.rollback()
     base_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'documentos_entrada')
     pastas = {
         'BOLETO': os.path.join(base_dir, 'boletos'),
