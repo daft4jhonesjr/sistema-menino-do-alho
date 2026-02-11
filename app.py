@@ -4272,41 +4272,38 @@ def api_receber_automatico():
     caminho = os.path.join(pasta, filename)
     arquivo.save(caminho)
 
-    user_id = None
-    if current_user.is_authenticated:
-        user_id = current_user.id
-    else:
-        # Fallback para o robô: pega o primeiro usuário (Admin)
-        primeiro_user = Usuario.query.first()
-        if primeiro_user:
-            user_id = primeiro_user.id
-
-    def processar_background(app, filepath, uid):
-        try:
-            with app.app_context():
-                try:
-                    if uid:
-                        usuario = Usuario.query.get(uid)
-                        if usuario:
-                            login_user(usuario)
-                    _processar_documento(filepath, user_id_forcado=uid)
-                    print(f"[receber_automatico] Processamento concluído: {filepath}")
-                except Exception as e:
-                    db.session.rollback()
-                    print(f"[receber_automatico] ERRO ao processar {filepath}: {type(e).__name__}: {e}")
-                    traceback.print_exc()
-                finally:
-                    db.session.remove()
-        except Exception as e:
-            try:
-                db.session.rollback()
-            except Exception:
-                pass
-            print(f'Erro no processamento background: {e}')
-            print(f"[receber_automatico] ERRO ao processar {filepath}: {type(e).__name__}: {e}")
-            traceback.print_exc()
-
     try:
+        user_id = None
+        if current_user.is_authenticated:
+            user_id = current_user.id
+        else:
+            # Fallback para o robô: pega o primeiro usuário (Admin)
+            primeiro_user = Usuario.query.first()
+            if primeiro_user:
+                user_id = primeiro_user.id
+
+        def processar_background(app, filepath, uid):
+            try:
+                with app.app_context():
+                    try:
+                        if uid:
+                            usuario = Usuario.query.get(uid)
+                            if usuario:
+                                login_user(usuario)
+                        _processar_documento(filepath, user_id_forcado=uid)
+                        print(f"[receber_automatico] Processamento concluído: {filepath}")
+                    except Exception as e:
+                        db.session.rollback()
+                        print(f"[receber_automatico] ERRO ao processar {filepath}: {type(e).__name__}: {e}")
+                        traceback.print_exc()
+                    finally:
+                        db.session.remove()
+            except Exception as e:
+                db.session.rollback()
+                print(f'Erro no processamento: {e}')
+                print(f"[receber_automatico] ERRO ao processar {filepath}: {type(e).__name__}: {e}")
+                traceback.print_exc()
+
         thread = threading.Thread(target=processar_background, args=(current_app._get_current_object(), caminho, user_id))
         thread.start()
         return jsonify({'message': 'Processamento iniciado em segundo plano'}), 202
