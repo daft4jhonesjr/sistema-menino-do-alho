@@ -2263,7 +2263,8 @@ def dashboard():
     ).filter(filtro_ano_venda).scalar() or 0
     
     # KPI 8: Margem de Lucro (%) = (total_lucro / total_vendas) * 100
-    margem_porcentagem = (total_lucro / total_vendas * 100) if total_vendas > 0 else 0
+    # Proteção contra divisão por zero: total_vendas 0 ou negativo → margem = 0
+    margem_porcentagem = (float(total_lucro) / float(total_vendas) * 100) if total_vendas and float(total_vendas) > 0 else 0
     
     # KPI 9: Total de Pedidos - FILTRADO POR ANO
     total_pedidos = db.session.query(
@@ -2273,7 +2274,8 @@ def dashboard():
     ).filter(filtro_ano_venda).scalar() or 0
     
     # KPI 10: Ticket Médio = total_vendas / total_pedidos
-    ticket_medio = (total_vendas / total_pedidos) if total_pedidos > 0 else 0
+    # Proteção contra divisão por zero
+    ticket_medio = (float(total_vendas) / float(total_pedidos)) if total_pedidos and total_pedidos > 0 else 0
     
     # KPI 11: Evolução Mensal (Lucro vs. Volume) - FILTRADO POR ANO
     # Verifica se é Postgres ou SQLite para escolher a função certa
