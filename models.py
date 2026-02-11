@@ -178,6 +178,7 @@ class Documento(db.Model):
     venda_id = db.Column(db.Integer, db.ForeignKey('vendas.id'), nullable=True)  # FK opcional para associar a uma venda
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)  # Usuário que processou/recuperou
     data_processamento = db.Column(db.Date, default=date.today, nullable=False)  # Quando foi processado
+    conteudo_binario = db.Column(db.LargeBinary, nullable=True)  # PDF armazenado no banco (evita perder se arquivo física sumir)
     
     def __repr__(self):
         return f'<Documento {self.caminho_arquivo} - Tipo: {self.tipo}>'

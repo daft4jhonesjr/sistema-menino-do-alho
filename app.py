@@ -1258,6 +1258,12 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                     # #endregion
                     nf_val = dados_extraidos.get('numero_nf')
                     usuario_id = user_id_forcado if user_id_forcado else (current_user.id if current_user.is_authenticated else None)
+                    conteudo_bin = None
+                    try:
+                        with open(caminho_completo, 'rb') as f:
+                            conteudo_bin = f.read()
+                    except Exception:
+                        pass
                     documento = Documento(
                         caminho_arquivo=caminho_relativo,
                         tipo=tipo,
@@ -1268,7 +1274,8 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                         data_vencimento=dados_extraidos.get('data_vencimento'),
                         venda_id=venda_id,
                         usuario_id=usuario_id,
-                        data_processamento=date.today()
+                        data_processamento=date.today(),
+                        conteudo_binario=conteudo_bin
                     )
                     db.session.add(documento)
                     db.session.flush()
@@ -1378,6 +1385,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                     resultado['processados'] += 1
                     resultado['mensagens'].append(f"Processado: {arquivo}")
             except Exception as e:
+                db.session.rollback()
                 import traceback
                 nf_doc = dados_extraidos.get('numero_nf') if dados_extraidos else 'N/A'
                 # #region agent log
@@ -1386,7 +1394,6 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                 mensagem_erro = f"Falha técnica ao vincular NF {nf_doc}: {str(e)}"
                 print(f"DEBUG: ❌ ERRO ao processar {arquivo}: {mensagem_erro}")
                 print(f"DEBUG: Traceback: {traceback.format_exc()}")
-                db.session.rollback()
                 resultado['erros'] += 1
                 resultado['mensagens'].append(f"❌ {mensagem_erro}")
     
@@ -1963,6 +1970,14 @@ with app.app_context():
     # Migração: usuario_id em documentos (quem processou/recuperou)
     try:
         db.session.execute(text('ALTER TABLE documentos ADD COLUMN usuario_id INTEGER'))
+        db.session.commit()
+    except (OperationalError, Exception):
+        db.session.rollback()
+    # Migração: conteudo_binario em documentos (PDF armazenado no banco)
+    try:
+        uri = app.config.get('SQLALCHEMY_DATABASE_URI', '')
+        col_type = 'BYTEA' if 'postgres' in uri.lower() else 'BLOB'
+        db.session.execute(text(f'ALTER TABLE documentos ADD COLUMN conteudo_binario {col_type}'))
         db.session.commit()
     except (OperationalError, Exception):
         db.session.rollback()
@@ -2639,6 +2654,7 @@ def importar_clientes():
             flash(f'Importação concluída com sucesso! {sucesso} cliente(s) importado(s).', 'success')
             return redirect(url_for('listar_clientes'))
         except Exception as e:
+            db.session.rollback()
             if filepath and os.path.exists(filepath):
                 try:
                     os.remove(filepath)
@@ -3356,6 +3372,7 @@ def importar_produtos():
                 flash(f'Atenção: {len(outros_nomes)} produto(s) foram movidos para "OUTROS" por falta de categoria: {nomes_lista}', 'warning')
             return redirect(url_for('listar_produtos'))
         except Exception as e:
+            db.session.rollback()
             # #region agent log
             _debug_log("app.py:importar_produtos", "outer except", {"route": "importar_produtos", "exc_type": type(e).__name__, "exc_msg": str(e), "tb": traceback.format_exc()}, "H1")
             # #endregion
@@ -3564,6 +3581,7 @@ def api_detalhes_mes(ano, mes):
         })
         
     except Exception as e:
+        db.session.rollback()
         import traceback
         traceback.print_exc()
         return jsonify({'erro': f'Erro ao processar dados do mês: {str(e)}'}), 500
@@ -4199,23 +4217,21 @@ def recibo_venda(id):
 @app.route('/documento/visualizar/<int:id>')
 @login_required
 def visualizar_documento(id):
-    """Abre o PDF do documento em uma nova aba do navegador."""
+    """Abre o PDF do documento em uma nova aba. Prioriza conteudo_binario do banco; fallback para arquivo físico."""
     documento = Documento.query.get_or_404(id)
-    # Caminho completo do arquivo
-    caminho_completo = os.path.join(os.path.dirname(os.path.abspath(__file__)), documento.caminho_arquivo)
-    
+    if documento.conteudo_binario:
+        return send_file(io.BytesIO(documento.conteudo_binario), mimetype='application/pdf', download_name=os.path.basename(documento.caminho_arquivo or 'documento.pdf'), as_attachment=False)
+    caminho_completo = os.path.join(os.path.dirname(os.path.abspath(__file__)), documento.caminho_arquivo or '')
     if not os.path.exists(caminho_completo):
-        flash('Arquivo não encontrado.', 'error')
-        return redirect(url_for('listar_vendas'))
-    
-    # Retorna o arquivo PDF
+        flash('Arquivo não encontrado e o documento não possui cópia no banco.', 'error')
+        return redirect(url_for('dashboard'))
     return send_file(caminho_completo, mimetype='application/pdf')
 
 
 @app.route('/venda/<int:id>/ver_boleto')
 @login_required
 def ver_boleto_venda(id):
-    """Abre o PDF do boleto vinculado ao pedido em nova aba."""
+    """Abre o PDF do boleto vinculado ao pedido em nova aba. Prioriza conteudo_binario do banco se arquivo físico não existir."""
     venda = Venda.query.get_or_404(id)
     path = (venda.caminho_boleto or '').strip()
     if not path:
@@ -4223,6 +4239,9 @@ def ver_boleto_venda(id):
         return redirect(url_for('listar_vendas'))
     full = os.path.join(os.path.dirname(os.path.abspath(__file__)), path)
     if not os.path.exists(full):
+        doc = Documento.query.filter_by(caminho_arquivo=path).first()
+        if doc and doc.conteudo_binario:
+            return send_file(io.BytesIO(doc.conteudo_binario), mimetype='application/pdf', download_name=os.path.basename(path), as_attachment=False)
         flash('Arquivo do boleto não encontrado.', 'error')
         return redirect(url_for('listar_vendas'))
     return send_file(full, mimetype='application/pdf')
@@ -4249,6 +4268,8 @@ def ver_nf_venda(id):
     
     full = os.path.join(os.path.dirname(os.path.abspath(__file__)), path)
     if not os.path.exists(full):
+        if doc.conteudo_binario:
+            return send_file(io.BytesIO(doc.conteudo_binario), mimetype='application/pdf', download_name=os.path.basename(path), as_attachment=False)
         flash('Arquivo da nota fiscal não encontrado no sistema de arquivos.', 'error')
         return redirect(url_for('listar_vendas'))
     return send_file(full, mimetype='application/pdf')
@@ -4832,6 +4853,7 @@ def importar_vendas():
             flash(msg, 'success')
             return redirect(url_for('listar_vendas'))
         except Exception as e:
+            db.session.rollback()
             # #region agent log
             _debug_log("app.py:importar_vendas", "outer except", {"route": "importar_vendas", "exc_type": type(e).__name__, "exc_msg": str(e), "tb": traceback.format_exc()}, "H1")
             # #endregion
@@ -4929,11 +4951,19 @@ def forcar_leitura_pasta():
                 caminho_relativo = os.path.join('documentos_entrada', 'boletos' if tipo == 'BOLETO' else 'notas_fiscais', nome).replace(os.sep, '/')
                 doc_existente = Documento.query.filter_by(caminho_arquivo=caminho_relativo).first()
                 if not doc_existente:
+                    conteudo_bin = None
+                    caminho_full = os.path.join(base_dir, 'boletos' if tipo == 'BOLETO' else 'notas_fiscais', nome)
+                    try:
+                        with open(caminho_full, 'rb') as f:
+                            conteudo_bin = f.read()
+                    except Exception:
+                        pass
                     doc = Documento(
                         caminho_arquivo=caminho_relativo,
                         tipo=tipo,
                         usuario_id=current_user.id,
-                        data_processamento=date.today()
+                        data_processamento=date.today(),
+                        conteudo_binario=conteudo_bin
                     )
                     db.session.add(doc)
                     ressuscitados += 1
@@ -5085,6 +5115,7 @@ def debug_vincular():
         
         return jsonify(resposta)
     except Exception as e:
+        db.session.rollback()
         import traceback
         return jsonify({
             'sucesso': False,
