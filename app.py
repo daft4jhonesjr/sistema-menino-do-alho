@@ -4298,6 +4298,12 @@ def api_receber_automatico():
                 finally:
                     db.session.remove()
         except Exception as e:
+            try:
+                with app.app_context():
+                    db.session.rollback()
+            except Exception:
+                pass
+            print(f'Erro no processamento background: {e}')
             print(f"[receber_automatico] ERRO ao processar {filepath}: {type(e).__name__}: {e}")
             traceback.print_exc()
 
