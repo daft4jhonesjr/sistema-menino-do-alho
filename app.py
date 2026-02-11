@@ -100,7 +100,9 @@ def _normalizar_nome_coluna(s):
 
 
 def _parse_preco(val):
-    """Converte valor de preço para float. Remove R$, espaços, aspas; troca vírgula por ponto (formato BR)."""
+    """Converte valor de preço para float. Remove R$, espaços, aspas; troca vírgula por ponto (formato BR).
+    Preserva o sinal de menos para valores negativos (perdas, prejuízos, ajustes).
+    Ex: '-R$ 120,00' → -120.0"""
     if pd.isna(val) and val != 0:
         return None
     if val is None:
@@ -108,13 +110,17 @@ def _parse_preco(val):
     s = str(val).strip().strip('"').strip("'").strip()
     if not s:
         return None
+    # Remover R$, espaços; depois detectar e preservar sinal de menos
     s = re.sub(r'R\$\s*', '', s, flags=re.IGNORECASE)
     s = s.replace(' ', '')
+    negativo = s.lstrip().startswith('-')
+    s = s.lstrip('-').strip()  # Remove o menos para processar; reinstituímos no final
     # Formato BR: 1.234,56 → remover pontos (milhar), vírgula → ponto
     if ',' in s:
         s = s.replace('.', '').replace(',', '.')
     try:
-        return float(s)
+        n = float(s)
+        return -n if negativo else n
     except (ValueError, TypeError):
         return None
 
@@ -593,14 +599,18 @@ def _detectar_empresa_destak(texto):
 
 
 def _parse_valor_monetario(s):
-    """Converte string 'R$ 1.234,56' ou '2400,00' para float. Retorna None se inválido."""
+    """Converte string 'R$ 1.234,56' ou '-R$ 120,00' para float. Retorna None se inválido. Preserva sinal negativo."""
     if not s or not isinstance(s, str):
         return None
+    s = str(s).strip()
+    negativo = s.lstrip().startswith('-')
     s = re.sub(r'R\$\s*', '', s, flags=re.IGNORECASE).replace(' ', '')
+    s = s.lstrip('-').strip()
     if ',' in s:
         s = s.replace('.', '').replace(',', '.')
     try:
-        return float(s)
+        n = float(s)
+        return -n if negativo else n
     except (ValueError, TypeError):
         return None
 
@@ -3249,8 +3259,8 @@ def importar_produtos():
                         erros_detalhados.append(_msg_linha(linha_num, contexto, "O campo 'fornecedor' está vazio. Use DESTAK ou PATY", True))
                         erros += 1
                         continue
-                    if preco_custo_valor is None or preco_custo_valor <= 0:
-                        txt = f"O preço '{preco_raw}' não pôde ser convertido. Use formato brasileiro (ex: 143,00 ou 1.234,56) ou use ponto como decimal" if preco_raw else "O campo 'preco_custo' (ou 'preco') está vazio"
+                    if preco_custo_valor is None:
+                        txt = f"O preço '{preco_raw}' não pôde ser convertido. Use formato brasileiro (ex: 143,00 ou -120,00 para ajustes) ou use ponto como decimal" if preco_raw else "O campo 'preco_custo' (ou 'preco') está vazio"
                         erros_detalhados.append(_msg_linha(linha_num, contexto, txt, True))
                         erros += 1
                         continue
@@ -4661,8 +4671,8 @@ def importar_vendas():
                         continue
                     preco_raw = row.get('preco_venda', row.get('preco', 0))
                     preco_venda = _parse_preco(preco_raw)
-                    if preco_venda is None or preco_venda <= 0:
-                        txt = f"O preço '{preco_raw}' não pôde ser convertido. Use formato brasileiro (ex: 143,00 ou 1.234,56) ou use ponto como decimal" if preco_raw and str(preco_raw).strip() else "O campo 'preco_venda' (ou 'preco') está vazio"
+                    if preco_venda is None:
+                        txt = f"O preço '{preco_raw}' não pôde ser convertido. Use formato brasileiro (ex: 143,00 ou -120,00 para perdas) ou use ponto como decimal" if preco_raw and str(preco_raw).strip() else "O campo 'preco_venda' (ou 'preco') está vazio"
                         erros_detalhados.append(_msg_linha(linha_num, contexto, txt, True))
                         erros += 1
                         continue
