@@ -15,7 +15,7 @@
     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ pedido.data_venda.strftime('%d/%m/%Y') }}</td>
     <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">{{ pedido.cliente_nome }}</td>
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ pedido.nf }}</td>
-    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{% if pedido.total_quantidade %}{{ (pedido.total_valor / pedido.total_quantidade)|formato_moeda }}{% else %}<span class="text-gray-400">---</span>{% endif %}</td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{% if pedido.total_quantidade and pedido.total_quantidade != 0 %}{{ (pedido.total_valor / pedido.total_quantidade)|formato_moeda }}{% else %}<span class="text-gray-400">---</span>{% endif %}</td>
     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 text-right">{{ pedido.total_quantidade }}</td>
     <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 text-right">{{ pedido.total_valor|formato_moeda }}</td>
     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-right {% if pedido.total_lucro >= 0 %}text-emerald-600{% else %}text-red-600{% endif %}">{{ pedido.total_lucro|formato_moeda }}</td>

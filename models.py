@@ -176,6 +176,7 @@ class Documento(db.Model):
     razao_social = db.Column(db.String(200))  # Razão social extraída
     data_vencimento = db.Column(db.Date)  # Data de vencimento (para boletos)
     venda_id = db.Column(db.Integer, db.ForeignKey('vendas.id'), nullable=True)  # FK opcional para associar a uma venda
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)  # Usuário que processou/recuperou
     data_processamento = db.Column(db.Date, default=date.today, nullable=False)  # Quando foi processado
     
     def __repr__(self):
