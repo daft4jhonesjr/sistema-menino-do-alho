@@ -3848,6 +3848,16 @@ def nova_venda():
             produtos = Produto.query.filter(Produto.estoque_atual > 0).all()
             return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
 
+        # Validação de quantidade (deve ser positiva mesmo para perdas)
+        if quantidade_venda <= 0:
+            msg = 'A quantidade deve ser maior que zero (mesmo para perdas).'
+            if _is_ajax():
+                return jsonify(ok=False, mensagem=msg), 400
+            flash(msg, 'error')
+            clientes = Cliente.query.all()
+            produtos = Produto.query.filter(Produto.estoque_atual > 0).all()
+            return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
+
         produto = Produto.query.get_or_404(produto_id)
         if produto.estoque_atual < quantidade_venda:
             msg = f'Estoque insuficiente! Disponível: {produto.estoque_atual}'
@@ -3856,6 +3866,9 @@ def nova_venda():
             clientes = Cliente.query.all()
             produtos = Produto.query.filter(Produto.estoque_atual > 0).all()
             return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
+
+        # ✅ Valores negativos no preço são permitidos (para ajustes, perdas, etc.)
+        # Não há validação que impeça preços negativos
 
         venda = Venda(
             cliente_id=int(request.form['cliente_id']),
