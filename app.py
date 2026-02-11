@@ -4854,6 +4854,35 @@ def api_produto(id):
     })
 
 
+@app.route('/admin/raio_x', methods=['GET'])
+@login_required
+def raio_x():
+    """Diagnóstico: últimos 5 documentos cadastrados e ID do usuário atual."""
+    if not current_user.is_admin():
+        return '<html><body><p>Acesso negado.</p></body></html>', 403
+    docs = Documento.query.order_by(Documento.id.desc()).limit(5).all()
+    html = '''<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><title>Raio-X Documentos</title>
+<style>body{font-family:system-ui,sans-serif;max-width:900px;margin:2rem auto;padding:1rem;background:#f5f5f5;}h1{color:#0d9488;}table{border-collapse:collapse;width:100%;background:white;box-shadow:0 1px 3px rgba(0,0,0,.1);}th,td{padding:.75rem;text-align:left;border-bottom:1px solid #e5e7eb;}th{background:#0d9488;color:white;}tr:hover{background:#f0fdfa;}p.info{background:#e0f2fe;padding:1rem;border-radius:8px;margin-bottom:1.5rem;}</style>
+</head>
+<body>
+<h1>🔍 Raio-X Documentos</h1>
+<p class="info"><strong>Seu ID atual:</strong> ''' + str(current_user.id) + ''' (usuário: ''' + str(current_user.username) + ''')</p>
+<h2>Últimos 5 documentos</h2>
+<table>
+<tr><th>ID</th><th>Nome do Arquivo</th><th>ID Dono (usuario_id)</th><th>Status</th><th>Data de Upload</th></tr>'''
+    for d in docs:
+        nome = os.path.basename(d.caminho_arquivo or '')
+        status = 'Vinculado' if d.venda_id else 'Sem vínculo'
+        usuario_id_str = str(d.usuario_id) if d.usuario_id is not None else '<em>NULL</em>'
+        data_str = d.data_processamento.strftime('%d/%m/%Y') if d.data_processamento else '-'
+        html += f'<tr><td>{d.id}</td><td>{nome}</td><td>{usuario_id_str}</td><td>{status}</td><td>{data_str}</td></tr>'
+    html += '''</table>
+</body></html>'''
+    return html
+
+
 @app.route('/admin/resgatar_orfaos', methods=['GET', 'POST'])
 @login_required
 def resgatar_orfaos():
