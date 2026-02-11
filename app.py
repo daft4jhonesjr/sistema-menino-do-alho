@@ -1776,13 +1776,14 @@ def load_user(user_id):
 
 @app.template_filter('formato_moeda')
 def formato_moeda(value):
-    """Formata um número como moeda brasileira: R$ 1.000,00"""
+    """Formata um número como moeda brasileira: R$ 1.000,00. Aceita negativos (ex: -R$ 120,00)."""
     if value is None:
         return 'R$ 0,00'
     try:
         num = float(value)
-        # Formata com separador de milhar (.) e decimal (,)
-        return f'R$ {num:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+        negativo = num < 0
+        s = f'R$ {abs(num):,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+        return ('-' + s) if negativo else s
     except (ValueError, TypeError):
         return 'R$ 0,00'
 
@@ -4266,11 +4267,22 @@ def api_receber_automatico():
     caminho = os.path.join(pasta, filename)
     arquivo.save(caminho)
 
-    def processar_background(app, filepath):
-        with app.app_context():
-            _processar_documento(filepath)
+    user_id = current_user.id if current_user.is_authenticated else None
 
-    thread = threading.Thread(target=processar_background, args=(current_app._get_current_object(), caminho))
+    def processar_background(app, filepath, uid):
+        try:
+            with app.app_context():
+                if uid:
+                    u = Usuario.query.get(uid)
+                    if u:
+                        login_user(u)
+                _processar_documento(filepath)
+            print(f"[receber_automatico] Processamento concluído: {filepath}")
+        except Exception as e:
+            print(f"[receber_automatico] ERRO ao processar {filepath}: {type(e).__name__}: {e}")
+            traceback.print_exc()
+
+    thread = threading.Thread(target=processar_background, args=(current_app._get_current_object(), caminho, user_id))
     thread.start()
     return jsonify({'message': 'Processamento iniciado em segundo plano'}), 202
 
