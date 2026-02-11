@@ -905,7 +905,7 @@ def _processar_pdf(caminho_arquivo, tipo_documento):
         return None
 
 
-def _processar_documento(caminho_arquivo):
+def _processar_documento(caminho_arquivo, user_id_forcado=None):
     """Processa um único documento: move para documentos_entrada, organiza e processa."""
     base = os.path.join(os.path.dirname(os.path.abspath(__file__)), "documentos_entrada")
     os.makedirs(base, exist_ok=True)
@@ -913,14 +913,15 @@ def _processar_documento(caminho_arquivo):
     destino = os.path.join(base, nome)
     shutil.move(caminho_arquivo, destino)
     organizar_arquivos()
-    _processar_documentos_pendentes()
+    _processar_documentos_pendentes(user_id_forcado=user_id_forcado)
 
 
-def _processar_documentos_pendentes(capturar_logs_memoria=False):
+def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado=None):
     """Verifica as pastas de documentos e processa novos arquivos PDF que ainda não foram registrados.
     
     Args:
         capturar_logs_memoria: Se True, captura logs em uma lista para retorno (usado pelo endpoint de debug)
+        user_id_forcado: Se informado, usa este ID como usuario_id ao criar Documento (ex: da thread background)
     
     Returns:
         dict com: {'processados': int, 'erros': int, 'mensagens': list, 'logs': list (se capturar_logs_memoria=True)}
@@ -1256,6 +1257,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False):
                     _debug_log("app.py:783", "ANTES de criar documento", {"arquivo": arquivo, "venda_id": venda_id, "venda_match_exists": venda_match is not None, "nf": dados_extraidos.get('numero_nf')}, "E")
                     # #endregion
                     nf_val = dados_extraidos.get('numero_nf')
+                    usuario_id = user_id_forcado if user_id_forcado else (current_user.id if current_user.is_authenticated else None)
                     documento = Documento(
                         caminho_arquivo=caminho_relativo,
                         tipo=tipo,
@@ -1265,6 +1267,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False):
                         razao_social=dados_extraidos.get('razao_social'),
                         data_vencimento=dados_extraidos.get('data_vencimento'),
                         venda_id=venda_id,
+                        usuario_id=usuario_id,
                         data_processamento=date.today()
                     )
                     db.session.add(documento)
@@ -1958,6 +1961,12 @@ with app.app_context():
         db.session.rollback()
     try:
         db.session.execute(text("UPDATE documentos SET nf_extraida = numero_nf WHERE nf_extraida IS NULL AND numero_nf IS NOT NULL"))
+        db.session.commit()
+    except (OperationalError, Exception):
+        db.session.rollback()
+    # Migração: usuario_id em documentos (quem processou/recuperou)
+    try:
+        db.session.execute(text('ALTER TABLE documentos ADD COLUMN usuario_id INTEGER'))
         db.session.commit()
     except (OperationalError, Exception):
         db.session.rollback()
@@ -4277,7 +4286,7 @@ def api_receber_automatico():
                         usuario = Usuario.query.get(uid)
                         if usuario:
                             login_user(usuario)
-                    _processar_documento(filepath)
+                    _processar_documento(filepath, user_id_forcado=uid)
                     print(f"[receber_automatico] Processamento concluído: {filepath}")
                 except Exception as e:
                     db.session.rollback()
@@ -4836,6 +4845,26 @@ def api_produto(id):
         'estoque': produto.estoque_atual,
         'preco_custo': float(produto.preco_custo)
     })
+
+
+@app.route('/admin/resgatar_orfaos', methods=['GET', 'POST'])
+@login_required
+def resgatar_orfaos():
+    """Atribui ao usuário atual todos os documentos com usuario_id NULL (órfãos)."""
+    if not current_user.is_admin():
+        flash('Acesso negado. Apenas administradores podem executar esta ação.', 'error')
+        return redirect(url_for('dashboard'))
+    try:
+        orfaos = Documento.query.filter(Documento.usuario_id.is_(None)).all()
+        count = len(orfaos)
+        for doc in orfaos:
+            doc.usuario_id = current_user.id
+        db.session.commit()
+        flash(f'Recuperados {count} documento(s) órfão(s).', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro ao resgatar órfãos: {str(e)}', 'error')
+    return redirect(url_for('dashboard'))
 
 
 @app.route('/admin/limpar_vinculos_quebrados', methods=['POST'])
