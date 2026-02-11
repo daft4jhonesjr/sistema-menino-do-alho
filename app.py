@@ -4276,7 +4276,14 @@ def api_receber_automatico():
     caminho = os.path.join(pasta, filename)
     arquivo.save(caminho)
 
-    user_id = current_user.id if current_user.is_authenticated else None
+    user_id = None
+    if current_user.is_authenticated:
+        user_id = current_user.id
+    else:
+        # Fallback para o robô: pega o primeiro usuário (Admin)
+        primeiro_user = Usuario.query.first()
+        if primeiro_user:
+            user_id = primeiro_user.id
 
     def processar_background(app, filepath, uid):
         try:
