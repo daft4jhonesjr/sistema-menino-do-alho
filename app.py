@@ -904,6 +904,17 @@ def _processar_pdf(caminho_arquivo, tipo_documento):
         return None
 
 
+def _processar_documento(caminho_arquivo):
+    """Processa um único documento: move para documentos_entrada, organiza e processa."""
+    base = os.path.join(os.path.dirname(os.path.abspath(__file__)), "documentos_entrada")
+    os.makedirs(base, exist_ok=True)
+    nome = os.path.basename(caminho_arquivo)
+    destino = os.path.join(base, nome)
+    shutil.move(caminho_arquivo, destino)
+    organizar_arquivos()
+    _processar_documentos_pendentes()
+
+
 def _processar_documentos_pendentes(capturar_logs_memoria=False):
     """Verifica as pastas de documentos e processa novos arquivos PDF que ainda não foram registrados.
     
@@ -4234,6 +4245,30 @@ def ver_nf_venda(id):
         flash('Arquivo da nota fiscal não encontrado no sistema de arquivos.', 'error')
         return redirect(url_for('listar_vendas'))
     return send_file(full, mimetype='application/pdf')
+
+
+@app.route('/api/receber_automatico', methods=['POST'])
+def api_receber_automatico():
+    """API para receber arquivos automaticamente. Requer token em Authorization."""
+    token_esperado = 'SEGREDDO_DO_ALHO_2026'
+    auth = request.headers.get('Authorization', '')
+    if auth != token_esperado and auth != f'Bearer {token_esperado}':
+        return jsonify({'status': 'erro', 'mensagem': 'Token inválido ou ausente.'}), 403
+    if 'file' not in request.files:
+        return jsonify({'status': 'erro', 'mensagem': 'Nenhum arquivo enviado.'}), 400
+    arquivo = request.files['file']
+    if not arquivo or not arquivo.filename:
+        return jsonify({'status': 'erro', 'mensagem': 'Arquivo vazio ou inexistente.'}), 400
+    filename = secure_filename(arquivo.filename)
+    pasta = app.config['UPLOAD_FOLDER']
+    os.makedirs(pasta, exist_ok=True)
+    caminho = os.path.join(pasta, filename)
+    arquivo.save(caminho)
+    try:
+        _processar_documento(caminho)
+    except Exception as e:
+        return jsonify({'status': 'erro', 'mensagem': str(e)}), 500
+    return jsonify({'status': 'sucesso', 'mensagem': 'Recebido!'})
 
 
 @app.route('/processar_documentos', methods=['POST'])
