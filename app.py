@@ -4428,14 +4428,17 @@ def admin_arquivos_deletar_massa():
     if not current_user.is_admin():
         flash('Acesso negado. Apenas administradores podem gerenciar arquivos.', 'error')
         return redirect(url_for('dashboard'))
-    ids = request.form.getlist('ids[]') or (request.get_json(silent=True) or {}).get('ids', [])
-    if not ids:
-        flash('Nenhum documento selecionado.', 'warning')
+    ids_raw = request.form.getlist('ids[]') or request.form.getlist('ids') or (request.get_json(silent=True) or {}).get('ids', [])
+    if not ids_raw:
+        flash('Nenhum arquivo selecionado.', 'warning')
         return redirect(url_for('admin_arquivos'))
     try:
-        ids = list({int(x) for x in ids if x is not None})
+        ids = list({int(x) for x in ids_raw if x is not None and str(x).strip()})
     except (TypeError, ValueError):
         flash('IDs inválidos.', 'error')
+        return redirect(url_for('admin_arquivos'))
+    if not ids:
+        flash('Nenhum arquivo selecionado.', 'warning')
         return redirect(url_for('admin_arquivos'))
     try:
         docs = Documento.query.filter(Documento.id.in_(ids)).all()
