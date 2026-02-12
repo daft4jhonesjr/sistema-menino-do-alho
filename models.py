@@ -135,7 +135,7 @@ class Venda(db.Model):
     data_vencimento = db.Column(db.Date, nullable=True)  # vencimento do boleto vinculado (extraído do PDF)
 
     # Relacionamento com documentos
-    documentos = db.relationship('Documento', backref='venda', lazy=True, cascade='all, delete-orphan')
+    documentos = db.relationship('Documento', backref='venda', lazy=True, cascade='all, delete-orphan', passive_deletes=True)
     
     def calcular_total(self):
         """Valor total da venda = preco_venda * quantidade_venda."""
@@ -175,7 +175,7 @@ class Documento(db.Model):
     nf_extraida = db.Column(db.String(50))  # Cache OCR: NF extraída; se preenchida, não roda OCR de novo
     razao_social = db.Column(db.String(200))  # Razão social extraída
     data_vencimento = db.Column(db.Date)  # Data de vencimento (para boletos)
-    venda_id = db.Column(db.Integer, db.ForeignKey('vendas.id'), nullable=True)  # FK opcional para associar a uma venda
+    venda_id = db.Column(db.Integer, db.ForeignKey('vendas.id', ondelete='CASCADE'), nullable=True)  # FK opcional para associar a uma venda
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)  # Usuário que processou/recuperou
     data_processamento = db.Column(db.Date, default=date.today, nullable=False)  # Quando foi processado
     conteudo_binario = db.Column(db.LargeBinary, nullable=True)  # PDF armazenado no banco (evita perder se arquivo física sumir)
