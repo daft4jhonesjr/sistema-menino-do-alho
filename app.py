@@ -2079,7 +2079,15 @@ def login():
         if not username or not password:
             flash('Preencha usuário e senha.', 'error')
             return render_template('auth/login.html')
-        user = Usuario.query.filter_by(username=username).first()
+        try:
+            user = Usuario.query.filter_by(username=username).first()
+        except Exception:
+            db.session.rollback()
+            try:
+                user = Usuario.query.filter_by(username=username).first()
+            except Exception:
+                flash('Erro no sistema, tente novamente.', 'error')
+                return render_template('auth/login.html')
         if not user or not check_password_hash(user.password_hash, password):
             flash('Usuário ou senha inválidos.', 'error')
             return render_template('auth/login.html')
@@ -4156,8 +4164,9 @@ def excluir_venda(id):
         
         flash(f'Pedido completo excluído com sucesso! {len(vendas_do_pedido)} item(ns) removido(s).', 'success')
     except Exception as e:
-        db.session.rollback()
-        flash(f'Erro ao excluir pedido: {str(e)}', 'error')
+        db.session.rollback()  # OBRIGATÓRIO para destravar o sistema em caso de erro
+        print(f"Erro ao deletar venda: {e}")
+        flash('Erro ao deletar a venda. Tente novamente.', 'error')
     return redirect(url_for('listar_vendas'))
 
 
