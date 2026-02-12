@@ -1675,11 +1675,21 @@ login_manager.login_message = 'Faça login para acessar esta página.'
 
 # --- VACINA CONTRA TRAVAMENTO DO BANCO ---
 @app.before_request
+def ensure_clean_connection():
+    """Verifica se a conexão está limpa antes de processar qualquer coisa. Evita PendingRollbackError."""
+    try:
+        db.session.execute(text('SELECT 1'))
+    except Exception:
+        db.session.rollback()
+        db.session.remove()
+
+
+@app.before_request
 def limpar_sessao_anterior():
     """Garante que não haja transações pendentes antes de cada requisição."""
     try:
         db.session.rollback()
-    except:
+    except Exception:
         db.session.remove()
 
 
@@ -4286,6 +4296,36 @@ def ver_nf_venda(id):
         flash('Arquivo da nota fiscal não encontrado no sistema de arquivos.', 'error')
         return redirect(url_for('listar_vendas'))
     return send_file(full, mimetype='application/pdf')
+
+
+# Diretório persistente no Render para uploads do bot
+RENDER_DOCUMENTOS_BASE = '/opt/render/project/src/documentos_entrada'
+
+
+@app.route('/upload', methods=['POST'])
+def upload_documento():
+    """
+    Rota para o bot enviar arquivos ao disco persistente do Render.
+    Campo tipo: 'boleto' -> boletos/ ; 'nfe' -> notas_fiscais/
+    """
+    # Obter arquivo (o bot pode enviar 'file', 'arquivo' ou 'documento')
+    arquivo = request.files.get('file') or request.files.get('arquivo') or request.files.get('documento')
+    if not arquivo or not arquivo.filename:
+        return jsonify({'mensagem': 'Nenhum arquivo enviado.'}), 400
+
+    tipo = (request.form.get('tipo') or request.form.get('type') or '').strip().lower()
+    if tipo == 'boleto':
+        diretorio = os.path.join(RENDER_DOCUMENTOS_BASE, 'boletos')
+    elif tipo == 'nfe':
+        diretorio = os.path.join(RENDER_DOCUMENTOS_BASE, 'notas_fiscais')
+    else:
+        return jsonify({'mensagem': "Campo 'tipo' inválido. Use 'boleto' ou 'nfe'."}), 400
+
+    os.makedirs(diretorio, exist_ok=True)
+    nome_original = secure_filename(arquivo.filename)
+    caminho = os.path.join(diretorio, nome_original)
+    arquivo.save(caminho)
+    return jsonify({'mensagem': 'Sucesso'}), 200
 
 
 @app.route('/api/receber_automatico', methods=['POST'])
