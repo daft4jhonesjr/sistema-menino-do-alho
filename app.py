@@ -4370,6 +4370,46 @@ def reprocessar_boletos():
     return redirect(url_for('dashboard'))
 
 
+@app.route('/admin/arquivos')
+@login_required
+def admin_arquivos():
+    """Lista todos os documentos salvos no banco, ordenados pelos mais recentes."""
+    if not current_user.is_admin():
+        flash('Acesso negado. Apenas administradores podem gerenciar arquivos.', 'error')
+        return redirect(url_for('dashboard'))
+    documentos = Documento.query.order_by(Documento.data_processamento.desc()).all()
+    return render_template('gerenciar_arquivos.html', documentos=documentos)
+
+
+@app.route('/admin/arquivos/deletar_massa', methods=['POST'])
+@login_required
+def admin_arquivos_deletar_massa():
+    """Exclusão em massa de documentos. Recebe lista de IDs via form ou JSON."""
+    if not current_user.is_admin():
+        flash('Acesso negado. Apenas administradores podem gerenciar arquivos.', 'error')
+        return redirect(url_for('dashboard'))
+    ids = request.form.getlist('ids[]') or (request.get_json(silent=True) or {}).get('ids', [])
+    if not ids:
+        flash('Nenhum documento selecionado.', 'warning')
+        return redirect(url_for('admin_arquivos'))
+    try:
+        ids = list({int(x) for x in ids if x is not None})
+    except (TypeError, ValueError):
+        flash('IDs inválidos.', 'error')
+        return redirect(url_for('admin_arquivos'))
+    try:
+        docs = Documento.query.filter(Documento.id.in_(ids)).all()
+        for d in docs:
+            db.session.delete(d)
+        db.session.commit()
+        flash(f'{len(docs)} documento(s) excluído(s) com sucesso!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        print(f"Erro ao deletar documentos em massa: {e}")
+        flash('Erro ao excluir documentos. Tente novamente.', 'error')
+    return redirect(url_for('admin_arquivos'))
+
+
 @app.route('/admin/reprocessar-vencimentos', methods=['GET', 'POST'])
 @login_required
 def admin_reprocessar_vencimentos():
