@@ -4919,11 +4919,16 @@ def importar_vendas():
                     if empresa_val not in ('PATY', 'DESTAK', 'NENHUM'):
                         empresa_val = 'DESTAK'  # Fallback se valor inválido ou vazio
                     
-                    # Ler situação da coluna 'situacao' (com fallback para PENDENTE)
-                    situacao_raw = row.get('situacao', row.get('status', ''))
-                    situacao_val = _strip_quotes(situacao_raw).upper().strip() if situacao_raw else ''
-                    if situacao_val not in ('PAGO', 'PENDENTE'):
-                        situacao_val = 'PENDENTE'  # Fallback se valor inválido ou vazio
+                    # Captura a situação (aceita situacao, situação, status)
+                    situacao_crua = str(row.get('situacao', row.get('situação', row.get('status', 'PENDENTE')))).strip().upper()
+                    situacao_crua = _strip_quotes(situacao_crua) if situacao_crua else ''
+                    # Filtro inteligente: reconhece PAGO ou PENDENTE mesmo com erros de digitação (ex: PENDETE)
+                    if 'PAGO' in situacao_crua:
+                        situacao_val = 'PAGO'
+                    elif 'PEND' in situacao_crua:
+                        situacao_val = 'PENDENTE'
+                    else:
+                        situacao_val = 'PENDENTE'  # Padrão de segurança
                     
                     venda = Venda(
                         cliente_id=cliente.id,
