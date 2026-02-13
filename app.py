@@ -4816,9 +4816,9 @@ def importar_vendas():
                 df = pd.read_excel(filepath)
             if not is_raw:
                 df.columns = df.columns.str.strip().str.lower().str.replace(' ', '_')
-            sucesso = 0
+            vendas_novas = 0
+            vendas_ignoradas = 0
             erros = 0
-            ignorados = 0
             erros_detalhados = []
             # Mapa nome normalizado -> Produto para busca tolerante a espaços (evita rejeitar por espaços duplos/invisíveis)
             _produtos_por_nome_normalizado = {_normalizar_nome_busca(p.nome_produto): p for p in Produto.query.all()}
@@ -4905,9 +4905,13 @@ def importar_vendas():
                             Venda.quantidade_venda == quantidade_venda
                         )
                     else:
-                        base_dup = base_dup.filter(Venda.nf == nf_val)
+                        base_dup = base_dup.filter(
+                            Venda.nf == nf_val,
+                            Venda.preco_venda == Decimal(str(preco_venda)),
+                            Venda.quantidade_venda == quantidade_venda
+                        )
                     if base_dup.first():
-                        ignorados += 1
+                        vendas_ignoradas += 1
                         continue
                     # Ler empresa da coluna 'empresa' ou 'empresa_faturadora' (aceita NENHUM para vendas sem NF)
                     empresa_raw = row.get('empresa', row.get('empresa_faturadora', ''))
@@ -4934,7 +4938,7 @@ def importar_vendas():
                     db.session.add(venda)
                     produto.estoque_atual -= quantidade_venda
                     db.session.commit()
-                    sucesso += 1
+                    vendas_novas += 1
                 except Exception as e:
                     db.session.rollback()
                     erros_detalhados.append(_msg_linha(linha_num, contexto, f"Erro inesperado: {str(e)}", True))
@@ -4942,11 +4946,14 @@ def importar_vendas():
             if filepath and os.path.exists(filepath):
                 os.remove(filepath)
             if erros > 0:
-                return render_template('vendas/importar.html', erros_detalhados=erros_detalhados, sucesso=sucesso, erros=erros, ignorados=ignorados)
-            msg = f'Importação concluída: {sucesso} nova(s) venda(s).'
-            if ignorados > 0:
-                msg += f' {ignorados} ignorada(s) (já cadastradas).'
-            flash(msg, 'success')
+                return render_template('vendas/importar.html', erros_detalhados=erros_detalhados, sucesso=vendas_novas, erros=erros, ignorados=vendas_ignoradas)
+            if vendas_novas > 0 or vendas_ignoradas > 0:
+                mensagem = f'🎉 Tudo pronto! Salvamos {vendas_novas} vendas novas no sistema.'
+                if vendas_ignoradas > 0:
+                    mensagem += f' Ah, e encontramos {vendas_ignoradas} vendas que já estavam cadastradas e pulamos elas para não duplicar nada! 😉'
+                flash(mensagem, 'success')
+            else:
+                flash('A planilha estava vazia ou não encontramos dados válidos.', 'warning')
             return redirect(url_for('listar_vendas'))
         except Exception as e:
             db.session.rollback()

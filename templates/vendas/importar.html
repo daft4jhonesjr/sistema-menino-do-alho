@@ -32,7 +32,7 @@
 {% endif %}
 
 <div class="bg-white rounded-lg shadow-md p-6 max-w-2xl">
-    <form method="POST" enctype="multipart/form-data">
+    <form id="form-importar-vendas" method="POST" enctype="multipart/form-data">
         <div class="mb-4">
             <label for="arquivo" class="block text-sm font-medium text-gray-700 mb-2">
                 Selecione o arquivo <span class="text-red-500">*</span>
@@ -90,13 +90,24 @@
             </div>
         </div>
 
-        <div class="flex gap-4">
-            <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-md transition-colors flex items-center">
-                <i data-lucide="upload" class="w-4 h-4 mr-2"></i>Importar
-            </button>
-            <a href="{{ url_for('listar_vendas') }}" class="px-4 py-2 bg-gray-300 text-gray-700 font-medium rounded-md hover:bg-gray-400 transition-colors flex items-center">
-                <i data-lucide="x" class="w-4 h-4 mr-2"></i>Cancelar
-            </a>
+        <div class="flex flex-col gap-4">
+            <div class="flex gap-4">
+                <button type="submit" id="btn-importar" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-md transition-colors flex items-center">
+                    <i data-lucide="upload" class="w-4 h-4 mr-2"></i>Importar
+                </button>
+                <a href="{{ url_for('listar_vendas') }}" class="px-4 py-2 bg-gray-300 text-gray-700 font-medium rounded-md hover:bg-gray-400 transition-colors flex items-center">
+                    <i data-lucide="x" class="w-4 h-4 mr-2"></i>Cancelar
+                </a>
+            </div>
+            <div id="loading-importacao" class="hidden mt-4">
+                <p class="text-emerald-600 mb-1 font-bold flex items-center gap-2">
+                    <i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>
+                    Lendo planilha e verificando duplicatas... Aguarde.
+                </p>
+                <div class="h-4 w-full rounded-full bg-gray-200 overflow-hidden">
+                    <div class="h-full bg-emerald-500 rounded-full animate-pulse" style="width: 100%"></div>
+                </div>
+            </div>
         </div>
     </form>
 </div>
@@ -342,6 +353,20 @@ document.addEventListener('DOMContentLoaded', function() {
             reader.readAsArrayBuffer(file);
         }
     });
+
+    // Barra de progresso ao enviar formulário de importação
+    var formImportar = document.getElementById('form-importar-vendas');
+    var btnImportar = document.getElementById('btn-importar');
+    var loadingImportacao = document.getElementById('loading-importacao');
+    if (formImportar && btnImportar && loadingImportacao) {
+        formImportar.addEventListener('submit', function() {
+            loadingImportacao.classList.remove('hidden');
+            btnImportar.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 mr-2 animate-spin"></i>Importando...';
+            btnImportar.style.pointerEvents = 'none';
+            btnImportar.classList.add('opacity-50');
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        });
+    }
 });
 </script>
 {% endblock %}
