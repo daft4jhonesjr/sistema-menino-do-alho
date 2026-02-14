@@ -7,3 +7,7 @@ class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or '-vCohb0GSb3IEtEiotaxZ0_45Dtfu5Uq49llGXFQdOEy8AxcvvQj7Ft2uDeuCbeAGyKzUbN1P9QeQkDIfo-tVA'
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or 'sqlite:///menino_do_alho.db'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    # Cloudinary (uploads em nuvem)
+    CLOUDINARY_CLOUD_NAME = os.environ.get('CLOUDINARY_CLOUD_NAME', '')
+    CLOUDINARY_API_KEY = os.environ.get('CLOUDINARY_API_KEY', '')
+    CLOUDINARY_API_SECRET = os.environ.get('CLOUDINARY_API_SECRET', '')

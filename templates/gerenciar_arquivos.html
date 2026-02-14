@@ -35,8 +35,8 @@
                             <input type="checkbox" name="ids" value="{{ doc.id }}" class="cb-item rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 w-4 h-4">
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ doc.id }}</td>
-                        <td class="px-6 py-4 text-sm text-gray-900 max-w-xs truncate" title="{{ doc.caminho_arquivo }}">
-                            {{ doc.caminho_arquivo.split('/')[-1] if '/' in doc.caminho_arquivo else doc.caminho_arquivo }}
+                        <td class="px-6 py-4 text-sm text-gray-900 max-w-xs truncate" title="{{ doc.url_arquivo or doc.caminho_arquivo or '' }}">
+                            {{ (doc.url_arquivo or doc.caminho_arquivo or '').split('/')[-1].split('?')[0] if (doc.url_arquivo or doc.caminho_arquivo) else '-' }}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                             {{ doc.data_processamento.strftime('%d/%m/%Y') if doc.data_processamento else '-' }}

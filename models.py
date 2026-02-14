@@ -168,7 +168,9 @@ class Documento(db.Model):
     __tablename__ = 'documentos'
     
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    caminho_arquivo = db.Column(db.String(500), nullable=False, unique=True)
+    url_arquivo = db.Column(db.String(500), nullable=True)  # URL do Cloudinary (armazenamento em nuvem)
+    public_id = db.Column(db.String(200), nullable=True, unique=True)  # ID público do Cloudinary (para exclusão)
+    caminho_arquivo = db.Column(db.String(500), nullable=True)  # Deprecado: mantido para compatibilidade com Venda.caminho_boleto/nf
     tipo = db.Column(db.String(20), nullable=False)  # 'BOLETO' ou 'NOTA_FISCAL'
     cnpj = db.Column(db.String(18))  # CNPJ extraído do documento
     numero_nf = db.Column(db.String(50))  # Número da NF (se aplicável)
@@ -178,7 +180,6 @@ class Documento(db.Model):
     venda_id = db.Column(db.Integer, db.ForeignKey('vendas.id', ondelete='CASCADE'), nullable=True)  # FK opcional para associar a uma venda
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)  # Usuário que processou/recuperou
     data_processamento = db.Column(db.Date, default=date.today, nullable=False)  # Quando foi processado
-    conteudo_binario = db.Column(db.LargeBinary, nullable=True)  # PDF armazenado no banco (evita perder se arquivo física sumir)
     
     def __repr__(self):
-        return f'<Documento {self.caminho_arquivo} - Tipo: {self.tipo}>'
+        return f'<Documento {self.public_id or self.id} - Tipo: {self.tipo}>'

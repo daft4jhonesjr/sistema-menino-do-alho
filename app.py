@@ -39,6 +39,8 @@ import threading
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 import pdfplumber
+import cloudinary
+import cloudinary.uploader
 
 # #region agent log
 _log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.cursor')
@@ -1274,8 +1276,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                         data_vencimento=dados_extraidos.get('data_vencimento'),
                         venda_id=venda_id,
                         usuario_id=usuario_id,
-                        data_processamento=date.today(),
-                        conteudo_binario=conteudo_bin
+                        data_processamento=date.today()
                     )
                     db.session.add(documento)
                     db.session.flush()
@@ -1656,6 +1657,14 @@ except Exception as e:
 
 db.init_app(app)
 
+# Configurar Cloudinary (uploads em nuvem)
+if app.config.get('CLOUDINARY_CLOUD_NAME') and app.config.get('CLOUDINARY_API_KEY'):
+    cloudinary.config(
+        cloud_name=app.config['CLOUDINARY_CLOUD_NAME'],
+        api_key=app.config['CLOUDINARY_API_KEY'],
+        api_secret=app.config['CLOUDINARY_API_SECRET']
+    )
+
 # Ativar WAL Mode no SQLite para melhorar concorrência com múltiplos workers
 @event.listens_for(Engine, "connect")
 def set_sqlite_pragma(dbapi_connection, connection_record):
@@ -1991,6 +2000,13 @@ with app.app_context():
         db.session.commit()
     except (OperationalError, Exception):
         db.session.rollback()
+    # Migração: url_arquivo e public_id em documentos (Cloudinary)
+    for col, col_def in [('url_arquivo', 'VARCHAR(500)'), ('public_id', 'VARCHAR(200)')]:
+        try:
+            db.session.execute(text(f'ALTER TABLE documentos ADD COLUMN {col} {col_def}'))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
     # Migração: data_vencimento em vendas (vencimento do boleto extraído do PDF)
     try:
         db.session.execute(text('ALTER TABLE vendas ADD COLUMN data_vencimento DATE'))
@@ -4240,15 +4256,15 @@ def recibo_venda(id):
 @app.route('/documento/visualizar/<int:id>')
 @login_required
 def visualizar_documento(id):
-    """Abre o PDF do documento em uma nova aba. Prioriza conteudo_binario do banco; fallback para arquivo físico."""
+    """Abre o PDF do documento em nova aba. Se tiver url_arquivo (Cloudinary), redireciona; senão tenta arquivo local."""
     documento = Documento.query.get_or_404(id)
-    if documento.conteudo_binario:
-        return send_file(io.BytesIO(documento.conteudo_binario), mimetype='application/pdf', download_name=os.path.basename(documento.caminho_arquivo or 'documento.pdf'), as_attachment=False)
+    if documento.url_arquivo:
+        return redirect(documento.url_arquivo)
     caminho_completo = os.path.join(os.path.dirname(os.path.abspath(__file__)), documento.caminho_arquivo or '')
-    if not os.path.exists(caminho_completo):
-        flash('Arquivo não encontrado e o documento não possui cópia no banco.', 'error')
-        return redirect(url_for('dashboard'))
-    return send_file(caminho_completo, mimetype='application/pdf')
+    if documento.caminho_arquivo and os.path.exists(caminho_completo):
+        return send_file(caminho_completo, mimetype='application/pdf')
+    flash('Arquivo não encontrado.', 'error')
+    return redirect(url_for('dashboard'))
 
 
 @app.route('/venda/<int:id>/ver_boleto')
@@ -4260,14 +4276,14 @@ def ver_boleto_venda(id):
     if not path:
         flash('Boleto não vinculado a este pedido.', 'error')
         return redirect(url_for('listar_vendas'))
+    doc = Documento.query.filter(or_(Documento.caminho_arquivo == path, Documento.url_arquivo == path)).first()
+    if doc and doc.url_arquivo:
+        return redirect(doc.url_arquivo)
     full = os.path.join(os.path.dirname(os.path.abspath(__file__)), path)
-    if not os.path.exists(full):
-        doc = Documento.query.filter_by(caminho_arquivo=path).first()
-        if doc and doc.conteudo_binario:
-            return send_file(io.BytesIO(doc.conteudo_binario), mimetype='application/pdf', download_name=os.path.basename(path), as_attachment=False)
-        flash('Arquivo do boleto não encontrado.', 'error')
-        return redirect(url_for('listar_vendas'))
-    return send_file(full, mimetype='application/pdf')
+    if os.path.exists(full):
+        return send_file(full, mimetype='application/pdf')
+    flash('Arquivo do boleto não encontrado.', 'error')
+    return redirect(url_for('listar_vendas'))
 
 
 @app.route('/venda/<int:id>/ver_nf')
@@ -4280,22 +4296,19 @@ def ver_nf_venda(id):
         flash('Nota fiscal não vinculada a este pedido.', 'error')
         return redirect(url_for('listar_vendas'))
     
-    # Verificar se o documento existe no banco
-    doc = Documento.query.filter_by(caminho_arquivo=path).first()
+    doc = Documento.query.filter(or_(Documento.caminho_arquivo == path, Documento.url_arquivo == path)).first()
     if not doc:
-        # Limpar vínculo quebrado
         venda.caminho_nf = None
         db.session.commit()
         flash('Nota fiscal não encontrada no banco de dados. Vínculo removido.', 'error')
         return redirect(url_for('listar_vendas'))
-    
+    if doc.url_arquivo:
+        return redirect(doc.url_arquivo)
     full = os.path.join(os.path.dirname(os.path.abspath(__file__)), path)
-    if not os.path.exists(full):
-        if doc.conteudo_binario:
-            return send_file(io.BytesIO(doc.conteudo_binario), mimetype='application/pdf', download_name=os.path.basename(path), as_attachment=False)
-        flash('Arquivo da nota fiscal não encontrado no sistema de arquivos.', 'error')
-        return redirect(url_for('listar_vendas'))
-    return send_file(full, mimetype='application/pdf')
+    if os.path.exists(full):
+        return send_file(full, mimetype='application/pdf')
+    flash('Arquivo da nota fiscal não encontrado no sistema de arquivos.', 'error')
+    return redirect(url_for('listar_vendas'))
 
 
 # Diretório persistente no Render para uploads do bot
@@ -4305,27 +4318,51 @@ RENDER_DOCUMENTOS_BASE = '/opt/render/project/src/documentos_entrada'
 @app.route('/upload', methods=['POST'])
 def upload_documento():
     """
-    Rota para o bot enviar arquivos ao disco persistente do Render.
-    Campo tipo: 'boleto' -> boletos/ ; 'nfe' -> notas_fiscais/
+    Rota para o bot enviar arquivos. Envia direto para o Cloudinary e salva no banco.
+    Campo tipo: 'boleto' -> BOLETO ; 'nfe' -> NOTA_FISCAL
     """
-    # Obter arquivo (o bot pode enviar 'file', 'arquivo' ou 'documento')
     arquivo = request.files.get('file') or request.files.get('arquivo') or request.files.get('documento')
     if not arquivo or not arquivo.filename:
         return jsonify({'mensagem': 'Nenhum arquivo enviado.'}), 400
 
     tipo = (request.form.get('tipo') or request.form.get('type') or '').strip().lower()
     if tipo == 'boleto':
-        diretorio = os.path.join(RENDER_DOCUMENTOS_BASE, 'boletos')
+        tipo_doc = 'BOLETO'
     elif tipo == 'nfe':
-        diretorio = os.path.join(RENDER_DOCUMENTOS_BASE, 'notas_fiscais')
+        tipo_doc = 'NOTA_FISCAL'
     else:
         return jsonify({'mensagem': "Campo 'tipo' inválido. Use 'boleto' ou 'nfe'."}), 400
 
-    os.makedirs(diretorio, exist_ok=True)
-    nome_original = secure_filename(arquivo.filename)
-    caminho = os.path.join(diretorio, nome_original)
-    arquivo.save(caminho)
-    return jsonify({'mensagem': 'Sucesso'}), 200
+    if not app.config.get('CLOUDINARY_CLOUD_NAME'):
+        return jsonify({'mensagem': 'Cloudinary não configurado. Defina CLOUDINARY_CLOUD_NAME, API_KEY e API_SECRET.'}), 503
+
+    try:
+        upload_result = cloudinary.uploader.upload(arquivo, resource_type='auto')
+        url_segura = upload_result.get('secure_url')
+        id_publico = upload_result.get('public_id')
+        if not url_segura or not id_publico:
+            return jsonify({'mensagem': 'Erro ao fazer upload no Cloudinary.'}), 500
+
+        usuario_id = current_user.id if current_user.is_authenticated else None
+        if not usuario_id:
+            u = Usuario.query.first()
+            if u:
+                usuario_id = u.id
+
+        doc = Documento(
+            url_arquivo=url_segura,
+            public_id=id_publico,
+            caminho_arquivo=url_segura,  # para compatibilidade com lookup
+            tipo=tipo_doc,
+            usuario_id=usuario_id
+        )
+        db.session.add(doc)
+        db.session.commit()
+        return jsonify({'mensagem': 'Sucesso'}), 200
+    except Exception as e:
+        db.session.rollback()
+        print(f"Erro upload Cloudinary: {e}")
+        return jsonify({'mensagem': str(e)}), 500
 
 
 @app.route('/api/receber_automatico', methods=['POST'])
@@ -4443,6 +4480,11 @@ def admin_arquivos_deletar_massa():
     try:
         docs = Documento.query.filter(Documento.id.in_(ids)).all()
         for d in docs:
+            if d.public_id and app.config.get('CLOUDINARY_CLOUD_NAME'):
+                try:
+                    cloudinary.uploader.destroy(d.public_id, resource_type='auto')
+                except Exception as ex:
+                    print(f"Erro ao excluir do Cloudinary {d.public_id}: {ex}")
             db.session.delete(d)
         db.session.commit()
         flash(f'{len(docs)} documento(s) excluído(s) com sucesso!', 'success')
@@ -5070,8 +5112,7 @@ def forcar_leitura_pasta():
                         caminho_arquivo=caminho_relativo,
                         tipo=tipo,
                         usuario_id=current_user.id,
-                        data_processamento=date.today(),
-                        conteudo_binario=conteudo_bin
+                        data_processamento=date.today()
                     )
                     db.session.add(doc)
                     ressuscitados += 1
@@ -5094,8 +5135,10 @@ def limpar_fantasmas():
     try:
         docs = Documento.query.all()
         for doc in docs:
+            if doc.url_arquivo:
+                continue  # Documentos no Cloudinary não têm arquivo local
             caminho_full = os.path.join(base_path, doc.caminho_arquivo or '')
-            if not os.path.exists(caminho_full):
+            if doc.caminho_arquivo and not os.path.exists(caminho_full):
                 db.session.delete(doc)
                 removidos += 1
         db.session.commit()
@@ -5125,7 +5168,7 @@ def limpar_vinculos_quebrados():
         for v in vendas_com_boleto:
             caminho = (v.caminho_boleto or '').strip()
             if caminho:
-                doc = Documento.query.filter_by(caminho_arquivo=caminho).first()
+                doc = Documento.query.filter(or_(Documento.caminho_arquivo == caminho, Documento.url_arquivo == caminho)).first()
                 if not doc:
                     v.caminho_boleto = None
                     limpos_boleto += 1
@@ -5135,7 +5178,7 @@ def limpar_vinculos_quebrados():
         for v in vendas_com_nf:
             caminho = (v.caminho_nf or '').strip()
             if caminho:
-                doc = Documento.query.filter_by(caminho_arquivo=caminho).first()
+                doc = Documento.query.filter(or_(Documento.caminho_arquivo == caminho, Documento.url_arquivo == caminho)).first()
                 if not doc:
                     v.caminho_nf = None
                     limpos_nf += 1
