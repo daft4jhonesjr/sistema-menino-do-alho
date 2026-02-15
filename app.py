@@ -3650,6 +3650,48 @@ def api_vendas_por_filtro():
     return jsonify(resposta)
 
 
+@app.route('/api/dashboard/detalhes/<filtro>')
+@login_required
+def api_dashboard_detalhes(filtro):
+    """Retorna lista de vendas filtradas por pendente, pago, avulsa, paty ou destak."""
+    filtros_validos = ('pendente', 'pago', 'avulsa', 'paty', 'destak')
+    if filtro not in filtros_validos:
+        return jsonify({'erro': f'Filtro inválido. Use: {", ".join(filtros_validos)}'}), 400
+    try:
+        ano_ativo = session.get('ano_ativo', datetime.now().year)
+        filtro_ano_venda = extract('year', Venda.data_venda) == ano_ativo
+
+        query = Venda.query.filter(filtro_ano_venda)
+        if filtro == 'pendente':
+            query = query.filter(Venda.situacao == 'PENDENTE')
+        elif filtro == 'pago':
+            query = query.filter(Venda.situacao == 'PAGO')
+        elif filtro == 'avulsa':
+            query = query.filter(~Venda.empresa_faturadora.in_(['PATY', 'DESTAK']))
+        elif filtro == 'paty':
+            query = query.filter(Venda.empresa_faturadora == 'PATY')
+        elif filtro == 'destak':
+            query = query.filter(Venda.empresa_faturadora == 'DESTAK')
+
+        vendas = query.order_by(Venda.data_venda.desc(), Venda.id.desc()).all()
+        vendas_lista = []
+        for venda in vendas:
+            vendas_lista.append({
+                'id': venda.id,
+                'cliente': venda.cliente.nome_cliente if venda.cliente else 'Cliente Desconhecido',
+                'descricao': venda.produto.nome_produto if venda.produto else 'Produto Desconhecido',
+                'data': venda.data_venda.strftime('%d/%m/%Y'),
+                'valor': float(venda.preco_venda * venda.quantidade_venda),
+                'status': venda.situacao,
+            })
+        return jsonify({'vendas': vendas_lista})
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        traceback.print_exc()
+        return jsonify({'erro': str(e)}), 500
+
+
 @app.route('/api/dashboard/detalhes_mes/<int:ano>/<int:mes>')
 @login_required
 def api_detalhes_mes(ano, mes):
