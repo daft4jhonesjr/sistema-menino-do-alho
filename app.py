@@ -1040,7 +1040,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                 documento = doc_existente
                 if not documento.url_arquivo and (os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL')):
                     try:
-                        resultado_nuvem = cloudinary.uploader.upload(caminho_completo, resource_type='auto')
+                        resultado_nuvem = cloudinary.uploader.upload(caminho_completo, resource_type='raw')
                         documento.url_arquivo = resultado_nuvem.get('secure_url')
                         documento.public_id = resultado_nuvem.get('public_id')
                         db.session.flush()
@@ -1272,7 +1272,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                     # OBRIGATÓRIO: Fazer o upload para a nuvem ANTES de salvar no banco
                     if os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL'):
                         try:
-                            resultado_nuvem = cloudinary.uploader.upload(caminho_completo, resource_type='auto')
+                            resultado_nuvem = cloudinary.uploader.upload(caminho_completo, resource_type='raw')
                             url_arquivo = resultado_nuvem.get('secure_url')
                             public_id = resultado_nuvem.get('public_id')
                             print(f"✅ Sucesso Nuvem: {url_arquivo}")
@@ -4478,7 +4478,7 @@ def admin_arquivos_deletar_massa():
         for d in docs:
             if d.public_id and (os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL')):
                 try:
-                    cloudinary.uploader.destroy(d.public_id, resource_type='auto')
+                    cloudinary.uploader.destroy(d.public_id, resource_type='raw')
                 except Exception as ex:
                     print(f"Erro ao excluir do Cloudinary {d.public_id}: {ex}")
             db.session.delete(d)
@@ -5102,7 +5102,7 @@ def forcar_leitura_pasta():
                     public_id = None
                     if os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL'):
                         try:
-                            resultado_nuvem = cloudinary.uploader.upload(caminho_full, resource_type='auto')
+                            resultado_nuvem = cloudinary.uploader.upload(caminho_full, resource_type='raw')
                             url_arquivo = resultado_nuvem.get('secure_url')
                             public_id = resultado_nuvem.get('public_id')
                         except Exception as ex:
