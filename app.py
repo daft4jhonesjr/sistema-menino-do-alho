@@ -4256,15 +4256,12 @@ def recibo_venda(id):
 @app.route('/documento/visualizar/<int:id>')
 @login_required
 def visualizar_documento(id):
-    """Abre o PDF do documento em nova aba. Se tiver url_arquivo (Cloudinary), redireciona; senão tenta arquivo local."""
+    """Redireciona para o PDF na nuvem (Cloudinary)."""
     documento = Documento.query.get_or_404(id)
     if documento.url_arquivo:
         return redirect(documento.url_arquivo)
-    caminho_completo = os.path.join(os.path.dirname(os.path.abspath(__file__)), documento.caminho_arquivo or '')
-    if documento.caminho_arquivo and os.path.exists(caminho_completo):
-        return send_file(caminho_completo, mimetype='application/pdf')
-    flash('Arquivo não encontrado.', 'error')
-    return redirect(url_for('dashboard'))
+    flash('Link do arquivo não encontrado na nuvem. Faça o upload novamente.', 'error')
+    return redirect(request.referrer or url_for('dashboard'))
 
 
 @app.route('/venda/<int:id>/ver_boleto')
