@@ -24,6 +24,10 @@
         </div>
         <div class="space-y-4">
             <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Nome Completo</label>
+                <input type="text" name="nome" value="{{ user.nome or '' }}" placeholder="Ex: Victor Nóbrega" class="w-full border border-gray-300 rounded-lg p-3 focus:ring-emerald-500 focus:border-emerald-500 font-medium text-gray-800">
+            </div>
+            <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Nome de Usuário</label>
                 <input type="text" name="username" value="{{ user.username }}" class="w-full border border-gray-300 rounded-lg p-3 focus:ring-emerald-500 focus:border-emerald-500 font-medium text-gray-800">
             </div>

@@ -14,6 +14,7 @@ class Usuario(UserMixin, db.Model):
     password_hash = db.Column(db.String(256), nullable=False)
     role = db.Column(db.String(20), nullable=False, default='user')  # 'admin' ou 'user'
     profile_image_url = db.Column(db.String(500), nullable=True)  # URL da foto de perfil (Cloudinary)
+    nome = db.Column(db.String(100), nullable=True)  # Nome completo/real do usuário
 
     def is_admin(self):
         """Jhones é sempre admin. Demais seguem role."""

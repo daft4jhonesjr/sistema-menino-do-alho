@@ -2064,6 +2064,12 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             db.session.commit()
         except (OperationalError, Exception):
             db.session.rollback()
+        # Migração: nome em usuarios (nome completo/real)
+        try:
+            db.session.execute(text('ALTER TABLE usuarios ADD COLUMN nome VARCHAR(100)'))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
         # Migração: data_vencimento em vendas (vencimento do boleto extraído do PDF)
         try:
             db.session.execute(text('ALTER TABLE vendas ADD COLUMN data_vencimento DATE'))
@@ -2193,14 +2199,17 @@ def logout():
 @login_required
 def perfil():
     if request.method == 'POST':
-        novo_nome = request.form.get('username', '').strip()
+        novo_nome_real = request.form.get('nome', '').strip()
+        novo_username = request.form.get('username', '').strip()
         imagem = request.files.get('profile_image')
-        # Atualizar Nome
-        if novo_nome and novo_nome != current_user.username:
-            if Usuario.query.filter_by(username=novo_nome).first():
+        # Atualizar Nome Real/Completo
+        current_user.nome = novo_nome_real if novo_nome_real else None
+        # Atualizar Username (com verificação de duplicidade)
+        if novo_username and novo_username != current_user.username:
+            if Usuario.query.filter_by(username=novo_username).first():
                 flash('Este nome de usuário já está em uso.', 'error')
             else:
-                current_user.username = novo_nome
+                current_user.username = novo_username
                 flash('Nome de usuário atualizado!', 'success')
         # Atualizar Foto de Perfil (Upload para Cloudinary)
         if imagem and imagem.filename != '':
@@ -2220,6 +2229,7 @@ def perfil():
             else:
                 flash('Cloudinary não configurado. Não foi possível enviar a foto.', 'error')
         db.session.commit()
+        flash('Perfil atualizado com sucesso!', 'success')
         return redirect(url_for('perfil'))
     return render_template('auth/perfil.html', user=current_user)
 
