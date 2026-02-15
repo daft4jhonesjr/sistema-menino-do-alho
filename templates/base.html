@@ -115,9 +115,22 @@
                     </div>
                 </div>
                 
-                <a href="#" class="px-4 py-2.5 text-white/80 hover:bg-emerald-600 hover:text-white rounded-lg transition flex items-center text-sm font-medium">
-                    <i data-lucide="user" class="w-4 h-4 mr-2"></i>{{ current_user.username if current_user.is_authenticated else 'Conta' }}
+                {% if current_user.is_authenticated %}
+                <a href="{{ url_for('perfil') }}" class="flex items-center gap-3 bg-emerald-700 hover:bg-emerald-600 px-4 py-2 rounded-lg transition group">
+                    {% if current_user.profile_image_url %}
+                        <img src="{{ current_user.profile_image_url }}" alt="Foto de {{ current_user.username }}" class="w-8 h-8 rounded-full object-cover border-2 border-emerald-500 group-hover:border-emerald-400">
+                    {% else %}
+                        <svg class="w-6 h-6 text-emerald-200 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    {% endif %}
+                    <span class="font-medium text-white group-hover:text-emerald-100">{{ current_user.username }}</span>
                 </a>
+                {% else %}
+                <a href="{{ url_for('login') }}" class="px-4 py-2.5 text-white/80 hover:bg-emerald-600 hover:text-white rounded-lg transition flex items-center text-sm font-medium">
+                    <i data-lucide="user" class="w-4 h-4 mr-2"></i>Conta
+                </a>
+                {% endif %}
                 <a href="{{ url_for('logout') }}" class="px-4 py-2.5 text-white/80 hover:bg-emerald-600 hover:text-white rounded-lg transition flex items-center text-sm font-medium">
                     <i data-lucide="log-out" class="w-4 h-4 mr-2"></i>Sair
                 </a>

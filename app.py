@@ -1967,31 +1967,30 @@ def admin_required(f):
     return wrapped
 
 
-# Criar tabelas e seed
-with app.app_context():
-    db.create_all()
-    try:
-        db.session.execute(text('ALTER TABLE produtos ADD COLUMN preco_venda_alvo NUMERIC(10,2)'))
-        db.session.commit()
-    except (OperationalError, Exception):
-        db.session.rollback()
-    # Migração: adicionar quantidade_entrada e popular com estoque_atual existente
-    try:
-        db.session.execute(text('ALTER TABLE produtos ADD COLUMN quantidade_entrada INTEGER DEFAULT 0'))
-        db.session.commit()
-        # Popular quantidade_entrada com estoque_atual para produtos existentes
-        db.session.execute(text('UPDATE produtos SET quantidade_entrada = estoque_atual WHERE quantidade_entrada = 0 OR quantidade_entrada IS NULL'))
-        db.session.commit()
-    except (OperationalError, Exception):
-        # Coluna já existe ou outro erro - apenas popular se necessário
+# Bootstrap do banco: NÃO executa na importação se SKIP_DB_BOOTSTRAP=1 (usado pelo migrate_recreate_db.py)
+if not os.environ.get('SKIP_DB_BOOTSTRAP'):
+    with app.app_context():
+        db.create_all()
         try:
+            db.session.execute(text('ALTER TABLE produtos ADD COLUMN preco_venda_alvo NUMERIC(10,2)'))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
+        # Migração: adicionar quantidade_entrada e popular com estoque_atual existente
+        try:
+            db.session.execute(text('ALTER TABLE produtos ADD COLUMN quantidade_entrada INTEGER DEFAULT 0'))
+            db.session.commit()
             db.session.execute(text('UPDATE produtos SET quantidade_entrada = estoque_atual WHERE quantidade_entrada = 0 OR quantidade_entrada IS NULL'))
             db.session.commit()
-        except Exception:
-            db.session.rollback()
-    # Migração: criar tabela documentos se não existir
-    try:
-        db.session.execute(text('''
+        except (OperationalError, Exception):
+            try:
+                db.session.execute(text('UPDATE produtos SET quantidade_entrada = estoque_atual WHERE quantidade_entrada = 0 OR quantidade_entrada IS NULL'))
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+        # Migração: criar tabela documentos se não existir
+        try:
+            db.session.execute(text('''
             CREATE TABLE IF NOT EXISTS documentos (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 caminho_arquivo VARCHAR(500) NOT NULL UNIQUE,
@@ -2005,122 +2004,123 @@ with app.app_context():
                 FOREIGN KEY (venda_id) REFERENCES vendas(id)
             )
         '''))
-        db.session.commit()
-    except (OperationalError, Exception) as e:
-        # Tabela já existe ou outro erro
-        db.session.rollback()
-    # Migração: caminho_pdf em vendas (PDF vinculado) — apenas para DBs antigos
-    try:
-        db.session.execute(text('ALTER TABLE vendas ADD COLUMN caminho_pdf VARCHAR(500)'))
-        db.session.commit()
-    except (OperationalError, Exception):
-        db.session.rollback()
-    # Migração: caminho_boleto e caminho_nf em vendas
-    for col in ('caminho_boleto', 'caminho_nf'):
+            db.session.commit()
+        except (OperationalError, Exception) as e:
+            db.session.rollback()
+        # Migração: caminho_pdf em vendas (PDF vinculado) — apenas para DBs antigos
         try:
-            db.session.execute(text(f'ALTER TABLE vendas ADD COLUMN {col} VARCHAR(500)'))
+            db.session.execute(text('ALTER TABLE vendas ADD COLUMN caminho_pdf VARCHAR(500)'))
             db.session.commit()
         except (OperationalError, Exception):
             db.session.rollback()
-    # Índice em vendas.nf para buscas por NF
-    try:
-        db.session.execute(text('CREATE INDEX IF NOT EXISTS ix_vendas_nf ON vendas(nf)'))
-        db.session.commit()
-    except (OperationalError, Exception):
-        db.session.rollback()
-    # Cache OCR: nf_extraida em documentos (evita re-rodar OCR)
-    try:
-        db.session.execute(text('ALTER TABLE documentos ADD COLUMN nf_extraida VARCHAR(50)'))
-        db.session.commit()
-    except (OperationalError, Exception):
-        db.session.rollback()
-    try:
-        db.session.execute(text("UPDATE documentos SET nf_extraida = numero_nf WHERE nf_extraida IS NULL AND numero_nf IS NOT NULL"))
-        db.session.commit()
-    except (OperationalError, Exception):
-        db.session.rollback()
-    # Migração: usuario_id em documentos (quem processou/recuperou)
-    try:
-        db.session.execute(text('ALTER TABLE documentos ADD COLUMN usuario_id INTEGER'))
-        db.session.commit()
-    except (OperationalError, Exception):
-        db.session.rollback()
-    # Migração: conteudo_binario em documentos (PDF armazenado no banco)
-    try:
-        uri = app.config.get('SQLALCHEMY_DATABASE_URI', '')
-        col_type = 'BYTEA' if 'postgres' in uri.lower() else 'BLOB'
-        db.session.execute(text(f'ALTER TABLE documentos ADD COLUMN conteudo_binario {col_type}'))
-        db.session.commit()
-    except (OperationalError, Exception):
-        db.session.rollback()
-    # Migração: url_arquivo e public_id em documentos (Cloudinary)
-    for col, col_def in [('url_arquivo', 'VARCHAR(500)'), ('public_id', 'VARCHAR(200)')]:
+        # Migração: caminho_boleto e caminho_nf em vendas
+        for col in ('caminho_boleto', 'caminho_nf'):
+            try:
+                db.session.execute(text(f'ALTER TABLE vendas ADD COLUMN {col} VARCHAR(500)'))
+                db.session.commit()
+            except (OperationalError, Exception):
+                db.session.rollback()
+        # Índice em vendas.nf para buscas por NF
         try:
-            db.session.execute(text(f'ALTER TABLE documentos ADD COLUMN {col} {col_def}'))
+            db.session.execute(text('CREATE INDEX IF NOT EXISTS ix_vendas_nf ON vendas(nf)'))
             db.session.commit()
         except (OperationalError, Exception):
             db.session.rollback()
-    # Migração: data_vencimento em vendas (vencimento do boleto extraído do PDF)
-    try:
-        db.session.execute(text('ALTER TABLE vendas ADD COLUMN data_vencimento DATE'))
-        db.session.commit()
-    except (OperationalError, Exception):
-        db.session.rollback()
-    # Backfill data_vencimento em vendas a partir dos Documentos (boletos) vinculados
-    try:
-        for v in Venda.query.filter(Venda.caminho_boleto.isnot(None)).filter(Venda.data_vencimento.is_(None)):
-            doc = Documento.query.filter_by(caminho_arquivo=v.caminho_boleto).first()
-            if doc and doc.data_vencimento:
-                v.data_vencimento = doc.data_vencimento
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
-    # Verificar se caminho_pdf ainda existe (não foi dropado em migração anterior)
-    # PRAGMA é específico do SQLite, então só executar se estivermos usando SQLite
-    tem_caminho_pdf = False
-    uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
-    if uri and uri.startswith("sqlite"):
-        colunas_vendas = [r[1] for r in db.session.execute(text('PRAGMA table_info(vendas)')).fetchall()]
-        tem_caminho_pdf = 'caminho_pdf' in colunas_vendas
-    if tem_caminho_pdf:
-        # Migrar caminho_pdf -> caminho_boleto / caminho_nf
+        # Cache OCR: nf_extraida em documentos (evita re-rodar OCR)
         try:
-            rp = db.session.execute(text("SELECT id, caminho_pdf FROM vendas WHERE caminho_pdf IS NOT NULL AND trim(caminho_pdf) != ''"))
-            for row in rp:
-                vid, path = row[0], (row[1] or '').strip()
-                if not path:
-                    continue
-                doc = Documento.query.filter_by(venda_id=vid, caminho_arquivo=path).first()
-                v = Venda.query.get(vid)
-                if not v:
-                    continue
-                if doc:
-                    if doc.tipo == 'BOLETO':
-                        v.caminho_boleto = path
-                    else:
-                        v.caminho_nf = path
-                else:
-                    v.caminho_boleto = path
+            db.session.execute(text('ALTER TABLE documentos ADD COLUMN nf_extraida VARCHAR(50)'))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
+        try:
+            db.session.execute(text("UPDATE documentos SET nf_extraida = numero_nf WHERE nf_extraida IS NULL AND numero_nf IS NOT NULL"))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
+        # Migração: usuario_id em documentos (quem processou/recuperou)
+        try:
+            db.session.execute(text('ALTER TABLE documentos ADD COLUMN usuario_id INTEGER'))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
+        # Migração: conteudo_binario em documentos (PDF armazenado no banco)
+        try:
+            uri = app.config.get('SQLALCHEMY_DATABASE_URI', '')
+            col_type = 'BYTEA' if 'postgres' in uri.lower() else 'BLOB'
+            db.session.execute(text(f'ALTER TABLE documentos ADD COLUMN conteudo_binario {col_type}'))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
+        # Migração: url_arquivo e public_id em documentos (Cloudinary)
+        for col, col_def in [('url_arquivo', 'VARCHAR(500)'), ('public_id', 'VARCHAR(200)')]:
+            try:
+                db.session.execute(text(f'ALTER TABLE documentos ADD COLUMN {col} {col_def}'))
+                db.session.commit()
+            except (OperationalError, Exception):
+                db.session.rollback()
+        # Migração: profile_image_url em usuarios (foto de perfil)
+        try:
+            db.session.execute(text('ALTER TABLE usuarios ADD COLUMN profile_image_url VARCHAR(500)'))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
+        # Migração: data_vencimento em vendas (vencimento do boleto extraído do PDF)
+        try:
+            db.session.execute(text('ALTER TABLE vendas ADD COLUMN data_vencimento DATE'))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
+        # Backfill data_vencimento em vendas a partir dos Documentos (boletos) vinculados
+        try:
+            for v in Venda.query.filter(Venda.caminho_boleto.isnot(None)).filter(Venda.data_vencimento.is_(None)):
+                doc = Documento.query.filter_by(caminho_arquivo=v.caminho_boleto).first()
+                if doc and doc.data_vencimento:
+                    v.data_vencimento = doc.data_vencimento
             db.session.commit()
         except Exception:
             db.session.rollback()
-        try:
-            db.session.execute(text('ALTER TABLE vendas DROP COLUMN caminho_pdf'))
+        # Verificar se caminho_pdf ainda existe (não foi dropado em migração anterior)
+        uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
+        tem_caminho_pdf = False
+        if uri and uri.startswith("sqlite"):
+            colunas_vendas = [r[1] for r in db.session.execute(text('PRAGMA table_info(vendas)')).fetchall()]
+            tem_caminho_pdf = 'caminho_pdf' in colunas_vendas
+        if tem_caminho_pdf:
+            try:
+                rp = db.session.execute(text("SELECT id, caminho_pdf FROM vendas WHERE caminho_pdf IS NOT NULL AND trim(caminho_pdf) != ''"))
+                for row in rp:
+                    vid, path = row[0], (row[1] or '').strip()
+                    if not path:
+                        continue
+                    doc = Documento.query.filter_by(venda_id=vid, caminho_arquivo=path).first()
+                    v = Venda.query.get(vid)
+                    if not v:
+                        continue
+                    if doc:
+                        if doc.tipo == 'BOLETO':
+                            v.caminho_boleto = path
+                        else:
+                            v.caminho_nf = path
+                    else:
+                        v.caminho_boleto = path
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+            try:
+                db.session.execute(text('ALTER TABLE vendas DROP COLUMN caminho_pdf'))
+                db.session.commit()
+            except (OperationalError, Exception):
+                db.session.rollback()
+        # Jhones sempre admin; criar se não existir
+        u = Usuario.query.filter_by(username='Jhones').first()
+        if not u:
+            u = Usuario(username='Jhones', password_hash=generate_password_hash('admin123'), role='admin')
+            db.session.add(u)
             db.session.commit()
-        except (OperationalError, Exception):
-            db.session.rollback()
-    # Jhones sempre admin; criar se não existir
-    u = Usuario.query.filter_by(username='Jhones').first()
-    if not u:
-        u = Usuario(username='Jhones', password_hash=generate_password_hash('admin123'), role='admin')
-        db.session.add(u)
-        db.session.commit()
-    # #region agent log
-    try:
-        _debug_log("app.py:bootstrap", "App started, debug.log active", {"path": DEBUG_LOG_PATH}, "ALL", run_id="bootstrap")
-    except Exception:
-        pass
-    # #endregion
+        try:
+            _debug_log("app.py:bootstrap", "App started, debug.log active", {"path": DEBUG_LOG_PATH}, "ALL", run_id="bootstrap")
+        except Exception:
+            pass
 
 
 @app.before_request
@@ -2187,6 +2187,41 @@ def login():
 def logout():
     logout_user()
     return redirect(url_for('login'))
+
+
+@app.route('/perfil', methods=['GET', 'POST'])
+@login_required
+def perfil():
+    if request.method == 'POST':
+        novo_nome = request.form.get('username', '').strip()
+        imagem = request.files.get('profile_image')
+        # Atualizar Nome
+        if novo_nome and novo_nome != current_user.username:
+            if Usuario.query.filter_by(username=novo_nome).first():
+                flash('Este nome de usuário já está em uso.', 'error')
+            else:
+                current_user.username = novo_nome
+                flash('Nome de usuário atualizado!', 'success')
+        # Atualizar Foto de Perfil (Upload para Cloudinary)
+        if imagem and imagem.filename != '':
+            if os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL'):
+                try:
+                    upload_result = cloudinary.uploader.upload(
+                        imagem,
+                        folder="perfis_usuarios",
+                        public_id=f"user_{current_user.id}_profile",
+                        overwrite=True,
+                        resource_type="image"
+                    )
+                    current_user.profile_image_url = upload_result['secure_url']
+                    flash('Foto de perfil atualizada com sucesso!', 'success')
+                except Exception as e:
+                    flash(f'Erro ao fazer upload da imagem: {str(e)}', 'error')
+            else:
+                flash('Cloudinary não configurado. Não foi possível enviar a foto.', 'error')
+        db.session.commit()
+        return redirect(url_for('perfil'))
+    return render_template('auth/perfil.html', user=current_user)
 
 
 def get_config():
