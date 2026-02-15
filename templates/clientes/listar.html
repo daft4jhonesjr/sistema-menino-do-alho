@@ -67,7 +67,6 @@
                                 data-razao="{{ cliente.razao_social or '' }}"
                                 data-cnpj="{{ cliente.cnpj or '' }}"
                                 data-cidade="{{ cliente.cidade or '' }}"
-                                data-telefone="{{ cliente.telefone or '' }}"
                                 title="Editar cliente">
                             <i data-lucide="pencil" class="w-4 h-4"></i>
                         </button>
@@ -116,10 +115,6 @@
                     <label for="modal-cnpj" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">CNPJ</label>
                     <input type="text" id="modal-cnpj" name="cnpj" placeholder="00.000.000/0000-00" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                 </div>
-                <div class="mb-5">
-                    <label for="modal-telefone" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Telefone (WhatsApp)</label>
-                    <input type="text" id="modal-telefone" name="telefone" placeholder="(81) 99999-9999" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
-                </div>
                 <div class="mb-6">
                     <label for="modal-cidade" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Cidade</label>
                     <input type="text" id="modal-cidade" name="cidade" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
@@ -162,10 +157,6 @@
                 <div class="mb-5">
                     <label for="edit_cnpj" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">CNPJ</label>
                     <input type="text" id="edit_cnpj" name="cnpj" placeholder="00.000.000/0000-00" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
-                </div>
-                <div class="mb-5">
-                    <label for="edit_telefone" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Telefone (WhatsApp)</label>
-                    <input type="text" id="edit_telefone" name="telefone" placeholder="(81) 99999-9999" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                 </div>
                 <div class="mb-6">
                     <label for="edit_cidade" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Cidade</label>
@@ -337,12 +328,10 @@
         var razao = btn.getAttribute('data-razao') || '';
         var cnpj = btn.getAttribute('data-cnpj') || '';
         var cidade = btn.getAttribute('data-cidade') || '';
-        var telefone = btn.getAttribute('data-telefone') || '';
         form.action = actionBase.replace(/\/0$/, '/') + id;
         document.getElementById('edit_nome').value = nome;
         document.getElementById('edit_razao').value = razao;
         document.getElementById('edit_cnpj').value = mascaraCNPJ(cnpj);
-        document.getElementById('edit_telefone').value = telefone;
         document.getElementById('edit_cidade').value = cidade;
         wrap.classList.remove('hidden');
         document.body.style.overflow = 'hidden';

@@ -2657,8 +2657,7 @@ def novo_cliente():
                 nome_cliente=request.form['nome_cliente'],
                 razao_social=request.form.get('razao_social', ''),
                 cnpj=cnpj,
-                cidade=request.form.get('cidade', ''),
-                telefone=request.form.get('telefone', '') or None
+                cidade=request.form.get('cidade', '')
             )
             db.session.add(cliente)
             db.session.commit()
@@ -2698,7 +2697,6 @@ def editar_cliente(id):
             cliente.razao_social = request.form.get('razao_social', '')
             cliente.cnpj = cnpj
             cliente.cidade = request.form.get('cidade', '')
-            cliente.telefone = request.form.get('telefone', '') or None
             db.session.commit()
             flash('Cliente atualizado com sucesso!', 'success')
             return redirect(url_for('listar_clientes'))
