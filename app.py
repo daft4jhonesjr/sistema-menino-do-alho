@@ -5116,6 +5116,9 @@ def importar_vendas():
                         erros_detalhados.append(_msg_linha(linha_num, contexto, txt, True))
                         erros += 1
                         continue
+                    # Regra de negócio: valores negativos (perdas) são registrados como R$ 0,00
+                    if preco_venda < 0:
+                        preco_venda = 0.0
                     data_raw = row.get('data_venda', row.get('data', ''))
                     data_venda, raw_used = _parse_data_flex(data_raw)
                     if raw_used and raw_used.strip() and data_venda is None:
