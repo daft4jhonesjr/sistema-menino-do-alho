@@ -1038,7 +1038,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                 # #endregion
                 print(f"DEBUG: Documento ID {doc_existente.id} existe mas não está vinculado. Re-processando para tentar vincular.")
                 documento = doc_existente
-                if not documento.url_arquivo and app.config.get('CLOUDINARY_CLOUD_NAME') and app.config.get('CLOUDINARY_API_KEY'):
+                if not documento.url_arquivo and (os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL')):
                     try:
                         resultado_nuvem = cloudinary.uploader.upload(caminho_completo, resource_type='auto')
                         documento.url_arquivo = resultado_nuvem.get('secure_url')
@@ -1271,7 +1271,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                     usuario_id = user_id_forcado if user_id_forcado else (current_user.id if current_user.is_authenticated else None)
                     url_arquivo = None
                     public_id = None
-                    if app.config.get('CLOUDINARY_CLOUD_NAME') and app.config.get('CLOUDINARY_API_KEY'):
+                    if os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL'):
                         try:
                             resultado_nuvem = cloudinary.uploader.upload(caminho_completo, resource_type='auto')
                             url_arquivo = resultado_nuvem.get('secure_url')
@@ -1681,13 +1681,7 @@ except Exception as e:
 
 db.init_app(app)
 
-# Configurar Cloudinary (uploads em nuvem)
-if app.config.get('CLOUDINARY_CLOUD_NAME') and app.config.get('CLOUDINARY_API_KEY'):
-    cloudinary.config(
-        cloud_name=app.config['CLOUDINARY_CLOUD_NAME'],
-        api_key=app.config['CLOUDINARY_API_KEY'],
-        api_secret=app.config['CLOUDINARY_API_SECRET']
-    )
+# Cloudinary: o pacote já puxa CLOUDINARY_URL de os.environ nativamente
 
 # Ativar WAL Mode no SQLite para melhorar concorrência com múltiplos workers
 @event.listens_for(Engine, "connect")
@@ -4354,7 +4348,7 @@ def upload_documento():
     else:
         return jsonify({'mensagem': "Campo 'tipo' inválido. Use 'boleto' ou 'nfe'."}), 400
 
-    if app.config.get('CLOUDINARY_CLOUD_NAME') and app.config.get('CLOUDINARY_API_KEY'):
+    if os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL'):
         caminho_temp = None
         try:
             temp_dir = tempfile.gettempdir()
@@ -4525,7 +4519,7 @@ def admin_arquivos_deletar_massa():
     try:
         docs = Documento.query.filter(Documento.id.in_(ids)).all()
         for d in docs:
-            if d.public_id and app.config.get('CLOUDINARY_CLOUD_NAME'):
+            if d.public_id and (os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL')):
                 try:
                     cloudinary.uploader.destroy(d.public_id, resource_type='auto')
                 except Exception as ex:
@@ -5149,7 +5143,7 @@ def forcar_leitura_pasta():
                     caminho_full = os.path.join(base_dir, 'boletos' if tipo == 'BOLETO' else 'notas_fiscais', nome)
                     url_arquivo = None
                     public_id = None
-                    if app.config.get('CLOUDINARY_CLOUD_NAME') and app.config.get('CLOUDINARY_API_KEY'):
+                    if os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL'):
                         try:
                             resultado_nuvem = cloudinary.uploader.upload(caminho_full, resource_type='auto')
                             url_arquivo = resultado_nuvem.get('secure_url')
