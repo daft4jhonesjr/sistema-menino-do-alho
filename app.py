@@ -1040,9 +1040,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                 documento = doc_existente
                 if not documento.url_arquivo and app.config.get('CLOUDINARY_CLOUD_NAME') and app.config.get('CLOUDINARY_API_KEY'):
                     try:
-                        with open(caminho_completo, 'rb') as f:
-                            f.seek(0)
-                            resultado_nuvem = cloudinary.uploader.upload(f, resource_type='auto')
+                        resultado_nuvem = cloudinary.uploader.upload(caminho_completo, resource_type='auto')
                         documento.url_arquivo = resultado_nuvem.get('secure_url')
                         documento.public_id = resultado_nuvem.get('public_id')
                         db.session.flush()
@@ -1275,9 +1273,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                     public_id = None
                     if app.config.get('CLOUDINARY_CLOUD_NAME') and app.config.get('CLOUDINARY_API_KEY'):
                         try:
-                            with open(caminho_completo, 'rb') as f:
-                                f.seek(0)
-                                resultado_nuvem = cloudinary.uploader.upload(f, resource_type='auto')
+                            resultado_nuvem = cloudinary.uploader.upload(caminho_completo, resource_type='auto')
                             url_arquivo = resultado_nuvem.get('secure_url')
                             public_id = resultado_nuvem.get('public_id')
                         except Exception as ex:
@@ -1358,6 +1354,11 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                         _debug_log("app.py:843", "DEPOIS do commit (sucesso)", {"venda_id": venda_id, "documento_id": documento.id, "nf": nf_doc, "processados_depois": resultado['processados']+1}, "B")
                         # #endregion
                         _log_detalhado(f"DEBUG: ✅ COMMIT EXECUTADO COM SUCESSO: NF {nf_doc} vinculada à Venda {venda_id} (Cliente: {cliente_nome})")
+                        if documento.url_arquivo and os.path.exists(caminho_completo):
+                            try:
+                                os.remove(caminho_completo)
+                            except Exception as rm_err:
+                                print(f"Aviso: não foi possível remover arquivo temporário {caminho_completo}: {rm_err}")
                         resultado['processados'] += 1
                         resultado['vinculos_novos'] += 1
                         rotulo = "Nota Fiscal" if tipo == 'NOTA_FISCAL' else "Boleto"
@@ -1401,6 +1402,11 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                     # #endregion
                     print(f"DEBUG: Sem vínculo automático: venda_id={venda_id}, venda_match={venda_match is not None}")
                     db.session.commit()
+                    if documento.url_arquivo and os.path.exists(caminho_completo):
+                        try:
+                            os.remove(caminho_completo)
+                        except Exception as rm_err:
+                            print(f"Aviso: não foi possível remover arquivo temporário {caminho_completo}: {rm_err}")
                     resultado['processados'] += 1
                     resultado['mensagens'].append(f"Processado: {arquivo}")
             except Exception as e:
@@ -5145,9 +5151,7 @@ def forcar_leitura_pasta():
                     public_id = None
                     if app.config.get('CLOUDINARY_CLOUD_NAME') and app.config.get('CLOUDINARY_API_KEY'):
                         try:
-                            with open(caminho_full, 'rb') as f:
-                                f.seek(0)
-                                resultado_nuvem = cloudinary.uploader.upload(f, resource_type='auto')
+                            resultado_nuvem = cloudinary.uploader.upload(caminho_full, resource_type='auto')
                             url_arquivo = resultado_nuvem.get('secure_url')
                             public_id = resultado_nuvem.get('public_id')
                         except Exception as ex:
@@ -5163,6 +5167,20 @@ def forcar_leitura_pasta():
                     db.session.add(doc)
                     ressuscitados += 1
         db.session.commit()
+        # Remove PDFs locais após upload para Cloudinary (mantém apenas na nuvem)
+        for tipo, pasta in pastas.items():
+            if not os.path.exists(pasta):
+                continue
+            for nome in os.listdir(pasta):
+                if not nome.lower().endswith('.pdf'):
+                    continue
+                caminho_full = os.path.join(pasta, nome)
+                doc = Documento.query.filter_by(caminho_arquivo=os.path.join('documentos_entrada', 'boletos' if tipo == 'BOLETO' else 'notas_fiscais', nome).replace(os.sep, '/')).first()
+                if doc and doc.url_arquivo and os.path.exists(caminho_full):
+                    try:
+                        os.remove(caminho_full)
+                    except Exception as rm_err:
+                        print(f"Aviso: não foi possível remover {caminho_full}: {rm_err}")
     except Exception as e:
         db.session.rollback()
         return jsonify({'erro': str(e), 'ressuscitados': 0}), 500
