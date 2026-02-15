@@ -28,6 +28,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 import pandas as pd
 import os
 import re
+import tempfile
 import json
 import csv
 import io
@@ -4348,9 +4349,13 @@ def upload_documento():
         return jsonify({'mensagem': "Campo 'tipo' inválido. Use 'boleto' ou 'nfe'."}), 400
 
     if app.config.get('CLOUDINARY_CLOUD_NAME') and app.config.get('CLOUDINARY_API_KEY'):
+        caminho_temp = None
         try:
-            arquivo.seek(0)  # Reseta o ponteiro caso o arquivo já tenha sido lido
-            resultado_nuvem = cloudinary.uploader.upload(arquivo, resource_type='auto')
+            temp_dir = tempfile.gettempdir()
+            caminho_temp = os.path.join(temp_dir, secure_filename(arquivo.filename))
+            arquivo.save(caminho_temp)
+
+            resultado_nuvem = cloudinary.uploader.upload(caminho_temp, resource_type='auto')
             link_permanente = resultado_nuvem.get('secure_url')
             id_nas_nuvens = resultado_nuvem.get('public_id')
             if not link_permanente or not id_nas_nuvens:
@@ -4376,6 +4381,12 @@ def upload_documento():
             db.session.rollback()
             print(f"Erro upload Cloudinary: {e}")
             return jsonify({'mensagem': str(e)}), 500
+        finally:
+            if caminho_temp and os.path.exists(caminho_temp):
+                try:
+                    os.remove(caminho_temp)
+                except Exception:
+                    pass
 
     # Fallback: guardar no Disco Persistente do Render
     try:
