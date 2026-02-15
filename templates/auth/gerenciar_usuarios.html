@@ -62,19 +62,9 @@
                         </span>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap">
-                        {% if u.username == 'Jhones' %}
-                            <span class="text-gray-400 text-sm">—</span>
-                        {% else %}
-                            <form method="POST" action="{{ url_for('alterar_role_usuario', id=u.id) }}" class="inline-flex items-center gap-2">
-                                <select name="role" class="text-sm border border-gray-200 rounded-lg px-2 py-1 focus:ring-emerald-500 focus:border-emerald-500">
-                                    <option value="user" {% if u.role == 'user' %}selected{% endif %}>user</option>
-                                    <option value="admin" {% if u.role == 'admin' %}selected{% endif %}>admin</option>
-                                </select>
-                                <button type="submit" class="text-sm bg-emerald-700 text-white px-3 py-1.5 rounded-lg hover:bg-emerald-600 transition font-medium">
-                                    Aplicar
-                                </button>
-                            </form>
-                        {% endif %}
+                        <button type="button" onclick="abrirModalUsuario(this.dataset.id, this.dataset.username, this.dataset.role)" class="btn-editar-usuario bg-emerald-100 text-emerald-700 px-3 py-1 rounded hover:bg-emerald-200 transition text-sm font-medium" data-id="{{ u.id }}" data-username="{{ u.username|e }}" data-role="{{ u.role }}">
+                            Editar
+                        </button>
                     </td>
                 </tr>
                 {% else %}
@@ -86,4 +76,57 @@
         </table>
     </div>
 </div>
+
+<!-- Modal Editar Usuário -->
+<div id="modalUsuario" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6 mx-4">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-bold text-gray-800">Editar Perfil do Usuário</h3>
+            <button type="button" onclick="fecharModalUsuario()" class="text-gray-400 hover:text-red-500 text-2xl">&times;</button>
+        </div>
+        <form id="formEditarUsuario" method="POST" action="">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Nome de Usuário (Editável)</label>
+                    <input type="text" name="username" id="modal_username" class="w-full border border-gray-300 rounded-lg p-2 focus:ring-emerald-500 focus:border-emerald-500" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Nova Senha</label>
+                    <input type="password" name="password" class="w-full border border-gray-300 rounded-lg p-2 focus:ring-emerald-500 focus:border-emerald-500" placeholder="Deixe vazio para manter a atual">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Nível de Acesso</label>
+                    <select name="role" id="modal_role" class="w-full border border-gray-300 rounded-lg p-2 focus:ring-emerald-500 focus:border-emerald-500">
+                        <option value="user">Usuário Comum (user)</option>
+                        <option value="admin">Administrador (admin)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end gap-3">
+                <button type="button" onclick="fecharModalUsuario()" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">Cancelar</button>
+                <button type="submit" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium">Salvar Alterações</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function abrirModalUsuario(id, username, role) {
+    const form = document.getElementById('formEditarUsuario');
+    form.action = '/gerenciar_usuarios/editar_completo/' + id;
+    document.getElementById('modal_username').value = username || '';
+    document.getElementById('modal_role').value = role || 'user';
+    form.querySelector('input[name="password"]').value = '';
+    const modal = document.getElementById('modalUsuario');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+function fecharModalUsuario() {
+    const modal = document.getElementById('modalUsuario');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+}
+</script>
 {% endblock %}

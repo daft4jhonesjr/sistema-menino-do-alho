@@ -2268,20 +2268,20 @@ def editar_usuario_completo(id):
     novo_nome = request.form.get('username', '').strip()
     nova_senha = request.form.get('password', '')
     novo_role = request.form.get('role')
-    # Verifica se o novo nome já existe em OUTRO usuário
+    # Lógica para alterar o Nome de Usuário
     if novo_nome and novo_nome != u.username:
         existe = Usuario.query.filter_by(username=novo_nome).first()
         if existe:
-            flash('Este nome de usuário já está em uso.', 'error')
+            flash(f'Erro: O nome {novo_nome} já está em uso por outro usuário.', 'error')
             return redirect(url_for('gerenciar_usuarios'))
         u.username = novo_nome
-    # Atualiza senha se foi digitada
+    # Atualiza senha apenas se algo for digitado
     if nova_senha:
         u.password_hash = generate_password_hash(nova_senha)
-    # Atualiza role (protegendo o Jhones)
+    # Atualiza nível (Proteção para o Jhones não se auto-rebaixar)
     if novo_role in ('admin', 'user'):
         if u.username == 'Jhones' and novo_role == 'user':
-            flash('O administrador principal (Jhones) não pode virar usuário comum.', 'warning')
+            flash('Atenção: O administrador principal não pode ser alterado para usuário comum.', 'warning')
         else:
             u.role = novo_role
     db.session.commit()
