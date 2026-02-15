@@ -28,3 +28,4 @@ gunicorn
 cloudinary
 psycopg2-binary
 redis
+rq

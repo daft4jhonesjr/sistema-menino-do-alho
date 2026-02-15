@@ -38,6 +38,8 @@ import socket
 import traceback
 import threading
 from werkzeug.utils import secure_filename
+from redis import Redis
+from rq import Queue
 from werkzeug.security import generate_password_hash, check_password_hash
 import pdfplumber
 import cloudinary
@@ -1677,6 +1679,26 @@ else:
     cache = Cache(config={'CACHE_TYPE': 'SimpleCache'})
     print("🟡 Cache configurado usando SimpleCache (Memória Local)")
 cache.init_app(app)
+
+# Configurar Fila de Tarefas (RQ)
+redis_conn = Redis.from_url(redis_url) if redis_url else None
+fila_tarefas = Queue(connection=redis_conn) if redis_conn else None
+
+
+def background_organizar_tudo(usuario_id):
+    """Trabalho pesado executado pelo Worker do RQ em segundo plano."""
+    from app import app, db, _reprocessar_boletos_atualizar_extracao, organizar_arquivos, _processar_documentos_pendentes
+    with app.app_context():
+        try:
+            print("🤖 [WORKER] Iniciando leitura pesada de PDFs...")
+            _reprocessar_boletos_atualizar_extracao()
+            organizar_arquivos()
+            _processar_documentos_pendentes(user_id_forcado=usuario_id)
+            print("🤖 [WORKER] PDFs lidos, vinculados e enviados para a nuvem com sucesso!")
+        except Exception as e:
+            db.session.rollback()
+            print(f"🤖 [WORKER] ERRO FATAL: {str(e)}")
+
 
 # Criar pasta de uploads se não existir
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -4598,18 +4620,14 @@ def admin_reprocessar_vencimentos():
 @app.route('/organizar_e_vincular', methods=['POST'])
 @login_required
 def organizar_e_vincular():
-    """Organiza PDFs na raiz de documentos_entrada (triagem) e em seguida processa/vincula por NF."""
-    _reprocessar_boletos_atualizar_extracao()
-    org = organizar_arquivos()
-    proc = _processar_documentos_pendentes()
-    n_notas = org["notas_fiscais"]
-    n_boletos = org["boletos"]
-    msg = f"Sucesso! {n_notas} Notas e {n_boletos} Boletos organizados e vinculados."
-    if org["nao_identificados"]:
-        msg += f" {org['nao_identificados']} enviado(s) para 'nao_identificados'."
-    if org["erros"] or proc["erros"]:
-        msg += f" Erros: organização {org['erros']}, processamento {proc['erros']}."
-    flash(msg, 'success' if (org["erros"] == 0 and proc["erros"] == 0) else 'warning')
+    """Terceiriza o processamento para o robô de background."""
+    if fila_tarefas:
+        fila_tarefas.enqueue(background_organizar_tudo, current_user.id)
+        flash("⏳ O robô começou a ler os PDFs nos bastidores! Pode continuar navegando, os links aparecerão em breve.", 'info')
+    else:
+        # Fallback de segurança se o Redis falhar
+        background_organizar_tudo(current_user.id)
+        flash("Sucesso! Documentos processados.", 'success')
     return redirect(url_for('dashboard'))
 
 
