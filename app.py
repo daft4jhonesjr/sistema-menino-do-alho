@@ -2413,7 +2413,6 @@ def get_radar_recompra():
                         alertas.append({
                             'cliente_nome': cliente.nome_cliente,
                             'produto': produto_nome,
-                            'telefone': getattr(cliente, 'telefone', '') or '',
                             'ultima_venda': ultima_venda.strftime('%d/%m/%Y'),
                             'media_dias': round(media_dias),
                             'status': status,

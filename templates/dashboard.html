@@ -273,15 +273,10 @@
                         <td class="px-4 py-4">
                             <span class="px-3 py-1 text-xs font-semibold rounded-full {{ alerta.cor }}">{{ alerta.status }}</span>
                         </td>
-                        <td class="px-4 py-4">
-                            {% if alerta.telefone %}
-                            {% set msg_whatsapp = 'Olá ' ~ alerta.cliente_nome ~ ', vi aqui que o seu estoque de ' ~ alerta.produto ~ ' pode estar acabando. Vamos agendar a próxima entrega?' %}
-                            <a href="https://wa.me/55{{ alerta.telefone | replace(' ', '') | replace('-', '') | replace('(', '') | replace(')', '') }}?text={{ msg_whatsapp | urlencode }}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium bg-green-600 text-white hover:bg-green-700 transition">
-                                <i data-lucide="message-circle" class="w-4 h-4 mr-1.5"></i>WhatsApp
-                            </a>
-                            {% else %}
-                            <span class="text-gray-400 dark:text-gray-500 text-sm">Sem telefone</span>
-                            {% endif %}
+                        <td class="px-4 py-4 text-right">
+                            <span class="inline-flex items-center gap-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-3 py-1.5 rounded-lg text-xs font-medium">
+                                Notificar
+                            </span>
                         </td>
                     </tr>
                     {% endfor %}
