@@ -22,6 +22,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
+            darkMode: 'class',
             theme: {
                 extend: {
                     fontFamily: {
@@ -30,6 +31,18 @@
                 }
             }
         }
+    </script>
+    <script>
+        function aplicarTemaAutomatico() {
+            const horaAtual = new Date().getHours();
+            if (horaAtual >= 18 || horaAtual < 6) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        }
+        aplicarTemaAutomatico();
+        setInterval(aplicarTemaAutomatico, 60000);
     </script>
     <style>
         body { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; }
@@ -57,7 +70,7 @@
     <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
     {% block head_extras %}{% endblock %}
 </head>
-<body class="bg-emerald-50 min-h-screen flex flex-col">
+<body class="bg-emerald-50 text-gray-800 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-500 min-h-screen flex flex-col">
     <!-- Header -->
     <header class="bg-white border-b border-gray-200 shadow-sm">
         <div class="container mx-auto px-4 py-5 text-center">
