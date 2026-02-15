@@ -2365,6 +2365,66 @@ def index():
     return redirect(url_for('dashboard'))
 
 
+def get_radar_recompra():
+    """Calcula alertas de recompra por cliente e produto. A média de dias entre compras é calculada
+    individualmente por produto para cada cliente (evita falsos positivos ao misturar Alho e Sacola)."""
+    from datetime import datetime, timedelta
+    clientes = Cliente.query.all()
+    alertas = []
+    hoje = datetime.now().date()
+
+    for cliente in clientes:
+        vendas = Venda.query.filter_by(cliente_id=cliente.id).order_by(Venda.data_venda.asc()).all()
+
+        # Agrupar datas de venda por produto (nome_produto do Produto vinculado)
+        vendas_por_produto = {}
+        for venda in vendas:
+            nome_produto = venda.produto.nome_produto if venda.produto else 'Produto Desconhecido'
+            if nome_produto not in vendas_por_produto:
+                vendas_por_produto[nome_produto] = []
+            vendas_por_produto[nome_produto].append(venda.data_venda)
+
+        # Calcular média individualmente para cada produto
+        for produto_nome, datas in vendas_por_produto.items():
+            if len(datas) >= 2:
+                intervalos = []
+                for i in range(1, len(datas)):
+                    dias = (datas[i] - datas[i - 1]).days
+                    if dias > 0:  # Ignora compras no mesmo dia
+                        intervalos.append(dias)
+
+                if intervalos:
+                    media_dias = sum(intervalos) / len(intervalos)
+                    ultima_venda = datas[-1]
+                    proxima_compra = ultima_venda + timedelta(days=media_dias)
+                    dias_para_comprar = (proxima_compra - hoje).days
+
+                    if dias_para_comprar <= 4:
+                        if dias_para_comprar < 0:
+                            status = 'Atrasado'
+                            cor = 'text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/30'
+                        elif dias_para_comprar == 0:
+                            status = 'É Hoje!'
+                            cor = 'text-orange-600 dark:text-orange-400 bg-orange-100 dark:bg-orange-900/30'
+                        else:
+                            status = f'Em {dias_para_comprar} dias'
+                            cor = 'text-yellow-600 dark:text-yellow-400 bg-yellow-100 dark:bg-yellow-900/30'
+
+                        alertas.append({
+                            'cliente_nome': cliente.nome_cliente,
+                            'produto': produto_nome,
+                            'telefone': getattr(cliente, 'telefone', '') or '',
+                            'ultima_venda': ultima_venda.strftime('%d/%m/%Y'),
+                            'media_dias': round(media_dias),
+                            'status': status,
+                            'cor': cor,
+                            'dias_restantes': dias_para_comprar
+                        })
+
+    alertas.sort(key=lambda x: x['dias_restantes'])
+    return alertas
+
+
 @app.route('/dashboard')
 @login_required
 @cache.cached(timeout=300)  # Cache por 5 minutos (300 segundos)
@@ -2534,6 +2594,9 @@ def dashboard():
             })
     
     faturamento_total = float(total_pendente) + float(total_pago)
+
+    # Radar de Recompra: alertas por cliente/produto (média calculada por produto)
+    alertas_recompra = get_radar_recompra()
     
     return render_template('dashboard.html',
                          vendas_por_cliente=vendas_por_cliente,
@@ -2559,7 +2622,8 @@ def dashboard():
                          labels_meses=labels_meses,
                          data_lucro=data_lucro,
                          data_caixas=data_caixas,
-                         detalhamento_mensal=detalhamento_mensal)
+                         detalhamento_mensal=detalhamento_mensal,
+                         alertas_recompra=alertas_recompra)
 
 
 # ========== MÓDULO CLIENTES ==========
@@ -2594,7 +2658,8 @@ def novo_cliente():
                 nome_cliente=request.form['nome_cliente'],
                 razao_social=request.form.get('razao_social', ''),
                 cnpj=cnpj,
-                cidade=request.form.get('cidade', '')
+                cidade=request.form.get('cidade', ''),
+                telefone=request.form.get('telefone', '') or None
             )
             db.session.add(cliente)
             db.session.commit()
@@ -2634,6 +2699,7 @@ def editar_cliente(id):
             cliente.razao_social = request.form.get('razao_social', '')
             cliente.cnpj = cnpj
             cliente.cidade = request.form.get('cidade', '')
+            cliente.telefone = request.form.get('telefone', '') or None
             db.session.commit()
             flash('Cliente atualizado com sucesso!', 'success')
             return redirect(url_for('listar_clientes'))

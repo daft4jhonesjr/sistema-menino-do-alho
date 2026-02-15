@@ -64,6 +64,7 @@ class Cliente(db.Model):
     razao_social = db.Column(db.String(200), index=True)  # Índice para buscas por razão social
     cnpj = db.Column(db.String(18), unique=True)
     cidade = db.Column(db.String(100))
+    telefone = db.Column(db.String(20), nullable=True)  # Para Radar de Recompra (WhatsApp)
     
     # Relacionamento com vendas
     vendas = db.relationship('Venda', backref='cliente', lazy=True, cascade='all, delete-orphan')
