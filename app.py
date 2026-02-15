@@ -1264,20 +1264,23 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
             try:
                 # Se documento já existe (não vinculado), foi atualizado acima. Senão, criar novo.
                 if documento is None:
-                    # #region agent log
-                    _debug_log("app.py:783", "ANTES de criar documento", {"arquivo": arquivo, "venda_id": venda_id, "venda_match_exists": venda_match is not None, "nf": dados_extraidos.get('numero_nf')}, "E")
-                    # #endregion
                     nf_val = dados_extraidos.get('numero_nf')
                     usuario_id = user_id_forcado if user_id_forcado else (current_user.id if current_user.is_authenticated else None)
                     url_arquivo = None
                     public_id = None
+
+                    # OBRIGATÓRIO: Fazer o upload para a nuvem ANTES de salvar no banco
                     if os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL'):
                         try:
                             resultado_nuvem = cloudinary.uploader.upload(caminho_completo, resource_type='auto')
                             url_arquivo = resultado_nuvem.get('secure_url')
                             public_id = resultado_nuvem.get('public_id')
+                            print(f"✅ Sucesso Nuvem: {url_arquivo}")
                         except Exception as ex:
-                            print(f"Erro ao fazer upload para Cloudinary: {ex}")
+                            print(f"❌ ERRO GRAVE Nuvem: {ex}")
+                    else:
+                        print("⚠️ Cloudinary não configurado. Salvando sem URL.")
+
                     documento = Documento(
                         caminho_arquivo=caminho_relativo,
                         url_arquivo=url_arquivo,
