@@ -2260,6 +2260,35 @@ def atualizar_codigo_cadastro():
     return redirect(url_for('gerenciar_usuarios'))
 
 
+@app.route('/gerenciar_usuarios/editar_completo/<int:id>', methods=['POST'])
+@login_required
+@admin_required
+def editar_usuario_completo(id):
+    u = Usuario.query.get_or_404(id)
+    novo_nome = request.form.get('username', '').strip()
+    nova_senha = request.form.get('password', '')
+    novo_role = request.form.get('role')
+    # Verifica se o novo nome já existe em OUTRO usuário
+    if novo_nome and novo_nome != u.username:
+        existe = Usuario.query.filter_by(username=novo_nome).first()
+        if existe:
+            flash('Este nome de usuário já está em uso.', 'error')
+            return redirect(url_for('gerenciar_usuarios'))
+        u.username = novo_nome
+    # Atualiza senha se foi digitada
+    if nova_senha:
+        u.password_hash = generate_password_hash(nova_senha)
+    # Atualiza role (protegendo o Jhones)
+    if novo_role in ('admin', 'user'):
+        if u.username == 'Jhones' and novo_role == 'user':
+            flash('O administrador principal (Jhones) não pode virar usuário comum.', 'warning')
+        else:
+            u.role = novo_role
+    db.session.commit()
+    flash(f'Usuário {u.username} atualizado com sucesso!', 'success')
+    return redirect(url_for('gerenciar_usuarios'))
+
+
 @app.route('/gerenciar_usuarios/alterar_role/<int:id>', methods=['POST'])
 @login_required
 @admin_required
