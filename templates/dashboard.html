@@ -18,7 +18,7 @@
 {% block content %}
 <div class="mb-6">
     <h2 class="text-3xl font-bold text-emerald-700 mb-2">Dashboard</h2>
-    <p class="text-gray-600">Visão geral do sistema</p>
+    <p class="text-gray-600 dark:text-gray-400">Visão geral do sistema</p>
 </div>
 
 <!-- Primeira linha: Faturamento Total em destaque (100% largura) -->
@@ -36,30 +36,30 @@
 
 <!-- Segunda linha: Pendente, Pago, Lucro (3 colunas) -->
 <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 border-l-4 border-amber-500">
+    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-6 border-l-4 border-amber-500">
         <div class="flex items-center justify-between">
             <div>
-                <p class="text-gray-600 text-sm font-medium">Financeiro - Pendente</p>
+                <p class="text-gray-600 dark:text-gray-400 text-sm font-medium">Financeiro - Pendente</p>
                 <p class="text-3xl font-bold text-amber-600 mt-2">{{ total_pendente|formato_moeda }}</p>
             </div>
             <i data-lucide="clock" class="w-10 h-10 text-amber-500"></i>
         </div>
     </div>
 
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 border-l-4 border-emerald-500">
+    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-6 border-l-4 border-emerald-500">
         <div class="flex items-center justify-between">
             <div>
-                <p class="text-gray-600 text-sm font-medium">Financeiro - Pago</p>
+                <p class="text-gray-600 dark:text-gray-400 text-sm font-medium">Financeiro - Pago</p>
                 <p class="text-3xl font-bold text-emerald-600 mt-2">{{ total_pago|formato_moeda }}</p>
             </div>
             <i data-lucide="check-circle" class="w-10 h-10 text-emerald-500"></i>
         </div>
     </div>
 
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 border-l-4 {% if total_lucro >= 0 %}border-emerald-500{% else %}border-red-500{% endif %}">
+    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-6 border-l-4 {% if total_lucro >= 0 %}border-emerald-500{% else %}border-red-500{% endif %}">
         <div class="flex items-center justify-between">
             <div>
-                <p class="text-gray-600 text-sm font-medium">Lucro Total do Período</p>
+                <p class="text-gray-600 dark:text-gray-400 text-sm font-medium">Lucro Total do Período</p>
                 <p class="text-3xl font-bold mt-2 {% if total_lucro >= 0 %}text-emerald-600{% else %}text-red-600{% endif %}">{{ total_lucro|formato_moeda }}</p>
             </div>
             <i data-lucide="trending-up" class="w-10 h-10 {% if total_lucro >= 0 %}text-emerald-500{% else %}text-red-500{% endif %}"></i>
@@ -69,59 +69,59 @@
 
 <!-- Terceira linha: Faturamento por empresa, Margem e Ticket Médio -->
 <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 border-l-4 border-blue-500">
+    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-5 border-l-4 border-blue-500">
         <div class="flex items-center justify-between">
             <div>
-                <p class="text-gray-600 text-sm font-medium">Faturamento PATY</p>
+                <p class="text-gray-600 dark:text-gray-400 text-sm font-medium">Faturamento PATY</p>
                 <p class="text-2xl font-bold text-blue-600 mt-1">{{ total_paty|formato_moeda }}</p>
                 {% if faturamento_total and faturamento_total > 0 %}
-                <small class="text-gray-500 font-medium" style="font-size: 0.8rem;">({{ "%.1f"|format((total_paty / faturamento_total) * 100) }}%)</small>
+                <small class="text-gray-500 dark:text-gray-400 font-medium" style="font-size: 0.8rem;">({{ "%.1f"|format((total_paty / faturamento_total) * 100) }}%)</small>
                 {% endif %}
             </div>
             <i data-lucide="building-2" class="w-8 h-8 text-blue-500"></i>
         </div>
     </div>
 
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 border-l-4 border-emerald-500">
+    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-5 border-l-4 border-emerald-500">
         <div class="flex items-center justify-between">
             <div>
-                <p class="text-gray-600 text-sm font-medium">Faturamento DESTAK</p>
+                <p class="text-gray-600 dark:text-gray-400 text-sm font-medium">Faturamento DESTAK</p>
                 <p class="text-2xl font-bold text-emerald-600 mt-1">{{ total_destak|formato_moeda }}</p>
                 {% if faturamento_total and faturamento_total > 0 %}
-                <small class="text-gray-500 font-medium" style="font-size: 0.8rem;">({{ "%.1f"|format((total_destak / faturamento_total) * 100) }}%)</small>
+                <small class="text-gray-500 dark:text-gray-400 font-medium" style="font-size: 0.8rem;">({{ "%.1f"|format((total_destak / faturamento_total) * 100) }}%)</small>
                 {% endif %}
             </div>
             <i data-lucide="building" class="w-8 h-8 text-emerald-500"></i>
         </div>
     </div>
 
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 border-l-4 border-gray-400">
+    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-5 border-l-4 border-gray-400">
         <div class="flex items-center justify-between">
             <div>
-                <p class="text-gray-600 text-sm font-medium">Vendas Avulsas</p>
-                <p class="text-2xl font-bold text-gray-600 mt-1">{{ total_nenhum|formato_moeda }}</p>
+                <p class="text-gray-600 dark:text-gray-400 text-sm font-medium">Vendas Avulsas</p>
+                <p class="text-2xl font-bold text-gray-600 dark:text-gray-100 mt-1">{{ total_nenhum|formato_moeda }}</p>
                 {% if faturamento_total and faturamento_total > 0 %}
-                <small class="text-gray-500 font-medium" style="font-size: 0.8rem;">({{ "%.1f"|format((total_nenhum / faturamento_total) * 100) }}%)</small>
+                <small class="text-gray-500 dark:text-gray-400 font-medium" style="font-size: 0.8rem;">({{ "%.1f"|format((total_nenhum / faturamento_total) * 100) }}%)</small>
                 {% endif %}
             </div>
-            <i data-lucide="user" class="w-8 h-8 text-gray-500"></i>
+            <i data-lucide="user" class="w-8 h-8 text-gray-500 dark:text-gray-400"></i>
         </div>
     </div>
 
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 border-l-4 border-indigo-500">
+    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-5 border-l-4 border-indigo-500">
         <div class="flex items-center justify-between">
             <div>
-                <p class="text-gray-600 text-sm font-medium">Margem de Lucro</p>
+                <p class="text-gray-600 dark:text-gray-400 text-sm font-medium">Margem de Lucro</p>
                 <p class="text-2xl font-bold mt-1 {% if margem_porcentagem >= 0 %}text-indigo-600{% else %}text-red-600{% endif %}">{{ "%.2f"|format(margem_porcentagem) }}%</p>
             </div>
             <i data-lucide="pie-chart" class="w-8 h-8 {% if margem_porcentagem >= 0 %}text-indigo-500{% else %}text-red-500{% endif %}"></i>
         </div>
     </div>
 
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 border-l-4 border-cyan-500">
+    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-5 border-l-4 border-cyan-500">
         <div class="flex items-center justify-between">
             <div>
-                <p class="text-gray-600 text-sm font-medium">Ticket Médio</p>
+                <p class="text-gray-600 dark:text-gray-400 text-sm font-medium">Ticket Médio</p>
                 <p class="text-2xl font-bold text-cyan-600 mt-1">{{ ticket_medio|formato_moeda }}</p>
             </div>
             <i data-lucide="shopping-cart" class="w-8 h-8 text-cyan-500"></i>
@@ -139,7 +139,7 @@
             <i data-lucide="chevron-down" class="w-5 h-5 text-emerald-600 transition-transform duration-300" id="chevron-documentos" style="transform: rotate(-90deg);"></i>
         </button>
         <div class="flex flex-wrap items-center gap-4">
-            <div class="text-sm text-gray-600 bg-gray-50 px-3 py-2 rounded-lg border border-gray-200">
+            <div class="text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700">
                 <span class="font-medium">Status:</span> 
                 <span class="text-blue-600">{{ total_documentos }} boletos lidos</span>, 
                 <span class="text-emerald-600">{{ documentos_vinculados }} vinculados com sucesso</span>
@@ -157,7 +157,7 @@
                     <i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>
                     Lendo e organizando documentos... Por favor, aguarde.
                 </p>
-                <div class="h-4 w-full rounded-full bg-gray-200 overflow-hidden">
+                <div class="h-4 w-full rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
                     <div class="h-full bg-emerald-500 rounded-full animate-pulse" style="width: 100%"></div>
                 </div>
             </div>
@@ -171,7 +171,7 @@
         {% set nome = item.nome_arquivo %}
         {% set ok = item.leitura_ok %}
         {% set nf_nao = item.nf_nao_encontrada %}
-        <div class="rounded-xl border shadow-sm overflow-hidden flex flex-col md:flex-row md:items-center {% if ok and not nf_nao %}bg-emerald-50/50 border-emerald-200{% elif nf_nao %}bg-amber-50/50 border-amber-200{% else %}bg-amber-50/50 border-amber-200{% endif %}">
+        <div class="rounded-xl border shadow-sm dark:shadow-none overflow-hidden flex flex-col md:flex-row md:items-center {% if ok and not nf_nao %}bg-emerald-50/50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800{% elif nf_nao %}bg-amber-50/50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800{% else %}bg-amber-50/50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800{% endif %}">
             <div class="flex items-center gap-4 p-4 md:flex-1">
                 <div class="flex-shrink-0 w-12 h-12 rounded-lg flex items-center justify-center {% if doc.tipo == 'BOLETO' %}bg-blue-100 text-blue-700{% else %}bg-emerald-100 text-emerald-700{% endif %}">
                     {% if doc.tipo == 'BOLETO' %}
@@ -181,7 +181,7 @@
                     {% endif %}
                 </div>
                 <div class="min-w-0 flex-1">
-                    <p class="font-semibold text-gray-900 truncate">{% if item.etiqueta_pasta %}<span class="text-gray-500 font-medium">[{{ item.etiqueta_pasta }}]</span> {% endif %}{{ nome }}</p>
+                    <p class="font-semibold text-gray-900 dark:text-gray-100 truncate">{% if item.etiqueta_pasta %}<span class="text-gray-500 dark:text-gray-400 font-medium">[{{ item.etiqueta_pasta }}]</span> {% endif %}{{ nome }}</p>
                     {% if not ok %}
                     <p class="text-sm text-amber-700 font-medium mt-0.5">Leitura incompleta — Verifique o arquivo manualmente.</p>
                     {% elif item.diagnostico %}
@@ -196,7 +196,7 @@
                     {% elif nf_nao %}
                     <p class="text-sm text-amber-700 font-medium mt-0.5">NF {{ doc.numero_nf or '?' }} lida, mas não encontrada nas Vendas.</p>
                     {% endif %}
-                    <p class="text-sm text-gray-600 mt-0.5">
+                    <p class="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
                         {% if ok %}
                         {% if doc.cnpj %}<span class="font-medium text-emerald-700">Pagador: {{ doc.cnpj }}</span>{% endif %}
                         {% if doc.numero_nf %} · NF {{ doc.numero_nf }}{% endif %}
@@ -213,7 +213,7 @@
                     </p>
                 </div>
             </div>
-            <div class="flex items-center gap-2 p-4 md:p-4 md:border-l md:border-gray-200 md:border-t-0 border-t border-gray-200 flex-wrap">
+            <div class="flex items-center gap-2 p-4 md:p-4 md:border-l md:border-gray-200 dark:border-gray-700 md:border-t-0 border-t border-gray-200 dark:border-gray-700 flex-wrap">
                 <a href="{{ url_for('visualizar_documento', id=doc.id) }}" target="_blank" class="inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition">
                     <i data-lucide="external-link" class="w-4 h-4 mr-2"></i>Visualizar
                 </a>
@@ -239,7 +239,7 @@
         {% endfor %}
     </div>
     {% else %}
-    <p class="text-gray-500 py-6 rounded-xl border border-gray-200 bg-gray-50 text-center">Nenhum documento pendente. Nada precisa da sua atenção no momento.</p>
+    <p class="text-gray-500 dark:text-gray-400 py-6 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-center">Nenhum documento pendente. Nada precisa da sua atenção no momento.</p>
     {% endif %}
     </div>
 </section>
@@ -248,21 +248,21 @@
 <div id="modal-vincular-doc" class="fixed inset-0 z-50 hidden" aria-hidden="true">
     <div class="absolute inset-0 bg-black/50" data-dismiss="modal-vincular-doc"></div>
     <div class="absolute inset-0 flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
-            <div class="px-6 py-4 border-b border-gray-200">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl dark:shadow-none dark:border dark:border-gray-700 max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
                 <h4 class="text-lg font-bold text-emerald-700">Vincular à Venda</h4>
-                <p id="modal-vincular-doc-nome" class="text-sm text-gray-600 mt-1 truncate"></p>
+                <p id="modal-vincular-doc-nome" class="text-sm text-gray-600 dark:text-gray-400 mt-1 truncate"></p>
             </div>
             <form id="form-vincular-doc" method="post" action="#" class="flex flex-col flex-1 min-h-0">
                 <input type="hidden" name="doc_id" id="input-vincular-doc-id" />
                 <div class="p-6 flex-1 overflow-y-auto">
-                    <label for="select-vincular-pedido" class="block text-sm font-medium text-gray-700 mb-2">Pedido</label>
-                    <select id="select-vincular-pedido" name="venda_id" required class="w-full rounded-lg border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                    <label for="select-vincular-pedido" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Pedido</label>
+                    <select id="select-vincular-pedido" name="venda_id" required class="w-full rounded-lg border border-gray-300 dark:border-gray-700 dark:bg-gray-700 dark:text-gray-100 px-4 py-2 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
                         <option value="">Selecione um pedido…</option>
                     </select>
                 </div>
-                <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
-                    <button type="button" class="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50" data-dismiss="modal-vincular-doc">Cancelar</button>
+                <div class="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
+                    <button type="button" class="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700" data-dismiss="modal-vincular-doc">Cancelar</button>
                     <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">Vincular</button>
                 </div>
             </form>
@@ -272,15 +272,15 @@
 
 <!-- Detalhamento Mensal (card acima do gráfico) -->
 {% if detalhamento_mensal %}
-<div class="bg-white shadow-sm mb-4 rounded-xl border border-gray-100 overflow-hidden">
+<div class="bg-white dark:bg-gray-800 shadow-sm dark:shadow-none mb-4 rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
     <div class="p-5">
-        <h5 class="text-gray-600 mb-3 flex items-center text-base font-semibold">
+        <h5 class="text-gray-600 dark:text-gray-400 mb-3 flex items-center text-base font-semibold">
             <i data-lucide="calendar" class="w-5 h-5 mr-2 text-emerald-600"></i>Detalhamento Mensal
         </h5>
         <div class="flex flex-wrap gap-3">
             {% for item in detalhamento_mensal %}
-            <button type="button" onclick="abrirDetalhesMes({{ item.ano }}, {{ item.mes_numero }})" class="flex items-center px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 hover:bg-emerald-50 hover:border-emerald-300 cursor-pointer transition">
-                <span class="font-bold text-gray-900 mr-2">{{ item.mes }}</span>
+            <button type="button" onclick="abrirDetalhesMes({{ item.ano }}, {{ item.mes_numero }})" class="flex items-center px-3 py-2 rounded-xl bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 hover:border-emerald-300 dark:hover:border-emerald-700 cursor-pointer transition">
+                <span class="font-bold text-gray-900 dark:text-gray-100 mr-2">{{ item.mes }}</span>
                 <span class="font-bold text-emerald-600">{{ item.lucro|formato_moeda }}</span>
             </button>
             {% endfor %}
@@ -290,7 +290,7 @@
 {% endif %}
 
 <!-- Gráfico de Evolução Mensal (Lucro vs. Volume) -->
-<div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-6">
+<div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-6 mb-6">
     <h3 class="text-xl font-bold text-emerald-700 mb-4 flex items-center">
         <i data-lucide="trending-up" class="w-5 h-5 mr-2"></i>Evolução Mensal: Lucro vs. Volume de Vendas
     </h3>
@@ -299,32 +299,32 @@
         <canvas id="graficoEvolucao"></canvas>
     </div>
     {% else %}
-    <p class="text-gray-500 text-center py-8">Nenhum dado disponível para exibir a evolução mensal.</p>
+    <p class="text-gray-500 dark:text-gray-400 text-center py-8">Nenhum dado disponível para exibir a evolução mensal.</p>
     {% endif %}
 </div>
 
 <!-- Grid: Top 10 Clientes e Produtos lado a lado -->
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
     <!-- Top 10 Clientes por Lucro -->
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-6">
         <h3 class="text-xl font-bold text-emerald-700 mb-4 flex items-center">
             <i data-lucide="trending-up" class="w-5 h-5 mr-2"></i>Top 10 Clientes por Lucro
         </h3>
     {% if vendas_por_cliente %}
-        <div class="overflow-x-auto rounded-xl border border-gray-200">
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
+        <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead class="bg-gray-50 dark:bg-gray-700">
                     <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
-                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total Vendido</th>
-                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Lucro Total</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cliente</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Total Vendido</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Lucro Total</th>
                     </tr>
                 </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
+                <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                     {% for cliente, total_vendido, lucro_total in vendas_por_cliente %}
-                    <tr class="hover:bg-emerald-50 transition">
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ cliente }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{{ total_vendido|formato_moeda }}</td>
+                    <tr class="hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{{ cliente }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 text-right">{{ total_vendido|formato_moeda }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-emerald-600 text-right">{{ lucro_total|formato_moeda }}</td>
                     </tr>
                     {% endfor %}
@@ -332,32 +332,32 @@
             </table>
         </div>
     {% else %}
-        <p class="text-gray-500 text-center py-8">Nenhuma venda registrada ainda.</p>
+        <p class="text-gray-500 dark:text-gray-400 text-center py-8">Nenhuma venda registrada ainda.</p>
     {% endif %}
     </div>
 
     <!-- Top 10 Produtos por Lucro -->
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-6">
         <h3 class="text-xl font-bold text-emerald-700 mb-4 flex items-center">
             <i data-lucide="trending-up" class="w-5 h-5 mr-2"></i>Top 10 Produtos por Lucro
         </h3>
     {% if vendas_por_produto %}
-        <div class="overflow-x-auto rounded-xl border border-gray-200">
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
+        <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead class="bg-gray-50 dark:bg-gray-700">
                     <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Produto</th>
-                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Quantidade</th>
-                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total Vendido</th>
-                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Lucro Total</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Produto</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Quantidade</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Total Vendido</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Lucro Total</th>
                     </tr>
                 </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
+                <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                     {% for produto, quantidade, total_vendido, lucro_total in vendas_por_produto %}
-                    <tr class="hover:bg-emerald-50 transition">
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ produto }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{{ quantidade }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{{ total_vendido|formato_moeda }}</td>
+                    <tr class="hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{{ produto }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 text-right">{{ quantidade }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 text-right">{{ total_vendido|formato_moeda }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-emerald-600 text-right">{{ lucro_total|formato_moeda }}</td>
                     </tr>
                     {% endfor %}
@@ -365,7 +365,7 @@
             </table>
         </div>
     {% else %}
-        <p class="text-gray-500 text-center py-8">Nenhuma venda registrada ainda.</p>
+        <p class="text-gray-500 dark:text-gray-400 text-center py-8">Nenhuma venda registrada ainda.</p>
     {% endif %}
     </div>
 </div>
@@ -373,7 +373,7 @@
 <!-- Modal: Detalhes Mensais -->
 <div id="modal-detalhes-mes-overlay" class="fixed inset-0 bg-black/50 z-50 hidden" onclick="fecharModalDetalhesMes()"></div>
 <div id="modal-detalhes-mes" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden pointer-events-none">
-    <div class="bg-white rounded-xl shadow-xl border border-gray-200 max-w-6xl w-full max-h-[90vh] flex flex-col pointer-events-auto overflow-hidden">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl dark:shadow-none border border-gray-200 dark:border-gray-700 max-w-6xl w-full max-h-[90vh] flex flex-col pointer-events-auto overflow-hidden">
         <!-- Cabeçalho -->
         <div class="bg-emerald-700 text-white rounded-t-xl">
             <div class="flex items-center justify-between px-6 py-4">
@@ -387,7 +387,7 @@
         </div>
         
         <!-- Loading -->
-        <div id="modal-detalhes-mes-loading" class="px-6 py-12 text-center text-gray-500">
+        <div id="modal-detalhes-mes-loading" class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
             <i data-lucide="loader-2" class="w-10 h-10 text-emerald-700 mb-3 mx-auto animate-spin"></i>
             <p>Carregando detalhes do mês...</p>
         </div>
@@ -396,7 +396,7 @@
         <div id="modal-detalhes-mes-conteudo" class="flex-1 overflow-auto p-6 hidden">
             <!-- Cards de Resumo -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div class="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl border border-emerald-200 shadow-sm p-5">
+                <div class="bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-900/40 dark:to-emerald-800/40 rounded-xl border border-emerald-200 dark:border-emerald-700 shadow-sm dark:shadow-none p-5">
                     <div class="flex items-center justify-between">
                         <div>
                             <p class="text-emerald-600 text-sm font-medium">Lucro Líquido</p>
@@ -405,7 +405,7 @@
                         <i data-lucide="trending-up" class="w-12 h-12 text-emerald-500"></i>
                     </div>
                 </div>
-                <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl border border-blue-200 shadow-sm p-5">
+                <div class="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/40 dark:to-blue-800/40 rounded-xl border border-blue-200 dark:border-blue-700 shadow-sm dark:shadow-none p-5">
                     <div class="flex items-center justify-between">
                         <div>
                             <p class="text-blue-600 text-sm font-medium">Faturamento Total</p>
@@ -418,20 +418,20 @@
             
             <!-- Seção 1: Top Clientes do Mês -->
             <div class="mb-6">
-                <h4 class="text-lg font-bold text-gray-800 mb-3 flex items-center">
+                <h4 class="text-lg font-bold text-gray-800 dark:text-gray-100 mb-3 flex items-center">
                     <i data-lucide="users" class="w-5 h-5 mr-2 text-emerald-600"></i>Top Clientes do Mês
                 </h4>
-                <div id="modal-mes-top-clientes" class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <div id="modal-mes-top-clientes" class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-hidden">
                     <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200">
-                            <thead class="bg-gray-50">
+                        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                            <thead class="bg-gray-50 dark:bg-gray-700">
                                 <tr>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cliente</th>
-                                    <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Qtd Compras</th>
-                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total Gasto</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Cliente</th>
+                                    <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Qtd Compras</th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Total Gasto</th>
                                 </tr>
                             </thead>
-                            <tbody id="modal-mes-top-clientes-tbody" class="bg-white divide-y divide-gray-200">
+                            <tbody id="modal-mes-top-clientes-tbody" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                             </tbody>
                         </table>
                     </div>
@@ -440,30 +440,30 @@
             
             <!-- Seção 2: Todas as Vendas -->
             <div>
-                <h4 class="text-lg font-bold text-gray-800 mb-3 flex items-center">
+                <h4 class="text-lg font-bold text-gray-800 dark:text-gray-100 mb-3 flex items-center">
                     <i data-lucide="shopping-bag" class="w-5 h-5 mr-2 text-emerald-600"></i>Todas as Vendas do Mês
                 </h4>
-                <div id="modal-mes-vendas-wrapper" class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <div id="modal-mes-vendas-wrapper" class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-hidden">
                     <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200">
-                            <thead class="bg-gray-50">
+                        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                            <thead class="bg-gray-50 dark:bg-gray-700">
                                 <tr>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Data</th>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cliente</th>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Produto</th>
-                                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Qtd</th>
-                                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Valor Total</th>
-                                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Lucro</th>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">NF</th>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Situação</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Data</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Cliente</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Produto</th>
+                                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Qtd</th>
+                                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Valor Total</th>
+                                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Lucro</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">NF</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Situação</th>
                                 </tr>
                             </thead>
-                            <tbody id="modal-mes-vendas-tbody" class="bg-white divide-y divide-gray-200">
+                            <tbody id="modal-mes-vendas-tbody" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                             </tbody>
                         </table>
                     </div>
                 </div>
-                <p id="modal-mes-vendas-vazio" class="text-gray-500 text-center py-6 hidden">Nenhuma venda encontrada para este mês.</p>
+                <p id="modal-mes-vendas-vazio" class="text-gray-500 dark:text-gray-400 text-center py-6 hidden">Nenhuma venda encontrada para este mês.</p>
             </div>
         </div>
     </div>
@@ -767,15 +767,15 @@ function abrirDetalhesMes(ano, mes) {
             if (data.top_clientes && data.top_clientes.length > 0) {
                 data.top_clientes.forEach(function(cliente, index) {
                     var tr = document.createElement('tr');
-                    tr.className = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+                    tr.className = (index % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-700');
                     tr.innerHTML =
-                        '<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">' + cliente.nome + '</td>' +
-                        '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">' + cliente.qtd_compras + '</td>' +
-                        '<td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 text-right">' + formatoMoeda(cliente.total_gasto) + '</td>';
+                        '<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">' + cliente.nome + '</td>' +
+                        '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 text-center">' + cliente.qtd_compras + '</td>' +
+                        '<td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 dark:text-gray-100 text-right">' + formatoMoeda(cliente.total_gasto) + '</td>';
                     tbodyClientes.appendChild(tr);
                 });
             } else {
-                tbodyClientes.innerHTML = '<tr><td colspan="3" class="px-6 py-4 text-center text-gray-500">Nenhum cliente encontrado</td></tr>';
+                tbodyClientes.innerHTML = '<tr><td colspan="3" class="px-6 py-4 text-center text-gray-500 dark:text-gray-400">Nenhum cliente encontrado</td></tr>';
             }
             
             // Preencher Vendas
@@ -789,19 +789,19 @@ function abrirDetalhesMes(ano, mes) {
                 
                 data.vendas.forEach(function(venda, index) {
                     var tr = document.createElement('tr');
-                    tr.className = (index % 2 === 0 ? 'bg-white' : 'bg-gray-50') + ' hover:bg-emerald-50 transition';
+                    tr.className = (index % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-700') + ' hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition';
                     
-                    var lucroClass = venda.lucro >= 0 ? 'text-emerald-600' : 'text-red-600';
+                    var lucroClass = venda.lucro >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400';
                     var sitClass = venda.situacao === 'PAGO' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800';
                     
                     tr.innerHTML =
-                        '<td class="px-4 py-3 text-sm text-gray-900">' + venda.data + '</td>' +
-                        '<td class="px-4 py-3 text-sm text-gray-900">' + venda.cliente + '</td>' +
-                        '<td class="px-4 py-3 text-sm text-gray-900">' + venda.produto + '</td>' +
-                        '<td class="px-4 py-3 text-sm text-gray-900 text-right">' + venda.quantidade + '</td>' +
-                        '<td class="px-4 py-3 text-sm font-medium text-gray-900 text-right">' + formatoMoeda(venda.valor_total) + '</td>' +
+                        '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">' + venda.data + '</td>' +
+                        '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">' + venda.cliente + '</td>' +
+                        '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">' + venda.produto + '</td>' +
+                        '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 text-right">' + venda.quantidade + '</td>' +
+                        '<td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100 text-right">' + formatoMoeda(venda.valor_total) + '</td>' +
                         '<td class="px-4 py-3 text-sm font-medium text-right ' + lucroClass + '">' + formatoMoeda(venda.lucro) + '</td>' +
-                        '<td class="px-4 py-3 text-sm text-gray-900">' + venda.nf + '</td>' +
+                        '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">' + venda.nf + '</td>' +
                         '<td class="px-4 py-3"><span class="px-3 py-1 text-xs font-semibold rounded-full ' + sitClass + '">' + venda.situacao + '</span></td>';
                     tbodyVendas.appendChild(tr);
                 });
