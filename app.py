@@ -1037,6 +1037,16 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                 # #endregion
                 print(f"DEBUG: Documento ID {doc_existente.id} existe mas não está vinculado. Re-processando para tentar vincular.")
                 documento = doc_existente
+                if not documento.url_arquivo and app.config.get('CLOUDINARY_CLOUD_NAME') and app.config.get('CLOUDINARY_API_KEY'):
+                    try:
+                        with open(caminho_completo, 'rb') as f:
+                            f.seek(0)
+                            resultado_nuvem = cloudinary.uploader.upload(f, resource_type='auto')
+                        documento.url_arquivo = resultado_nuvem.get('secure_url')
+                        documento.public_id = resultado_nuvem.get('public_id')
+                        db.session.flush()
+                    except Exception as ex:
+                        print(f"Erro ao fazer upload para Cloudinary (doc existente): {ex}")
                 nf_cached = (getattr(doc_existente, 'nf_extraida', None) or doc_existente.numero_nf)
                 nf_cached = (nf_cached or '').strip() or None
                 if nf_cached:
@@ -1260,14 +1270,21 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                     # #endregion
                     nf_val = dados_extraidos.get('numero_nf')
                     usuario_id = user_id_forcado if user_id_forcado else (current_user.id if current_user.is_authenticated else None)
-                    conteudo_bin = None
-                    try:
-                        with open(caminho_completo, 'rb') as f:
-                            conteudo_bin = f.read()
-                    except Exception:
-                        pass
+                    url_arquivo = None
+                    public_id = None
+                    if app.config.get('CLOUDINARY_CLOUD_NAME') and app.config.get('CLOUDINARY_API_KEY'):
+                        try:
+                            with open(caminho_completo, 'rb') as f:
+                                f.seek(0)
+                                resultado_nuvem = cloudinary.uploader.upload(f, resource_type='auto')
+                            url_arquivo = resultado_nuvem.get('secure_url')
+                            public_id = resultado_nuvem.get('public_id')
+                        except Exception as ex:
+                            print(f"Erro ao fazer upload para Cloudinary: {ex}")
                     documento = Documento(
                         caminho_arquivo=caminho_relativo,
+                        url_arquivo=url_arquivo,
+                        public_id=public_id,
                         tipo=tipo,
                         cnpj=dados_extraidos.get('cnpj'),
                         numero_nf=nf_val,
@@ -4332,9 +4349,10 @@ def upload_documento():
 
     if app.config.get('CLOUDINARY_CLOUD_NAME') and app.config.get('CLOUDINARY_API_KEY'):
         try:
-            resultado = cloudinary.uploader.upload(arquivo, resource_type='auto')
-            link_permanente = resultado.get('secure_url')
-            id_nas_nuvens = resultado.get('public_id')
+            arquivo.seek(0)  # Reseta o ponteiro caso o arquivo já tenha sido lido
+            resultado_nuvem = cloudinary.uploader.upload(arquivo, resource_type='auto')
+            link_permanente = resultado_nuvem.get('secure_url')
+            id_nas_nuvens = resultado_nuvem.get('public_id')
             if not link_permanente or not id_nas_nuvens:
                 return jsonify({'mensagem': 'Erro ao fazer upload no Cloudinary.'}), 500
 
@@ -5111,15 +5129,22 @@ def forcar_leitura_pasta():
                 caminho_relativo = os.path.join('documentos_entrada', 'boletos' if tipo == 'BOLETO' else 'notas_fiscais', nome).replace(os.sep, '/')
                 doc_existente = Documento.query.filter_by(caminho_arquivo=caminho_relativo).first()
                 if not doc_existente:
-                    conteudo_bin = None
                     caminho_full = os.path.join(base_dir, 'boletos' if tipo == 'BOLETO' else 'notas_fiscais', nome)
-                    try:
-                        with open(caminho_full, 'rb') as f:
-                            conteudo_bin = f.read()
-                    except Exception:
-                        pass
+                    url_arquivo = None
+                    public_id = None
+                    if app.config.get('CLOUDINARY_CLOUD_NAME') and app.config.get('CLOUDINARY_API_KEY'):
+                        try:
+                            with open(caminho_full, 'rb') as f:
+                                f.seek(0)
+                                resultado_nuvem = cloudinary.uploader.upload(f, resource_type='auto')
+                            url_arquivo = resultado_nuvem.get('secure_url')
+                            public_id = resultado_nuvem.get('public_id')
+                        except Exception as ex:
+                            print(f"Erro Cloudinary (forcar_leitura): {ex}")
                     doc = Documento(
                         caminho_arquivo=caminho_relativo,
+                        url_arquivo=url_arquivo,
+                        public_id=public_id,
                         tipo=tipo,
                         usuario_id=current_user.id,
                         data_processamento=date.today()
