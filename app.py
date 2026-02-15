@@ -4311,15 +4311,15 @@ def ver_nf_venda(id):
     return redirect(url_for('listar_vendas'))
 
 
-# Caminho absoluto do Disco Persistente no Render
+# Caminho absoluto do Disco Persistente no Render (fallback quando Cloudinary não está configurado)
 BASE_DIR = '/opt/render/project/src/documentos_entrada'
 
 
 @app.route('/upload', methods=['POST'])
 def upload_documento():
     """
-    Rota para o bot enviar arquivos. Guarda no Disco Persistente do Render.
-    Campo tipo: 'boleto' -> boletos/ ; 'nfe' -> notas_fiscais/
+    Rota para o bot enviar arquivos. Prioriza Cloudinary; fallback para disco.
+    Campo tipo: 'boleto' -> BOLETO ; 'nfe' -> NOTA_FISCAL
     """
     arquivo = request.files.get('file') or request.files.get('arquivo') or request.files.get('documento')
     if not arquivo or not arquivo.filename:
@@ -4327,13 +4327,47 @@ def upload_documento():
 
     tipo = (request.form.get('tipo') or request.form.get('type') or '').strip().lower()
     if tipo == 'boleto':
-        caminho_final = os.path.join(BASE_DIR, 'boletos')
+        tipo_doc = 'BOLETO'
     elif tipo == 'nfe':
-        caminho_final = os.path.join(BASE_DIR, 'notas_fiscais')
+        tipo_doc = 'NOTA_FISCAL'
     else:
         return jsonify({'mensagem': "Campo 'tipo' inválido. Use 'boleto' ou 'nfe'."}), 400
 
+    if app.config.get('CLOUDINARY_CLOUD_NAME') and app.config.get('CLOUDINARY_API_KEY'):
+        try:
+            resultado = cloudinary.uploader.upload(arquivo, resource_type='auto')
+            link_permanente = resultado.get('secure_url')
+            id_nas_nuvens = resultado.get('public_id')
+            if not link_permanente or not id_nas_nuvens:
+                return jsonify({'mensagem': 'Erro ao fazer upload no Cloudinary.'}), 500
+
+            usuario_id = current_user.id if current_user.is_authenticated else None
+            if not usuario_id:
+                u = Usuario.query.first()
+                if u:
+                    usuario_id = u.id
+
+            novo_documento = Documento(
+                url_arquivo=link_permanente,
+                public_id=id_nas_nuvens,
+                caminho_arquivo=link_permanente,
+                tipo=tipo_doc,
+                usuario_id=usuario_id
+            )
+            db.session.add(novo_documento)
+            db.session.commit()
+            return jsonify({'mensagem': 'Sucesso'}), 200
+        except Exception as e:
+            db.session.rollback()
+            print(f"Erro upload Cloudinary: {e}")
+            return jsonify({'mensagem': str(e)}), 500
+
+    # Fallback: guardar no Disco Persistente do Render
     try:
+        if tipo == 'boleto':
+            caminho_final = os.path.join(BASE_DIR, 'boletos')
+        else:
+            caminho_final = os.path.join(BASE_DIR, 'notas_fiscais')
         os.makedirs(caminho_final, exist_ok=True)
         nome_arquivo = secure_filename(arquivo.filename)
         caminho_completo = os.path.join(caminho_final, nome_arquivo)
