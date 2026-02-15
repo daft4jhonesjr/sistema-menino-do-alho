@@ -1664,8 +1664,18 @@ app.config['COMPRESS_MIMETYPES'] = ['text/html', 'text/css', 'text/javascript', 
 app.config['COMPRESS_LEVEL'] = 6  # Nível de compressão (1-9, 6 é um bom equilíbrio)
 app.config['COMPRESS_MIN_SIZE'] = 500  # Comprimir apenas arquivos maiores que 500 bytes
 
-# Configurar cache usando SimpleCache (armazenamento em memória RAM)
-cache = Cache(config={'CACHE_TYPE': 'SimpleCache'})
+# Configurar cache (Redis em produção, SimpleCache local)
+redis_url = os.environ.get('REDIS_URL')
+if redis_url:
+    cache = Cache(config={
+        'CACHE_TYPE': 'RedisCache',
+        'CACHE_REDIS_URL': redis_url,
+        'CACHE_DEFAULT_TIMEOUT': 300  # 5 minutos
+    })
+    print("🟢 Cache configurado usando Redis Unificado")
+else:
+    cache = Cache(config={'CACHE_TYPE': 'SimpleCache'})
+    print("🟡 Cache configurado usando SimpleCache (Memória Local)")
 cache.init_app(app)
 
 # Criar pasta de uploads se não existir
