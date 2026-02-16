@@ -2724,16 +2724,29 @@ def caixa():
                 'entradas_mes': 0.0,
                 'saidas_mes': 0.0,
                 'saidas_fornecedor_mes': 0.0,
-                'saidas_pessoal_mes': 0.0
+                'saidas_pessoal_mes': 0.0,
+                'saldo_dinheiro': 0.0,
+                'saldo_cheque': 0.0,
+                'saldo_pix': 0.0
             }
         lancamentos_agrupados[chave_mes]['itens'].append(l)
+        # Cálculo por forma de pagamento (Saldo líquido: Entradas - Saídas)
+        valor_sinal = l.valor if l.tipo == 'ENTRADA' else -l.valor
+        forma = str(l.forma_pagamento or '').lower()
+        if 'dinheiro' in forma:
+            lancamentos_agrupados[chave_mes]['saldo_dinheiro'] += valor_sinal
+        elif 'cheque' in forma:
+            lancamentos_agrupados[chave_mes]['saldo_cheque'] += valor_sinal
+        elif 'pix' in forma or 'transfer' in forma:
+            lancamentos_agrupados[chave_mes]['saldo_pix'] += valor_sinal
+        # Cálculo de Entradas e Saídas
         if l.tipo == 'ENTRADA':
             lancamentos_agrupados[chave_mes]['entradas_mes'] += l.valor
         else:
             lancamentos_agrupados[chave_mes]['saidas_mes'] += l.valor
-            if 'Fornecedor' in l.categoria:
+            if l.categoria and 'Fornecedor' in l.categoria:
                 lancamentos_agrupados[chave_mes]['saidas_fornecedor_mes'] += l.valor
-            elif 'Pessoal' in l.categoria:
+            elif l.categoria and 'Pessoal' in l.categoria:
                 lancamentos_agrupados[chave_mes]['saidas_pessoal_mes'] += l.valor
     # Calcula o saldo de cada mês isolado
     for chave, grupo in lancamentos_agrupados.items():
