@@ -207,6 +207,12 @@
                 <p>Carregando...</p>
             </div>
             <div id="modal-vendas-conteudo" class="flex-1 overflow-auto p-6 hidden">
+                <!-- Abas: Vendas / Galeria de Fotos (apenas para produto) -->
+                <div id="modal-vendas-abas-wrap" class="flex border-b border-gray-200 dark:border-gray-700 mb-4 hidden">
+                    <button type="button" onclick="mudarAbaModalProduto('vendas')" id="aba-vendas-btn" class="py-2 px-4 text-emerald-600 border-b-2 border-emerald-600 font-medium text-sm">Histórico de Vendas</button>
+                    <button type="button" onclick="mudarAbaModalProduto('fotos')" id="aba-fotos-btn" class="py-2 px-4 text-gray-500 border-b-2 border-transparent hover:text-gray-700 font-medium text-sm">Galeria de Fotos</button>
+                </div>
+                <div id="conteudo-vendas">
                 <!-- Cards de Totais (apenas para clientes) -->
                 <div id="modal-vendas-totais" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 hidden">
                     <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl border border-blue-200 shadow-sm p-5">
@@ -256,6 +262,11 @@
                 </div>
                 
                 <p id="modal-vendas-vazio" class="text-gray-500 text-center py-6 hidden">Nenhuma venda encontrada.</p>
+                </div>
+                <div id="conteudo-fotos" class="hidden">
+                    <div id="grid-fotos" class="grid grid-cols-2 md:grid-cols-3 gap-4"></div>
+                    <p id="sem-fotos-msg" class="text-gray-500 text-center py-8 hidden">Nenhuma foto adicionada para este produto.</p>
+                </div>
             </div>
         </div>
     </div>
@@ -341,6 +352,34 @@
                 
                 if (isPrimeiraPagina) {
                     titulo.innerHTML = '<i data-lucide="shopping-bag" class="w-5 h-5 mr-2"></i>' + (data.titulo || 'Vendas');
+                    
+                    // Abas e Galeria de Fotos (apenas para produto)
+                    var abasWrap = document.getElementById('modal-vendas-abas-wrap');
+                    if (modalVendasTipo === 'produto') {
+                        abasWrap.classList.remove('hidden');
+                        mudarAbaModalProduto('vendas');
+                        fetch('/api/produtos/' + modalVendasId + '/fotos')
+                            .then(function(r) { return r.json(); })
+                            .then(function(fotos) {
+                                var grid = document.getElementById('grid-fotos');
+                                var msg = document.getElementById('sem-fotos-msg');
+                                grid.innerHTML = '';
+                                if (fotos && fotos.length > 0) {
+                                    msg.classList.add('hidden');
+                                    fotos.forEach(function(url) {
+                                        var img = document.createElement('img');
+                                        img.src = url;
+                                        img.className = 'w-full h-32 md:h-48 object-cover rounded-lg border border-gray-200 shadow-sm hover:scale-105 transition-transform cursor-pointer';
+                                        img.onclick = function() { window.open(url, '_blank'); };
+                                        grid.appendChild(img);
+                                    });
+                                } else {
+                                    msg.classList.remove('hidden');
+                                }
+                            });
+                    } else {
+                        abasWrap.classList.add('hidden');
+                    }
                     
                     // Exibir informações do cliente se disponíveis
                     var clienteInfoDiv = document.getElementById('modal-vendas-cliente-info');
@@ -469,6 +508,28 @@
     function fecharModalVendas() {
         document.getElementById('modal-vendas-overlay').classList.add('hidden');
         document.getElementById('modal-vendas').classList.add('hidden');
+    }
+
+    function mudarAbaModalProduto(aba) {
+        var conteudoVendas = document.getElementById('conteudo-vendas');
+        var conteudoFotos = document.getElementById('conteudo-fotos');
+        var btnVendas = document.getElementById('aba-vendas-btn');
+        var btnFotos = document.getElementById('aba-fotos-btn');
+        if (aba === 'vendas') {
+            conteudoVendas.classList.remove('hidden');
+            conteudoFotos.classList.add('hidden');
+            btnVendas.classList.add('text-emerald-600', 'border-emerald-600');
+            btnVendas.classList.remove('text-gray-500', 'border-transparent');
+            btnFotos.classList.remove('text-emerald-600', 'border-emerald-600');
+            btnFotos.classList.add('text-gray-500', 'border-transparent');
+        } else {
+            conteudoFotos.classList.remove('hidden');
+            conteudoVendas.classList.add('hidden');
+            btnFotos.classList.add('text-emerald-600', 'border-emerald-600');
+            btnFotos.classList.remove('text-gray-500', 'border-transparent');
+            btnVendas.classList.remove('text-emerald-600', 'border-emerald-600');
+            btnVendas.classList.add('text-gray-500', 'border-transparent');
+        }
     }
     
     // Dropdown Seletor de Ano

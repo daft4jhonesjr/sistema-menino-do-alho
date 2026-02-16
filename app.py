@@ -4,7 +4,7 @@ from flask_compress import Compress
 from flask_caching import Cache
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from models import db, Cliente, Produto, Venda, Usuario, Configuracao, TipoProduto, Nacionalidade, Tamanho, Fornecedor, EmpresaFaturadora, SituacaoVenda, Documento
+from models import db, Cliente, Produto, ProdutoFoto, Venda, Usuario, Configuracao, TipoProduto, Nacionalidade, Tamanho, Fornecedor, EmpresaFaturadora, SituacaoVenda, Documento
 from config import Config
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -37,6 +37,7 @@ import hashlib
 import socket
 import traceback
 import threading
+import time
 from werkzeug.utils import secure_filename
 from redis import Redis
 from rq import Queue
@@ -3270,6 +3271,21 @@ def novo_produto():
         )
         db.session.add(produto)
         db.session.commit()
+
+        # Upload de fotos (até 5)
+        upload_dir = os.path.join(app.root_path, 'static', 'uploads')
+        os.makedirs(upload_dir, exist_ok=True)
+        fotos = request.files.getlist('fotos')
+        for foto in fotos[:5]:  # Limita a 5 fotos
+            if foto and foto.filename:
+                nome_seguro = secure_filename(foto.filename)
+                nome_arquivo = f"{int(time.time())}_{nome_seguro}"
+                caminho_salvar = os.path.join(upload_dir, nome_arquivo)
+                foto.save(caminho_salvar)
+                nova_foto = ProdutoFoto(produto_id=produto.id, arquivo=nome_arquivo)
+                db.session.add(nova_foto)
+        db.session.commit()
+
         limpar_cache_dashboard()  # Limpar cache após nova entrada de produto
         if _is_ajax():
             return jsonify(ok=True, mensagem='Produto cadastrado com sucesso!')
@@ -3336,6 +3352,22 @@ def editar_produto(id):
         # preco_venda_alvo não é mais editável via formulário - manter valor existente
         produto.data_chegada = data_chegada
         produto.nome_produto = nome_produto
+
+        # Upload de fotos adicionais (até 5 no total)
+        fotos_existentes = ProdutoFoto.query.filter_by(produto_id=produto.id).count()
+        slots_disponiveis = max(0, 5 - fotos_existentes)
+        if slots_disponiveis > 0:
+            upload_dir = os.path.join(app.root_path, 'static', 'uploads')
+            os.makedirs(upload_dir, exist_ok=True)
+            fotos = request.files.getlist('fotos')
+            for foto in fotos[:slots_disponiveis]:
+                if foto and foto.filename:
+                    nome_seguro = secure_filename(foto.filename)
+                    nome_arquivo = f"{int(time.time())}_{nome_seguro}"
+                    caminho_salvar = os.path.join(upload_dir, nome_arquivo)
+                    foto.save(caminho_salvar)
+                    nova_foto = ProdutoFoto(produto_id=produto.id, arquivo=nome_arquivo)
+                    db.session.add(nova_foto)
         
         db.session.commit()
         limpar_cache_dashboard()  # Limpar cache após editar produto
@@ -3669,6 +3701,14 @@ def importar_produtos():
 
 
 # ========== MÓDULO VENDAS ==========
+
+@app.route('/api/produtos/<int:produto_id>/fotos')
+@login_required
+def get_fotos_produto(produto_id):
+    """Retorna URLs das fotos do produto para a galeria no modal."""
+    fotos = ProdutoFoto.query.filter_by(produto_id=produto_id).all()
+    return jsonify([url_for('static', filename=f'uploads/{f.arquivo}') for f in fotos])
+
 
 @app.route('/api/vendas_por_filtro')
 @login_required

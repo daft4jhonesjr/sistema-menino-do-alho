@@ -96,6 +96,8 @@ class Produto(db.Model):
     
     # Relacionamento com vendas
     vendas = db.relationship('Venda', backref='produto', lazy=True)
+    # Relacionamento com fotos (até 5 por produto)
+    fotos = db.relationship('ProdutoFoto', backref='produto', lazy=True, cascade='all, delete-orphan')
     
     def preco_venda_alvo_ou_default(self):
         """Preço de venda alvo ou padrão (ex.: R$ 160) se não definido."""
@@ -119,6 +121,18 @@ class Produto(db.Model):
 
     def __repr__(self):
         return f'<Produto {self.nome_produto}>'
+
+
+class ProdutoFoto(db.Model):
+    """Fotos do produto (até 5 por produto)."""
+    __tablename__ = 'produto_fotos'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    produto_id = db.Column(db.Integer, db.ForeignKey('produtos.id', ondelete='CASCADE'), nullable=False)
+    arquivo = db.Column(db.String(255), nullable=False)
+
+    def __repr__(self):
+        return f'<ProdutoFoto {self.id} - Produto {self.produto_id}>'
 
 
 class Venda(db.Model):
