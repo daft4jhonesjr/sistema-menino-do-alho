@@ -1719,7 +1719,17 @@ except Exception as e:
 
 db.init_app(app)
 
-# Cloudinary: o pacote já puxa CLOUDINARY_URL de os.environ nativamente
+# Cloudinary: configurar com variáveis de ambiente ou app.config (para fotos de produtos, documentos, etc.)
+_cloudinary_url = os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL')
+if _cloudinary_url:
+    cloudinary.config(secure=True)  # Usa CLOUDINARY_URL do ambiente
+elif app.config.get('CLOUDINARY_CLOUD_NAME') and app.config.get('CLOUDINARY_API_KEY') and app.config.get('CLOUDINARY_API_SECRET'):
+    cloudinary.config(
+        cloud_name=app.config['CLOUDINARY_CLOUD_NAME'],
+        api_key=app.config['CLOUDINARY_API_KEY'],
+        api_secret=app.config['CLOUDINARY_API_SECRET'],
+        secure=True
+    )
 
 # Ativar WAL Mode no SQLite para melhorar concorrência com múltiplos workers
 @event.listens_for(Engine, "connect")
@@ -3269,18 +3279,19 @@ def novo_produto():
         db.session.add(produto)
         db.session.commit()
 
-        # Upload de fotos (até 5)
-        upload_dir = os.path.join(app.root_path, 'static', 'uploads')
-        os.makedirs(upload_dir, exist_ok=True)
-        fotos = request.files.getlist('fotos')
-        for foto in fotos[:5]:  # Limita a 5 fotos
-            if foto and foto.filename:
-                nome_seguro = secure_filename(foto.filename)
-                nome_arquivo = f"{int(time.time())}_{nome_seguro}"
-                caminho_salvar = os.path.join(upload_dir, nome_arquivo)
-                foto.save(caminho_salvar)
-                nova_foto = ProdutoFoto(produto_id=produto.id, arquivo=nome_arquivo)
-                db.session.add(nova_foto)
+        # Upload de fotos para Cloudinary (até 5)
+        if os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL') or (app.config.get('CLOUDINARY_CLOUD_NAME') and app.config.get('CLOUDINARY_API_KEY')):
+            fotos = request.files.getlist('fotos')
+            for foto in fotos[:5]:
+                if foto and foto.filename:
+                    try:
+                        upload_result = cloudinary.uploader.upload(foto, folder="menino_do_alho/produtos")
+                        url_segura = upload_result.get('secure_url')
+                        if url_segura:
+                            nova_foto = ProdutoFoto(produto_id=produto.id, arquivo=url_segura)
+                            db.session.add(nova_foto)
+                    except Exception as e:
+                        print(f"Erro ao fazer upload para o Cloudinary (produto {produto.id}): {e}")
         db.session.commit()
 
         limpar_cache_dashboard()  # Limpar cache após nova entrada de produto
@@ -3346,22 +3357,22 @@ def editar_produto(id):
         produto.data_chegada = data_chegada
         produto.nome_produto = nome_produto
 
-        # Upload de fotos adicionais (até 5 no total)
+        # Upload de fotos adicionais para Cloudinary (até 5 no total)
         fotos_existentes = ProdutoFoto.query.filter_by(produto_id=produto.id).count()
         slots_disponiveis = max(0, 5 - fotos_existentes)
-        if slots_disponiveis > 0:
-            upload_dir = os.path.join(app.root_path, 'static', 'uploads')
-            os.makedirs(upload_dir, exist_ok=True)
+        if slots_disponiveis > 0 and (os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL') or (app.config.get('CLOUDINARY_CLOUD_NAME') and app.config.get('CLOUDINARY_API_KEY'))):
             fotos = request.files.getlist('fotos')
             for foto in fotos[:slots_disponiveis]:
                 if foto and foto.filename:
-                    nome_seguro = secure_filename(foto.filename)
-                    nome_arquivo = f"{int(time.time())}_{nome_seguro}"
-                    caminho_salvar = os.path.join(upload_dir, nome_arquivo)
-                    foto.save(caminho_salvar)
-                    nova_foto = ProdutoFoto(produto_id=produto.id, arquivo=nome_arquivo)
-                    db.session.add(nova_foto)
-        
+                    try:
+                        upload_result = cloudinary.uploader.upload(foto, folder="menino_do_alho/produtos")
+                        url_segura = upload_result.get('secure_url')
+                        if url_segura:
+                            nova_foto = ProdutoFoto(produto_id=produto.id, arquivo=url_segura)
+                            db.session.add(nova_foto)
+                    except Exception as e:
+                        print(f"Erro ao fazer upload para o Cloudinary (produto {produto.id}): {e}")
+
         db.session.commit()
         limpar_cache_dashboard()  # Limpar cache após editar produto
         flash('Produto atualizado com sucesso!', 'success')
@@ -3698,9 +3709,15 @@ def importar_produtos():
 @app.route('/api/produtos/<int:produto_id>/fotos')
 @login_required
 def get_fotos_produto(produto_id):
-    """Retorna URLs das fotos do produto para a galeria no modal."""
+    """Retorna URLs das fotos do produto para a galeria no modal. Cloudinary: URL completa em arquivo. Local: fallback para static/uploads/."""
     fotos = ProdutoFoto.query.filter_by(produto_id=produto_id).all()
-    return jsonify([url_for('static', filename=f'uploads/{f.arquivo}') for f in fotos])
+    urls = []
+    for f in fotos:
+        if f.arquivo and (f.arquivo.startswith('http://') or f.arquivo.startswith('https://')):
+            urls.append(f.arquivo)
+        elif f.arquivo:
+            urls.append(url_for('static', filename=f'uploads/{f.arquivo}'))
+    return jsonify(urls)
 
 
 @app.route('/api/vendas_por_filtro')

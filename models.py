@@ -129,7 +129,7 @@ class ProdutoFoto(db.Model):
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     produto_id = db.Column(db.Integer, db.ForeignKey('produtos.id', ondelete='CASCADE'), nullable=False)
-    arquivo = db.Column(db.String(255), nullable=False)
+    arquivo = db.Column(db.String(500), nullable=False)  # URL do Cloudinary ou nome do arquivo local (legado)
 
     def __repr__(self):
         return f'<ProdutoFoto {self.id} - Produto {self.produto_id}>'
