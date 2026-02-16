@@ -2755,9 +2755,13 @@ def excluir_cliente(id):
 def extrato_cliente(cliente_id):
     """Extrato de cobrança em PDF: vendas pendentes do cliente."""
     cliente = Cliente.query.get_or_404(cliente_id)
-    vendas_pendentes = Venda.query.filter_by(cliente_id=cliente.id, situacao='PENDENTE').options(
-        joinedload(Venda.produto)
-    ).order_by(Venda.data_venda).all()
+
+    # Filtro blindado: ignora case na situação e oculta itens de perda/brinde (R$ 0,00)
+    vendas_pendentes = Venda.query.filter(
+        Venda.cliente_id == cliente.id,
+        Venda.situacao.ilike('pendente'),
+        (Venda.preco_venda * Venda.quantidade_venda) > 0
+    ).options(joinedload(Venda.produto)).order_by(Venda.data_venda).all()
 
     total = sum(float(v.calcular_total()) for v in vendas_pendentes)
     data_hoje = datetime.now().strftime('%d/%m/%Y')
