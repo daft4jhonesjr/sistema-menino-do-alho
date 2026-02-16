@@ -2575,6 +2575,20 @@ def dashboard():
         func.sum(Venda.preco_venda * Venda.quantidade_venda)
     ).filter(Venda.empresa_faturadora == 'DESTAK', filtro_ano_venda).scalar() or 0
     
+    # Separação PATY e DESTAK por situação (Pago vs Pendente)
+    paty_pago = db.session.query(
+        func.sum(Venda.preco_venda * Venda.quantidade_venda)
+    ).filter(Venda.empresa_faturadora == 'PATY', Venda.situacao == 'PAGO', filtro_ano_venda).scalar() or 0
+    paty_pendente = db.session.query(
+        func.sum(Venda.preco_venda * Venda.quantidade_venda)
+    ).filter(Venda.empresa_faturadora == 'PATY', Venda.situacao == 'PENDENTE', filtro_ano_venda).scalar() or 0
+    destak_pago = db.session.query(
+        func.sum(Venda.preco_venda * Venda.quantidade_venda)
+    ).filter(Venda.empresa_faturadora == 'DESTAK', Venda.situacao == 'PAGO', filtro_ano_venda).scalar() or 0
+    destak_pendente = db.session.query(
+        func.sum(Venda.preco_venda * Venda.quantidade_venda)
+    ).filter(Venda.empresa_faturadora == 'DESTAK', Venda.situacao == 'PENDENTE', filtro_ano_venda).scalar() or 0
+    
     # Vendas sem empresa (NENHUM ou string vazia) - FILTRADO POR ANO
     total_nenhum = db.session.query(
         func.sum(Venda.preco_venda * Venda.quantidade_venda)
@@ -2682,6 +2696,10 @@ def dashboard():
                          detalhes_prejuizo=detalhes_prejuizo,
                          total_paty=float(total_paty),
                          total_destak=float(total_destak),
+                         paty_pago=float(paty_pago),
+                         paty_pendente=float(paty_pendente),
+                         destak_pago=float(destak_pago),
+                         destak_pendente=float(destak_pendente),
                          total_nenhum=float(total_nenhum),
                          margem_porcentagem=float(margem_porcentagem),
                          ticket_medio=float(ticket_medio),
