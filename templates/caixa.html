@@ -125,7 +125,7 @@
                     </thead>
                     <tbody class="divide-y divide-gray-100 dark:divide-gray-700 text-sm">
                         {% for l in grupo.itens %}
-                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors">
+                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                             <td class="px-6 py-3">
                                 <input type="checkbox" name="lancamento_ids" value="{{ l.id }}" onchange="atualizarBarraMassa()" class="check-item-caixa item-grupo-{{ grupo.id_html }} w-4 h-4 text-emerald-600 bg-gray-100 border-gray-300 rounded focus:ring-emerald-500 dark:bg-gray-700 dark:border-gray-600">
                             </td>
