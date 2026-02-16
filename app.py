@@ -2376,19 +2376,29 @@ def get_radar_recompra():
     for cliente in clientes:
         vendas = Venda.query.filter_by(cliente_id=cliente.id).order_by(Venda.data_venda.asc()).all()
 
-        # Agrupar datas de venda por produto (nome_produto do Produto vinculado)
-        # Remove padrões de data no final da string (ex: ' 01/01/26' ou ' 31/01/2026')
-        # para agrupar diferentes lotes do mesmo produto na mesma 'gaveta'
+        # Agrupar datas de venda por categoria mestra (ALHO, SACOLA, CAFÉ, etc.)
+        # Agrupa marcas e tamanhos diferentes do mesmo tipo na mesma 'gaveta'
         vendas_por_produto = {}
         for venda in vendas:
-            nome_produto_bruto = venda.produto.nome_produto if venda.produto else 'Produto Desconhecido'
-            nome_produto_limpo = re.sub(r'\s*\d{2}/\d{2}/\d{2,4}.*$', '', str(nome_produto_bruto)).strip() or nome_produto_bruto
-            if nome_produto_limpo not in vendas_por_produto:
-                vendas_por_produto[nome_produto_limpo] = []
-            vendas_por_produto[nome_produto_limpo].append(venda.data_venda)
+            nome_produto_bruto = str(venda.produto.nome_produto if venda.produto else 'Produto Desconhecido').upper()
+            # Define a categoria mestra baseada em palavras-chave
+            if 'ALHO' in nome_produto_bruto:
+                categoria = 'ALHO'
+            elif 'SACOLA' in nome_produto_bruto:
+                categoria = 'SACOLA'
+            elif 'CAFÉ' in nome_produto_bruto or 'CAFE' in nome_produto_bruto:
+                categoria = 'CAFÉ'
+            else:
+                # Se não for nenhum dos principais, agrupa pela primeira palavra (ex: 'CEBOLA')
+                palavras = nome_produto_bruto.split()
+                categoria = palavras[0] if palavras else 'OUTROS'
 
-        # Calcular média individualmente para cada produto
-        for produto_nome, datas in vendas_por_produto.items():
+            if categoria not in vendas_por_produto:
+                vendas_por_produto[categoria] = []
+            vendas_por_produto[categoria].append(venda.data_venda)
+
+        # Calcular média individualmente para cada categoria
+        for categoria, datas in vendas_por_produto.items():
             if len(datas) >= 2:
                 intervalos = []
                 for i in range(1, len(datas)):
@@ -2415,7 +2425,7 @@ def get_radar_recompra():
 
                         alertas.append({
                             'cliente_nome': cliente.nome_cliente,
-                            'produto': produto_nome,
+                            'produto': categoria,
                             'ultima_venda': ultima_venda.strftime('%d/%m/%Y'),
                             'media_dias': round(media_dias),
                             'status': status,
