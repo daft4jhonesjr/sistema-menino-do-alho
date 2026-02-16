@@ -2548,6 +2548,24 @@ def dashboard():
     ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
      .filter(prejuizo_expr < 0, filtro_ano_venda).scalar() or 0
 
+    # Detalhes para o modal de prejuízos (vendas com lucro negativo, ordenadas da mais recente)
+    vendas_com_prejuizo = Venda.query.options(
+        joinedload(Venda.cliente), joinedload(Venda.produto)
+    ).join(Produto, Venda.produto_id == Produto.id)\
+     .filter(prejuizo_expr < 0, filtro_ano_venda)\
+     .order_by(Venda.data_venda.desc()).all()
+    detalhes_prejuizo = []
+    for v in vendas_com_prejuizo:
+        nome_cliente = v.cliente.nome_cliente if v.cliente else "Desconhecido"
+        produto_nome = v.produto.nome_produto if v.produto else "-"
+        detalhes_prejuizo.append({
+            'data': v.data_venda.strftime('%d/%m/%Y') if v.data_venda else '-',
+            'cliente': nome_cliente,
+            'produto': produto_nome,
+            'qtd': v.quantidade_venda,
+            'prejuizo_valor': abs(v.calcular_lucro())
+        })
+
     # KPI 6: Faturamento por Empresa - FILTRADO POR ANO
     total_paty = db.session.query(
         func.sum(Venda.preco_venda * Venda.quantidade_venda)
@@ -2661,6 +2679,7 @@ def dashboard():
                          total_lucro=float(total_lucro),
                          total_prejuizo=float(total_prejuizo),
                          qtd_caixas_prejuizo=int(qtd_caixas_prejuizo),
+                         detalhes_prejuizo=detalhes_prejuizo,
                          total_paty=float(total_paty),
                          total_destak=float(total_destak),
                          total_nenhum=float(total_nenhum),
