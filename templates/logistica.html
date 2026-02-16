@@ -14,12 +14,23 @@
             <a href="{{ url_for('logistica', status='ENTREGUE') }}" class="px-4 py-2 rounded-md text-sm font-medium transition-colors {% if filtro_status == 'ENTREGUE' %}bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm{% else %}text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200{% endif %}">Já Entregues</a>
         </div>
 
-        {% if filtro_status == 'PENDENTE' %}
-        <button type="button" onclick="gerarRotaMaps()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg font-medium shadow-lg shadow-emerald-500/30 flex items-center gap-2 transition-colors">
-            <i data-lucide="map-pin" class="w-5 h-5"></i>
-            Rota no Maps
-        </button>
-        {% endif %}
+        <div class="flex items-center gap-2 mt-4 md:mt-0">
+            {% if filtro_status == 'PENDENTE' %}
+            <button type="button" onclick="atualizarStatusMassa('ENTREGUE')" class="bg-emerald-100 hover:bg-emerald-200 text-emerald-800 dark:bg-emerald-900/40 dark:hover:bg-emerald-900/60 dark:text-emerald-300 px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center gap-2 transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                Entregar Selecionados
+            </button>
+            <button type="button" onclick="gerarRotaMaps()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-lg shadow-emerald-500/30 flex items-center gap-2 transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path></svg>
+                Rota no Maps
+            </button>
+            {% else %}
+            <button type="button" onclick="atualizarStatusMassa('PENDENTE')" class="bg-gray-200 hover:bg-gray-300 text-gray-800 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200 px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center gap-2 transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                Desfazer Selecionados
+            </button>
+            {% endif %}
+        </div>
     </div>
 </div>
 
@@ -28,11 +39,9 @@
         <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead class="bg-gray-50 dark:bg-gray-900/50">
                 <tr>
-                    {% if filtro_status == 'PENDENTE' %}
                     <th class="px-4 py-3 text-left w-12">
                         <input type="checkbox" id="check-all-entregas" class="rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" title="Selecionar todos">
                     </th>
-                    {% endif %}
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Data</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cliente</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Endereço</th>
@@ -44,15 +53,9 @@
             <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                 {% for e in entregas %}
                 <tr class="hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition">
-                    {% if filtro_status == 'PENDENTE' %}
                     <td class="px-4 py-4">
-                        {% if e.endereco %}
-                        <input type="checkbox" class="check-entrega rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" data-endereco="{{ e.endereco }}">
-                        {% else %}
-                        <span class="text-gray-300 dark:text-gray-600" title="Sem endereço">—</span>
-                        {% endif %}
+                        <input type="checkbox" class="check-entrega rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" value="{{ e.venda_id }}" data-endereco="{{ e.endereco }}">
                     </td>
-                    {% endif %}
                     <td class="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">{{ e.data }}</td>
                     <td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">{{ e.cliente_nome }}</td>
                     <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{{ e.endereco or '—' }}</td>
@@ -70,7 +73,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="{{ 7 if filtro_status == 'PENDENTE' else 6 }}" class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                    <td colspan="7" class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
                         {% if filtro_status == 'PENDENTE' %}
                         Nenhum pedido pendente de entrega.
                         {% else %}
@@ -128,6 +131,41 @@ function gerarRotaMaps() {
     }
 
     window.open(url, '_blank');
+}
+
+function atualizarStatusMassa(novoStatus) {
+    const selecionados = document.querySelectorAll('.check-entrega:checked');
+    const ids = Array.from(selecionados).map(cb => cb.value);
+
+    if (ids.length === 0) {
+        alert('Selecione pelo menos um pedido!');
+        return;
+    }
+
+    const textoAcao = novoStatus === 'ENTREGUE' ? 'marcar como ENTREGUE' : 'voltar para PENDENTE';
+    if (!confirm(`Tem certeza que deseja ${textoAcao} os ${ids.length} pedidos selecionados?`)) {
+        return;
+    }
+
+    fetch("{{ url_for('logistica_bulk_update') }}", {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ids: ids, status: novoStatus })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            window.location.reload();
+        } else {
+            alert('Erro: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao processar a solicitação no servidor.');
+    });
 }
 </script>
 {% endblock %}

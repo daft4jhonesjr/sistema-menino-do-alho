@@ -4231,6 +4231,34 @@ def toggle_entrega(venda_id):
     return redirect(url_for('logistica', status=status))
 
 
+@app.route('/logistica/bulk_update', methods=['POST'])
+@login_required
+def logistica_bulk_update():
+    """Atualiza status de entrega de vários pedidos de uma vez (ação em massa)."""
+    dados = request.get_json() or {}
+    ids_raw = dados.get('ids', [])
+    novo_status = dados.get('status')
+
+    if not ids_raw or not novo_status:
+        return jsonify({'success': False, 'message': 'Dados inválidos.'}), 400
+
+    try:
+        ids = [int(x) for x in ids_raw]
+    except (ValueError, TypeError):
+        return jsonify({'success': False, 'message': 'IDs inválidos.'}), 400
+    if novo_status not in ('PENDENTE', 'ENTREGUE'):
+        return jsonify({'success': False, 'message': 'Status inválido.'}), 400
+
+    try:
+        Venda.query.filter(Venda.id.in_(ids)).update({'status_entrega': novo_status}, synchronize_session=False)
+        db.session.commit()
+        flash(f'{len(ids)} pedidos atualizados com sucesso!', 'success')
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
 @app.route('/vendas/novo', methods=['GET', 'POST'])
 @login_required
 def nova_venda():
