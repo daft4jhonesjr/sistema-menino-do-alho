@@ -4176,6 +4176,35 @@ def listar_vendas():
                          filtro_vencidos=filtro_vencidos)
 
 
+@app.route('/logistica')
+@login_required
+def logistica():
+    """Roteirizador de Entregas: lista vendas pendentes agrupadas por cliente com endereço."""
+    vendas_pendentes = Venda.query.filter_by(situacao='PENDENTE').options(
+        joinedload(Venda.cliente),
+        joinedload(Venda.produto)
+    ).all()
+
+    entregas_dict = {}
+    for v in vendas_pendentes:
+        cliente = v.cliente
+        if not cliente or not cliente.endereco:
+            continue
+        if cliente.id not in entregas_dict:
+            entregas_dict[cliente.id] = {
+                'cliente_nome': cliente.nome_cliente or 'Sem Nome',
+                'endereco': cliente.endereco,
+                'produtos': [],
+                'total': 0
+            }
+        produto_nome = v.produto.nome_produto if v.produto else 'Item'
+        entregas_dict[cliente.id]['produtos'].append(f"{v.quantidade_venda}x {produto_nome}")
+        entregas_dict[cliente.id]['total'] += float(v.calcular_total())
+
+    entregas = list(entregas_dict.values())
+    return render_template('logistica.html', entregas=entregas)
+
+
 @app.route('/vendas/novo', methods=['GET', 'POST'])
 @login_required
 def nova_venda():
