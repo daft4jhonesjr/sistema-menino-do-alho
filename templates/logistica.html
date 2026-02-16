@@ -62,7 +62,7 @@
                     <td class="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">{{ e.produto }}</td>
                     <td class="px-6 py-4 text-sm font-semibold text-emerald-600 dark:text-emerald-400 text-right">{{ e.total | formato_moeda }}</td>
                     <td class="px-6 py-4 text-center">
-                        <form method="post" action="{{ url_for('toggle_entrega', venda_id=e.venda_id) }}?status={{ filtro_status }}" class="inline">
+                        <form method="post" action="{{ url_for('toggle_entrega', venda_id=e.venda_id, status=filtro_status) }}" class="inline" onsubmit="return confirm('{% if filtro_status == 'PENDENTE' %}Tem certeza que deseja marcar este pedido como ENTREGUE?{% else %}Tem certeza que deseja desfazer e voltar o pedido para PENDENTE?{% endif %}');">
                             {% if filtro_status == 'PENDENTE' %}
                             <button type="submit" class="text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 text-sm font-medium">Marcar como Entregue</button>
                             {% else %}
