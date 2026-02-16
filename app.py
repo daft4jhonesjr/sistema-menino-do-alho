@@ -2748,6 +2748,20 @@ def adicionar_caixa():
     return redirect(url_for('caixa'))
 
 
+@app.route('/caixa/deletar/<int:id>', methods=['POST'])
+@login_required
+def deletar_caixa(id):
+    try:
+        lancamento = LancamentoCaixa.query.get_or_404(id)
+        db.session.delete(lancamento)
+        db.session.commit()
+        flash('Lançamento removido do caixa.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro ao remover lançamento: {str(e)}', 'error')
+    return redirect(url_for('caixa'))
+
+
 @app.route('/caixa/importar', methods=['POST'])
 @login_required
 def importar_caixa():
@@ -2816,12 +2830,12 @@ def importar_caixa():
                     is_saida = '-' in valor_raw or 'saída' in categoria.lower() or 'saida' in categoria.lower()
                     tipo_lancamento = 'SAIDA' if is_saida else 'ENTRADA'
 
-                    v_str = valor_raw.replace('R$', '').replace('-', '').replace(' ', '')
-                    if ',' in v_str and '.' in v_str:
+                    v_str = valor_raw.replace('R$', '').replace('-', '').replace(' ', '').strip()
+                    if ',' in v_str:
                         v_str = v_str.replace('.', '').replace(',', '.')
-                    elif ',' in v_str:
-                        v_str = v_str.replace(',', '.')
-                    v_str = v_str.strip()
+                    else:
+                        if '.' in v_str and len(v_str.split('.')[-1]) == 3:
+                            v_str = v_str.replace('.', '')
                     valor = float(v_str) if v_str else 0.0
 
                     novo_lancamento = LancamentoCaixa(
