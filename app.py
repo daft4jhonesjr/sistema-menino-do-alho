@@ -45,6 +45,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import pdfplumber
 import cloudinary
 import cloudinary.uploader
+import openpyxl
 
 # #region agent log
 _log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.cursor')
@@ -5675,6 +5676,55 @@ def debug_ping():
 def service_worker():
     """Serve o Service Worker com o tipo MIME correto."""
     return send_file('static/sw.js', mimetype='application/javascript')
+
+
+@app.route('/api/backup/excel')
+@login_required
+def backup_excel():
+    """Cofre de Dados: exporta Vendas, Clientes e Produtos para Excel (.xlsx)."""
+    wb = openpyxl.Workbook()
+
+    # Aba 1: Vendas
+    ws_vendas = wb.active
+    ws_vendas.title = "Vendas"
+    ws_vendas.append(["ID", "Data", "Cliente", "Produto", "Qtd", "Preço Unit.", "Valor Total", "Custo Total", "Lucro", "Situação", "Status Entrega"])
+
+    vendas = Venda.query.options(joinedload(Venda.cliente), joinedload(Venda.produto)).all()
+    for v in vendas:
+        cliente = v.cliente
+        nome_cliente = cliente.nome_cliente if cliente else "Desconhecido"
+        data_venda = v.data_venda.strftime('%d/%m/%Y') if v.data_venda else ""
+        qtd = v.quantidade_venda or 0
+        preco_unit = float(v.preco_venda or 0)
+        valor_total = float(v.calcular_total())
+        lucro = float(v.calcular_lucro())
+        custo_total = valor_total - lucro
+        produto_nome = v.produto.nome_produto if v.produto else "-"
+
+        ws_vendas.append([v.id, data_venda, nome_cliente, produto_nome, qtd, preco_unit, valor_total, custo_total, lucro, v.situacao or "", v.status_entrega or ""])
+
+    # Aba 2: Clientes
+    ws_clientes = wb.create_sheet(title="Clientes")
+    ws_clientes.append(["ID", "Nome", "Razão Social", "CNPJ", "Cidade", "Endereço"])
+    clientes = Cliente.query.all()
+    for c in clientes:
+        ws_clientes.append([c.id, c.nome_cliente or "", c.razao_social or "", c.cnpj or "", c.cidade or "", c.endereco or ""])
+
+    # Aba 3: Estoque/Produtos
+    ws_produtos = wb.create_sheet(title="Estoque")
+    ws_produtos.append(["ID", "Nome", "Tipo", "Fornecedor", "Nacionalidade", "Tamanho", "Marca", "Preço Custo", "Qtd Entrada", "Estoque Atual", "Data Chegada"])
+    produtos = Produto.query.all()
+    for p in produtos:
+        data_chegada = p.data_chegada.strftime('%d/%m/%Y') if p.data_chegada else ""
+        ws_produtos.append([p.id, p.nome_produto or "", p.tipo or "", p.fornecedor or "", p.nacionalidade or "", p.tamanho or "", p.marca or "", float(p.preco_custo or 0), p.quantidade_entrada or 0, p.estoque_atual or 0, data_chegada])
+
+    # Salvar arquivo em memória
+    out = io.BytesIO()
+    wb.save(out)
+    out.seek(0)
+    data_atual = datetime.now().strftime('%Y-%m-%d_%Hh%M')
+    nome_arquivo = f"Cofre_Menino_Do_Alho_{data_atual}.xlsx"
+    return send_file(out, download_name=nome_arquivo, as_attachment=True, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
 
 @app.route('/debug-vincular')
