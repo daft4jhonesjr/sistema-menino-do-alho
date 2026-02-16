@@ -3738,12 +3738,19 @@ def api_vendas_por_filtro():
     if cliente_id:
         query = query.filter(Venda.cliente_id == cliente_id)
     
-    # Calcular totais ANTES de paginar (apenas para clientes)
+    # Calcular totais ANTES de paginar (para clientes e produtos)
     total_vendido = None
     total_lucro = None
+    total_qtd = None
     if cliente_id:
         # Query para calcular totais de TODAS as vendas do cliente
         vendas_totais = query.all()
+        total_vendido = sum(float(v.preco_venda * v.quantidade_venda) for v in vendas_totais)
+        total_lucro = sum(float(v.calcular_lucro()) for v in vendas_totais)
+    elif produto_id:
+        # Totais de TODAS as vendas do produto
+        vendas_totais = query.all()
+        total_qtd = sum(v.quantidade_venda for v in vendas_totais)
         total_vendido = sum(float(v.preco_venda * v.quantidade_venda) for v in vendas_totais)
         total_lucro = sum(float(v.calcular_lucro()) for v in vendas_totais)
     
@@ -3809,9 +3816,15 @@ def api_vendas_por_filtro():
         }
     }
     
-    # Adicionar totais apenas para clientes
+    # Adicionar totais para clientes e produtos
     if cliente_id and total_vendido is not None:
         resposta['totais'] = {
+            'total_vendido': total_vendido,
+            'total_lucro': total_lucro
+        }
+    elif produto_id and total_vendido is not None:
+        resposta['totais'] = {
+            'total_qtd': total_qtd or 0,
             'total_vendido': total_vendido,
             'total_lucro': total_lucro
         }

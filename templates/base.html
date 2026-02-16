@@ -261,6 +261,24 @@
                     </button>
                 </div>
                 
+                <!-- Painel de resumo financeiro (apenas para produto) -->
+                <div id="modal-vendas-totais-produto" class="mt-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 rounded-lg p-4 flex flex-col md:flex-row justify-between items-center gap-4 hidden">
+                    <div class="text-center md:text-left">
+                        <span class="block text-xs font-bold text-emerald-800 dark:text-emerald-400 uppercase tracking-wider mb-1">Total Vendido</span>
+                        <span id="modal-produto-total-qtd" class="text-xl font-black text-gray-900 dark:text-gray-100">0 un.</span>
+                    </div>
+                    <div class="hidden md:block w-px h-10 bg-emerald-200 dark:bg-emerald-800"></div>
+                    <div class="text-center">
+                        <span class="block text-xs font-bold text-emerald-800 dark:text-emerald-400 uppercase tracking-wider mb-1">Faturamento Bruto</span>
+                        <span id="modal-produto-total-valor" class="text-xl font-black text-gray-900 dark:text-gray-100">R$ 0,00</span>
+                    </div>
+                    <div class="hidden md:block w-px h-10 bg-emerald-200 dark:bg-emerald-800"></div>
+                    <div class="text-center md:text-right">
+                        <span class="block text-xs font-bold text-emerald-800 dark:text-emerald-400 uppercase tracking-wider mb-1">Lucro Realizado</span>
+                        <span id="modal-produto-total-lucro" class="text-xl font-black text-emerald-600 dark:text-emerald-400">R$ 0,00</span>
+                    </div>
+                </div>
+                
                 <p id="modal-vendas-vazio" class="text-gray-500 text-center py-6 hidden">Nenhuma venda encontrada.</p>
                 </div>
                 <div id="conteudo-fotos" class="hidden">
@@ -310,6 +328,7 @@
         document.getElementById('modal-vendas-tabela-wrapper').classList.remove('hidden');
         document.getElementById('modal-vendas-cliente-info').classList.add('hidden');
         document.getElementById('modal-vendas-totais').classList.add('hidden');
+        document.getElementById('modal-vendas-totais-produto').classList.add('hidden');
         document.getElementById('modal-vendas-carregar-mais-wrapper').classList.add('hidden');
         tbody.innerHTML = '';
         titulo.innerHTML = '<i data-lucide="loader-2" class="w-5 h-5 mr-2 animate-spin"></i>Carregando...';
@@ -391,14 +410,31 @@
                         clienteInfoDiv.classList.add('hidden');
                     }
                     
-                    // Exibir totais se disponíveis (apenas para clientes)
+                    // Exibir totais se disponíveis (clientes: cards; produtos: painel resumo)
                     var totaisDiv = document.getElementById('modal-vendas-totais');
+                    var totaisProdutoDiv = document.getElementById('modal-vendas-totais-produto');
                     if (data.totais) {
-                        document.getElementById('modal-total-vendido').textContent = formatoMoeda(data.totais.total_vendido || 0);
-                        document.getElementById('modal-total-lucro').textContent = formatoMoeda(data.totais.total_lucro || 0);
-                        totaisDiv.classList.remove('hidden');
+                        if (modalVendasTipo === 'cliente') {
+                            document.getElementById('modal-total-vendido').textContent = formatoMoeda(data.totais.total_vendido || 0);
+                            document.getElementById('modal-total-lucro').textContent = formatoMoeda(data.totais.total_lucro || 0);
+                            totaisDiv.classList.remove('hidden');
+                            totaisProdutoDiv.classList.add('hidden');
+                        } else if (modalVendasTipo === 'produto') {
+                            totaisDiv.classList.add('hidden');
+                            var qtd = data.totais.total_qtd || 0;
+                            var valor = data.totais.total_vendido || 0;
+                            var lucro = data.totais.total_lucro || 0;
+                            document.getElementById('modal-produto-total-qtd').textContent = qtd + ' un.';
+                            document.getElementById('modal-produto-total-valor').textContent = formatoMoeda(valor);
+                            document.getElementById('modal-produto-total-lucro').textContent = formatoMoeda(lucro);
+                            totaisProdutoDiv.classList.remove('hidden');
+                        } else {
+                            totaisDiv.classList.add('hidden');
+                            totaisProdutoDiv.classList.add('hidden');
+                        }
                     } else {
                         totaisDiv.classList.add('hidden');
+                        totaisProdutoDiv.classList.add('hidden');
                     }
                 }
                 
