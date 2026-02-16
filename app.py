@@ -2731,13 +2731,19 @@ def caixa():
                 'id_html': f"mes-{chave_mes}",
                 'itens': [],
                 'entradas_mes': 0.0,
-                'saidas_mes': 0.0
+                'saidas_mes': 0.0,
+                'saidas_fornecedor_mes': 0.0,
+                'saidas_pessoal_mes': 0.0
             }
         lancamentos_agrupados[chave_mes]['itens'].append(l)
         if l.tipo == 'ENTRADA':
             lancamentos_agrupados[chave_mes]['entradas_mes'] += l.valor
         else:
             lancamentos_agrupados[chave_mes]['saidas_mes'] += l.valor
+            if 'Fornecedor' in l.categoria:
+                lancamentos_agrupados[chave_mes]['saidas_fornecedor_mes'] += l.valor
+            elif 'Pessoal' in l.categoria:
+                lancamentos_agrupados[chave_mes]['saidas_pessoal_mes'] += l.valor
     for chave, grupo in lancamentos_agrupados.items():
         grupo['saldo_mes'] = grupo['entradas_mes'] - grupo['saidas_mes']
     lancamentos_agrupados = dict(sorted(lancamentos_agrupados.items(), key=lambda x: x[0], reverse=True))
