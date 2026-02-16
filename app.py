@@ -2720,8 +2720,32 @@ def caixa():
             saldos_forma[l.forma_pagamento] += l.valor
         else:
             saldos_forma[l.forma_pagamento] -= l.valor
+
+    meses_pt = {1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril', 5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto', 9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'}
+    lancamentos_agrupados = {}
+    for l in lancamentos:
+        chave_mes = l.data.strftime('%Y-%m')
+        if chave_mes not in lancamentos_agrupados:
+            lancamentos_agrupados[chave_mes] = {
+                'titulo': f"{meses_pt[l.data.month]} de {l.data.year}",
+                'id_html': f"mes-{chave_mes}",
+                'itens': [],
+                'entradas_mes': 0.0,
+                'saidas_mes': 0.0
+            }
+        lancamentos_agrupados[chave_mes]['itens'].append(l)
+        if l.tipo == 'ENTRADA':
+            lancamentos_agrupados[chave_mes]['entradas_mes'] += l.valor
+        else:
+            lancamentos_agrupados[chave_mes]['saidas_mes'] += l.valor
+    for chave, grupo in lancamentos_agrupados.items():
+        grupo['saldo_mes'] = grupo['entradas_mes'] - grupo['saidas_mes']
+    lancamentos_agrupados = dict(sorted(lancamentos_agrupados.items(), key=lambda x: x[0], reverse=True))
+    mes_atual_str = date.today().strftime('%Y-%m')
+
     return render_template('caixa.html',
-                         lancamentos=lancamentos,
+                         lancamentos_agrupados=lancamentos_agrupados,
+                         mes_atual_str=mes_atual_str,
                          total_entradas=total_entradas,
                          total_saida_pessoal=total_saida_pessoal,
                          total_saida_fornecedor=total_saida_fornecedor,

@@ -63,54 +63,77 @@
             Apagar Selecionados
         </button>
     </div>
-    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden">
-        <div class="overflow-x-auto">
-            <table class="w-full text-left whitespace-nowrap">
-                <thead class="bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 text-xs uppercase font-bold">
-                    <tr>
-                        <th class="w-12 px-6 py-4">
-                            <input type="checkbox" id="check-todos-caixa" onchange="alternarTodosCaixa(this)" class="w-4 h-4 text-emerald-600 bg-gray-100 border-gray-300 rounded focus:ring-emerald-500 dark:bg-gray-700 dark:border-gray-600">
-                        </th>
-                        <th class="px-6 py-4">Data</th>
-                        <th class="px-6 py-4">Descrição</th>
-                        <th class="px-6 py-4">Categoria</th>
-                        <th class="px-6 py-4">Conta/Pagamento</th>
-                        <th class="px-6 py-4 text-right">Valor</th>
-                        <th class="px-6 py-4 text-right">Ações</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-200 dark:divide-gray-700 text-sm">
-                    {% for l in lancamentos %}
-                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors">
-                        <td class="px-6 py-4">
-                            <input type="checkbox" name="lancamento_ids" value="{{ l.id }}" onchange="atualizarBarraMassa()" class="check-item-caixa w-4 h-4 text-emerald-600 bg-gray-100 border-gray-300 rounded focus:ring-emerald-500 dark:bg-gray-700 dark:border-gray-600">
-                        </td>
-                        <td class="px-6 py-4 text-gray-500 dark:text-gray-400">{{ l.data.strftime('%d/%m/%Y') }}</td>
-                        <td class="px-6 py-4 font-medium text-gray-900 dark:text-gray-100">{{ l.descricao }}</td>
-                        <td class="px-6 py-4 text-gray-500 dark:text-gray-400">{{ l.categoria }}</td>
-                        <td class="px-6 py-4"><span class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-xs font-medium">{{ l.forma_pagamento }}</span></td>
-                        <td class="px-6 py-4 text-right font-bold {% if l.tipo == 'ENTRADA' %}text-emerald-600 dark:text-emerald-400{% else %}text-red-600 dark:text-red-400{% endif %}">
-                            {% if l.tipo == 'ENTRADA' %}+ {% else %}- {% endif %}{{ l.valor|formato_moeda }}
-                        </td>
-                        <td class="px-6 py-4 text-right">
-                            <button type="submit" form="form-delete-{{ l.id }}" onclick="return confirm('Remover este lançamento?');" class="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 p-1" title="Excluir">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                            </button>
-                        </td>
-                    </tr>
-                    {% else %}
-                    <tr>
-                        <td colspan="7" class="px-6 py-10 text-center text-gray-500 italic">Nenhum lançamento registrado no caixa.</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+    <div class="space-y-4">
+    {% for chave, grupo in lancamentos_agrupados.items() %}
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+        <button type="button" onclick="toggleMesCaixa('{{ grupo.id_html }}', 'icon-{{ grupo.id_html }}')" class="w-full flex flex-col md:flex-row justify-between items-start md:items-center p-4 bg-gray-50 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors border-b border-gray-100 dark:border-gray-700">
+            <div class="flex items-center gap-3 mb-2 md:mb-0">
+                <svg id="icon-{{ grupo.id_html }}" class="w-5 h-5 text-gray-500 transform transition-transform duration-300 {% if chave == mes_atual_str %}rotate-180{% endif %}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                <h3 class="text-lg font-bold text-gray-800 dark:text-gray-100 uppercase tracking-wide">{{ grupo.titulo }}</h3>
+                <span class="bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs py-1 px-2 rounded-full font-bold">{{ grupo.itens|length }} itens</span>
+            </div>
+            <div class="flex gap-4 ml-8 md:ml-0 text-sm">
+                <div class="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11l5-5m0 0l5 5m-5-5v12"></path></svg>
+                    <span class="font-semibold">{{ grupo.entradas_mes|formato_moeda }}</span>
+                </div>
+                <div class="flex items-center gap-1 text-red-500 dark:text-red-400">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 13l-5 5m0 0l-5-5m5 5V6"></path></svg>
+                    <span class="font-semibold">- {{ grupo.saidas_mes|formato_moeda }}</span>
+                </div>
+                <div class="flex items-center gap-1 pl-2 border-l border-gray-300 dark:border-gray-600 {% if grupo.saldo_mes < 0 %}text-red-600 dark:text-red-400{% else %}text-emerald-600 dark:text-emerald-400{% endif %}">
+                    <span class="font-black">Saldo: {{ grupo.saldo_mes|formato_moeda }}</span>
+                </div>
+            </div>
+        </button>
+        <div id="{{ grupo.id_html }}" class="transition-all duration-300 {% if chave != mes_atual_str %}hidden{% endif %}">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left whitespace-nowrap">
+                    <thead class="bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-xs uppercase font-bold border-b border-gray-100 dark:border-gray-700">
+                        <tr>
+                            <th class="w-12 px-6 py-3">
+                                <input type="checkbox" onchange="alternarTodosGrupo(this, '{{ grupo.id_html }}')" data-grupo-id="{{ grupo.id_html }}" class="check-mestre-grupo w-4 h-4 text-emerald-600 bg-gray-100 border-gray-300 rounded focus:ring-emerald-500 dark:bg-gray-700 dark:border-gray-600">
+                            </th>
+                            <th class="px-6 py-3">Data</th>
+                            <th class="px-6 py-3">Descrição</th>
+                            <th class="px-6 py-3">Categoria</th>
+                            <th class="px-6 py-3">Conta/Pagamento</th>
+                            <th class="px-6 py-3 text-right">Valor</th>
+                            <th class="px-6 py-3 text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100 dark:divide-gray-700 text-sm">
+                        {% for l in grupo.itens %}
+                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors">
+                            <td class="px-6 py-3">
+                                <input type="checkbox" name="lancamento_ids" value="{{ l.id }}" onchange="atualizarBarraMassa()" class="check-item-caixa item-grupo-{{ grupo.id_html }} w-4 h-4 text-emerald-600 bg-gray-100 border-gray-300 rounded focus:ring-emerald-500 dark:bg-gray-700 dark:border-gray-600">
+                            </td>
+                            <td class="px-6 py-3 text-gray-500 dark:text-gray-400">{{ l.data.strftime('%d/%m/%Y') }}</td>
+                            <td class="px-6 py-3 font-medium text-gray-900 dark:text-gray-100">{{ l.descricao }}</td>
+                            <td class="px-6 py-3 text-gray-500 dark:text-gray-400"><span class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-xs">{{ l.categoria }}</span></td>
+                            <td class="px-6 py-3"><span class="bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-2 py-1 rounded text-xs font-bold">{{ l.forma_pagamento }}</span></td>
+                            <td class="px-6 py-3 text-right font-bold {% if l.tipo == 'ENTRADA' %}text-emerald-600 dark:text-emerald-400{% else %}text-red-600 dark:text-red-400{% endif %}">
+                                {% if l.tipo == 'ENTRADA' %}+ {% else %}- {% endif %}{{ l.valor|formato_moeda }}
+                            </td>
+                            <td class="px-6 py-3 text-center">
+                                <button type="button" onclick="confirmarExclusaoUnica({{ l.id }})" class="text-red-400 hover:text-red-600 dark:hover:text-red-300 transition-colors p-1" title="Apagar Lançamento">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
+    {% else %}
+    <div class="bg-white dark:bg-gray-800 p-10 rounded-xl shadow-sm text-center text-gray-500 italic border border-gray-100 dark:border-gray-700">
+        Nenhum lançamento registrado no caixa ainda.
+    </div>
+    {% endfor %}
+    </div>
 </form>
-{% for l in lancamentos %}
-<form id="form-delete-{{ l.id }}" action="{{ url_for('deletar_caixa', id=l.id) }}" method="POST" class="hidden"></form>
-{% endfor %}
 
 <!-- Modal Novo Lançamento -->
 <div id="modalNovoLancamento" class="fixed inset-0 z-50 hidden bg-black/60 flex items-center justify-center p-4" onclick="if(event.target===this) this.classList.add('hidden')">
@@ -210,10 +233,24 @@
 </div>
 
 <script>
-function alternarTodosCaixa(masterCheckbox) {
-    var checkboxes = document.querySelectorAll('.check-item-caixa');
+window.CAIXA_DELETE_URL = "{{ url_for('deletar_caixa', id=0) }}".replace('/0', '');
+function toggleMesCaixa(conteudoId, iconeId) {
+    var conteudo = document.getElementById(conteudoId);
+    var icone = document.getElementById(iconeId);
+    if (conteudo && icone) {
+        if (conteudo.classList.contains('hidden')) {
+            conteudo.classList.remove('hidden');
+            icone.classList.add('rotate-180');
+        } else {
+            conteudo.classList.add('hidden');
+            icone.classList.remove('rotate-180');
+        }
+    }
+}
+function alternarTodosGrupo(checkboxMestre, grupoId) {
+    var checkboxes = document.querySelectorAll('.item-grupo-' + grupoId);
     checkboxes.forEach(function(cb) {
-        cb.checked = masterCheckbox.checked;
+        cb.checked = checkboxMestre.checked;
     });
     atualizarBarraMassa();
 }
@@ -221,7 +258,6 @@ function atualizarBarraMassa() {
     var checkboxes = document.querySelectorAll('.check-item-caixa:checked');
     var barraAcao = document.getElementById('barra-acao-massa');
     var contador = document.getElementById('contador-selecionados');
-    var masterCheckbox = document.getElementById('check-todos-caixa');
     var totalCheckboxes = document.querySelectorAll('.check-item-caixa');
     if (contador) contador.innerText = checkboxes.length;
     if (barraAcao) {
@@ -231,10 +267,22 @@ function atualizarBarraMassa() {
             barraAcao.classList.add('hidden');
         }
     }
-    if (masterCheckbox && totalCheckboxes.length > 0) {
-        masterCheckbox.checked = checkboxes.length === totalCheckboxes.length;
-    } else if (masterCheckbox) {
-        masterCheckbox.checked = false;
+    var masters = document.querySelectorAll('.check-mestre-grupo');
+    masters.forEach(function(m) {
+        var gid = m.getAttribute('data-grupo-id');
+        if (gid) {
+            var items = document.querySelectorAll('.item-grupo-' + gid);
+            m.checked = items.length > 0 && document.querySelectorAll('.item-grupo-' + gid + ':checked').length === items.length;
+        }
+    });
+}
+function confirmarExclusaoUnica(id) {
+    if (confirm('Tem certeza que deseja apagar este lançamento? O saldo será recalculado.')) {
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = window.CAIXA_DELETE_URL + id;
+        document.body.appendChild(form);
+        form.submit();
     }
 }
 function confirmarExclusaoMassa() {
