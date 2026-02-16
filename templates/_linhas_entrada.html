@@ -34,7 +34,6 @@
         <button type="button" class="btn-editar-produto text-emerald-600 hover:text-emerald-800 mr-4 inline-flex items-center cursor-pointer bg-transparent border-none p-0"
                 data-id="{{ produto.id }}"
                 data-preco-custo="{{ produto.preco_custo }}"
-                data-preco-venda-alvo="{{ produto.preco_venda_alvo or '' }}"
                 data-quantidade-entrada="0"
                 data-data-chegada="{{ produto.data_chegada.strftime('%Y-%m-%d') }}"
                 data-tipo="{{ produto.tipo }}"

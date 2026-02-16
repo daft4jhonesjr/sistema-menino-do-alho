@@ -3251,9 +3251,6 @@ def novo_produto():
             flash(str(e), 'error')
             return render_template('produtos/formulario.html', produto=None)
 
-        # Campo "Preço de Venda Alvo" removido do formulário - sempre None
-        preco_venda_alvo = None
-
         nome_produto = gerar_nome_produto(tipo, nacionalidade, marca, data_chegada, tamanho)
         produto = Produto(
             tipo=tipo,
@@ -3263,7 +3260,7 @@ def novo_produto():
             fornecedor=fornecedor,
             caminhoneiro=caminhoneiro,
             preco_custo=Decimal(preco_custo),
-            preco_venda_alvo=preco_venda_alvo,
+            preco_venda_alvo=None,
             quantidade_entrada=quantidade_entrada,  # Quantidade original que entrou
             estoque_atual=quantidade_entrada,  # Inicia com a mesma quantidade
             data_chegada=data_chegada,
@@ -3339,9 +3336,6 @@ def editar_produto(id):
         if quantidade_entrada > 0:
             produto.estoque_atual += quantidade_entrada
         
-        # Campo "Preço de Venda Alvo" removido do formulário - manter valor existente ou None
-        # Não alterar o preco_venda_alvo ao editar (mantém o valor atual se existir)
-
         produto.tipo = tipo
         produto.nacionalidade = nacionalidade
         produto.marca = marca
@@ -3349,7 +3343,6 @@ def editar_produto(id):
         produto.fornecedor = fornecedor
         produto.caminhoneiro = caminhoneiro
         produto.preco_custo = Decimal(preco_custo)
-        # preco_venda_alvo não é mais editável via formulário - manter valor existente
         produto.data_chegada = data_chegada
         produto.nome_produto = nome_produto
 
