@@ -97,12 +97,15 @@
 })();
 
 function gerarRotaMaps() {
-    var selecionados = document.querySelectorAll('.check-entrega:checked');
-    var enderecos = [];
+    const selecionados = document.querySelectorAll('.check-entrega:checked');
+    const enderecos = [];
 
-    selecionados.forEach(function(cb) {
-        var end = cb.getAttribute('data-endereco');
-        if (end && end.trim() !== '' && enderecos.indexOf(end) === -1) {
+    const vistos = new Set();
+    selecionados.forEach(cb => {
+        const end = cb.dataset.endereco;
+        // Evita duplicidade se o cliente tiver 2 pedidos
+        if (end && end.trim() !== '' && !vistos.has(end.trim())) {
+            vistos.add(end.trim());
             enderecos.push(encodeURIComponent(end));
         }
     });
@@ -112,11 +115,16 @@ function gerarRotaMaps() {
         return;
     }
 
-    var url = 'https://www.google.com/maps/dir/?api=1';
-    url += '&destination=' + enderecos[enderecos.length - 1];
-    if (enderecos.length > 1) {
-        var waypoints = enderecos.slice(0, -1).join('|');
-        url += '&waypoints=' + waypoints;
+    // URL base oficial para rotas (Directions)
+    let url = "https://www.google.com/maps/dir/?api=1&travelmode=driving";
+    // Remove o último item do array para ser o destino final
+    const destination = enderecos.pop();
+    url += "&destination=" + destination;
+
+    // Se sobrar endereços, adiciona como paradas (waypoints) separadas por | (%7C)
+    if (enderecos.length > 0) {
+        const waypoints = enderecos.join('%7C');
+        url += "&waypoints=" + waypoints;
     }
 
     window.open(url, '_blank');
