@@ -2536,7 +2536,18 @@ def dashboard():
         func.sum((Venda.preco_venda - Produto.preco_custo) * Venda.quantidade_venda)
     ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
      .filter(filtro_ano_venda).scalar() or 0
-    
+
+    # KPI 5b: Prejuízo/Perdas - vendas com lucro negativo - FILTRADO POR ANO
+    prejuizo_expr = (Venda.preco_venda - Produto.preco_custo) * Venda.quantidade_venda
+    total_prejuizo = db.session.query(
+        func.sum(func.abs(prejuizo_expr))
+    ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
+     .filter(prejuizo_expr < 0, filtro_ano_venda).scalar() or 0
+    qtd_caixas_prejuizo = db.session.query(
+        func.sum(Venda.quantidade_venda)
+    ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
+     .filter(prejuizo_expr < 0, filtro_ano_venda).scalar() or 0
+
     # KPI 6: Faturamento por Empresa - FILTRADO POR ANO
     total_paty = db.session.query(
         func.sum(Venda.preco_venda * Venda.quantidade_venda)
@@ -2648,6 +2659,8 @@ def dashboard():
                          total_pendente=float(total_pendente),
                          total_pago=float(total_pago),
                          total_lucro=float(total_lucro),
+                         total_prejuizo=float(total_prejuizo),
+                         qtd_caixas_prejuizo=int(qtd_caixas_prejuizo),
                          total_paty=float(total_paty),
                          total_destak=float(total_destak),
                          total_nenhum=float(total_nenhum),
