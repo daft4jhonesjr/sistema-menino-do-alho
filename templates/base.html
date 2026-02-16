@@ -105,6 +105,9 @@
                 <a href="{{ url_for('listar_vendas') }}" class="px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors text-sm {% if request.endpoint in ('listar_vendas', 'nova_venda', 'editar_venda') %}bg-white/20 text-white font-medium{% else %}text-emerald-50 hover:bg-white/10 hover:text-white{% endif %}">
                     <i data-lucide="shopping-cart" class="w-4 h-4"></i>Vendas
                 </a>
+                <a href="{{ url_for('caixa') }}" class="px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors text-sm {% if request.endpoint == 'caixa' %}bg-white/20 text-white font-medium{% else %}text-emerald-50 hover:bg-white/10 hover:text-white{% endif %}">
+                    <i data-lucide="wallet" class="w-4 h-4"></i>Caixa Diário
+                </a>
                 <a href="{{ url_for('logistica') }}" class="px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors text-sm {% if request.endpoint == 'logistica' %}bg-white/20 text-white font-medium{% else %}text-emerald-50 hover:bg-white/10 hover:text-white{% endif %}">
                     <i data-lucide="truck" class="w-4 h-4"></i>Logística
                 </a>

@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+
+{% block title %}Caixa Diário - Menino do Alho{% endblock %}
+
+{% block content %}
+<div class="mb-6 flex flex-col md:flex-row justify-between items-end gap-4">
+    <div>
+        <h2 class="text-2xl font-bold text-gray-800 dark:text-gray-100">Caixa Diário</h2>
+        <p class="text-gray-500 dark:text-gray-400">Controle de entradas, saídas e contas bancárias.</p>
+    </div>
+    <button onclick="document.getElementById('modalNovoLancamento').classList.remove('hidden')" class="w-full md:w-auto bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-lg flex items-center justify-center gap-2 transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+        Novo Lançamento
+    </button>
+</div>
+
+<!-- Cartões de resumo -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm">
+        <p class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Total de Entradas</p>
+        <h3 class="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{{ total_entradas|formato_moeda }}</h3>
+    </div>
+    <div class="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm">
+        <p class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Total de Saídas</p>
+        <h3 class="text-2xl font-bold text-red-600 dark:text-red-400">- {{ total_saidas|formato_moeda }}</h3>
+    </div>
+    <div class="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm {% if saldo_atual < 0 %}border-red-500{% else %}border-emerald-500{% endif %} border-b-4">
+        <p class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Saldo Geral</p>
+        <h3 class="text-2xl font-bold {% if saldo_atual < 0 %}text-red-600 dark:text-red-400{% else %}text-gray-900 dark:text-gray-100{% endif %}">{{ saldo_atual|formato_moeda }}</h3>
+    </div>
+</div>
+
+<!-- Saldos por forma de pagamento -->
+{% if saldos_forma %}
+<div class="flex flex-wrap gap-3 mb-6">
+    {% for forma, valor in saldos_forma.items() %}
+    <div class="bg-blue-50 dark:bg-blue-900/20 px-4 py-2 rounded-lg border border-blue-100 dark:border-blue-800 flex gap-3 items-center">
+        <span class="text-xs font-bold text-blue-800 dark:text-blue-300 uppercase">{{ forma }}:</span>
+        <span class="text-sm font-black text-blue-900 dark:text-blue-100">{{ valor|formato_moeda }}</span>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Tabela de lançamentos -->
+<div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden">
+    <div class="overflow-x-auto">
+        <table class="w-full text-left whitespace-nowrap">
+            <thead class="bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 text-xs uppercase font-bold">
+                <tr>
+                    <th class="px-6 py-4">Data</th>
+                    <th class="px-6 py-4">Descrição</th>
+                    <th class="px-6 py-4">Categoria</th>
+                    <th class="px-6 py-4">Conta/Pagamento</th>
+                    <th class="px-6 py-4 text-right">Valor</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200 dark:divide-gray-700 text-sm">
+                {% for l in lancamentos %}
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors">
+                    <td class="px-6 py-4 text-gray-500 dark:text-gray-400">{{ l.data.strftime('%d/%m/%Y') }}</td>
+                    <td class="px-6 py-4 font-medium text-gray-900 dark:text-gray-100">{{ l.descricao }}</td>
+                    <td class="px-6 py-4 text-gray-500 dark:text-gray-400">{{ l.categoria }}</td>
+                    <td class="px-6 py-4"><span class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-xs font-medium">{{ l.forma_pagamento }}</span></td>
+                    <td class="px-6 py-4 text-right font-bold {% if l.tipo == 'ENTRADA' %}text-emerald-600 dark:text-emerald-400{% else %}text-red-600 dark:text-red-400{% endif %}">
+                        {% if l.tipo == 'ENTRADA' %}+ {% else %}- {% endif %}{{ l.valor|formato_moeda }}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" class="px-6 py-10 text-center text-gray-500 italic">Nenhum lançamento registrado no caixa.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal Novo Lançamento -->
+<div id="modalNovoLancamento" class="fixed inset-0 z-50 hidden bg-black/60 flex items-center justify-center p-4" onclick="if(event.target===this) this.classList.add('hidden')">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-lg overflow-hidden" onclick="event.stopPropagation()">
+        <div class="flex justify-between items-center p-5 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+            <h3 class="text-lg font-bold text-gray-800 dark:text-gray-100">Novo Lançamento no Caixa</h3>
+            <button type="button" onclick="document.getElementById('modalNovoLancamento').classList.add('hidden')" class="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors p-1">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        <form action="{{ url_for('adicionar_caixa') }}" method="POST" class="p-5 space-y-4">
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Data</label>
+                    <input type="date" name="data" value="{{ data_hoje }}" required class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tipo</label>
+                    <select name="tipo" required class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
+                        <option value="ENTRADA">Entrada (Receita)</option>
+                        <option value="SAIDA">Saída (Despesa)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Descrição (Ex: Pagamento Cliente X, Saída Uber)</label>
+                <input type="text" name="descricao" required class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500" placeholder="Ex: Pagamento Cliente X, Saída Uber">
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Categoria</label>
+                    <select name="categoria" required class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
+                        <option value="Entrada Cliente">Entrada Cliente</option>
+                        <option value="Fundo de Caixa">Fundo de Caixa</option>
+                        <option value="Saída Pessoal">Saída Pessoal</option>
+                        <option value="Saída Fornecedor">Saída Fornecedor</option>
+                        <option value="Despesa Operacional">Despesa Operacional (Gasolina, etc)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Forma / Conta</label>
+                    <select name="forma_pagamento" required class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
+                        <option value="Dinheiro">Dinheiro (Espécie)</option>
+                        <option value="Pix">Pix</option>
+                        <option value="Transferência">Transferência</option>
+                        <option value="Cheque">Cheque</option>
+                    </select>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Valor (R$)</label>
+                <input type="text" name="valor" placeholder="0,00" required class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-lg font-bold">
+            </div>
+
+            <div class="pt-4 flex justify-end gap-3">
+                <button type="button" onclick="document.getElementById('modalNovoLancamento').classList.add('hidden')" class="px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">Cancelar</button>
+                <button type="submit" class="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg shadow-sm transition-colors">Salvar Lançamento</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -4,7 +4,7 @@ from flask_compress import Compress
 from flask_caching import Cache
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from models import db, Cliente, Produto, ProdutoFoto, Venda, Usuario, Configuracao, TipoProduto, Nacionalidade, Tamanho, Fornecedor, EmpresaFaturadora, SituacaoVenda, Documento
+from models import db, Cliente, Produto, ProdutoFoto, Venda, Usuario, Configuracao, TipoProduto, Nacionalidade, Tamanho, Fornecedor, EmpresaFaturadora, SituacaoVenda, Documento, LancamentoCaixa
 from config import Config
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -2699,6 +2699,53 @@ def dashboard():
                          data_caixas=data_caixas,
                          detalhamento_mensal=detalhamento_mensal,
                          alertas_recompra=alertas_recompra)
+
+
+# ========== MÓDULO CAIXA (LIVRO CAIXA) ==========
+
+@app.route('/caixa')
+@login_required
+def caixa():
+    lancamentos = LancamentoCaixa.query.order_by(LancamentoCaixa.data.desc(), LancamentoCaixa.id.desc()).all()
+    total_entradas = sum(l.valor for l in lancamentos if l.tipo == 'ENTRADA')
+    total_saidas = sum(l.valor for l in lancamentos if l.tipo == 'SAIDA')
+    saldo_atual = total_entradas - total_saidas
+    saldos_forma = {}
+    for l in lancamentos:
+        if l.forma_pagamento not in saldos_forma:
+            saldos_forma[l.forma_pagamento] = 0
+        if l.tipo == 'ENTRADA':
+            saldos_forma[l.forma_pagamento] += l.valor
+        else:
+            saldos_forma[l.forma_pagamento] -= l.valor
+    return render_template('caixa.html',
+                         lancamentos=lancamentos,
+                         total_entradas=total_entradas,
+                         total_saidas=total_saidas,
+                         saldo_atual=saldo_atual,
+                         saldos_forma=saldos_forma,
+                         data_hoje=date.today().strftime('%Y-%m-%d'))
+
+
+@app.route('/caixa/adicionar', methods=['POST'])
+@login_required
+def adicionar_caixa():
+    nova_data = datetime.strptime(request.form.get('data'), '%Y-%m-%d').date()
+    valor_str = request.form.get('valor', '0').replace('.', '').replace(',', '.')
+    novo_valor = float(valor_str)
+    novo_lancamento = LancamentoCaixa(
+        data=nova_data,
+        descricao=request.form.get('descricao', '').strip(),
+        tipo=request.form.get('tipo'),
+        categoria=request.form.get('categoria'),
+        forma_pagamento=request.form.get('forma_pagamento'),
+        valor=novo_valor,
+        usuario_id=current_user.id
+    )
+    db.session.add(novo_lancamento)
+    db.session.commit()
+    flash('Lançamento adicionado com sucesso!', 'success')
+    return redirect(url_for('caixa'))
 
 
 # ========== MÓDULO CLIENTES ==========

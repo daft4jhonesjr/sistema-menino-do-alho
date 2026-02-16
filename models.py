@@ -182,6 +182,23 @@ class Configuracao(db.Model):
         return f'<Configuracao id={self.id}>'
 
 
+class LancamentoCaixa(db.Model):
+    """Livro Caixa: entradas e saídas financeiras com categoria e forma de pagamento."""
+    __tablename__ = 'lancamentos_caixa'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    data = db.Column(db.Date, nullable=False)
+    descricao = db.Column(db.String(200), nullable=False)
+    tipo = db.Column(db.String(20), nullable=False)  # 'ENTRADA' ou 'SAIDA'
+    categoria = db.Column(db.String(50), nullable=False)
+    forma_pagamento = db.Column(db.String(50), nullable=False)
+    valor = db.Column(db.Float, nullable=False)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)
+
+    def __repr__(self):
+        return f'<LancamentoCaixa {self.id} - {self.tipo} {self.valor}>'
+
+
 class Documento(db.Model):
     __tablename__ = 'documentos'
     
