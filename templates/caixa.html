@@ -40,18 +40,6 @@
     </div>
 </div>
 
-<!-- Saldos por forma de pagamento -->
-{% if saldos_forma %}
-<div class="flex flex-wrap gap-3 mb-6">
-    {% for forma, valor in saldos_forma.items() %}
-    <div class="bg-blue-50 dark:bg-blue-900/20 px-4 py-2 rounded-lg border border-blue-100 dark:border-blue-800 flex gap-3 items-center">
-        <span class="text-xs font-bold text-blue-800 dark:text-blue-300 uppercase">{{ forma }}:</span>
-        <span class="text-sm font-black text-blue-900 dark:text-blue-100">{{ valor|formato_moeda }}</span>
-    </div>
-    {% endfor %}
-</div>
-{% endif %}
-
 <!-- Tabela de lançamentos -->
 <form action="{{ url_for('deletar_massa_caixa') }}" method="POST" id="form-excluir-massa">
     <div id="barra-acao-massa" class="hidden mb-4 flex items-center justify-between bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3 rounded-lg">

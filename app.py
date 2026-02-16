@@ -2712,15 +2712,6 @@ def caixa():
     total_saida_fornecedor = sum(l.valor for l in lancamentos if l.tipo == 'SAIDA' and l.categoria and 'Fornecedor' in l.categoria)
     total_saidas = sum(l.valor for l in lancamentos if l.tipo == 'SAIDA')
     saldo_atual = total_entradas - total_saidas
-    saldos_forma = {}
-    for l in lancamentos:
-        if l.forma_pagamento not in saldos_forma:
-            saldos_forma[l.forma_pagamento] = 0
-        if l.tipo == 'ENTRADA':
-            saldos_forma[l.forma_pagamento] += l.valor
-        else:
-            saldos_forma[l.forma_pagamento] -= l.valor
-
     meses_pt = {1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril', 5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto', 9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'}
     lancamentos_agrupados = {}
     for l in lancamentos:
@@ -2766,7 +2757,6 @@ def caixa():
                          total_saida_pessoal=total_saida_pessoal,
                          total_saida_fornecedor=total_saida_fornecedor,
                          saldo_atual=saldo_atual,
-                         saldos_forma=saldos_forma,
                          data_hoje=date.today().strftime('%Y-%m-%d'))
 
 
