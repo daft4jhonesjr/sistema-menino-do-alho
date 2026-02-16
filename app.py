@@ -2762,6 +2762,24 @@ def deletar_caixa(id):
     return redirect(url_for('caixa'))
 
 
+@app.route('/caixa/deletar_massa', methods=['POST'])
+@login_required
+def deletar_massa_caixa():
+    ids = request.form.getlist('lancamento_ids')
+    if not ids:
+        flash('Nenhum lançamento selecionado para exclusão.', 'error')
+        return redirect(url_for('caixa'))
+    try:
+        ids_int = [int(x) for x in ids]
+        LancamentoCaixa.query.filter(LancamentoCaixa.id.in_(ids_int)).delete(synchronize_session=False)
+        db.session.commit()
+        flash(f'{len(ids_int)} lançamentos apagados com sucesso!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro ao excluir lançamentos: {str(e)}', 'error')
+    return redirect(url_for('caixa'))
+
+
 @app.route('/caixa/importar', methods=['POST'])
 @login_required
 def importar_caixa():

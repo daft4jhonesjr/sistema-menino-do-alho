@@ -49,46 +49,64 @@
 {% endif %}
 
 <!-- Tabela de lançamentos -->
-<div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden">
-    <div class="overflow-x-auto">
-        <table class="w-full text-left whitespace-nowrap">
-            <thead class="bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 text-xs uppercase font-bold">
-                <tr>
-                    <th class="px-6 py-4">Data</th>
-                    <th class="px-6 py-4">Descrição</th>
-                    <th class="px-6 py-4">Categoria</th>
-                    <th class="px-6 py-4">Conta/Pagamento</th>
-                    <th class="px-6 py-4 text-right">Valor</th>
-                    <th class="px-6 py-4 text-right">Ações</th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-200 dark:divide-gray-700 text-sm">
-                {% for l in lancamentos %}
-                <tr class="hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors">
-                    <td class="px-6 py-4 text-gray-500 dark:text-gray-400">{{ l.data.strftime('%d/%m/%Y') }}</td>
-                    <td class="px-6 py-4 font-medium text-gray-900 dark:text-gray-100">{{ l.descricao }}</td>
-                    <td class="px-6 py-4 text-gray-500 dark:text-gray-400">{{ l.categoria }}</td>
-                    <td class="px-6 py-4"><span class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-xs font-medium">{{ l.forma_pagamento }}</span></td>
-                    <td class="px-6 py-4 text-right font-bold {% if l.tipo == 'ENTRADA' %}text-emerald-600 dark:text-emerald-400{% else %}text-red-600 dark:text-red-400{% endif %}">
-                        {% if l.tipo == 'ENTRADA' %}+ {% else %}- {% endif %}{{ l.valor|formato_moeda }}
-                    </td>
-                    <td class="px-6 py-4 text-right">
-                        <form action="{{ url_for('deletar_caixa', id=l.id) }}" method="POST" class="inline" onsubmit="return confirm('Remover este lançamento?');">
-                            <button type="submit" class="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 p-1" title="Excluir">
+<form action="{{ url_for('deletar_massa_caixa') }}" method="POST" id="form-excluir-massa">
+    <div id="barra-acao-massa" class="hidden mb-4 flex items-center justify-between bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3 rounded-lg">
+        <span class="text-red-700 dark:text-red-400 font-medium text-sm">
+            <span id="contador-selecionados" class="font-bold">0</span> lançamento(s) selecionado(s)
+        </span>
+        <button type="button" onclick="confirmarExclusaoMassa()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-sm flex items-center gap-2 transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+            Apagar Selecionados
+        </button>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left whitespace-nowrap">
+                <thead class="bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 text-xs uppercase font-bold">
+                    <tr>
+                        <th class="w-12 px-6 py-4">
+                            <input type="checkbox" id="check-todos-caixa" onchange="alternarTodosCaixa(this)" class="w-4 h-4 text-emerald-600 bg-gray-100 border-gray-300 rounded focus:ring-emerald-500 dark:bg-gray-700 dark:border-gray-600">
+                        </th>
+                        <th class="px-6 py-4">Data</th>
+                        <th class="px-6 py-4">Descrição</th>
+                        <th class="px-6 py-4">Categoria</th>
+                        <th class="px-6 py-4">Conta/Pagamento</th>
+                        <th class="px-6 py-4 text-right">Valor</th>
+                        <th class="px-6 py-4 text-right">Ações</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700 text-sm">
+                    {% for l in lancamentos %}
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors">
+                        <td class="px-6 py-4">
+                            <input type="checkbox" name="lancamento_ids" value="{{ l.id }}" onchange="atualizarBarraMassa()" class="check-item-caixa w-4 h-4 text-emerald-600 bg-gray-100 border-gray-300 rounded focus:ring-emerald-500 dark:bg-gray-700 dark:border-gray-600">
+                        </td>
+                        <td class="px-6 py-4 text-gray-500 dark:text-gray-400">{{ l.data.strftime('%d/%m/%Y') }}</td>
+                        <td class="px-6 py-4 font-medium text-gray-900 dark:text-gray-100">{{ l.descricao }}</td>
+                        <td class="px-6 py-4 text-gray-500 dark:text-gray-400">{{ l.categoria }}</td>
+                        <td class="px-6 py-4"><span class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-xs font-medium">{{ l.forma_pagamento }}</span></td>
+                        <td class="px-6 py-4 text-right font-bold {% if l.tipo == 'ENTRADA' %}text-emerald-600 dark:text-emerald-400{% else %}text-red-600 dark:text-red-400{% endif %}">
+                            {% if l.tipo == 'ENTRADA' %}+ {% else %}- {% endif %}{{ l.valor|formato_moeda }}
+                        </td>
+                        <td class="px-6 py-4 text-right">
+                            <button type="submit" form="form-delete-{{ l.id }}" onclick="return confirm('Remover este lançamento?');" class="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 p-1" title="Excluir">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                             </button>
-                        </form>
-                    </td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="6" class="px-6 py-10 text-center text-gray-500 italic">Nenhum lançamento registrado no caixa.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="px-6 py-10 text-center text-gray-500 italic">Nenhum lançamento registrado no caixa.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
-</div>
+</form>
+{% for l in lancamentos %}
+<form id="form-delete-{{ l.id }}" action="{{ url_for('deletar_caixa', id=l.id) }}" method="POST" class="hidden"></form>
+{% endfor %}
 
 <!-- Modal Novo Lançamento -->
 <div id="modalNovoLancamento" class="fixed inset-0 z-50 hidden bg-black/60 flex items-center justify-center p-4" onclick="if(event.target===this) this.classList.add('hidden')">
@@ -186,4 +204,40 @@
         </form>
     </div>
 </div>
+
+<script>
+function alternarTodosCaixa(masterCheckbox) {
+    var checkboxes = document.querySelectorAll('.check-item-caixa');
+    checkboxes.forEach(function(cb) {
+        cb.checked = masterCheckbox.checked;
+    });
+    atualizarBarraMassa();
+}
+function atualizarBarraMassa() {
+    var checkboxes = document.querySelectorAll('.check-item-caixa:checked');
+    var barraAcao = document.getElementById('barra-acao-massa');
+    var contador = document.getElementById('contador-selecionados');
+    var masterCheckbox = document.getElementById('check-todos-caixa');
+    var totalCheckboxes = document.querySelectorAll('.check-item-caixa');
+    if (contador) contador.innerText = checkboxes.length;
+    if (barraAcao) {
+        if (checkboxes.length > 0) {
+            barraAcao.classList.remove('hidden');
+        } else {
+            barraAcao.classList.add('hidden');
+        }
+    }
+    if (masterCheckbox && totalCheckboxes.length > 0) {
+        masterCheckbox.checked = checkboxes.length === totalCheckboxes.length;
+    } else if (masterCheckbox) {
+        masterCheckbox.checked = false;
+    }
+}
+function confirmarExclusaoMassa() {
+    var qtd = document.querySelectorAll('.check-item-caixa:checked').length;
+    if (confirm('Atenção: Você está prestes a apagar definitivamente ' + qtd + ' lançamento(s) do caixa. O saldo será recalculado. Deseja continuar?')) {
+        document.getElementById('form-excluir-massa').submit();
+    }
+}
+</script>
 {% endblock %}
