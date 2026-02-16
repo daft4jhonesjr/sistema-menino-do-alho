@@ -2760,7 +2760,8 @@ def importar_caixa():
         flash('Nenhum arquivo selecionado.', 'error')
         return redirect(url_for('caixa'))
 
-    if arquivo and arquivo.filename.lower().endswith('.csv'):
+    fn = arquivo.filename.lower()
+    if arquivo and (fn.endswith('.csv') or fn.endswith('.tsv') or fn.endswith('.txt')):
         try:
             raw = arquivo.stream.read()
             try:
@@ -2770,28 +2771,37 @@ def importar_caixa():
 
             stream = io.StringIO(conteudo, newline=None)
             primeira_linha = stream.readline()
-            delimitador = ';' if ';' in primeira_linha else ','
+            if '\t' in primeira_linha:
+                delimitador = '\t'
+            elif ';' in primeira_linha:
+                delimitador = ';'
+            else:
+                delimitador = ','
             stream.seek(0)
 
             leitor = csv.reader(stream, delimiter=delimitador)
-            next(leitor, None)
-
             linhas_sucesso = 0
             erros = []
 
-            for i, linha in enumerate(leitor, start=2):
+            for i, linha in enumerate(leitor, start=1):
                 if not linha or all(c.strip() == '' for c in linha):
                     continue
 
-                if len(linha) < 6:
-                    erros.append(f"Linha {i}: Faltam colunas (tem {len(linha)}, precisa de 6).")
+                if 'data' in str(linha).lower() or 'valor' in str(linha).lower() or (linha and 'descri' in str(linha[0]).lower()):
+                    continue
+
+                if len(linha) < 5:
+                    erros.append(f"Linha {i}: Faltam colunas. Formato esperado de 5 colunas.")
                     continue
 
                 try:
-                    data_str = str(linha[0]).strip()
-                    if not data_str:
-                        erros.append(f"Linha {i}: Data vazia.")
-                        continue
+                    # Formato: [0] Descrição | [1] Valor (-R$) | [2] Data | [3] Categoria | [4] Forma
+                    descricao = str(linha[0]).strip()
+                    valor_raw = str(linha[1]).strip()
+                    data_str = str(linha[2]).strip()
+                    categoria = str(linha[3]).strip() or 'Outros'
+                    forma_pagamento = str(linha[4]).strip() or 'Dinheiro'
+
                     s = data_str.split()[0]
                     for fmt in ('%d/%m/%Y', '%Y-%m-%d', '%d-%m-%Y'):
                         try:
@@ -2803,26 +2813,21 @@ def importar_caixa():
                         erros.append(f"Linha {i}: Data inválida '{data_str}'.")
                         continue
 
-                    descricao = str(linha[1]).strip()
-                    tipo = str(linha[2]).strip().upper()
-                    categoria = str(linha[3]).strip() or 'Outros'
-                    forma_pagamento = str(linha[4]).strip() or 'Dinheiro'
+                    is_saida = '-' in valor_raw or 'saída' in categoria.lower() or 'saida' in categoria.lower()
+                    tipo_lancamento = 'SAIDA' if is_saida else 'ENTRADA'
 
-                    valor_str = str(linha[5]).replace('R$', '').replace(' ', '')
-                    if ',' in valor_str and '.' in valor_str:
-                        valor_str = valor_str.replace('.', '').replace(',', '.')
-                    elif ',' in valor_str:
-                        valor_str = valor_str.replace(',', '.')
-                    valor_str = valor_str.strip()
-                    if not valor_str:
-                        erros.append(f"Linha {i}: Valor vazio.")
-                        continue
-                    valor = float(valor_str)
+                    v_str = valor_raw.replace('R$', '').replace('-', '').replace(' ', '')
+                    if ',' in v_str and '.' in v_str:
+                        v_str = v_str.replace('.', '').replace(',', '.')
+                    elif ',' in v_str:
+                        v_str = v_str.replace(',', '.')
+                    v_str = v_str.strip()
+                    valor = float(v_str) if v_str else 0.0
 
                     novo_lancamento = LancamentoCaixa(
                         data=data_lanc,
                         descricao=descricao,
-                        tipo='ENTRADA' if 'ENTRADA' in tipo else 'SAIDA',
+                        tipo=tipo_lancamento,
                         categoria=categoria,
                         forma_pagamento=forma_pagamento,
                         valor=abs(valor),
@@ -2837,25 +2842,22 @@ def importar_caixa():
 
             if linhas_sucesso > 0:
                 db.session.commit()
-                mensagem = f'{linhas_sucesso} lançamentos importados com sucesso!'
+                msg = f'{linhas_sucesso} lançamentos importados com sucesso!'
                 if erros:
-                    mensagem += f' ({len(erros)} linhas omitidas por erro.)'
-                    flash(mensagem, 'success')
-                    flash('Erros: ' + '; '.join(erros[:5]) + ('...' if len(erros) > 5 else ''), 'warning')
-                else:
-                    flash(mensagem, 'success')
+                    msg += f' (Ignoradas {len(erros)} linhas inválidas).'
+                flash(msg, 'success')
             else:
                 db.session.rollback()
-                msg_erro = erros[0] if erros else "Formato de colunas inválido. Verifique se o CSV tem 6 colunas: Data, Descrição, Tipo, Categoria, Conta, Valor."
-                flash(f'Nenhum dado importado. {msg_erro}', 'error')
+                msg_erro = erros[0] if erros else "Formato de colunas inválido. Esperado: Descrição, Valor, Data, Categoria, Forma (5 colunas)."
+                flash(f'Falha na importação. {msg_erro}', 'error')
                 if len(erros) > 1:
                     flash('Detalhes: ' + '; '.join(erros[:3]) + ('...' if len(erros) > 3 else ''), 'warning')
 
         except Exception as e:
             db.session.rollback()
-            flash(f'Erro fatal ao ler o CSV: {str(e)}', 'error')
+            flash(f'Erro fatal ao processar o arquivo: {str(e)}', 'error')
     else:
-        flash('Por favor, envie um arquivo .csv válido.', 'error')
+        flash('Por favor, envie um arquivo .csv, .tsv ou .txt válido.', 'error')
 
     return redirect(url_for('caixa'))
 
