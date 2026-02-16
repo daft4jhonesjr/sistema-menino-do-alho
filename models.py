@@ -133,6 +133,7 @@ class Venda(db.Model):
     data_venda = db.Column(db.Date, default=date.today, nullable=False, index=True)  # Índice para filtros e ordenação por data
     empresa_faturadora = db.Column(db.String(20), nullable=False)
     situacao = db.Column(db.String(20), nullable=False, default='PENDENTE')
+    status_entrega = db.Column(db.String(50), default='PENDENTE')  # Status logístico (independente do financeiro)
     caminho_boleto = db.Column(db.String(500), nullable=True)
     caminho_nf = db.Column(db.String(500), nullable=True)
     data_vencimento = db.Column(db.Date, nullable=True)  # vencimento do boleto vinculado (extraído do PDF)

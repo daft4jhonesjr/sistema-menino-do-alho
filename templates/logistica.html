@@ -3,15 +3,24 @@
 {% block title %}Logística - Menino do Alho{% endblock %}
 
 {% block content %}
-<div class="mb-8 flex justify-between items-end flex-wrap gap-4">
+<div class="mb-6 flex flex-col md:flex-row md:justify-between md:items-end gap-4">
     <div>
-        <h2 class="text-2xl font-bold text-emerald-700 dark:text-emerald-400 mb-2">Logística e Entregas</h2>
-        <p class="text-gray-500 dark:text-gray-400">Selecione os clientes para gerar a rota otimizada de hoje.</p>
+        <h2 class="text-2xl font-bold text-gray-800 dark:text-gray-100">Logística e Entregas</h2>
+        <p class="text-gray-500 dark:text-gray-400">Gerencie o envio dos pedidos e gere rotas otimizadas.</p>
     </div>
-    <button type="button" onclick="gerarRotaMaps()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-lg font-medium shadow-lg shadow-emerald-500/30 flex items-center gap-2 transition-colors">
-        <i data-lucide="map-pin" class="w-5 h-5"></i>
-        Gerar Rota no Maps
-    </button>
+    <div class="flex items-center gap-3">
+        <div class="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1 border border-gray-200 dark:border-gray-700">
+            <a href="{{ url_for('logistica', status='PENDENTE') }}" class="px-4 py-2 rounded-md text-sm font-medium transition-colors {% if filtro_status == 'PENDENTE' %}bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm{% else %}text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200{% endif %}">Pendentes</a>
+            <a href="{{ url_for('logistica', status='ENTREGUE') }}" class="px-4 py-2 rounded-md text-sm font-medium transition-colors {% if filtro_status == 'ENTREGUE' %}bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm{% else %}text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200{% endif %}">Já Entregues</a>
+        </div>
+
+        {% if filtro_status == 'PENDENTE' %}
+        <button type="button" onclick="gerarRotaMaps()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg font-medium shadow-lg shadow-emerald-500/30 flex items-center gap-2 transition-colors">
+            <i data-lucide="map-pin" class="w-5 h-5"></i>
+            Rota no Maps
+        </button>
+        {% endif %}
+    </div>
 </div>
 
 <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-hidden">
@@ -19,36 +28,54 @@
         <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead class="bg-gray-50 dark:bg-gray-900/50">
                 <tr>
+                    {% if filtro_status == 'PENDENTE' %}
                     <th class="px-4 py-3 text-left w-12">
                         <input type="checkbox" id="check-all-entregas" class="rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" title="Selecionar todos">
                     </th>
+                    {% endif %}
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Data</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cliente</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Endereço</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Produtos</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Produto</th>
                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Total</th>
+                    <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Ações</th>
                 </tr>
             </thead>
             <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {% for entrega in entregas %}
+                {% for e in entregas %}
                 <tr class="hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition">
+                    {% if filtro_status == 'PENDENTE' %}
                     <td class="px-4 py-4">
-                        <input type="checkbox" class="check-entrega rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" data-endereco="{{ entrega.endereco }}">
+                        {% if e.endereco %}
+                        <input type="checkbox" class="check-entrega rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" data-endereco="{{ e.endereco }}">
+                        {% else %}
+                        <span class="text-gray-300 dark:text-gray-600" title="Sem endereço">—</span>
+                        {% endif %}
                     </td>
-                    <td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">{{ entrega.cliente_nome }}</td>
-                    <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{{ entrega.endereco }}</td>
-                    <td class="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
-                        <ul class="list-disc list-inside space-y-0.5">
-                            {% for p in entrega.produtos %}
-                            <li>{{ p }}</li>
-                            {% endfor %}
-                        </ul>
+                    {% endif %}
+                    <td class="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">{{ e.data }}</td>
+                    <td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">{{ e.cliente_nome }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{{ e.endereco or '—' }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">{{ e.produto }}</td>
+                    <td class="px-6 py-4 text-sm font-semibold text-emerald-600 dark:text-emerald-400 text-right">{{ e.total | formato_moeda }}</td>
+                    <td class="px-6 py-4 text-center">
+                        <form method="post" action="{{ url_for('toggle_entrega', venda_id=e.venda_id) }}?status={{ filtro_status }}" class="inline">
+                            {% if filtro_status == 'PENDENTE' %}
+                            <button type="submit" class="text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 text-sm font-medium">Marcar como Entregue</button>
+                            {% else %}
+                            <button type="submit" class="text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300 text-sm font-medium">Reverter</button>
+                            {% endif %}
+                        </form>
                     </td>
-                    <td class="px-6 py-4 text-sm font-semibold text-emerald-600 dark:text-emerald-400 text-right">{{ entrega.total | formato_moeda }}</td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="5" class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
-                        Nenhuma entrega pendente com endereço cadastrado. Cadastre o endereço dos clientes para gerar rotas.
+                    <td colspan="{{ 7 if filtro_status == 'PENDENTE' else 6 }}" class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                        {% if filtro_status == 'PENDENTE' %}
+                        Nenhum pedido pendente de entrega.
+                        {% else %}
+                        Nenhum pedido entregue.
+                        {% endif %}
                     </td>
                 </tr>
                 {% endfor %}
@@ -81,17 +108,15 @@ function gerarRotaMaps() {
     });
 
     if (enderecos.length === 0) {
-        alert('Selecione pelo menos um cliente para gerar a rota!');
+        alert('Selecione pelo menos um pedido com endereço válido para gerar a rota!');
         return;
     }
 
     var url = 'https://www.google.com/maps/dir/?api=1';
-    if (enderecos.length === 1) {
-        url += '&destination=' + enderecos[0];
-    } else {
-        var destination = enderecos.pop();
-        var waypoints = enderecos.join('|');
-        url += '&destination=' + destination + '&waypoints=' + waypoints;
+    url += '&destination=' + enderecos[enderecos.length - 1];
+    if (enderecos.length > 1) {
+        var waypoints = enderecos.slice(0, -1).join('|');
+        url += '&waypoints=' + waypoints;
     }
 
     window.open(url, '_blank');

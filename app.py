@@ -2125,6 +2125,17 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             db.session.commit()
         except (OperationalError, Exception):
             db.session.rollback()
+        # Migração: status_entrega em vendas (status logístico independente do financeiro)
+        try:
+            db.session.execute(text("ALTER TABLE vendas ADD COLUMN status_entrega VARCHAR(50) DEFAULT 'PENDENTE'"))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
+        try:
+            db.session.execute(text("UPDATE vendas SET status_entrega = 'PENDENTE' WHERE status_entrega IS NULL"))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
         # Jhones sempre admin; criar se não existir
         u = Usuario.query.filter_by(username='Jhones').first()
         if not u:
@@ -4179,30 +4190,45 @@ def listar_vendas():
 @app.route('/logistica')
 @login_required
 def logistica():
-    """Roteirizador de Entregas: lista vendas pendentes agrupadas por cliente com endereço."""
-    vendas_pendentes = Venda.query.filter_by(situacao='PENDENTE').options(
+    """Roteirizador de Entregas: lista cada venda individualmente por status de entrega."""
+    filtro_status = request.args.get('status', 'PENDENTE')
+    if filtro_status not in ('PENDENTE', 'ENTREGUE'):
+        filtro_status = 'PENDENTE'
+
+    vendas = Venda.query.filter_by(status_entrega=filtro_status).options(
         joinedload(Venda.cliente),
         joinedload(Venda.produto)
-    ).all()
+    ).order_by(Venda.data_venda.desc()).all()
 
-    entregas_dict = {}
-    for v in vendas_pendentes:
+    entregas = []
+    for v in vendas:
         cliente = v.cliente
-        if not cliente or not cliente.endereco:
+        if not cliente:
             continue
-        if cliente.id not in entregas_dict:
-            entregas_dict[cliente.id] = {
-                'cliente_nome': cliente.nome_cliente or 'Sem Nome',
-                'endereco': cliente.endereco,
-                'produtos': [],
-                'total': 0
-            }
         produto_nome = v.produto.nome_produto if v.produto else 'Item'
-        entregas_dict[cliente.id]['produtos'].append(f"{v.quantidade_venda}x {produto_nome}")
-        entregas_dict[cliente.id]['total'] += float(v.calcular_total())
+        entregas.append({
+            'venda_id': v.id,
+            'data': v.data_venda.strftime('%d/%m/%Y'),
+            'cliente_nome': cliente.nome_cliente or 'Sem Nome',
+            'endereco': cliente.endereco or '',
+            'produto': f"{v.quantidade_venda}x {produto_nome}",
+            'total': float(v.calcular_total()),
+            'status_entrega': v.status_entrega or 'PENDENTE'
+        })
 
-    entregas = list(entregas_dict.values())
-    return render_template('logistica.html', entregas=entregas)
+    return render_template('logistica.html', entregas=entregas, filtro_status=filtro_status)
+
+
+@app.route('/logistica/toggle/<int:venda_id>', methods=['POST'])
+@login_required
+def toggle_entrega(venda_id):
+    """Alterna o status de entrega entre PENDENTE e ENTREGUE."""
+    venda = Venda.query.get_or_404(venda_id)
+    venda.status_entrega = 'ENTREGUE' if (venda.status_entrega or 'PENDENTE') == 'PENDENTE' else 'PENDENTE'
+    db.session.commit()
+    flash('Status de entrega atualizado com sucesso!', 'success')
+    status = request.form.get('status', request.args.get('status', 'PENDENTE'))
+    return redirect(url_for('logistica', status=status))
 
 
 @app.route('/vendas/novo', methods=['GET', 'POST'])
