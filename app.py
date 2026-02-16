@@ -2708,6 +2708,8 @@ def dashboard():
 def caixa():
     lancamentos = LancamentoCaixa.query.order_by(LancamentoCaixa.data.desc(), LancamentoCaixa.id.desc()).all()
     total_entradas = sum(l.valor for l in lancamentos if l.tipo == 'ENTRADA')
+    total_saida_pessoal = sum(l.valor for l in lancamentos if l.tipo == 'SAIDA' and l.categoria and 'Pessoal' in l.categoria)
+    total_saida_fornecedor = sum(l.valor for l in lancamentos if l.tipo == 'SAIDA' and l.categoria and 'Fornecedor' in l.categoria)
     total_saidas = sum(l.valor for l in lancamentos if l.tipo == 'SAIDA')
     saldo_atual = total_entradas - total_saidas
     saldos_forma = {}
@@ -2721,7 +2723,8 @@ def caixa():
     return render_template('caixa.html',
                          lancamentos=lancamentos,
                          total_entradas=total_entradas,
-                         total_saidas=total_saidas,
+                         total_saida_pessoal=total_saida_pessoal,
+                         total_saida_fornecedor=total_saida_fornecedor,
                          saldo_atual=saldo_atual,
                          saldos_forma=saldos_forma,
                          data_hoje=date.today().strftime('%Y-%m-%d'))
