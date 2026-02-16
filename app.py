@@ -2750,6 +2750,21 @@ def excluir_cliente(id):
     return redirect(url_for('listar_clientes'))
 
 
+@app.route('/clientes/<int:cliente_id>/extrato')
+@login_required
+def extrato_cliente(cliente_id):
+    """Extrato de cobrança em PDF: vendas pendentes do cliente."""
+    cliente = Cliente.query.get_or_404(cliente_id)
+    vendas_pendentes = Venda.query.filter_by(cliente_id=cliente.id, situacao='PENDENTE').options(
+        joinedload(Venda.produto)
+    ).order_by(Venda.data_venda).all()
+
+    total = sum(float(v.calcular_total()) for v in vendas_pendentes)
+    data_hoje = datetime.now().strftime('%d/%m/%Y')
+
+    return render_template('extrato.html', cliente=cliente, vendas=vendas_pendentes, total=total, data_hoje=data_hoje)
+
+
 @app.route('/bulk_delete_clientes', methods=['POST'])
 @login_required
 def bulk_delete_clientes():

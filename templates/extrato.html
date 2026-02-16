@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extrato - {{ cliente.nome_cliente }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Esconde tudo que não for o recibo na hora de imprimir/salvar PDF */
+        @media print {
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background-color: white !important; }
+            .no-print { display: none !important; }
+            .print-area { box-shadow: none !important; margin: 0 !important; padding: 0 !important; }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 p-8 flex justify-center text-gray-800">
+    <div class="fixed top-4 right-4 no-print">
+        <button onclick="window.print()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2 rounded-lg font-bold shadow-lg flex items-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+            Salvar como PDF
+        </button>
+    </div>
+    <div class="print-area bg-white w-full max-w-3xl p-10 rounded-xl shadow-md border border-gray-200">
+        <div class="flex justify-between items-start border-b-2 border-emerald-600 pb-6 mb-6">
+            <div>
+                <h1 class="text-3xl font-extrabold text-emerald-700 flex items-center gap-2">
+                    <svg class="w-8 h-8" viewBox="0 0 24 24" fill="currentColor"><path d="M12,1C8.1,1,5,4.1,5,8c0,2.3,1.1,4.4,2.9,5.7C6.3,15.6,5,18.6,5,22h14c0-3.4-1.3-6.4-3.5-8.3C17.9,12.4,19,10.3,19,8 C19,4.1,15.9,1,12,1z M12,3c3,0,5,2,5,5c0,1.4-0.6,2.6-1.5,3.5c-0.7-0.3-1.5-0.5-2.4-0.5c-1.2,0-2.3,0.4-3.2,1 C8.9,11.4,8,9.9,8,8C8,5,10,3,12,3z M12,13c1.7,0,3.3,0.5,4.7,1.3C17.8,16.2,18.7,18.9,19,22H5c0.3-3.1,1.2-5.8,2.3-7.7 C8.7,13.5,10.3,13,12,13z"/></svg>
+                    Menino do Alho
+                </h1>
+                <p class="text-sm text-gray-500 mt-1">Gestão de Vendas e Estoque</p>
+            </div>
+            <div class="text-right">
+                <h2 class="text-xl font-bold text-gray-700">EXTRATO DE COBRANÇA</h2>
+                <p class="text-gray-500 font-medium mt-1">Data: {{ data_hoje }}</p>
+            </div>
+        </div>
+        <div class="bg-gray-50 p-4 rounded-lg border border-gray-100 mb-8">
+            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Cliente / Faturar para:</h3>
+            <p class="text-lg font-bold text-gray-800">{{ cliente.nome_cliente }}</p>
+            {% if cliente.razao_social %}<p class="text-gray-600 text-sm">{{ cliente.razao_social }}</p>{% endif %}
+            {% if cliente.cnpj %}<p class="text-gray-600 text-sm">CNPJ: {{ cliente.cnpj }}</p>{% endif %}
+            {% if cliente.endereco %}<p class="text-gray-600 text-sm mt-1">{{ cliente.endereco }}</p>{% endif %}
+        </div>
+        <table class="w-full text-left mb-8">
+            <thead>
+                <tr class="border-b-2 border-gray-800 text-gray-800 uppercase text-xs tracking-wider">
+                    <th class="pb-3 font-bold">Data</th>
+                    <th class="pb-3 font-bold">NF/Doc</th>
+                    <th class="pb-3 font-bold">Produto / Descrição</th>
+                    <th class="pb-3 font-bold text-center">Qtd</th>
+                    <th class="pb-3 font-bold text-right">Subtotal</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+                {% for venda in vendas %}
+                <tr class="text-sm text-gray-700">
+                    <td class="py-3">{{ venda.data_venda.strftime('%d/%m/%Y') }}</td>
+                    <td class="py-3 text-gray-500">{{ venda.nf or '-' }}</td>
+                    <td class="py-3 font-medium">{{ venda.produto.nome_produto if venda.produto else '-' }}</td>
+                    <td class="py-3 text-center">{{ venda.quantidade_venda }}</td>
+                    <td class="py-3 text-right font-medium">R$ {{ "%.2f"|format(venda.calcular_total()) }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" class="py-6 text-center text-gray-500 italic">Nenhuma fatura pendente para este cliente.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div class="flex justify-end">
+            <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-6 w-full max-w-sm">
+                <div class="flex justify-between items-center text-emerald-900">
+                    <span class="text-lg font-bold uppercase tracking-wider">Total Devido:</span>
+                    <span class="text-2xl font-black">R$ {{ "%.2f"|format(total) }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-12 pt-6 border-t border-gray-200 text-center">
+            <p class="text-xs text-gray-400">Este documento é um resumo de faturas pendentes e não substitui documento fiscal.</p>
+        </div>
+    </div>
+    <script>
+        // Aciona a caixa de impressão/PDF automaticamente ao abrir a página
+        window.onload = function() {
+            setTimeout(function() {
+                window.print();
+            }, 500);
+        }
+    </script>
+</body>
+</html>
