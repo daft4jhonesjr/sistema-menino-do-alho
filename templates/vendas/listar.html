@@ -49,6 +49,11 @@
         border-radius: 8px !important;
         background-color: #fff !important;
     }
+    .dark .venda-input-group .ts-wrapper .ts-control {
+        border-color: #4b5563 !important;
+        background-color: #374151 !important;
+        color: #f3f4f6 !important;
+    }
     .venda-input-group .ts-wrapper.focus .ts-control,
     .venda-input-group .ts-wrapper .ts-control:focus-within {
         border-color: #047857 !important;
@@ -82,6 +87,8 @@
     }
     .linha-vencida-abatimento { background-color: #fef2f2 !important; }
     .linha-vencida-abatimento:hover { background-color: #fee2e2 !important; }
+    .dark .linha-vencida-abatimento { background-color: rgba(127, 29, 29, 0.3) !important; }
+    .dark .linha-vencida-abatimento:hover { background-color: rgba(153, 27, 27, 0.4) !important; }
     /* Feedback visual PDV: campo preenchido com sucesso */
     .campo-preenchido { border-color: #28a745 !important; background-color: #e8f5e9 !important; transition: all 0.3s ease; }
     #cliente-select-wrap .ts-wrapper.campo-preenchido .ts-control { border-color: #28a745 !important; background-color: #e8f5e9 !important; }
@@ -91,30 +98,30 @@
 {% block content %}
 <div class="mb-6 flex justify-between items-center">
     <div>
-        <h2 class="text-3xl font-bold text-emerald-700 mb-2">Vendas</h2>
-        <p class="text-gray-600">Gerenciar vendas realizadas</p>
+        <h2 class="text-3xl font-bold text-emerald-700 dark:text-emerald-400 mb-2">Vendas</h2>
+        <p class="text-gray-600 dark:text-gray-400">Gerenciar vendas realizadas</p>
     </div>
     <div class="flex gap-3">
         {% if current_user.is_authenticated and current_user.is_admin() %}
-        <a href="{{ url_for('importar_vendas') }}" class="bg-white border border-gray-200 text-gray-700 px-5 py-2.5 rounded-xl shadow-sm hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-700 transition flex items-center font-medium">
+        <a href="{{ url_for('importar_vendas') }}" class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 px-5 py-2.5 rounded-xl shadow-sm dark:shadow-none hover:bg-emerald-50 dark:hover:bg-gray-700 hover:border-emerald-200 dark:hover:border-emerald-600 hover:text-emerald-700 dark:hover:text-emerald-400 transition flex items-center font-medium">
             <i data-lucide="upload" class="w-4 h-4 mr-2"></i>Importar Lista
         </a>
         {% endif %}
     </div>
 </div>
 
-<div id="bulk-delete-toast" class="hidden mb-4 p-4 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 flex items-center shadow-sm">
+<div id="bulk-delete-toast" class="hidden mb-4 p-4 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-200 flex items-center shadow-sm">
     <i data-lucide="check-circle" class="w-5 h-5 mr-3 flex-shrink-0"></i>
     <span id="bulk-delete-toast-msg"></span>
 </div>
 
 {% if produto_filtro or cliente_filtro %}
-<div class="mb-4 bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center justify-between shadow-sm">
+<div class="mb-4 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 rounded-xl p-4 flex items-center justify-between shadow-sm">
     <div class="flex items-center">
-        <i data-lucide="filter" class="w-5 h-5 text-emerald-700 mr-3"></i>
+        <i data-lucide="filter" class="w-5 h-5 text-emerald-700 dark:text-emerald-400 mr-3"></i>
         <div>
-            <p class="text-sm font-semibold text-emerald-800">Filtro Ativo:</p>
-            <p class="text-sm text-gray-700 mt-1">
+            <p class="text-sm font-semibold text-emerald-800 dark:text-emerald-200">Filtro Ativo:</p>
+            <p class="text-sm text-gray-700 dark:text-gray-300 mt-1">
                 Mostrando vendas para:
                 {% if produto_filtro %}
                     <span class="font-bold text-emerald-700">{{ produto_filtro.nome_produto }}</span>
@@ -127,22 +134,22 @@
         </div>
     </div>
     <a href="{{ url_for('listar_vendas') }}"
-       class="bg-white border border-emerald-700 text-emerald-700 px-4 py-2 rounded-xl hover:bg-emerald-700 hover:text-white transition flex items-center font-medium text-sm">
+       class="bg-white dark:bg-gray-800 border border-emerald-700 dark:border-emerald-600 text-emerald-700 dark:text-emerald-400 px-4 py-2 rounded-xl hover:bg-emerald-700 hover:text-white transition flex items-center font-medium text-sm">
         <i data-lucide="x" class="w-4 h-4 mr-2"></i>Limpar Filtro
     </a>
 </div>
 {% endif %}
 
 <!-- Alerta de erro (discreto, acima dos campos) -->
-<div id="venda-erro" class="hidden mb-4 p-4 bg-red-50 border border-red-200 rounded-xl text-red-800 text-sm shadow-sm"></div>
+<div id="venda-erro" class="hidden mb-4 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl text-red-800 dark:text-red-300 text-sm shadow-sm"></div>
 
 <!-- Linha de inserção: campos alinhados com a tabela -->
-<div class="mb-4 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+<div class="mb-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-hidden">
     <form id="form-nova-venda-inline" action="{{ url_for('add_venda') }}" method="POST" class="p-4">
         <div class="venda-input-group flex flex-nowrap gap-2 items-end w-full">
             <div class="w-[160px] flex-shrink-0" id="cliente-select-wrap">
-                <label for="inline-cliente_id" class="block text-xs font-medium text-gray-600 mb-1">Cliente</label>
-                <select id="inline-cliente_id" name="cliente_id" required class="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm">
+                <label for="inline-cliente_id" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Cliente</label>
+                <select id="inline-cliente_id" name="cliente_id" required class="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100 text-sm">
                     <option value="">Digite o nome...</option>
                     {% for c in clientes %}
                     <option value="{{ c.id }}">{{ c.nome_cliente }}</option>
@@ -150,38 +157,38 @@
                 </select>
             </div>
             <div class="flex-1 min-w-[120px]" id="produto-select-wrap">
-                <label for="inline-produto_id" class="block text-xs font-medium text-gray-600 mb-1">Produto</label>
-                <select id="inline-produto_id" name="produto_id" required class="produto-select w-full rounded-md border border-gray-300 shadow-sm bg-white px-3 py-2 text-sm min-h-[2.25rem] appearance-none pr-8 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                <label for="inline-produto_id" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Produto</label>
+                <select id="inline-produto_id" name="produto_id" required class="produto-select w-full rounded-md border border-gray-300 dark:border-gray-600 shadow-sm bg-white dark:bg-gray-700 px-3 py-2 text-sm min-h-[2.25rem] appearance-none pr-8 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500 focus:outline-none dark:text-gray-100">
                     <option value="" class="text-gray-400">Selecione o produto</option>
                     {% for p in produtos %}
                     <option value="{{ p.id }}" data-estoque="{{ p.estoque_atual }}" data-preco="{{ p.preco_custo }}">{{ p.nome_produto }} (Est.: {{ p.estoque_atual }})</option>
                     {% endfor %}
                 </select>
-                <p id="inline-estoque-info" class="mt-0.5 text-xs text-gray-500"></p>
+                <p id="inline-estoque-info" class="mt-0.5 text-xs text-gray-500 dark:text-gray-400"></p>
             </div>
             <div class="w-[75px] flex-shrink-0">
-                <label for="inline-nf" class="block text-xs font-medium text-gray-600 mb-1">NF</label>
-                <input type="text" id="inline-nf" name="nf" placeholder="00123" class="w-full px-2 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm">
+                <label for="inline-nf" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">NF</label>
+                <input type="text" id="inline-nf" name="nf" placeholder="00123" class="w-full px-2 py-2 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100 text-sm">
             </div>
             <div class="w-[65px] flex-shrink-0">
-                <label for="inline-quantidade_venda" class="block text-xs font-medium text-gray-600 mb-1">Qtd</label>
-                <input type="number" id="inline-quantidade_venda" name="quantidade_venda" value="1" min="1" required placeholder="1" class="w-full px-2 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm">
+                <label for="inline-quantidade_venda" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Qtd</label>
+                <input type="number" id="inline-quantidade_venda" name="quantidade_venda" value="1" min="1" required placeholder="1" class="w-full px-2 py-2 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100 text-sm">
             </div>
             <div class="w-[95px] flex-shrink-0">
-                <label for="preco" class="block text-xs font-medium text-gray-600 mb-1">Preço</label>
-                <input type="text" id="preco" name="preco_venda" required placeholder="R$ 0,00" class="preco-input w-full px-2 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm" autocomplete="off">
+                <label for="preco" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Preço</label>
+                <input type="text" id="preco" name="preco_venda" required placeholder="R$ 0,00" class="preco-input w-full px-2 py-2 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100 text-sm" autocomplete="off">
             </div>
             <div class="w-[95px] flex-shrink-0">
-                <label for="inline-valor-total" class="block text-xs font-medium text-gray-600 mb-1">Total</label>
-                <input type="text" id="inline-valor-total" readonly placeholder="R$ 0,00" class="w-full px-2 py-2 border border-gray-200 rounded-xl bg-gray-50 text-gray-700 text-sm cursor-default" tabindex="-1" title="Calculado automaticamente (Preço × Quantidade)">
+                <label for="inline-valor-total" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Total</label>
+                <input type="text" id="inline-valor-total" readonly placeholder="R$ 0,00" class="w-full px-2 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-sm cursor-default" tabindex="-1" title="Calculado automaticamente (Preço × Quantidade)">
             </div>
             <div class="w-[130px] flex-shrink-0">
-                <label for="inline-data_venda" class="block text-xs font-medium text-gray-600 mb-1">Data</label>
-                <input type="date" id="inline-data_venda" name="data_venda" class="w-full px-2 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm">
+                <label for="inline-data_venda" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Data</label>
+                <input type="date" id="inline-data_venda" name="data_venda" class="w-full px-2 py-2 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100 text-sm">
             </div>
             <div class="w-[95px] flex-shrink-0">
-                <label for="inline-empresa_faturadora" class="block text-xs font-medium text-gray-600 mb-1">Empresa</label>
-                <select id="inline-empresa_faturadora" name="empresa_faturadora" required class="w-full px-2 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm">
+                <label for="inline-empresa_faturadora" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Empresa</label>
+                <select id="inline-empresa_faturadora" name="empresa_faturadora" required class="w-full px-2 py-2 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100 text-sm">
                     <option value="">--</option>
                     <option value="DESTAK">DESTAK</option>
                     <option value="PATY">PATY</option>
@@ -189,8 +196,8 @@
                 </select>
             </div>
             <div class="w-[95px] flex-shrink-0">
-                <label for="inline-situacao" class="block text-xs font-medium text-gray-600 mb-1">Situação</label>
-                <select id="inline-situacao" name="situacao" required class="w-full px-2 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm">
+                <label for="inline-situacao" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Situação</label>
+                <select id="inline-situacao" name="situacao" required class="w-full px-2 py-2 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100 text-sm">
                     <option value="PENDENTE">PENDENTE</option>
                     <option value="PAGO">PAGO</option>
                 </select>
@@ -205,32 +212,32 @@
 </div>
 
 <!-- Carrinho atual (entre barra de inserção e tabela) -->
-<div id="carrinho-wrap" class="mb-4 bg-emerald-50 border-2 border-dashed border-emerald-200 rounded-xl p-4 shadow-sm" data-processar-url="{{ url_for('processar_carrinho') }}">
-    <h3 class="text-lg font-bold text-emerald-800 mb-3 flex items-center">
+<div id="carrinho-wrap" class="mb-4 bg-emerald-50 dark:bg-emerald-900/20 border-2 border-dashed border-emerald-200 dark:border-emerald-800 rounded-xl p-4 shadow-sm" data-processar-url="{{ url_for('processar_carrinho') }}">
+    <h3 class="text-lg font-bold text-emerald-800 dark:text-emerald-300 mb-3 flex items-center">
         <i data-lucide="shopping-bag" class="w-5 h-5 mr-2"></i>🛒 Carrinho Atual
     </h3>
-    <div id="carrinho-vazio" class="py-6 text-center text-gray-500 text-sm">Carrinho vazio. Adicione itens acima.</div>
-    <div id="carrinho-tabela-wrap" class="hidden overflow-x-auto rounded-lg border border-dashed border-emerald-200">
-        <table class="min-w-full divide-y divide-emerald-200">
-            <thead class="bg-emerald-100/60">
+    <div id="carrinho-vazio" class="py-6 text-center text-gray-500 dark:text-gray-400 text-sm">Carrinho vazio. Adicione itens acima.</div>
+    <div id="carrinho-tabela-wrap" class="hidden overflow-x-auto rounded-lg border border-dashed border-emerald-200 dark:border-emerald-800">
+        <table class="min-w-full divide-y divide-emerald-200 dark:divide-emerald-800">
+            <thead class="bg-emerald-100/60 dark:bg-emerald-900/40">
                 <tr>
-                    <th class="px-4 py-2 text-left text-xs font-medium text-emerald-800 uppercase">Cliente</th>
-                    <th class="px-4 py-2 text-left text-xs font-medium text-emerald-800 uppercase">Produto</th>
-                    <th class="px-4 py-2 text-left text-xs font-medium text-emerald-800 uppercase">NF</th>
-                    <th class="px-4 py-2 text-right text-xs font-medium text-emerald-800 uppercase">Qtd</th>
-                    <th class="px-4 py-2 text-right text-xs font-medium text-emerald-800 uppercase">Preço</th>
-                    <th class="px-4 py-2 text-right text-xs font-medium text-emerald-800 uppercase">Lucro</th>
-                    <th class="px-4 py-2 text-right text-xs font-medium text-emerald-800 uppercase">Total</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-emerald-800 dark:text-emerald-300 uppercase">Cliente</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-emerald-800 dark:text-emerald-300 uppercase">Produto</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-emerald-800 dark:text-emerald-300 uppercase">NF</th>
+                    <th class="px-4 py-2 text-right text-xs font-medium text-emerald-800 dark:text-emerald-300 uppercase">Qtd</th>
+                    <th class="px-4 py-2 text-right text-xs font-medium text-emerald-800 dark:text-emerald-300 uppercase">Preço</th>
+                    <th class="px-4 py-2 text-right text-xs font-medium text-emerald-800 dark:text-emerald-300 uppercase">Lucro</th>
+                    <th class="px-4 py-2 text-right text-xs font-medium text-emerald-800 dark:text-emerald-300 uppercase">Total</th>
                     <th class="px-4 py-2 w-12"></th>
                 </tr>
             </thead>
-            <tbody id="carrinho-tbody" class="bg-white divide-y divide-emerald-200"></tbody>
+            <tbody id="carrinho-tbody" class="bg-white dark:bg-gray-800 divide-y divide-emerald-200 dark:divide-emerald-800"></tbody>
         </table>
     </div>
     <div id="carrinho-acoes" class="hidden mt-4 flex flex-wrap items-center gap-4">
         <div id="carrinho-resumo" class="flex flex-wrap items-baseline gap-4 text-sm">
-            <span class="text-gray-600">Total Bruto: <strong class="text-gray-900" id="carrinho-total-bruto">R$ 0,00</strong></span>
-            <span class="text-gray-600">Lucro Estimado: <strong id="carrinho-lucro-estimado" class="text-emerald-600">R$ 0,00</strong></span>
+            <span class="text-gray-600 dark:text-gray-400">Total Bruto: <strong class="text-gray-900 dark:text-gray-100" id="carrinho-total-bruto">R$ 0,00</strong></span>
+            <span class="text-gray-600 dark:text-gray-400">Lucro Estimado: <strong id="carrinho-lucro-estimado" class="text-emerald-600 dark:text-emerald-400">R$ 0,00</strong></span>
         </div>
         <div class="flex flex-wrap gap-3">
             <button type="button" id="btn-finalizar-carrinho" class="bg-emerald-700 text-white px-6 py-3 rounded-xl hover:bg-emerald-600 transition font-semibold flex items-center shadow-sm">
@@ -244,7 +251,7 @@
 </div>
 
 <div class="mb-4 flex flex-wrap items-center gap-3">
-    <span class="text-sm font-medium text-gray-700">Ordenar por data de venda:</span>
+    <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Ordenar por data de venda:</span>
     {% set url_params = {} %}
     {% if request.args.get('produto_id') %}
         {% set _ = url_params.update({'produto_id': request.args.get('produto_id')}) %}
@@ -259,37 +266,37 @@
     {% set _ = url_params_crescente.update({'ordem_data': 'crescente'}) %}
     {% set url_params_decrescente = url_params.copy() %}
     {% set _ = url_params_decrescente.update({'ordem_data': 'decrescente'}) %}
-    <a href="{{ url_for('listar_vendas', **url_params_crescente) }}" class="px-4 py-2 rounded-xl text-sm font-medium transition {{ 'bg-emerald-700 text-white' if ordem_data == 'crescente' else 'bg-white border border-gray-200 text-gray-700 hover:bg-emerald-50 hover:border-emerald-200' }}">
+    <a href="{{ url_for('listar_vendas', **url_params_crescente) }}" class="px-4 py-2 rounded-xl text-sm font-medium transition {{ 'bg-emerald-700 text-white' if ordem_data == 'crescente' else 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-emerald-50 dark:hover:bg-gray-700 hover:border-emerald-200 dark:hover:border-emerald-600' }}">
         <i data-lucide="arrow-up" class="w-4 h-4 inline-block mr-1.5 align-middle"></i>Data crescente
     </a>
-    <a href="{{ url_for('listar_vendas', **url_params_decrescente) }}" class="px-4 py-2 rounded-xl text-sm font-medium transition {{ 'bg-emerald-700 text-white' if ordem_data == 'decrescente' else 'bg-white border border-gray-200 text-gray-700 hover:bg-emerald-50 hover:border-emerald-200' }}">
+    <a href="{{ url_for('listar_vendas', **url_params_decrescente) }}" class="px-4 py-2 rounded-xl text-sm font-medium transition {{ 'bg-emerald-700 text-white' if ordem_data == 'decrescente' else 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-emerald-50 dark:hover:bg-gray-700 hover:border-emerald-200 dark:hover:border-emerald-600' }}">
         <i data-lucide="arrow-down" class="w-4 h-4 inline-block mr-1.5 align-middle"></i>Data decrescente
     </a>
-    <span class="text-gray-300">|</span>
+    <span class="text-gray-300 dark:text-gray-600">|</span>
     {% set url_venc_cresc = url_params.copy() %}
     {% set _ = url_venc_cresc.update({'ordem_data': 'vencimento_crescente'}) %}
     {% set url_venc_decresc = url_params.copy() %}
     {% set _ = url_venc_decresc.update({'ordem_data': 'vencimento_decrescente'}) %}
-    <a href="{{ url_for('listar_vendas', **url_venc_cresc) }}" class="px-4 py-2 rounded-xl text-sm font-medium transition {{ 'bg-emerald-700 text-white' if ordem_data == 'vencimento_crescente' else 'bg-white border border-gray-200 text-gray-700 hover:bg-emerald-50 hover:border-emerald-200' }}">
+    <a href="{{ url_for('listar_vendas', **url_venc_cresc) }}" class="px-4 py-2 rounded-xl text-sm font-medium transition {{ 'bg-emerald-700 text-white' if ordem_data == 'vencimento_crescente' else 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-emerald-50 dark:hover:bg-gray-700 hover:border-emerald-200 dark:hover:border-emerald-600' }}">
         <i data-lucide="calendar-clock" class="w-4 h-4 inline-block mr-1.5 align-middle"></i>Vencimento Próximo
     </a>
-    <a href="{{ url_for('listar_vendas', **url_venc_decresc) }}" class="px-4 py-2 rounded-xl text-sm font-medium transition {{ 'bg-emerald-700 text-white' if ordem_data == 'vencimento_decrescente' else 'bg-white border border-gray-200 text-gray-700 hover:bg-emerald-50 hover:border-emerald-200' }}">
+    <a href="{{ url_for('listar_vendas', **url_venc_decresc) }}" class="px-4 py-2 rounded-xl text-sm font-medium transition {{ 'bg-emerald-700 text-white' if ordem_data == 'vencimento_decrescente' else 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-emerald-50 dark:hover:bg-gray-700 hover:border-emerald-200 dark:hover:border-emerald-600' }}">
         <i data-lucide="calendar-clock" class="w-4 h-4 inline-block mr-1.5 align-middle"></i>Vencimento Distante
     </a>
-    <span class="text-gray-300">|</span>
+    <span class="text-gray-300 dark:text-gray-600">|</span>
     {% if filtro_vencidos %}
         {% set url_sem_vencidos = {} %}
         {% if request.args.get('produto_id') %}{% set _ = url_sem_vencidos.update({'produto_id': request.args.get('produto_id')}) %}{% endif %}
         {% if request.args.get('cliente_id') %}{% set _ = url_sem_vencidos.update({'cliente_id': request.args.get('cliente_id')}) %}{% endif %}
         {% set _ = url_sem_vencidos.update({'ordem_data': ordem_data}) %}
-        <a href="{{ url_for('listar_vendas', **url_sem_vencidos) }}" class="px-4 py-2 rounded-xl text-sm font-medium bg-red-100 text-red-800 border border-red-200 hover:bg-red-200 transition">
+        <a href="{{ url_for('listar_vendas', **url_sem_vencidos) }}" class="px-4 py-2 rounded-xl text-sm font-medium bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800 hover:bg-red-200 dark:hover:bg-red-900/60 transition">
             <i data-lucide="x" class="w-4 h-4 inline-block mr-1.5 align-middle"></i>Limpar filtro vencidos
         </a>
     {% else %}
         {% set url_vencidos = url_params.copy() %}
         {% set _ = url_vencidos.update({'filtro_vencidos': 1}) %}
         {% set _ = url_vencidos.update({'ordem_data': ordem_data}) %}
-        <a href="{{ url_for('listar_vendas', **url_vencidos) }}" class="px-4 py-2 rounded-xl text-sm font-medium bg-white border border-gray-200 text-gray-700 hover:bg-amber-50 hover:border-amber-200 hover:text-amber-800 transition">
+        <a href="{{ url_for('listar_vendas', **url_vencidos) }}" class="px-4 py-2 rounded-xl text-sm font-medium bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-amber-50 dark:hover:bg-amber-900/30 hover:border-amber-200 dark:hover:border-amber-700 hover:text-amber-800 dark:hover:text-amber-400 transition">
             <i data-lucide="clipboard-list" class="w-4 h-4 inline-block mr-1.5 align-middle"></i>Ver Vencidos (Enviar para Fornecedor)
         </a>
     {% endif %}
@@ -297,42 +304,42 @@
 
 <div class="relative">
     <!-- Barra de ação em massa (exclusão): fixa no topo ao rolar -->
-    <div id="bulk-action-bar" class="hidden sticky top-0 z-50 w-full border-b border-red-200 bg-red-50 px-4 py-3 shadow-md flex flex-wrap items-center justify-between gap-3">
-        <span id="bulk-action-count" class="text-sm font-medium text-red-800">0 itens selecionados</span>
+    <div id="bulk-action-bar" class="hidden sticky top-0 z-50 w-full border-b border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/40 px-4 py-3 shadow-md flex flex-wrap items-center justify-between gap-3">
+        <span id="bulk-action-count" class="text-sm font-medium text-red-800 dark:text-red-200">0 itens selecionados</span>
         <div class="flex items-center gap-2">
-            <button type="button" id="bulk-action-cancel" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">Cancelar</button>
+            <button type="button" id="bulk-action-cancel" class="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 transition">Cancelar</button>
             <button type="button" id="bulk-action-confirm" class="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 transition focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2">Confirmar Exclusão</button>
         </div>
     </div>
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-hidden">
         <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200" data-bulk-module="vendas" id="tabela-vendas">
-                <thead class="bg-gray-50">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700" data-bulk-module="vendas" id="tabela-vendas">
+                <thead class="bg-gray-50 dark:bg-gray-900/50">
                     <tr>
                         <th class="px-3 py-3 text-center w-12">
-                            <input type="checkbox" id="bulk-master" class="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" title="Selecionar todos" aria-label="Selecionar todos">
+                            <input type="checkbox" id="bulk-master" class="rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" title="Selecionar todos" aria-label="Selecionar todos">
                         </th>
                         <th class="px-4 py-3 text-left w-12"></th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">NF</th>
-                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Preço Unit.</th>
-                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Qtd Total</th>
-                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Valor Total</th>
-                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Lucro Total</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vencimento</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Empresa</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Situação</th>
-                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Data</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cliente</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">NF</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Preço Unit.</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Qtd Total</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Valor Total</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Lucro Total</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Vencimento</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Empresa</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Situação</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Ações</th>
                     </tr>
                 </thead>
-                <tbody id="vendas-tbody" class="bg-white divide-y divide-gray-200">
+                <tbody id="vendas-tbody" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                     {% if pedidos %}
                         {% set current_page = pagination.page if pagination else 1 %}
                         {% include '_linhas_venda.html' %}
                     {% else %}
                     <tr id="vendas-empty-row">
-                        <td colspan="13" class="px-6 py-8 text-center text-gray-500">
+                        <td colspan="13" class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
                             {% if filtro_vencidos %}Nenhum pedido vencido há mais de 1 dia (para enviar ao fornecedor).{% else %}Nenhuma venda registrada ainda.{% endif %}
                         </td>
                     </tr>
@@ -354,35 +361,35 @@
 
 <!-- Modal Confirmação Exclusão em Massa -->
 <div id="modal-bulk-delete-backdrop" class="fixed inset-0 z-40 hidden bg-black/40 backdrop-blur-sm" aria-hidden="true"></div>
-<div id="modal-bulk-delete" class="fixed left-1/2 top-1/2 z-50 hidden w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg bg-white shadow-2xl" role="dialog" aria-labelledby="modal-bulk-delete-titulo" aria-modal="true">
+<div id="modal-bulk-delete" class="fixed left-1/2 top-1/2 z-50 hidden w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg bg-white dark:bg-gray-800 shadow-2xl dark:shadow-none" role="dialog" aria-labelledby="modal-bulk-delete-titulo" aria-modal="true">
     <div class="rounded-t-lg bg-red-600 px-6 py-4">
         <h3 id="modal-bulk-delete-titulo" class="text-lg font-bold text-white">Confirmar exclusão em massa</h3>
     </div>
     <div class="px-6 py-5">
-        <p id="modal-bulk-delete-msg" class="text-gray-700">Tem certeza?</p>
+        <p id="modal-bulk-delete-msg" class="text-gray-700 dark:text-gray-300">Tem certeza?</p>
     </div>
-    <div class="flex justify-end gap-3 rounded-b-lg border-t border-gray-200 bg-gray-50 px-6 py-4">
-        <button type="button" id="modal-bulk-delete-cancel" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">Cancelar</button>
+    <div class="flex justify-end gap-3 rounded-b-lg border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 px-6 py-4">
+        <button type="button" id="modal-bulk-delete-cancel" class="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 transition">Cancelar</button>
         <button type="button" id="modal-bulk-delete-ok" class="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 transition focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2">Excluir</button>
     </div>
 </div>
 
 <!-- Modal Confirmar Recebimento (Pagamento) -->
 <div id="modal-confirmar-pagamento-backdrop" class="fixed inset-0 z-40 hidden bg-black/40 backdrop-blur-sm" aria-hidden="true"></div>
-<div id="modal-confirmar-pagamento" class="fixed left-1/2 top-1/2 z-50 hidden w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg bg-white shadow-2xl" role="dialog" aria-labelledby="modal-confirmar-titulo" aria-modal="true">
+<div id="modal-confirmar-pagamento" class="fixed left-1/2 top-1/2 z-50 hidden w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg bg-white dark:bg-gray-800 shadow-2xl dark:shadow-none" role="dialog" aria-labelledby="modal-confirmar-titulo" aria-modal="true">
     <div class="rounded-t-lg bg-emerald-800 px-6 py-4">
         <h3 id="modal-confirmar-titulo" class="text-lg font-bold text-white">Confirmar Recebimento</h3>
     </div>
     <div class="px-6 py-5">
-        <div class="space-y-2 text-sm text-gray-700">
-            <p><span class="font-medium text-gray-500">Cliente:</span> <strong id="modal-confirmar-cliente">—</strong></p>
-            <p><span class="font-medium text-gray-500">NF:</span> <span id="modal-confirmar-nf">—</span></p>
-            <p><span class="font-medium text-gray-500">Valor Total:</span> <span id="modal-confirmar-valor" class="font-bold text-emerald-600">—</span></p>
+        <div class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+            <p><span class="font-medium text-gray-500 dark:text-gray-400">Cliente:</span> <strong id="modal-confirmar-cliente">—</strong></p>
+            <p><span class="font-medium text-gray-500 dark:text-gray-400">NF:</span> <span id="modal-confirmar-nf">—</span></p>
+            <p><span class="font-medium text-gray-500 dark:text-gray-400">Valor Total:</span> <span id="modal-confirmar-valor" class="font-bold text-emerald-600 dark:text-emerald-400">—</span></p>
         </div>
-        <p class="mt-4 text-gray-600">Você confirma que o pagamento deste pedido foi recebido?</p>
+        <p class="mt-4 text-gray-600 dark:text-gray-400">Você confirma que o pagamento deste pedido foi recebido?</p>
     </div>
-    <div class="flex justify-end gap-3 rounded-b-lg border-t border-gray-200 bg-gray-50 px-6 py-4">
-        <button type="button" id="modal-confirmar-cancelar" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition">Cancelar</button>
+    <div class="flex justify-end gap-3 rounded-b-lg border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 px-6 py-4">
+        <button type="button" id="modal-confirmar-cancelar" class="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600 transition">Cancelar</button>
         <button type="button" id="modal-confirmar-ok" class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 transition focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2">
             <i data-lucide="check" class="w-4 h-4"></i> Confirmar Pagamento
         </button>
@@ -392,7 +399,7 @@
 <!-- Modal Editar Venda -->
 <div id="modal-editar-venda-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
     <div class="fixed inset-0 bg-black/50" id="modal-editar-venda-overlay"></div>
-    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white rounded-xl shadow-sm border border-gray-200 z-50" onclick="event.stopPropagation()">
+    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-xl shadow-sm dark:shadow-none border border-gray-200 dark:border-gray-700 z-50" onclick="event.stopPropagation()">
         <div class="sticky top-0 flex justify-between items-center px-8 py-5 bg-emerald-700 text-white rounded-t-xl z-10">
             <h3 class="text-xl font-bold flex items-center">
                 <i data-lucide="pencil" class="w-5 h-5 mr-2"></i>Editar Venda
@@ -405,8 +412,8 @@
             <form id="form-editar-venda" method="POST" action="" data-action-base="{{ url_for('editar_venda', id=0) }}">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="mb-4">
-                        <label for="edit_cliente_id" class="block text-sm font-medium text-gray-700 mb-2">Cliente <span class="text-red-500">*</span></label>
-                        <select id="edit_cliente_id" name="cliente_id" required class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                        <label for="edit_cliente_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Cliente <span class="text-red-500">*</span></label>
+                        <select id="edit_cliente_id" name="cliente_id" required class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                             <option value="">Selecione...</option>
                             {% for c in todos_clientes %}
                             <option value="{{ c.id }}">{{ c.nome_cliente }}</option>
@@ -414,8 +421,8 @@
                         </select>
                     </div>
                     <div class="mb-4">
-                        <label for="edit_produto_id" class="block text-sm font-medium text-gray-700 mb-2">Produto <span class="text-red-500">*</span></label>
-                        <select id="edit_produto_id" name="produto_id" required class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                        <label for="edit_produto_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Produto <span class="text-red-500">*</span></label>
+                        <select id="edit_produto_id" name="produto_id" required class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                             <option value="">Selecione...</option>
                             {% for p in todos_produtos %}
                             <option value="{{ p.id }}">{{ p.nome_produto }} (Estoque: {{ p.estoque_atual }})</option>
@@ -423,24 +430,24 @@
                         </select>
                     </div>
                     <div class="mb-4">
-                        <label for="edit_quantidade_venda" class="block text-sm font-medium text-gray-700 mb-2">Quantidade <span class="text-red-500">*</span></label>
-                        <input type="number" id="edit_quantidade_venda" name="quantidade_venda" min="1" required class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                        <label for="edit_quantidade_venda" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Quantidade <span class="text-red-500">*</span></label>
+                        <input type="number" id="edit_quantidade_venda" name="quantidade_venda" min="1" required class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                     </div>
                     <div class="mb-4">
-                        <label for="edit_preco_venda" class="block text-sm font-medium text-gray-700 mb-2">Preço de Venda <span class="text-red-500">*</span></label>
-                        <input type="number" id="edit_preco_venda" name="preco_venda" step="0.01" required class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                        <label for="edit_preco_venda" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Preço de Venda <span class="text-red-500">*</span></label>
+                        <input type="number" id="edit_preco_venda" name="preco_venda" step="0.01" required class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                     </div>
                     <div class="mb-4">
-                        <label for="edit_nf" class="block text-sm font-medium text-gray-700 mb-2">Nota Fiscal</label>
-                        <input type="text" id="edit_nf" name="nf" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                        <label for="edit_nf" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Nota Fiscal</label>
+                        <input type="text" id="edit_nf" name="nf" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                     </div>
                     <div class="mb-4">
-                        <label for="edit_data_venda" class="block text-sm font-medium text-gray-700 mb-2">Data da Venda</label>
-                        <input type="date" id="edit_data_venda" name="data_venda" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                        <label for="edit_data_venda" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Data da Venda</label>
+                        <input type="date" id="edit_data_venda" name="data_venda" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                     </div>
                     <div class="mb-4">
-                        <label for="edit_empresa_faturadora" class="block text-sm font-medium text-gray-700 mb-2">Empresa Faturadora <span class="text-red-500">*</span></label>
-                        <select id="edit_empresa_faturadora" name="empresa_faturadora" required class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                        <label for="edit_empresa_faturadora" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Empresa Faturadora <span class="text-red-500">*</span></label>
+                        <select id="edit_empresa_faturadora" name="empresa_faturadora" required class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                             <option value="">Selecione...</option>
                             <option value="DESTAK">DESTAK</option>
                             <option value="PATY">PATY</option>
@@ -448,8 +455,8 @@
                         </select>
                     </div>
                     <div class="mb-4">
-                        <label for="edit_situacao" class="block text-sm font-medium text-gray-700 mb-2">Situação <span class="text-red-500">*</span></label>
-                        <select id="edit_situacao" name="situacao" required class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                        <label for="edit_situacao" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Situação <span class="text-red-500">*</span></label>
+                        <select id="edit_situacao" name="situacao" required class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                             <option value="PENDENTE">PENDENTE</option>
                             <option value="PAGO">PAGO</option>
                         </select>
@@ -459,7 +466,7 @@
                     <button type="submit" class="bg-emerald-700 text-white px-6 py-2.5 rounded-xl hover:bg-emerald-600 transition flex items-center font-medium" id="btn-salvar-editar-venda">
                         <i data-lucide="check" class="w-4 h-4 mr-2"></i>Salvar
                     </button>
-                    <button type="button" class="modal-editar-venda-fechar bg-gray-200 text-gray-700 px-6 py-2.5 rounded-xl hover:bg-gray-300 transition flex items-center font-medium">
+                    <button type="button" class="modal-editar-venda-fechar bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-6 py-2.5 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 transition flex items-center font-medium">
                         <i data-lucide="x" class="w-4 h-4 mr-2"></i>Cancelar
                     </button>
                 </div>
@@ -579,8 +586,8 @@
                 replacement.type = 'button';
                 replacement.className = 'badge-situacao-toggle badge-status-transition px-3 py-1 text-xs font-semibold rounded-full transition focus:outline-none focus:ring-2 ' +
                     (novo === 'PAGO'
-                        ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 hover:ring-2 hover:ring-emerald-400 focus:ring-emerald-400 cursor-pointer'
-                        : 'bg-amber-100 text-amber-800 hover:bg-amber-200 hover:ring-2 hover:ring-amber-400 focus:ring-amber-400 cursor-pointer');
+                        ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-800 hover:ring-2 hover:ring-emerald-400 focus:ring-emerald-400 cursor-pointer'
+                        : 'bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-800 hover:ring-2 hover:ring-amber-400 focus:ring-amber-400 cursor-pointer');
                 replacement.setAttribute('data-venda-id', id);
                 replacement.setAttribute('data-nf', nf);
                 replacement.setAttribute('data-situacao', novo);
@@ -889,7 +896,7 @@
         if (quantidadeInput) quantidadeInput.value = '1';
         if (dataInput) dataInput.value = new Date().toISOString().split('T')[0];
         precoClearAndResetSuggestion();
-        if (estoqueInfo) { estoqueInfo.textContent = ''; estoqueInfo.className = 'mt-0.5 text-xs text-gray-500'; }
+        if (estoqueInfo) { estoqueInfo.textContent = ''; estoqueInfo.className = 'mt-0.5 text-xs text-gray-500 dark:text-gray-400'; }
         updateValorTotalDisplay();
         if (btnAdicionar) btnAdicionar.disabled = false;
         hideErro();
@@ -920,7 +927,7 @@
     function resetFormParaProximoItem() {
         if (!form) return;
         hideErro();
-        if (estoqueInfo) { estoqueInfo.textContent = ''; estoqueInfo.className = 'mt-0.5 text-xs text-gray-500'; }
+        if (estoqueInfo) { estoqueInfo.textContent = ''; estoqueInfo.className = 'mt-0.5 text-xs text-gray-500 dark:text-gray-400'; }
         if (produtoSelect) {
             produtoSelect.value = '';
             setTimeout(function() { produtoSelect.focus(); }, 0);
@@ -991,21 +998,21 @@
             totalBruto += it.total;
             lucroTotal += typeof it.lucro === 'number' ? it.lucro : 0;
             var tr = document.createElement('tr');
-            tr.className = 'hover:bg-emerald-50/60 transition';
+            tr.className = 'hover:bg-emerald-50/60 dark:hover:bg-emerald-900/30 transition';
             var precoStr = formatoMoeda(it.preco_venda);
             var totalStr = formatoMoeda(it.total);
             var lucro = typeof it.lucro === 'number' ? it.lucro : 0;
             var lucroStr = formatoMoeda(lucro);
-            var lucroClass = lucro > 0 ? 'text-emerald-600 font-medium' : (lucro < 0 ? 'text-red-600 font-semibold' : 'text-amber-600 font-medium');
+            var lucroClass = lucro > 0 ? 'text-emerald-600 dark:text-emerald-400 font-medium' : (lucro < 0 ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-amber-600 dark:text-amber-400 font-medium');
             tr.innerHTML =
-                '<td class="px-4 py-2 text-sm font-medium text-gray-900">' + (it.cliente_nome || '-') + '</td>' +
-                '<td class="px-4 py-2 text-sm text-gray-900">' + (it.produto_nome || '-') + '</td>' +
-                '<td class="px-4 py-2 text-sm text-gray-900">' + (it.nf || '-') + '</td>' +
-                '<td class="px-4 py-2 text-sm text-gray-900 text-right">' + it.quantidade_venda + '</td>' +
-                '<td class="px-4 py-2 text-sm text-gray-900 text-right">' + precoStr + '</td>' +
+                '<td class="px-4 py-2 text-sm font-medium text-gray-900 dark:text-gray-100">' + (it.cliente_nome || '-') + '</td>' +
+                '<td class="px-4 py-2 text-sm text-gray-900 dark:text-gray-100">' + (it.produto_nome || '-') + '</td>' +
+                '<td class="px-4 py-2 text-sm text-gray-900 dark:text-gray-100">' + (it.nf || '-') + '</td>' +
+                '<td class="px-4 py-2 text-sm text-gray-900 dark:text-gray-100 text-right">' + it.quantidade_venda + '</td>' +
+                '<td class="px-4 py-2 text-sm text-gray-900 dark:text-gray-100 text-right">' + precoStr + '</td>' +
                 '<td class="px-4 py-2 text-sm text-right ' + lucroClass + '">' + lucroStr + '</td>' +
-                '<td class="px-4 py-2 text-sm font-bold text-gray-900 text-right">' + totalStr + '</td>' +
-                '<td class="px-4 py-2 text-right"><button type="button" class="carrinho-remover text-red-600 hover:text-red-800 inline-flex p-1 rounded hover:bg-red-50" data-index="' + i + '" title="Remover do carrinho"><i data-lucide="trash-2" class="w-4 h-4"></i></button></td>';
+                '<td class="px-4 py-2 text-sm font-bold text-gray-900 dark:text-gray-100 text-right">' + totalStr + '</td>' +
+                '<td class="px-4 py-2 text-right"><button type="button" class="carrinho-remover text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 inline-flex p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/30" data-index="' + i + '" title="Remover do carrinho"><i data-lucide="trash-2" class="w-4 h-4"></i></button></td>';
             carrinhoTbody.appendChild(tr);
         }
         var brutoEl = document.getElementById('carrinho-total-bruto');
@@ -1013,7 +1020,7 @@
         if (brutoEl) brutoEl.textContent = formatoMoeda(totalBruto);
         if (lucroEl) {
             lucroEl.textContent = formatoMoeda(lucroTotal);
-            lucroEl.className = lucroTotal > 0 ? 'text-emerald-600 font-bold' : (lucroTotal < 0 ? 'text-red-600 font-bold' : 'text-amber-600 font-bold');
+            lucroEl.className = lucroTotal > 0 ? 'text-emerald-600 dark:text-emerald-400 font-bold' : (lucroTotal < 0 ? 'text-red-600 dark:text-red-400 font-bold' : 'text-amber-600 dark:text-amber-400 font-bold');
         }
         if (typeof lucide !== 'undefined') lucide.createIcons();
 
@@ -1057,7 +1064,7 @@
             var preco = opt.getAttribute('data-preco');
             if (estoque != null) {
                 estoqueInfo.textContent = 'Est.: ' + estoque;
-                estoqueInfo.className = 'mt-0.5 text-xs ' + (parseInt(estoque, 10) > 0 ? 'text-emerald-600' : 'text-red-600');
+                estoqueInfo.className = 'mt-0.5 text-xs ' + (parseInt(estoque, 10) > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400');
                 if (preco && precoInput) {
                     var pc = parseFloat(preco);
                     if (!isNaN(pc)) {
@@ -1117,7 +1124,7 @@
             var q = parseInt(this.value || '0', 10);
             if (est > 0 && q > est) {
                 estoqueInfo.textContent = 'Est. insuficiente! Disp.: ' + est;
-                estoqueInfo.className = 'mt-0.5 text-xs text-red-600 font-semibold';
+                estoqueInfo.className = 'mt-0.5 text-xs text-red-600 dark:text-red-400 font-semibold';
             } else if (est > 0) {
                 estoqueInfo.textContent = 'Est.: ' + est;
                 estoqueInfo.className = 'mt-0.5 text-xs text-emerald-600';
