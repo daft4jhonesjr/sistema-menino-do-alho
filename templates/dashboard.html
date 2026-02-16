@@ -568,6 +568,12 @@
                     <tbody id="tabela-detalhes-body" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                     </tbody>
                 </table>
+                <div class="text-center py-4 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-100 dark:border-gray-700">
+                    <button id="btn-mais-detalhes" type="button" onclick="carregarMais('tabela-detalhes-body', 'btn-mais-detalhes')" class="hidden inline-flex items-center gap-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-medium py-2 px-6 rounded-full text-sm shadow-sm transition-all">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        Carregar mais resultados
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -596,7 +602,7 @@
                         <th class="px-6 py-4 text-right">Valor Perdido</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-200 dark:divide-gray-700 text-sm">
+                <tbody id="tbody-prejuizo" class="divide-y divide-gray-200 dark:divide-gray-700 text-sm">
                     {% for p in detalhes_prejuizo %}
                     <tr class="hover:bg-red-50/50 dark:hover:bg-red-900/10 transition-colors">
                         <td class="px-6 py-4 text-gray-500 dark:text-gray-400">{{ p.data }}</td>
@@ -616,6 +622,12 @@
                     {% endfor %}
                 </tbody>
             </table>
+            <div class="text-center py-4 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-100 dark:border-gray-700">
+                <button id="btn-mais-prejuizo" type="button" onclick="carregarMais('tbody-prejuizo', 'btn-mais-prejuizo')" class="hidden inline-flex items-center gap-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-medium py-2 px-6 rounded-full text-sm shadow-sm transition-all">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    Carregar mais resultados
+                </button>
+            </div>
         </div>
         <div class="bg-gray-50 dark:bg-gray-900 p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end">
             <button onclick="fecharModalPrejuizo()" class="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium px-5 py-2 rounded-lg shadow-sm transition-colors">Fechar Detalhamento</button>
@@ -991,6 +1003,8 @@ function abrirModalDashboard(filtro, titulo) {
 
     tituloEl.innerHTML = '<i data-lucide="list" class="w-5 h-5 mr-2"></i>' + titulo;
     tbody.innerHTML = '';
+    var btnMais = document.getElementById('btn-mais-detalhes');
+    if (btnMais) btnMais.classList.add('hidden');
     loading.classList.remove('hidden');
     conteudo.classList.add('hidden');
     overlay.classList.remove('hidden');
@@ -1025,6 +1039,7 @@ function abrirModalDashboard(filtro, titulo) {
                     tbody.appendChild(tr);
                 });
             }
+            inicializarPaginacao('tabela-detalhes-body', 'btn-mais-detalhes');
             if (typeof lucide !== 'undefined') lucide.createIcons();
         })
         .catch(function(error) {
@@ -1039,8 +1054,44 @@ function fecharModalDashboard() {
     document.getElementById('modal-dashboard-detalhes-overlay').classList.add('hidden');
 }
 
+const ITENS_POR_PAGINA = 20;
+function inicializarPaginacao(tbodyId, btnId) {
+    var tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+    var linhas = tbody.querySelectorAll('tr');
+    linhas.forEach(function(linha, index) {
+        if (linha.querySelector('td[colspan]')) return;
+        if (index >= ITENS_POR_PAGINA) {
+            linha.classList.add('hidden', 'linha-paginada');
+        } else {
+            linha.classList.remove('hidden', 'linha-paginada');
+        }
+    });
+    var btn = document.getElementById(btnId);
+    if (btn) {
+        var ocultas = tbody.querySelectorAll('tr.linha-paginada.hidden');
+        if (ocultas.length > 0) {
+            btn.classList.remove('hidden');
+        } else {
+            btn.classList.add('hidden');
+        }
+    }
+}
+function carregarMais(tbodyId, btnId) {
+    var tbody = document.getElementById(tbodyId);
+    var ocultas = tbody.querySelectorAll('tr.linha-paginada.hidden');
+    for (var i = 0; i < ITENS_POR_PAGINA && i < ocultas.length; i++) {
+        ocultas[i].classList.remove('hidden');
+    }
+    if (ocultas.length <= ITENS_POR_PAGINA) {
+        var btn = document.getElementById(btnId);
+        if (btn) btn.classList.add('hidden');
+    }
+}
+
 function abrirModalPrejuizo() {
     document.getElementById('modalPrejuizo').classList.remove('hidden');
+    inicializarPaginacao('tbody-prejuizo', 'btn-mais-prejuizo');
 }
 function fecharModalPrejuizo() {
     document.getElementById('modalPrejuizo').classList.add('hidden');
