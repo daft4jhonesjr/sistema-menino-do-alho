@@ -2816,6 +2816,7 @@ def importar_caixa():
 
             leitor = csv.reader(stream, delimiter=delimitador)
             linhas_sucesso = 0
+            linhas_duplicadas = 0
             erros = []
 
             for i, linha in enumerate(leitor, start=1):
@@ -2826,11 +2827,10 @@ def importar_caixa():
                     continue
 
                 if len(linha) < 5:
-                    erros.append(f"Linha {i}: Faltam colunas. Formato esperado de 5 colunas.")
+                    erros.append(f"Linha {i}: Faltam colunas.")
                     continue
 
                 try:
-                    # Formato: [0] Descrição | [1] Valor (-R$) | [2] Data | [3] Categoria | [4] Forma
                     descricao = str(linha[0]).strip()
                     valor_raw = str(linha[1]).strip()
                     data_str = str(linha[2]).strip()
@@ -2859,6 +2859,20 @@ def importar_caixa():
                             v_str = v_str.replace('.', '')
                     valor = float(v_str) if v_str else 0.0
 
+                    ja_existe = LancamentoCaixa.query.filter_by(
+                        data=data_lanc,
+                        descricao=descricao,
+                        tipo=tipo_lancamento,
+                        categoria=categoria,
+                        forma_pagamento=forma_pagamento,
+                        valor=abs(valor),
+                        usuario_id=current_user.id
+                    ).first()
+
+                    if ja_existe:
+                        linhas_duplicadas += 1
+                        continue
+
                     novo_lancamento = LancamentoCaixa(
                         data=data_lanc,
                         descricao=descricao,
@@ -2872,15 +2886,19 @@ def importar_caixa():
                     linhas_sucesso += 1
 
                 except Exception as e:
-                    erros.append(f"Linha {i}: {str(e)}")
+                    erros.append(f"Linha {i}: Erro nos dados -> {str(e)}")
                     continue
 
             if linhas_sucesso > 0:
                 db.session.commit()
-                msg = f'{linhas_sucesso} lançamentos importados com sucesso!'
+                msg = f'{linhas_sucesso} novos lançamentos importados!'
+                if linhas_duplicadas > 0:
+                    msg += f' ({linhas_duplicadas} ignorados pois já existiam).'
                 if erros:
-                    msg += f' (Ignoradas {len(erros)} linhas inválidas).'
+                    msg += f' (Com {len(erros)} erros de formatação).'
                 flash(msg, 'success')
+            elif linhas_duplicadas > 0:
+                flash(f'Nenhum dado novo. Todos os {linhas_duplicadas} lançamentos da planilha já estavam no sistema!', 'info')
             else:
                 db.session.rollback()
                 msg_erro = erros[0] if erros else "Formato de colunas inválido. Esperado: Descrição, Valor, Data, Categoria, Forma (5 colunas)."
