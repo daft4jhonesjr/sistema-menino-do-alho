@@ -348,6 +348,7 @@ def _parse_clientes_raw_tsv(text):
         razao = (parts[1] if len(parts) > 1 else '').strip()
         cnpj_raw = (parts[2] if len(parts) > 2 else '').strip()
         cidade = (parts[3] if len(parts) > 3 else '').strip()
+        endereco = (parts[4] if len(parts) > 4 else '').strip() or None
         if not apelido:
             continue
         razao_social = razao if razao else apelido
@@ -357,6 +358,7 @@ def _parse_clientes_raw_tsv(text):
             'razao_social': razao_social,
             'cnpj': cnpj_clean,
             'cidade': cidade,
+            'endereco': endereco,
         })
     return out
 
@@ -2117,6 +2119,12 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
                 db.session.commit()
             except (OperationalError, Exception):
                 db.session.rollback()
+        # Migração: endereco em clientes (endereço completo para Google Maps)
+        try:
+            db.session.execute(text('ALTER TABLE clientes ADD COLUMN endereco VARCHAR(255)'))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
         # Jhones sempre admin; criar se não existir
         u = Usuario.query.filter_by(username='Jhones').first()
         if not u:
@@ -2670,7 +2678,8 @@ def novo_cliente():
                 nome_cliente=request.form['nome_cliente'],
                 razao_social=request.form.get('razao_social', ''),
                 cnpj=cnpj,
-                cidade=request.form.get('cidade', '')
+                cidade=request.form.get('cidade', ''),
+                endereco=request.form.get('endereco', '') or None
             )
             db.session.add(cliente)
             db.session.commit()
@@ -2710,6 +2719,7 @@ def editar_cliente(id):
             cliente.razao_social = request.form.get('razao_social', '')
             cliente.cnpj = cnpj
             cliente.cidade = request.form.get('cidade', '')
+            cliente.endereco = request.form.get('endereco', '') or None
             db.session.commit()
             flash('Cliente atualizado com sucesso!', 'success')
             return redirect(url_for('listar_clientes'))
@@ -2763,11 +2773,13 @@ def _processar_linhas_clientes_upsert(linhas, erros_detalhados, sucesso_ref, err
                 erros_detalhados.append(_msg_linha(linha_num, '', "O campo Apelido (nome) está vazio", True))
                 erros_ref[0] += 1
                 continue
+            endereco = (row.get('endereco') or '').strip() or None
             cliente = Cliente.query.filter(func.lower(Cliente.nome_cliente) == nome.lower()).first()
             if cliente:
                 cliente.razao_social = razao_social or None
                 cliente.cnpj = cnpj
                 cliente.cidade = cidade or None
+                cliente.endereco = endereco
                 db.session.commit()
                 sucesso_ref[0] += 1
             else:
@@ -2779,7 +2791,8 @@ def _processar_linhas_clientes_upsert(linhas, erros_detalhados, sucesso_ref, err
                     nome_cliente=nome,
                     razao_social=razao_social or None,
                     cnpj=cnpj,
-                    cidade=cidade or None
+                    cidade=cidade or None,
+                    endereco=endereco
                 )
                 db.session.add(cliente)
                 db.session.commit()
@@ -2862,11 +2875,13 @@ def importar_clientes():
                                 erros_detalhados.append(_msg_linha(linha_num, nome, f"O CNPJ já está cadastrado para o cliente '{existente.nome_cliente}'. Use um CNPJ único.", True))
                                 erros += 1
                                 continue
+                            endereco = _strip_quotes(row.get('endereco', '')) or None
                             cliente = Cliente.query.filter(func.lower(Cliente.nome_cliente) == nome.lower()).first()
                             if cliente:
                                 cliente.razao_social = _strip_quotes(row.get('razao_social', row.get('razao', ''))) or nome
                                 cliente.cnpj = cnpj
                                 cliente.cidade = _strip_quotes(row.get('cidade', '')) or None
+                                cliente.endereco = endereco
                                 db.session.commit()
                                 sucesso += 1
                             else:
@@ -2874,7 +2889,8 @@ def importar_clientes():
                                     nome_cliente=nome,
                                     razao_social=_strip_quotes(row.get('razao_social', row.get('razao', ''))) or None,
                                     cnpj=cnpj,
-                                    cidade=_strip_quotes(row.get('cidade', '')) or None
+                                    cidade=_strip_quotes(row.get('cidade', '')) or None,
+                                    endereco=endereco
                                 )
                                 db.session.add(cliente)
                                 db.session.commit()

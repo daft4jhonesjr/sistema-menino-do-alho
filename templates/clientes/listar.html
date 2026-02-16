@@ -41,6 +41,7 @@
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Razão Social</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">CNPJ</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cidade</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Localização</th>
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Ações</th>
                     </tr>
                 </thead>
@@ -60,6 +61,16 @@
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ cliente.razao_social or '-' }}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ (cliente.cnpj | format_cnpj) or '-' }}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ cliente.cidade or '-' }}</td>
+                    <td class="px-6 py-4">
+                        {% if cliente.endereco %}
+                        <a href="https://www.google.com/maps/search/?api=1&query={{ cliente.endereco | urlencode }}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 font-medium transition-colors">
+                            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                            Ver no Mapa
+                        </a>
+                        {% else %}
+                        <span class="text-gray-400 dark:text-gray-500 text-sm">Sem endereço</span>
+                        {% endif %}
+                    </td>
                     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <button type="button" class="btn-editar-cliente text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 mr-4 inline-flex items-center cursor-pointer bg-transparent border-none p-0"
                                 data-id="{{ cliente.id }}"
@@ -67,6 +78,7 @@
                                 data-razao="{{ cliente.razao_social or '' }}"
                                 data-cnpj="{{ cliente.cnpj or '' }}"
                                 data-cidade="{{ cliente.cidade or '' }}"
+                                data-endereco="{{ cliente.endereco or '' }}"
                                 title="Editar cliente">
                             <i data-lucide="pencil" class="w-4 h-4"></i>
                         </button>
@@ -79,7 +91,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="7" class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">Nenhum cliente cadastrado.</td>
+                    <td colspan="8" class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">Nenhum cliente cadastrado.</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -115,9 +127,13 @@
                     <label for="modal-cnpj" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">CNPJ</label>
                     <input type="text" id="modal-cnpj" name="cnpj" placeholder="00.000.000/0000-00" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                 </div>
-                <div class="mb-6">
+                <div class="mb-5">
                     <label for="modal-cidade" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Cidade</label>
                     <input type="text" id="modal-cidade" name="cidade" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
+                </div>
+                <div class="mb-6">
+                    <label for="modal-endereco" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Endereço Completo</label>
+                    <input type="text" id="modal-endereco" name="endereco" placeholder="Rua, número, bairro, cidade - para abrir no Google Maps" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                 </div>
                 <div class="flex gap-4">
                     <button type="submit" class="bg-emerald-700 text-white px-6 py-2.5 rounded-xl hover:bg-emerald-600 transition flex items-center font-medium" id="modal-novo-cliente-salvar">
@@ -158,9 +174,13 @@
                     <label for="edit_cnpj" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">CNPJ</label>
                     <input type="text" id="edit_cnpj" name="cnpj" placeholder="00.000.000/0000-00" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                 </div>
-                <div class="mb-6">
+                <div class="mb-5">
                     <label for="edit_cidade" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Cidade</label>
                     <input type="text" id="edit_cidade" name="cidade" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
+                </div>
+                <div class="mb-6">
+                    <label for="edit_endereco" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Endereço Completo</label>
+                    <input type="text" id="edit_endereco" name="endereco" placeholder="Rua, número, bairro, cidade - para abrir no Google Maps" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                 </div>
                 <div class="flex gap-4">
                     <button type="submit" class="bg-emerald-700 text-white px-6 py-2.5 rounded-xl hover:bg-emerald-600 transition flex items-center font-medium" id="btn-salvar-editar-cliente">
@@ -328,11 +348,13 @@
         var razao = btn.getAttribute('data-razao') || '';
         var cnpj = btn.getAttribute('data-cnpj') || '';
         var cidade = btn.getAttribute('data-cidade') || '';
+        var endereco = btn.getAttribute('data-endereco') || '';
         form.action = actionBase.replace(/\/0$/, '/') + id;
         document.getElementById('edit_nome').value = nome;
         document.getElementById('edit_razao').value = razao;
         document.getElementById('edit_cnpj').value = mascaraCNPJ(cnpj);
         document.getElementById('edit_cidade').value = cidade;
+        document.getElementById('edit_endereco').value = endereco;
         wrap.classList.remove('hidden');
         document.body.style.overflow = 'hidden';
         if (typeof lucide !== 'undefined') lucide.createIcons();
