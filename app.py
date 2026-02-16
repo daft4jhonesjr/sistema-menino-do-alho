@@ -2748,6 +2748,83 @@ def adicionar_caixa():
     return redirect(url_for('caixa'))
 
 
+@app.route('/caixa/importar', methods=['POST'])
+@login_required
+def importar_caixa():
+    if 'arquivo' not in request.files:
+        flash('Nenhum arquivo enviado.', 'error')
+        return redirect(url_for('caixa'))
+
+    arquivo = request.files['arquivo']
+    if arquivo.filename == '':
+        flash('Nenhum arquivo selecionado.', 'error')
+        return redirect(url_for('caixa'))
+
+    if arquivo and arquivo.filename.lower().endswith('.xlsx'):
+        try:
+            wb = openpyxl.load_workbook(arquivo, data_only=True)
+            planilha = wb.active
+
+            for linha in planilha.iter_rows(min_row=2, values_only=True):
+                if not linha or len(linha) < 6:
+                    continue
+                if not linha[0] or not linha[1]:
+                    continue
+
+                try:
+                    # Tratamento da Data (Excel pode retornar datetime, date ou string)
+                    if isinstance(linha[0], datetime):
+                        data_lanc = linha[0].date()
+                    elif isinstance(linha[0], date):
+                        data_lanc = linha[0]
+                    else:
+                        s = str(linha[0]).strip().split()[0]
+                        for fmt in ('%d/%m/%Y', '%Y-%m-%d', '%d-%m-%Y'):
+                            try:
+                                data_lanc = datetime.strptime(s, fmt).date()
+                                break
+                            except ValueError:
+                                continue
+                        else:
+                            continue
+
+                    descricao = str(linha[1] or '').strip()
+                    tipo = str(linha[2] or 'ENTRADA').strip().upper()
+                    categoria = str(linha[3] or '').strip() or 'Outros'
+                    forma_pagamento = str(linha[4] or 'Dinheiro').strip() or 'Dinheiro'
+
+                    valor_raw = linha[5]
+                    if isinstance(valor_raw, (int, float)):
+                        valor = float(valor_raw)
+                    else:
+                        valor_str = str(valor_raw or '0').replace('R$', '').replace('.', '').replace(',', '.').strip()
+                        valor = float(valor_str) if valor_str else 0.0
+
+                    novo_lancamento = LancamentoCaixa(
+                        data=data_lanc,
+                        descricao=descricao,
+                        tipo='ENTRADA' if 'ENTRADA' in tipo or tipo == 'E' else 'SAIDA',
+                        categoria=categoria,
+                        forma_pagamento=forma_pagamento,
+                        valor=abs(valor),
+                        usuario_id=current_user.id
+                    )
+                    db.session.add(novo_lancamento)
+                except Exception as e:
+                    current_app.logger.warning(f"Erro ao processar linha {linha}: {e}")
+                    continue
+
+            db.session.commit()
+            flash('Caixa importado com sucesso!', 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Erro ao processar arquivo: {str(e)}', 'error')
+    else:
+        flash('Por favor, envie um arquivo .xlsx válido.', 'error')
+
+    return redirect(url_for('caixa'))
+
+
 # ========== MÓDULO CLIENTES ==========
 
 @app.route('/clientes')

@@ -8,10 +8,16 @@
         <h2 class="text-2xl font-bold text-gray-800 dark:text-gray-100">Caixa Diário</h2>
         <p class="text-gray-500 dark:text-gray-400">Controle de entradas, saídas e contas bancárias.</p>
     </div>
-    <button onclick="document.getElementById('modalNovoLancamento').classList.remove('hidden')" class="w-full md:w-auto bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-lg flex items-center justify-center gap-2 transition-colors">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
-        Novo Lançamento
-    </button>
+    <div class="flex flex-col md:flex-row gap-3 w-full md:w-auto mt-4 md:mt-0">
+        <button onclick="document.getElementById('modalImportarCaixa').classList.remove('hidden')" class="w-full md:w-auto bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 px-5 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center justify-center gap-2 transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+            Importar Planilha
+        </button>
+        <button onclick="document.getElementById('modalNovoLancamento').classList.remove('hidden')" class="w-full md:w-auto bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-lg flex items-center justify-center gap-2 transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+            Novo Lançamento
+        </button>
+    </div>
 </div>
 
 <!-- Cartões de resumo -->
@@ -135,6 +141,39 @@
             <div class="pt-4 flex justify-end gap-3">
                 <button type="button" onclick="document.getElementById('modalNovoLancamento').classList.add('hidden')" class="px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">Cancelar</button>
                 <button type="submit" class="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg shadow-sm transition-colors">Salvar Lançamento</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal Importar Caixa -->
+<div id="modalImportarCaixa" class="fixed inset-0 z-50 hidden bg-black/60 flex items-center justify-center p-4" onclick="if(event.target===this) this.classList.add('hidden')">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md overflow-hidden" onclick="event.stopPropagation()">
+        <div class="flex justify-between items-center p-5 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+            <h3 class="text-lg font-bold text-gray-800 dark:text-gray-100">Importar Dados (Excel)</h3>
+            <button type="button" onclick="document.getElementById('modalImportarCaixa').classList.add('hidden')" class="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors p-1">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        <form action="{{ url_for('importar_caixa') }}" method="POST" enctype="multipart/form-data" class="p-5 space-y-4">
+            <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 text-blue-800 dark:text-blue-300 p-4 rounded-lg text-sm">
+                <p class="font-bold mb-2">Atenção ao formato do Excel (.xlsx):</p>
+                <ul class="list-disc pl-5 space-y-1 text-xs font-medium">
+                    <li><strong>A:</strong> Data (DD/MM/AAAA)</li>
+                    <li><strong>B:</strong> Descrição do Gasto/Receita</li>
+                    <li><strong>C:</strong> Tipo (ENTRADA ou SAIDA)</li>
+                    <li><strong>D:</strong> Categoria (Ex: Saída Pessoal)</li>
+                    <li><strong>E:</strong> Conta (Ex: Dinheiro, Pix)</li>
+                    <li><strong>F:</strong> Valor (Apenas números)</li>
+                </ul>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Selecione a planilha (.xlsx)</label>
+                <input type="file" name="arquivo" accept=".xlsx" required class="w-full text-sm text-gray-500 dark:text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 dark:file:bg-emerald-900/30 dark:file:text-emerald-400">
+            </div>
+            <div class="pt-4 flex justify-end gap-3">
+                <button type="button" onclick="document.getElementById('modalImportarCaixa').classList.add('hidden')" class="px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">Cancelar</button>
+                <button type="submit" class="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg shadow-sm transition-colors">Importar</button>
             </div>
         </form>
     </div>
