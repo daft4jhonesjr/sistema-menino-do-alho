@@ -19,15 +19,15 @@
 {% block content %}
 <div class="mb-6 flex justify-between items-center flex-wrap gap-4">
     <div>
-        <h2 class="text-3xl font-bold text-emerald-700 mb-2">Entrada de Produtos</h2>
-        <p class="text-gray-600">Gerenciar estoque de produtos</p>
+        <h2 class="text-3xl font-bold text-emerald-700 dark:text-emerald-400 mb-2">Entrada de Produtos</h2>
+        <p class="text-gray-600 dark:text-gray-400">Gerenciar estoque de produtos</p>
     </div>
     <div class="flex gap-3 items-center flex-wrap">
         <button type="button" id="bulk-delete-btn" class="hidden bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-xl transition duration-200 ease-in-out flex items-center" data-endpoint="{{ url_for('bulk_delete_produtos') }}" data-redirect="{{ url_for('listar_produtos', ordem_data=ordem_data) }}">
             <i data-lucide="trash-2" class="w-4 h-4 mr-2"></i>Excluir Selecionados
         </button>
         {% if current_user.is_authenticated and current_user.is_admin() %}
-        <a href="{{ url_for('importar_produtos') }}" class="bg-white border border-gray-200 text-gray-700 px-5 py-2.5 rounded-xl shadow-sm hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-700 transition flex items-center font-medium">
+        <a href="{{ url_for('importar_produtos') }}" class="bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 px-5 py-2.5 rounded-xl shadow-sm dark:shadow-none hover:bg-emerald-50 dark:hover:bg-gray-600 hover:border-emerald-200 dark:hover:border-gray-500 hover:text-emerald-700 dark:hover:text-gray-100 transition flex items-center font-medium">
             <i data-lucide="upload" class="w-4 h-4 mr-2"></i>Importar Lista
         </a>
         {% endif %}
@@ -38,17 +38,17 @@
 </div>
 
 <div class="mb-4 flex flex-wrap items-center gap-3">
-    <span class="text-sm font-medium text-gray-700">Ordenar por data de chegada:</span>
-    <a href="{{ url_for('listar_produtos', ordem_data='crescente') }}" class="px-4 py-2 rounded-xl text-sm font-medium transition {{ 'bg-emerald-700 text-white' if ordem_data == 'crescente' else 'bg-white border border-gray-200 text-gray-700 hover:bg-emerald-50 hover:border-emerald-200' }}">
+    <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Ordenar por data de chegada:</span>
+    <a href="{{ url_for('listar_produtos', ordem_data='crescente') }}" class="px-4 py-2 rounded-xl text-sm font-medium transition {{ 'bg-emerald-700 text-white' if ordem_data == 'crescente' else 'bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-emerald-50 dark:hover:bg-gray-600 hover:border-emerald-200 dark:hover:border-gray-500' }}">
         <i data-lucide="arrow-up" class="w-4 h-4 inline-block mr-1.5 align-middle"></i>Data crescente
     </a>
-    <a href="{{ url_for('listar_produtos', ordem_data='decrescente') }}" class="px-4 py-2 rounded-xl text-sm font-medium transition {{ 'bg-emerald-700 text-white' if ordem_data == 'decrescente' else 'bg-white border border-gray-200 text-gray-700 hover:bg-emerald-50 hover:border-emerald-200' }}">
+    <a href="{{ url_for('listar_produtos', ordem_data='decrescente') }}" class="px-4 py-2 rounded-xl text-sm font-medium transition {{ 'bg-emerald-700 text-white' if ordem_data == 'decrescente' else 'bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-emerald-50 dark:hover:bg-gray-600 hover:border-emerald-200 dark:hover:border-gray-500' }}">
         <i data-lucide="arrow-down" class="w-4 h-4 inline-block mr-1.5 align-middle"></i>Data decrescente
     </a>
 </div>
 
 <div class="relative">
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-hidden">
         {% if produtos_agrupados %}
             {% for tipo, produtos in produtos_agrupados.items() %}
             {% set bg_color = 'bg-emerald-700' if tipo == 'ALHO' else 'bg-gray-600' if tipo == 'SACOLA' else 'bg-amber-700' if tipo == 'CAFE' else 'bg-slate-600' %}
@@ -71,61 +71,61 @@
             <!-- Tabela da Categoria -->
             <div class="categoria-content {% if not is_open %}hidden{% endif %}" data-tipo="{{ tipo }}">
                 <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-200" data-bulk-module="produtos">
-                        <thead class="bg-gray-50">
+                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700" data-bulk-module="produtos">
+                        <thead class="bg-gray-50 dark:bg-gray-900/50">
                             <tr>
                                 <th class="px-4 py-3 text-left">
-                                    <input type="checkbox" class="bulk-select-all rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" title="Selecionar todos" data-tipo="{{ tipo }}">
+                                    <input type="checkbox" class="bulk-select-all rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" title="Selecionar todos" data-tipo="{{ tipo }}">
                                 </th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Produto</th>
-                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">PREÇO</th>
-                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Qtd Entrada</th>
-                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">VALOR TOTAL</th>
-                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Estoque Atual</th>
-                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Lucro Realizado</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data Chegada</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fornecedor</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nacionalidade</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tamanho</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Marca</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Caminhoneiro</th>
-                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Produto</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">PREÇO</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Qtd Entrada</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">VALOR TOTAL</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Estoque Atual</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Lucro Realizado</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Data Chegada</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Tipo</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Fornecedor</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Nacionalidade</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Tamanho</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Marca</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Caminhoneiro</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Ações</th>
                             </tr>
                         </thead>
-                        <tbody class="bg-white divide-y divide-gray-200" data-tipo-tbody="{{ tipo }}">
+                        <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700" data-tipo-tbody="{{ tipo }}">
                             {% for item in produtos %}
                             {% set produto = item.produto %}
-                            <tr class="hover:bg-emerald-50 transition {% if produto.estoque_atual <= 0 %}bg-red-50{% elif produto.estoque_atual < 10 %}bg-amber-50{% endif %}" data-tipo="{{ tipo }}">
+                            <tr class="hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition {% if produto.estoque_atual <= 0 %}bg-red-50 dark:bg-red-900/20{% elif produto.estoque_atual < 10 %}bg-amber-50 dark:bg-amber-900/20{% endif %}" data-tipo="{{ tipo }}">
                                 <td class="px-4 py-4">
-                                    <input type="checkbox" class="bulk-row rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" value="{{ produto.id }}">
+                                    <input type="checkbox" class="bulk-row rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" value="{{ produto.id }}">
                                 </td>
-                                <td class="px-6 py-4 text-sm font-medium text-gray-900">
+                                <td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">
                                 <button type="button" onclick="abrirModalVendas('produto', {{ produto.id }})"
-                                        class="text-emerald-700 hover:underline font-bold transition text-left cursor-pointer">
+                                        class="text-emerald-700 dark:text-emerald-400 hover:underline font-bold transition text-left cursor-pointer">
                                     {{ produto.nome_produto }}
                                 </button>
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{{ produto.preco_custo | formato_moeda }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-right">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 text-right">{{ produto.preco_custo | formato_moeda }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400 text-right">
                                 {{ item.quantidade_entrada_exibicao }}
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">{{ (produto.preco_custo * item.quantidade_entrada_exibicao) | formato_moeda }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-bold {% if produto.estoque_atual <= 0 %}text-red-600{% elif produto.estoque_atual < 10 %}text-amber-600{% else %}text-emerald-600{% endif %} text-right">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 text-right font-medium">{{ (produto.preco_custo * item.quantidade_entrada_exibicao) | formato_moeda }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-bold {% if produto.estoque_atual <= 0 %}text-red-600 dark:text-red-400{% elif produto.estoque_atual < 10 %}text-amber-600 dark:text-amber-400{% else %}text-emerald-600 dark:text-emerald-400{% endif %} text-right">
                                 {{ produto.estoque_atual }}
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-right {% if produto.lucro_realizado() > 0 %}text-emerald-600{% elif produto.lucro_realizado() < 0 %}text-red-600{% else %}text-amber-600{% endif %}" title="{% if produto.quantidade_vendida() > 0 %}Lucro de {{ produto.lucro_medio_por_unidade() | formato_moeda }} por unidade{% else %}Nenhuma venda{% endif %}">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-right {% if produto.lucro_realizado() > 0 %}text-emerald-600 dark:text-emerald-400{% elif produto.lucro_realizado() < 0 %}text-red-600 dark:text-red-400{% else %}text-amber-600 dark:text-amber-400{% endif %}" title="{% if produto.quantidade_vendida() > 0 %}Lucro de {{ produto.lucro_medio_por_unidade() | formato_moeda }} por unidade{% else %}Nenhuma venda{% endif %}">
                                 {{ produto.lucro_realizado() | formato_moeda }}
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ produto.data_chegada.strftime('%d/%m/%Y') }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ produto.tipo }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ produto.fornecedor }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ produto.nacionalidade }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ produto.tamanho }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ produto.marca }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ produto.caminhoneiro }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ produto.data_chegada.strftime('%d/%m/%Y') }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ produto.tipo }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ produto.fornecedor }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ produto.nacionalidade }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ produto.tamanho }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ produto.marca }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ produto.caminhoneiro }}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                <button type="button" class="btn-editar-produto text-emerald-600 hover:text-emerald-800 mr-4 inline-flex items-center cursor-pointer bg-transparent border-none p-0"
+                                <button type="button" class="btn-editar-produto text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 mr-4 inline-flex items-center cursor-pointer bg-transparent border-none p-0"
                                         data-id="{{ produto.id }}"
                                         data-preco-custo="{{ produto.preco_custo }}"
                                         data-preco-venda-alvo="{{ produto.preco_venda_alvo or '' }}"
@@ -142,7 +142,7 @@
                                     <i data-lucide="pencil" class="w-4 h-4"></i>
                                 </button>
                                 <form action="{{ url_for('excluir_produto', id=produto.id) }}" method="POST" class="inline" onsubmit="return confirm('Tem certeza que deseja excluir este produto?');">
-                                    <button type="submit" class="text-red-600 hover:text-red-800 inline-flex items-center">
+                                    <button type="submit" class="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 inline-flex items-center">
                                         <i data-lucide="trash-2" class="w-4 h-4"></i>
                                     </button>
                                 </form>
@@ -154,30 +154,30 @@
                 </div>
                 <!-- Resumo Financeiro da categoria -->
                 {% set totais = totais_por_tipo.get(tipo, {}) %}
-                <div class="mt-4 mx-4 mb-4 p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
-                    <h4 class="text-sm font-bold text-emerald-800 mb-3 flex items-center">
+                <div class="mt-4 mx-4 mb-4 p-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700 rounded-xl">
+                    <h4 class="text-sm font-bold text-emerald-800 dark:text-emerald-400 mb-3 flex items-center">
                         <i data-lucide="pie-chart" class="w-4 h-4 mr-2"></i>Totais {{ tipo }}
                     </h4>
                     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        <div class="bg-white rounded-lg p-3 border border-emerald-100 shadow-sm">
-                            <p class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-0.5">Qtd Entrada</p>
-                            <p class="text-lg font-bold text-gray-900">{{ totais.get('total_qtd_entrada', 0)|int }} un</p>
+                        <div class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-emerald-100 dark:border-emerald-800 shadow-sm dark:shadow-none">
+                            <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-0.5">Qtd Entrada</p>
+                            <p class="text-lg font-bold text-gray-900 dark:text-gray-100">{{ totais.get('total_qtd_entrada', 0)|int }} un</p>
                         </div>
-                        <div class="bg-white rounded-lg p-3 border border-emerald-100 shadow-sm">
-                            <p class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-0.5">Investimento</p>
-                            <p class="text-lg font-bold text-gray-900">{{ totais.get('total_investido', 0)|formato_moeda }}</p>
+                        <div class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-emerald-100 dark:border-emerald-800 shadow-sm dark:shadow-none">
+                            <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-0.5">Investimento</p>
+                            <p class="text-lg font-bold text-gray-900 dark:text-gray-100">{{ totais.get('total_investido', 0)|formato_moeda }}</p>
                             <p class="text-xs mt-1.5 space-y-0.5">
-                                <span class="text-blue-600 block">Destak: {{ totais.get('investimento_destak', 0)|formato_moeda }}</span>
-                                <span class="text-purple-600 block">Paty: {{ totais.get('investimento_paty', 0)|formato_moeda }}</span>
+                                <span class="text-blue-600 dark:text-blue-400 block">Destak: {{ totais.get('investimento_destak', 0)|formato_moeda }}</span>
+                                <span class="text-purple-600 dark:text-purple-400 block">Paty: {{ totais.get('investimento_paty', 0)|formato_moeda }}</span>
                             </p>
                         </div>
-                        <div class="bg-white rounded-lg p-3 border border-emerald-100 shadow-sm">
-                            <p class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-0.5">Estoque Atual</p>
-                            <p class="text-lg font-bold text-gray-900">{{ totais.get('total_estoque_atual', 0)|int }} un</p>
+                        <div class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-emerald-100 dark:border-emerald-800 shadow-sm dark:shadow-none">
+                            <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-0.5">Estoque Atual</p>
+                            <p class="text-lg font-bold text-gray-900 dark:text-gray-100">{{ totais.get('total_estoque_atual', 0)|int }} un</p>
                         </div>
-                        <div class="bg-white rounded-lg p-3 border border-emerald-100 shadow-sm">
-                            <p class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-0.5">Lucro Realizado</p>
-                            <p class="text-lg font-bold {% if (totais.get('total_lucro_realizado', 0)|default(0)) >= 0 %}text-emerald-600{% else %}text-red-600{% endif %}">{{ totais.get('total_lucro_realizado', 0)|formato_moeda }}</p>
+                        <div class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-emerald-100 dark:border-emerald-800 shadow-sm dark:shadow-none">
+                            <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-0.5">Lucro Realizado</p>
+                            <p class="text-lg font-bold {% if (totais.get('total_lucro_realizado', 0)|default(0)) >= 0 %}text-emerald-600 dark:text-emerald-400{% else %}text-red-600 dark:text-red-400{% endif %}">{{ totais.get('total_lucro_realizado', 0)|formato_moeda }}</p>
                         </div>
                     </div>
                 </div>
@@ -193,7 +193,7 @@
             </div>
             {% endif %}
         {% else %}
-            <div class="px-6 py-8 text-center text-gray-500">Nenhum produto cadastrado.</div>
+            <div class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">Nenhum produto cadastrado.</div>
         {% endif %}
     </div>
 </div>
@@ -211,29 +211,29 @@
             </button>
         </div>
         <div class="p-8">
-            <div id="modal-nova-entrada-erro" class="hidden mb-4 p-4 bg-red-50 border border-red-200 rounded-xl text-red-800 text-sm"></div>
+            <div id="modal-nova-entrada-erro" class="hidden mb-4 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl text-red-800 dark:text-red-300 text-sm"></div>
             <form id="form-nova-entrada" action="{{ url_for('novo_produto') }}" method="POST">
                 <div class="grid grid-cols-2 gap-4">
                     <div class="col-span-2">
-                        <label for="preco_custo" class="block text-sm font-medium text-gray-700 mb-1">Preço de Custo (R$) <span class="text-red-500">*</span></label>
+                        <label for="preco_custo" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Preço de Custo (R$) <span class="text-red-500">*</span></label>
                         <div class="relative rounded-md shadow-sm">
                             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                <span class="text-gray-500 sm:text-sm">R$</span>
+                                <span class="text-gray-500 dark:text-gray-400 sm:text-sm">R$</span>
                             </div>
-                            <input type="number" step="0.01" name="preco_custo" id="preco_custo" required class="pl-10 w-full rounded-lg border-gray-300 focus:border-emerald-500 focus:ring-emerald-500 transition-colors shadow-sm" placeholder="0,00">
+                            <input type="number" step="0.01" name="preco_custo" id="preco_custo" required class="pl-10 w-full rounded-lg border-gray-300 dark:border-gray-600 focus:border-emerald-500 focus:ring-emerald-500 transition-colors shadow-sm dark:bg-gray-700 dark:text-gray-100" placeholder="0,00">
                         </div>
                     </div>
                     <div class="col-span-1">
-                        <label for="quantidade_entrada" class="block text-sm font-medium text-gray-700 mb-1">Quantidade <span class="text-red-500">*</span></label>
-                        <input type="number" name="quantidade_entrada" id="quantidade_entrada" value="1" required class="w-full rounded-lg border-gray-300 focus:border-emerald-500 focus:ring-emerald-500 transition-colors shadow-sm">
+                        <label for="quantidade_entrada" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Quantidade <span class="text-red-500">*</span></label>
+                        <input type="number" name="quantidade_entrada" id="quantidade_entrada" value="1" required class="w-full rounded-lg border-gray-300 dark:border-gray-600 focus:border-emerald-500 focus:ring-emerald-500 transition-colors shadow-sm dark:bg-gray-700 dark:text-gray-100">
                     </div>
                     <div class="col-span-1">
-                        <label for="data_chegada" class="block text-sm font-medium text-gray-700 mb-1">Data Chegada</label>
-                        <input type="date" name="data_chegada" id="data_chegada" class="w-full rounded-lg border-gray-300 focus:border-emerald-500 focus:ring-emerald-500 transition-colors shadow-sm">
+                        <label for="data_chegada" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Data Chegada</label>
+                        <input type="date" name="data_chegada" id="data_chegada" class="w-full rounded-lg border-gray-300 dark:border-gray-600 focus:border-emerald-500 focus:ring-emerald-500 transition-colors shadow-sm dark:bg-gray-700 dark:text-gray-100">
                     </div>
                     <div class="mb-4">
-                        <label for="tipo" class="block text-sm font-medium text-gray-700 mb-2">Tipo <span class="text-red-500">*</span></label>
-                        <select id="tipo" name="tipo" required class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                        <label for="tipo" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tipo <span class="text-red-500">*</span></label>
+                        <select id="tipo" name="tipo" required class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                             <option value="">Selecione...</option>
                             <option value="ALHO">ALHO</option>
                             <option value="SACOLA">SACOLA</option>
@@ -241,8 +241,8 @@
                         </select>
                     </div>
                     <div class="mb-4">
-                        <label for="fornecedor" class="block text-sm font-medium text-gray-700 mb-2">Fornecedor <span class="text-red-500">*</span></label>
-                        <select id="fornecedor" name="fornecedor" required class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                        <label for="fornecedor" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Fornecedor <span class="text-red-500">*</span></label>
+                        <select id="fornecedor" name="fornecedor" required class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                             <option value="">Selecione...</option>
                             <option value="DESTAK">DESTAK</option>
                             <option value="PATY">PATY</option>
@@ -250,20 +250,20 @@
                         </select>
                     </div>
                     <div class="mb-4" id="nacionalidade-wrap">
-                        <label for="nacionalidade" class="block text-sm font-medium text-gray-700 mb-2">Nacionalidade <span class="text-red-500" id="nacionalidade-asterisco">*</span></label>
+                        <label for="nacionalidade" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Nacionalidade <span class="text-red-500" id="nacionalidade-asterisco">*</span></label>
                         <input type="hidden" id="nacionalidade_hidden" value="N/A">
-                        <select id="nacionalidade" name="nacionalidade" required class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                        <select id="nacionalidade" name="nacionalidade" required class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                             <option value="">Selecione...</option>
                             <option value="ARGENTINO">ARGENTINO</option>
                             <option value="NACIONAL">NACIONAL</option>
                             <option value="CHINES">CHINES</option>
                             <option value="NA">N/A (Não se aplica)</option>
                         </select>
-                        <p class="mt-1 text-sm text-gray-500 hidden" id="nacionalidade-na-msg">N/A para SACOLA</p>
+                        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400 hidden" id="nacionalidade-na-msg">N/A para SACOLA</p>
                     </div>
                     <div class="mb-4">
-                        <label for="tamanho" class="block text-sm font-medium text-gray-700 mb-2">Tamanho <span class="text-red-500">*</span></label>
-                        <select id="tamanho" name="tamanho" required data-initial="" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                        <label for="tamanho" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tamanho <span class="text-red-500">*</span></label>
+                        <select id="tamanho" name="tamanho" required data-initial="" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                             <option value="">Selecione...</option>
                             {% for tam in ['4', '5', '6', '7', '8', '9', '10'] %}
                             <option value="{{ tam }}">{{ tam }}</option>
@@ -272,13 +272,13 @@
                         </select>
                     </div>
                     <div class="mb-4" id="marca-wrap">
-                        <label for="marca" class="block text-sm font-medium text-gray-700 mb-2">Marca <span class="text-red-500" id="marca-asterisco">*</span></label>
+                        <label for="marca" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Marca <span class="text-red-500" id="marca-asterisco">*</span></label>
                         <input type="hidden" id="marca_hidden" value="SOPACK">
-                        <input type="text" id="marca" name="marca" required placeholder="Ex: IMPORFOZ" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                        <input type="text" id="marca" name="marca" required placeholder="Ex: IMPORFOZ" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                     </div>
                     <div class="mb-4">
-                        <label for="caminhoneiro" class="block text-sm font-medium text-gray-700 mb-2">Caminhoneiro <span class="text-red-500">*</span></label>
-                        <input type="text" id="caminhoneiro" name="caminhoneiro" required placeholder="Ex: ALEXANDRE" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                        <label for="caminhoneiro" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Caminhoneiro <span class="text-red-500">*</span></label>
+                        <input type="text" id="caminhoneiro" name="caminhoneiro" required placeholder="Ex: ALEXANDRE" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                     </div>
                 </div>
                 <div class="flex gap-4 mt-6">
