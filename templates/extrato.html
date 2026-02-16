@@ -59,7 +59,7 @@
                     <td class="py-3 text-gray-500">{{ venda.nf or '-' }}</td>
                     <td class="py-3 font-medium">{{ venda.produto.nome_produto if venda.produto else '-' }}</td>
                     <td class="py-3 text-center">{{ venda.quantidade_venda }}</td>
-                    <td class="py-3 text-right font-medium">R$ {{ "%.2f"|format(venda.calcular_total()) }}</td>
+                    <td class="py-3 text-right font-medium">R$ {{ ("{:,.2f}".format(venda.calcular_total())).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                 </tr>
                 {% else %}
                 <tr>
@@ -72,7 +72,7 @@
             <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-6 w-full max-w-sm">
                 <div class="flex justify-between items-center text-emerald-900">
                     <span class="text-lg font-bold uppercase tracking-wider">Total Devido:</span>
-                    <span class="text-2xl font-black">R$ {{ "%.2f"|format(total) }}</span>
+                    <span class="text-2xl font-black">R$ {{ ("{:,.2f}".format(total)).replace(',', 'X').replace('.', ',').replace('X', '.') }}</span>
                 </div>
             </div>
         </div>
