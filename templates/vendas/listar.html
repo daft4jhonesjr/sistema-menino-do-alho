@@ -421,7 +421,19 @@
             <p><span class="font-medium text-gray-500 dark:text-gray-400">NF:</span> <span id="modal-confirmar-nf">—</span></p>
             <p><span class="font-medium text-gray-500 dark:text-gray-400">Valor Total:</span> <span id="modal-confirmar-valor" class="font-bold text-emerald-600 dark:text-emerald-400">—</span></p>
         </div>
-        <p class="mt-4 text-gray-600 dark:text-gray-400">Você confirma que o pagamento deste pedido foi recebido?</p>
+        <div class="mt-4 mb-4 bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-lg border border-emerald-100 dark:border-emerald-800">
+            <label class="block text-sm font-bold text-emerald-800 dark:text-emerald-300 mb-2 flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg>
+                Cair em qual conta do Caixa?
+            </label>
+            <select id="modal-confirmar-forma-pagamento" name="forma_pagamento" class="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500 font-medium">
+                <option value="Dinheiro">💵 Dinheiro (Espécie)</option>
+                <option value="Pix">📱 Pix / Transferência</option>
+                <option value="Cheque">📝 Cheque</option>
+            </select>
+            <p class="text-xs text-emerald-600 dark:text-emerald-400 mt-2 font-medium">* O valor será lançado automaticamente no seu Livro Caixa de hoje.</p>
+        </div>
+        <p class="text-gray-600 dark:text-gray-400">Você confirma que o pagamento deste pedido foi recebido?</p>
     </div>
     <div class="flex justify-end gap-3 rounded-b-lg border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 px-6 py-4">
         <button type="button" id="modal-confirmar-cancelar" class="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600 transition">Cancelar</button>
@@ -604,17 +616,20 @@
         modalConfirmarBtn = null;
     }
 
-    function execAtualizarStatus(btn, situacao, onSuccess) {
+    function execAtualizarStatus(btn, situacao, formaPagamento, onSuccess) {
         var id = btn.getAttribute('data-venda-id');
         var nf = btn.getAttribute('data-nf') || 'N/A';
         var cliente = btn.getAttribute('data-cliente') || '';
         var valor = btn.getAttribute('data-valor') || '';
         btn.disabled = true;
         var url = '/venda/atualizar_status/' + id;
-        fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
-        }).then(function(r) { return r.json(); }).then(function(data) {
+        var opts = { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } };
+        if (situacao === 'PENDENTE' && formaPagamento) {
+            var fd = new FormData();
+            fd.append('forma_pagamento', formaPagamento);
+            opts.body = fd;
+        }
+        fetch(url, opts).then(function(r) { return r.json(); }).then(function(data) {
             if (data.ok) {
                 var novo = data.novo_status || (situacao === 'PENDENTE' ? 'PAGO' : 'PENDENTE');
                 var replacement = document.createElement('button');
@@ -650,8 +665,10 @@
             if (!modalConfirmarBtn) return;
             var btn = modalConfirmarBtn;
             var situacao = btn.getAttribute('data-situacao');
+            var selForma = document.getElementById('modal-confirmar-forma-pagamento');
+            var formaPagamento = selForma ? selForma.value : 'Dinheiro';
             closeModalConfirmar();
-            execAtualizarStatus(btn, situacao);
+            execAtualizarStatus(btn, situacao, formaPagamento);
         });
     }
 
@@ -670,7 +687,7 @@
             }
             var msg = 'O pagamento foi um erro? Alterar pedido [NF ' + nf + '] de volta para PENDENTE?';
             if (!confirm(msg)) return;
-            execAtualizarStatus(btn, situacao);
+            execAtualizarStatus(btn, situacao, null);
         });
     }
     
