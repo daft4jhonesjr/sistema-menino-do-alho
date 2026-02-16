@@ -2764,11 +2764,11 @@ def importar_caixa():
         try:
             raw = arquivo.stream.read()
             try:
-                texto = raw.decode('utf-8')
-            except UnicodeDecodeError:
-                texto = raw.decode('latin-1')
+                conteudo = raw.decode('utf-8-sig', errors='replace')
+            except Exception:
+                conteudo = raw.decode('latin-1', errors='replace')
 
-            stream = io.StringIO(texto, newline=None)
+            stream = io.StringIO(conteudo, newline=None)
             primeira_linha = stream.readline()
             delimitador = ';' if ';' in primeira_linha else ','
             stream.seek(0)
@@ -2776,13 +2776,21 @@ def importar_caixa():
             leitor = csv.reader(stream, delimiter=delimitador)
             next(leitor, None)
 
-            for linha in leitor:
-                if not linha or len(linha) < 6:
+            linhas_sucesso = 0
+            erros = []
+
+            for i, linha in enumerate(leitor, start=2):
+                if not linha or all(c.strip() == '' for c in linha):
+                    continue
+
+                if len(linha) < 6:
+                    erros.append(f"Linha {i}: Faltam colunas (tem {len(linha)}, precisa de 6).")
                     continue
 
                 try:
                     data_str = str(linha[0]).strip()
                     if not data_str:
+                        erros.append(f"Linha {i}: Data vazia.")
                         continue
                     s = data_str.split()[0]
                     for fmt in ('%d/%m/%Y', '%Y-%m-%d', '%d-%m-%Y'):
@@ -2792,6 +2800,7 @@ def importar_caixa():
                         except ValueError:
                             continue
                     else:
+                        erros.append(f"Linha {i}: Data inválida '{data_str}'.")
                         continue
 
                     descricao = str(linha[1]).strip()
@@ -2799,8 +2808,16 @@ def importar_caixa():
                     categoria = str(linha[3]).strip() or 'Outros'
                     forma_pagamento = str(linha[4]).strip() or 'Dinheiro'
 
-                    valor_str = str(linha[5]).replace('R$', '').replace('.', '').replace(',', '.').strip()
-                    valor = float(valor_str) if valor_str else 0.0
+                    valor_str = str(linha[5]).replace('R$', '').replace(' ', '')
+                    if ',' in valor_str and '.' in valor_str:
+                        valor_str = valor_str.replace('.', '').replace(',', '.')
+                    elif ',' in valor_str:
+                        valor_str = valor_str.replace(',', '.')
+                    valor_str = valor_str.strip()
+                    if not valor_str:
+                        erros.append(f"Linha {i}: Valor vazio.")
+                        continue
+                    valor = float(valor_str)
 
                     novo_lancamento = LancamentoCaixa(
                         data=data_lanc,
@@ -2812,15 +2829,31 @@ def importar_caixa():
                         usuario_id=current_user.id
                     )
                     db.session.add(novo_lancamento)
+                    linhas_sucesso += 1
+
                 except Exception as e:
-                    current_app.logger.warning(f"Erro ao processar linha {linha}: {e}")
+                    erros.append(f"Linha {i}: {str(e)}")
                     continue
 
-            db.session.commit()
-            flash('Arquivo CSV importado com sucesso!', 'success')
+            if linhas_sucesso > 0:
+                db.session.commit()
+                mensagem = f'{linhas_sucesso} lançamentos importados com sucesso!'
+                if erros:
+                    mensagem += f' ({len(erros)} linhas omitidas por erro.)'
+                    flash(mensagem, 'success')
+                    flash('Erros: ' + '; '.join(erros[:5]) + ('...' if len(erros) > 5 else ''), 'warning')
+                else:
+                    flash(mensagem, 'success')
+            else:
+                db.session.rollback()
+                msg_erro = erros[0] if erros else "Formato de colunas inválido. Verifique se o CSV tem 6 colunas: Data, Descrição, Tipo, Categoria, Conta, Valor."
+                flash(f'Nenhum dado importado. {msg_erro}', 'error')
+                if len(erros) > 1:
+                    flash('Detalhes: ' + '; '.join(erros[:3]) + ('...' if len(erros) > 3 else ''), 'warning')
+
         except Exception as e:
             db.session.rollback()
-            flash(f'Erro ao processar o CSV: {str(e)}', 'error')
+            flash(f'Erro fatal ao ler o CSV: {str(e)}', 'error')
     else:
         flash('Por favor, envie um arquivo .csv válido.', 'error')
 
