@@ -206,24 +206,24 @@
         <div class="header">
             <h1>MENINO DO ALHO</h1>
             <div class="empresa-info">
-                <p><strong>Empresa Faturadora:</strong> {{ venda.empresa_faturadora }}</p>
-                <p><strong>Nota Fiscal:</strong> {{ venda.nf or 'N/A' }}</p>
-                <p><strong>Data da Venda:</strong> {{ venda.data_venda.strftime('%d/%m/%Y') }}</p>
+                <p><strong>Empresa Faturadora:</strong> {{ venda_base.empresa_faturadora }}</p>
+                <p><strong>Nota Fiscal:</strong> {{ venda_base.nf or 'N/A' }}</p>
+                <p><strong>Data da Venda:</strong> {{ venda_base.data_venda.strftime('%d/%m/%Y') }}</p>
             </div>
         </div>
         
         <!-- Dados do Cliente -->
         <div class="cliente-section">
             <h2>DADOS DO CLIENTE</h2>
-            <p><strong>Nome:</strong> {{ venda.cliente.nome_cliente }}</p>
-            {% if venda.cliente.razao_social %}
-            <p><strong>Razão Social:</strong> {{ venda.cliente.razao_social }}</p>
+            <p><strong>Nome:</strong> {{ cliente.nome_cliente }}</p>
+            {% if cliente.razao_social %}
+            <p><strong>Razão Social:</strong> {{ cliente.razao_social }}</p>
             {% endif %}
-            {% if venda.cliente.cnpj %}
-            <p><strong>CNPJ:</strong> {{ venda.cliente.cnpj }}</p>
+            {% if cliente.cnpj %}
+            <p><strong>CNPJ:</strong> {{ cliente.cnpj }}</p>
             {% endif %}
-            {% if venda.cliente.cidade %}
-            <p><strong>Cidade:</strong> {{ venda.cliente.cidade }}</p>
+            {% if cliente.cidade %}
+            <p><strong>Cidade:</strong> {{ cliente.cidade }}</p>
             {% endif %}
         </div>
         
@@ -238,19 +238,25 @@
                 </tr>
             </thead>
             <tbody>
-                <tr>
-                    <td>{{ venda.produto.nome_produto }}</td>
-                    <td class="text-center">{{ venda.quantidade_venda }}</td>
-                    <td class="text-right">{{ venda.preco_venda|formato_moeda }}</td>
-                    <td class="text-right">{{ venda.calcular_total()|formato_moeda }}</td>
+                {% for v in vendas %}
+                <tr class="border-b border-gray-300">
+                    <td class="p-2 text-left text-sm font-medium">{{ v.produto.nome_produto if v.produto else '-' }}</td>
+                    <td class="p-2 text-center text-sm">{{ v.quantidade_venda }}</td>
+                    <td class="p-2 text-center text-sm">
+                        R$ {{ ("{:,.2f}".format(v.calcular_total() / v.quantidade_venda if v.quantidade_venda > 0 else 0)).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                    </td>
+                    <td class="p-2 text-right text-sm">
+                        R$ {{ ("{:,.2f}".format(v.calcular_total())).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                    </td>
                 </tr>
+                {% endfor %}
             </tbody>
         </table>
         
         <!-- Total -->
         <div class="total-section">
             <span class="label">VALOR TOTAL:</span>
-            <span class="valor">{{ venda.calcular_total()|formato_moeda }}</span>
+            <span class="valor">R$ {{ ("{:,.2f}".format(total_recibo)).replace(',', 'X').replace('.', ',').replace('X', '.') }}</span>
         </div>
         
         <!-- Rodapé -->

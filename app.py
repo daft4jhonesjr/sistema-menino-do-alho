@@ -4606,10 +4606,26 @@ def atualizar_status_venda(id_venda):
 @app.route('/venda/recibo/<int:id>')
 @login_required
 def recibo_venda(id):
-    """Gera recibo de venda em formato de impressão (uma página A4)."""
-    venda = Venda.query.get_or_404(id)
+    """Gera recibo de venda em formato de impressão (uma página A4). Agrupa itens da mesma compra (cliente, data, NF)."""
+    venda_base = Venda.query.options(joinedload(Venda.cliente)).get_or_404(id)
+    cliente = venda_base.cliente
+
+    # Busca todas as linhas que pertencem a esta mesma "compra" (mesmo cliente, data e NF)
+    vendas_agrupadas = Venda.query.filter_by(
+        cliente_id=venda_base.cliente_id,
+        data_venda=venda_base.data_venda,
+        nf=venda_base.nf
+    ).options(joinedload(Venda.produto)).order_by(Venda.id).all()
+
+    total_recibo = sum(float(v.calcular_total()) for v in vendas_agrupadas)
     data_emissao = date.today()
-    return render_template('vendas/recibo.html', venda=venda, data_emissao=data_emissao)
+
+    return render_template('vendas/recibo.html',
+                          cliente=cliente,
+                          venda_base=venda_base,
+                          vendas=vendas_agrupadas,
+                          total_recibo=total_recibo,
+                          data_emissao=data_emissao)
 
 
 # ============================================================================
