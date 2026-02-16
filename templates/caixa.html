@@ -150,14 +150,14 @@
 <div id="modalImportarCaixa" class="fixed inset-0 z-50 hidden bg-black/60 flex items-center justify-center p-4" onclick="if(event.target===this) this.classList.add('hidden')">
     <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md overflow-hidden" onclick="event.stopPropagation()">
         <div class="flex justify-between items-center p-5 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
-            <h3 class="text-lg font-bold text-gray-800 dark:text-gray-100">Importar Dados (Excel)</h3>
+            <h3 class="text-lg font-bold text-gray-800 dark:text-gray-100">Importar Dados (CSV)</h3>
             <button type="button" onclick="document.getElementById('modalImportarCaixa').classList.add('hidden')" class="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors p-1">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
             </button>
         </div>
         <form action="{{ url_for('importar_caixa') }}" method="POST" enctype="multipart/form-data" class="p-5 space-y-4">
             <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 text-blue-800 dark:text-blue-300 p-4 rounded-lg text-sm">
-                <p class="font-bold mb-2">Atenção ao formato do Excel (.xlsx):</p>
+                <p class="font-bold mb-2">Atenção ao formato do arquivo (.csv):</p>
                 <ul class="list-disc pl-5 space-y-1 text-xs font-medium">
                     <li><strong>A:</strong> Data (DD/MM/AAAA)</li>
                     <li><strong>B:</strong> Descrição do Gasto/Receita</li>
@@ -168,8 +168,8 @@
                 </ul>
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Selecione a planilha (.xlsx)</label>
-                <input type="file" name="arquivo" accept=".xlsx" required class="w-full text-sm text-gray-500 dark:text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 dark:file:bg-emerald-900/30 dark:file:text-emerald-400">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Selecione o arquivo (.csv)</label>
+                <input type="file" name="arquivo" accept=".csv" required class="w-full text-sm text-gray-500 dark:text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 dark:file:bg-emerald-900/30 dark:file:text-emerald-400">
             </div>
             <div class="pt-4 flex justify-end gap-3">
                 <button type="button" onclick="document.getElementById('modalImportarCaixa').classList.add('hidden')" class="px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">Cancelar</button>

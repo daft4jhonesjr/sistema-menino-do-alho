@@ -2760,50 +2760,52 @@ def importar_caixa():
         flash('Nenhum arquivo selecionado.', 'error')
         return redirect(url_for('caixa'))
 
-    if arquivo and arquivo.filename.lower().endswith('.xlsx'):
+    if arquivo and arquivo.filename.lower().endswith('.csv'):
         try:
-            wb = openpyxl.load_workbook(arquivo, data_only=True)
-            planilha = wb.active
+            raw = arquivo.stream.read()
+            try:
+                texto = raw.decode('utf-8')
+            except UnicodeDecodeError:
+                texto = raw.decode('latin-1')
 
-            for linha in planilha.iter_rows(min_row=2, values_only=True):
+            stream = io.StringIO(texto, newline=None)
+            primeira_linha = stream.readline()
+            delimitador = ';' if ';' in primeira_linha else ','
+            stream.seek(0)
+
+            leitor = csv.reader(stream, delimiter=delimitador)
+            next(leitor, None)
+
+            for linha in leitor:
                 if not linha or len(linha) < 6:
-                    continue
-                if not linha[0] or not linha[1]:
                     continue
 
                 try:
-                    # Tratamento da Data (Excel pode retornar datetime, date ou string)
-                    if isinstance(linha[0], datetime):
-                        data_lanc = linha[0].date()
-                    elif isinstance(linha[0], date):
-                        data_lanc = linha[0]
-                    else:
-                        s = str(linha[0]).strip().split()[0]
-                        for fmt in ('%d/%m/%Y', '%Y-%m-%d', '%d-%m-%Y'):
-                            try:
-                                data_lanc = datetime.strptime(s, fmt).date()
-                                break
-                            except ValueError:
-                                continue
-                        else:
+                    data_str = str(linha[0]).strip()
+                    if not data_str:
+                        continue
+                    s = data_str.split()[0]
+                    for fmt in ('%d/%m/%Y', '%Y-%m-%d', '%d-%m-%Y'):
+                        try:
+                            data_lanc = datetime.strptime(s, fmt).date()
+                            break
+                        except ValueError:
                             continue
-
-                    descricao = str(linha[1] or '').strip()
-                    tipo = str(linha[2] or 'ENTRADA').strip().upper()
-                    categoria = str(linha[3] or '').strip() or 'Outros'
-                    forma_pagamento = str(linha[4] or 'Dinheiro').strip() or 'Dinheiro'
-
-                    valor_raw = linha[5]
-                    if isinstance(valor_raw, (int, float)):
-                        valor = float(valor_raw)
                     else:
-                        valor_str = str(valor_raw or '0').replace('R$', '').replace('.', '').replace(',', '.').strip()
-                        valor = float(valor_str) if valor_str else 0.0
+                        continue
+
+                    descricao = str(linha[1]).strip()
+                    tipo = str(linha[2]).strip().upper()
+                    categoria = str(linha[3]).strip() or 'Outros'
+                    forma_pagamento = str(linha[4]).strip() or 'Dinheiro'
+
+                    valor_str = str(linha[5]).replace('R$', '').replace('.', '').replace(',', '.').strip()
+                    valor = float(valor_str) if valor_str else 0.0
 
                     novo_lancamento = LancamentoCaixa(
                         data=data_lanc,
                         descricao=descricao,
-                        tipo='ENTRADA' if 'ENTRADA' in tipo or tipo == 'E' else 'SAIDA',
+                        tipo='ENTRADA' if 'ENTRADA' in tipo else 'SAIDA',
                         categoria=categoria,
                         forma_pagamento=forma_pagamento,
                         valor=abs(valor),
@@ -2815,12 +2817,12 @@ def importar_caixa():
                     continue
 
             db.session.commit()
-            flash('Caixa importado com sucesso!', 'success')
+            flash('Arquivo CSV importado com sucesso!', 'success')
         except Exception as e:
             db.session.rollback()
-            flash(f'Erro ao processar arquivo: {str(e)}', 'error')
+            flash(f'Erro ao processar o CSV: {str(e)}', 'error')
     else:
-        flash('Por favor, envie um arquivo .xlsx válido.', 'error')
+        flash('Por favor, envie um arquivo .csv válido.', 'error')
 
     return redirect(url_for('caixa'))
 
