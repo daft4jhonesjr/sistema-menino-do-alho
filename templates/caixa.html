@@ -89,10 +89,20 @@
                     <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Pessoal</span>
                     <span class="text-red-400 dark:text-red-300 font-semibold text-sm">- {{ grupo.saidas_pessoal_mes|formato_moeda }}</span>
                 </div>
-                <div class="flex flex-col text-right pl-3 md:pl-4 border-l-2 border-gray-300 dark:border-gray-600">
-                    <span class="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-0.5">Saldo do Mês</span>
-                    <span class="font-black text-sm {% if grupo.saldo_mes < 0 %}text-red-600 dark:text-red-400{% else %}text-emerald-600 dark:text-emerald-400{% endif %}">
-                        {{ grupo.saldo_mes|formato_moeda }}
+                <div class="hidden lg:flex flex-col text-right pl-3 border-l border-gray-200 dark:border-gray-700">
+                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Mês Anterior</span>
+                    <span class="text-gray-500 dark:text-gray-400 font-semibold text-sm">{{ grupo.saldo_anterior|formato_moeda }}</span>
+                </div>
+                <div class="hidden xl:flex flex-col text-right pl-3 border-l border-gray-200 dark:border-gray-700">
+                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Resultado</span>
+                    <span class="font-semibold text-sm {% if grupo.saldo_mes < 0 %}text-red-500 dark:text-red-400{% else %}text-emerald-500 dark:text-emerald-400{% endif %}">
+                        {% if grupo.saldo_mes > 0 %}+{% endif %}{{ grupo.saldo_mes|formato_moeda }}
+                    </span>
+                </div>
+                <div class="flex flex-col text-right pl-3 md:pl-4 border-l-2 border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1 rounded-r-lg">
+                    <span class="text-[10px] font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider mb-0.5">Saldo Final</span>
+                    <span class="font-black text-sm {% if grupo.saldo_final < 0 %}text-red-600 dark:text-red-400{% else %}text-emerald-700 dark:text-emerald-400{% endif %}">
+                        {{ grupo.saldo_final|formato_moeda }}
                     </span>
                 </div>
             </div>

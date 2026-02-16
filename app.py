@@ -2744,8 +2744,18 @@ def caixa():
                 lancamentos_agrupados[chave_mes]['saidas_fornecedor_mes'] += l.valor
             elif 'Pessoal' in l.categoria:
                 lancamentos_agrupados[chave_mes]['saidas_pessoal_mes'] += l.valor
+    # Calcula o saldo de cada mês isolado
     for chave, grupo in lancamentos_agrupados.items():
         grupo['saldo_mes'] = grupo['entradas_mes'] - grupo['saidas_mes']
+    # Lógica do Saldo Transitado (Acumulado) de um mês para o outro
+    # Ordena do mês mais antigo para o mais novo (Ex: '2026-01' -> '2026-02')
+    chaves_ordenadas = sorted(lancamentos_agrupados.keys())
+    saldo_acumulado = 0.0
+    for chave in chaves_ordenadas:
+        grupo = lancamentos_agrupados[chave]
+        grupo['saldo_anterior'] = saldo_acumulado
+        saldo_acumulado += grupo['saldo_mes']
+        grupo['saldo_final'] = saldo_acumulado
     lancamentos_agrupados = dict(sorted(lancamentos_agrupados.items(), key=lambda x: x[0], reverse=True))
     mes_atual_str = date.today().strftime('%Y-%m')
 
