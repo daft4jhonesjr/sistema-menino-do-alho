@@ -61,21 +61,29 @@
                 <span class="bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs py-1 px-2 rounded-full font-bold">{{ grupo.itens|length }} itens</span>
             </div>
             <div class="flex flex-wrap md:flex-nowrap gap-3 md:gap-4 ml-0 md:ml-auto items-center mt-4 md:mt-0">
-                <div class="hidden xl:flex flex-col text-right pr-3 border-r border-gray-200 dark:border-gray-700">
-                    <span class="text-[10px] font-bold text-blue-400 dark:text-blue-500 uppercase tracking-wider mb-0.5">Dinheiro</span>
-                    <span class="text-blue-700 dark:text-blue-400 font-semibold text-sm">{{ grupo.saldo_dinheiro|formato_moeda }}</span>
+                <div class="hidden xl:flex flex-col text-right pr-3 border-r border-gray-200 dark:border-gray-700 group cursor-pointer">
+                    <span class="text-[10px] font-bold text-blue-400 dark:text-blue-500 uppercase tracking-wider mb-0.5 group-hover:hidden">Dinheiro</span>
+                    <span class="text-[10px] font-bold text-emerald-500 dark:text-emerald-400 uppercase tracking-wider mb-0.5 hidden group-hover:block">Entrou (Mês)</span>
+                    <span class="text-blue-700 dark:text-blue-400 font-semibold text-sm group-hover:hidden">{{ grupo.saldo_dinheiro|formato_moeda }}</span>
+                    <span class="text-emerald-600 dark:text-emerald-400 font-bold text-sm hidden group-hover:block">+ {{ grupo.entradas_dinheiro|formato_moeda }}</span>
                 </div>
-                <div class="hidden xl:flex flex-col text-right pr-3 border-r border-gray-200 dark:border-gray-700">
-                    <span class="text-[10px] font-bold text-blue-400 dark:text-blue-500 uppercase tracking-wider mb-0.5">Cheque</span>
-                    <span class="text-blue-700 dark:text-blue-400 font-semibold text-sm">{{ grupo.saldo_cheque|formato_moeda }}</span>
+                <div class="hidden xl:flex flex-col text-right pr-3 border-r border-gray-200 dark:border-gray-700 group cursor-pointer">
+                    <span class="text-[10px] font-bold text-blue-400 dark:text-blue-500 uppercase tracking-wider mb-0.5 group-hover:hidden">Cheque</span>
+                    <span class="text-[10px] font-bold text-emerald-500 dark:text-emerald-400 uppercase tracking-wider mb-0.5 hidden group-hover:block">Entrou (Mês)</span>
+                    <span class="text-blue-700 dark:text-blue-400 font-semibold text-sm group-hover:hidden">{{ grupo.saldo_cheque|formato_moeda }}</span>
+                    <span class="text-emerald-600 dark:text-emerald-400 font-bold text-sm hidden group-hover:block">+ {{ grupo.entradas_cheque|formato_moeda }}</span>
                 </div>
-                <div class="hidden xl:flex flex-col text-right pr-3 border-r border-gray-200 dark:border-gray-700">
-                    <span class="text-[10px] font-bold text-blue-400 dark:text-blue-500 uppercase tracking-wider mb-0.5">Pix</span>
-                    <span class="text-blue-700 dark:text-blue-400 font-semibold text-sm">{{ grupo.saldo_pix|formato_moeda }}</span>
+                <div class="hidden xl:flex flex-col text-right pr-3 border-r border-gray-200 dark:border-gray-700 group cursor-pointer">
+                    <span class="text-[10px] font-bold text-blue-400 dark:text-blue-500 uppercase tracking-wider mb-0.5 group-hover:hidden">Pix</span>
+                    <span class="text-[10px] font-bold text-emerald-500 dark:text-emerald-400 uppercase tracking-wider mb-0.5 hidden group-hover:block">Entrou (Mês)</span>
+                    <span class="text-blue-700 dark:text-blue-400 font-semibold text-sm group-hover:hidden">{{ grupo.saldo_pix|formato_moeda }}</span>
+                    <span class="text-emerald-600 dark:text-emerald-400 font-bold text-sm hidden group-hover:block">+ {{ grupo.entradas_pix|formato_moeda }}</span>
                 </div>
-                <div class="hidden xl:flex flex-col text-right pr-3 border-r border-gray-200 dark:border-gray-700 mr-2">
-                    <span class="text-[10px] font-bold text-blue-400 dark:text-blue-500 uppercase tracking-wider mb-0.5">Boleto</span>
-                    <span class="text-blue-700 dark:text-blue-400 font-semibold text-sm">{{ grupo.saldo_boleto|formato_moeda }}</span>
+                <div class="hidden xl:flex flex-col text-right pr-3 border-r border-gray-200 dark:border-gray-700 group cursor-pointer mr-2">
+                    <span class="text-[10px] font-bold text-blue-400 dark:text-blue-500 uppercase tracking-wider mb-0.5 group-hover:hidden">Boleto</span>
+                    <span class="text-[10px] font-bold text-emerald-500 dark:text-emerald-400 uppercase tracking-wider mb-0.5 hidden group-hover:block">Entrou (Mês)</span>
+                    <span class="text-blue-700 dark:text-blue-400 font-semibold text-sm group-hover:hidden">{{ grupo.saldo_boleto|formato_moeda }}</span>
+                    <span class="text-emerald-600 dark:text-emerald-400 font-bold text-sm hidden group-hover:block">+ {{ grupo.entradas_boleto|formato_moeda }}</span>
                 </div>
                 <div class="flex flex-col text-right">
                     <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Entrada Total</span>

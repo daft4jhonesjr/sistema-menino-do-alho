@@ -2746,7 +2746,11 @@ def caixa():
                 'saldo_dinheiro': 0.0,
                 'saldo_cheque': 0.0,
                 'saldo_pix': 0.0,
-                'saldo_boleto': 0.0
+                'saldo_boleto': 0.0,
+                'entradas_dinheiro': 0.0,
+                'entradas_cheque': 0.0,
+                'entradas_pix': 0.0,
+                'entradas_boleto': 0.0
             }
         lancamentos_agrupados[chave_mes]['itens'].append(l)
         # Cálculo por forma de pagamento (Saldo líquido: Entradas - Saídas)
@@ -2763,6 +2767,14 @@ def caixa():
         # Cálculo de Entradas e Saídas
         if l.tipo == 'ENTRADA':
             lancamentos_agrupados[chave_mes]['entradas_mes'] += l.valor
+            if 'dinheiro' in forma:
+                lancamentos_agrupados[chave_mes]['entradas_dinheiro'] += l.valor
+            elif 'cheque' in forma:
+                lancamentos_agrupados[chave_mes]['entradas_cheque'] += l.valor
+            elif 'pix' in forma or 'transfer' in forma:
+                lancamentos_agrupados[chave_mes]['entradas_pix'] += l.valor
+            elif 'boleto' in forma:
+                lancamentos_agrupados[chave_mes]['entradas_boleto'] += l.valor
         else:
             lancamentos_agrupados[chave_mes]['saidas_mes'] += l.valor
             if l.categoria and 'Fornecedor' in l.categoria:
