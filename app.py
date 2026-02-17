@@ -4234,6 +4234,22 @@ def api_dashboard_detalhes(filtro):
         return jsonify({'erro': str(e)}), 500
 
 
+@app.route('/api/cobrancas_pendentes')
+@login_required
+def api_cobrancas_pendentes():
+    """Retorna se há cobranças pendentes (vendas não pagas) para notificações no dispositivo."""
+    try:
+        ano_ativo = session.get('ano_ativo', datetime.now().year)
+        filtro_ano = extract('year', Venda.data_venda) == ano_ativo
+        total = db.session.query(
+            func.sum(Venda.preco_venda * Venda.quantidade_venda)
+        ).filter(Venda.situacao == 'PENDENTE', filtro_ano).scalar() or 0
+        return jsonify({'has_pendentes': float(total) > 0, 'total': float(total)})
+    except Exception:
+        db.session.rollback()
+        return jsonify({'has_pendentes': False, 'total': 0})
+
+
 @app.route('/api/dashboard/detalhes_mes/<int:ano>/<int:mes>')
 @login_required
 def api_detalhes_mes(ano, mes):

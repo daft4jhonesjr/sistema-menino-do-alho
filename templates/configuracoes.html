@@ -40,6 +40,22 @@
             </div>
         </div>
 
+        <h3 class="text-lg font-bold text-emerald-700 dark:text-emerald-500 border-b border-gray-100 dark:border-gray-700 pb-2 mb-4 mt-8">Alertas e Notificações</h3>
+
+        <div class="mb-6 flex items-center justify-between bg-gray-50 dark:bg-gray-800/50 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+            <div>
+                <h4 class="font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                    <span>📲</span> Notificações no Dispositivo
+                </h4>
+                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Receba alertas na tela do celular ou computador quando houver cobranças vencendo hoje.</p>
+            </div>
+
+            <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="toggleNotificacoes" class="sr-only peer">
+                <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer dark:bg-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-emerald-500"></div>
+            </label>
+        </div>
+
         {% if current_user.is_admin() %}
         <h3 class="text-lg font-bold text-emerald-700 dark:text-emerald-500 border-b border-gray-100 dark:border-gray-700 pb-2 mb-4 mt-8">Gerenciamento do Sistema</h3>
 
@@ -88,6 +104,42 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     });
+
+    // Lógica das Notificações de Dispositivo
+    var toggleNotif = document.getElementById('toggleNotificacoes');
+    if (toggleNotif) {
+        if (localStorage.getItem('menino_alho_device_notif') === 'true' && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+            toggleNotif.checked = true;
+        }
+        toggleNotif.addEventListener('change', async function(e) {
+            if (e.target.checked) {
+                if (!("Notification" in window)) {
+                    alert("Seu navegador não suporta notificações de sistema.");
+                    e.target.checked = false;
+                    return;
+                }
+                try {
+                    var permission = await Notification.requestPermission();
+                    if (permission === "granted") {
+                        localStorage.setItem('menino_alho_device_notif', 'true');
+                        new Notification("Menino do Alho", {
+                            body: "Notificações ativadas com sucesso! Você será avisado sobre cobranças.",
+                            icon: "{{ url_for('static', filename='images/logo_menino_do_alho_amarelo1.jpeg') }}"
+                        });
+                    } else {
+                        e.target.checked = false;
+                        localStorage.setItem('menino_alho_device_notif', 'false');
+                        alert("Você precisa permitir as notificações nas configurações do seu navegador/celular para usar este recurso.");
+                    }
+                } catch (err) {
+                    e.target.checked = false;
+                    localStorage.setItem('menino_alho_device_notif', 'false');
+                }
+            } else {
+                localStorage.setItem('menino_alho_device_notif', 'false');
+            }
+        });
+    }
 });
 </script>
 {% endblock %}
