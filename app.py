@@ -4698,6 +4698,23 @@ def nova_venda():
         )
         db.session.add(venda)
         produto.estoque_atual -= quantidade_venda
+        db.session.flush()
+        # --- INÍCIO DA INTEGRAÇÃO COM CAIXA (PILOTO AUTOMÁTICO V3) ---
+        if str(venda.situacao or '').strip().upper() in ('PAGO', 'CONCLUÍDO'):
+            cliente = Cliente.query.get(venda.cliente_id)
+            nome_cliente = cliente.nome_cliente if cliente else "Cliente Avulso"
+            forma_pgto = request.form.get('forma_pagamento', 'Dinheiro')
+            novo_lanc = LancamentoCaixa(
+                data=date.today(),
+                descricao=f"Venda #{venda.id} - {nome_cliente}",
+                tipo='ENTRADA',
+                categoria='Entrada Cliente',
+                forma_pagamento=forma_pgto,
+                valor=float(venda.calcular_total()),
+                usuario_id=current_user.id
+            )
+            db.session.add(novo_lanc)
+        # --- FIM DA INTEGRAÇÃO ---
         db.session.commit()
         limpar_cache_dashboard()  # Limpar cache após nova venda
 
@@ -4848,6 +4865,34 @@ def editar_venda(id):
         venda.empresa_faturadora = request.form['empresa_faturadora']
         venda.situacao = request.form['situacao']
         
+        # --- INÍCIO DA INTEGRAÇÃO COM CAIXA (PILOTO AUTOMÁTICO V3) ---
+        vendas_do_pedido = _vendas_do_pedido(venda)
+        venda_id_busca = vendas_do_pedido[0].id if vendas_do_pedido else venda.id
+        lancamentos_existentes = LancamentoCaixa.query.filter(
+            LancamentoCaixa.descricao.like(f"Venda #{venda_id_busca} -%")
+        ).all()
+        status_atual = str(venda.situacao).strip().upper() if venda.situacao else ''
+        status_pago = status_atual in ('PAGO', 'CONCLUÍDO')
+        if status_pago and not lancamentos_existentes:
+            cliente = Cliente.query.get(venda.cliente_id)
+            nome_cliente = cliente.nome_cliente if cliente else "Cliente Avulso"
+            forma_pgto = request.form.get('forma_pagamento', 'Dinheiro')
+            valor_pedido = sum(float(v.calcular_total()) for v in vendas_do_pedido)
+            novo_lanc = LancamentoCaixa(
+                data=date.today(),
+                descricao=f"Venda #{venda_id_busca} - {nome_cliente}",
+                tipo='ENTRADA',
+                categoria='Entrada Cliente',
+                forma_pagamento=forma_pgto,
+                valor=valor_pedido,
+                usuario_id=current_user.id
+            )
+            db.session.add(novo_lanc)
+        elif not status_pago and lancamentos_existentes:
+            for lanc in lancamentos_existentes:
+                db.session.delete(lanc)
+        # --- FIM DA INTEGRAÇÃO ---
+        
         db.session.commit()
         limpar_cache_dashboard()  # Limpar cache após editar venda
         flash('Venda atualizada com sucesso!', 'success')
@@ -4965,26 +5010,29 @@ def atualizar_status_venda(id_venda):
     novo = 'PAGO' if atual == 'PENDENTE' else 'PENDENTE'
     for v in vendas_do_pedido:
         v.situacao = novo
-    # --- INÍCIO DA INTEGRAÇÃO COM CAIXA (PILOTO AUTOMÁTICO) ---
-    if novo.upper() in ('PAGO', 'CONCLUÍDO'):
-        lancamento_existente = LancamentoCaixa.query.filter(
-            LancamentoCaixa.descricao.like(f"%Venda #{venda.id}%")
-        ).first()
-        if not lancamento_existente:
-            cliente = Cliente.query.get(venda.cliente_id)
-            nome_cliente = cliente.nome_cliente if cliente else "Cliente Avulso"
-            forma_pgto = request.form.get('forma_pagamento') or (request.get_json(silent=True) or {}).get('forma_pagamento', 'Dinheiro') or 'Dinheiro'
-            valor_pedido = sum(float(v.calcular_total()) for v in vendas_do_pedido)
-            novo_lancamento = LancamentoCaixa(
-                data=date.today(),
-                descricao=f"Venda #{venda.id} - {nome_cliente}",
-                tipo='ENTRADA',
-                categoria='Entrada Cliente',
-                forma_pagamento=forma_pgto,
-                valor=valor_pedido,
-                usuario_id=current_user.id
-            )
-            db.session.add(novo_lancamento)
+    # --- INÍCIO DA INTEGRAÇÃO COM CAIXA (PILOTO AUTOMÁTICO V2) ---
+    lancamentos_existentes = LancamentoCaixa.query.filter(
+        LancamentoCaixa.descricao.like(f"Venda #{venda.id} -%")
+    ).all()
+    status_pago = novo and novo.upper() in ('PAGO', 'CONCLUÍDO')
+    if status_pago and not lancamentos_existentes:
+        cliente = Cliente.query.get(venda.cliente_id)
+        nome_cliente = cliente.nome_cliente if cliente else "Cliente Avulso"
+        forma_pgto = request.form.get('forma_pagamento') or (request.get_json(silent=True) or {}).get('forma_pagamento', 'Dinheiro') or 'Dinheiro'
+        valor_pedido = sum(float(v.calcular_total()) for v in vendas_do_pedido)
+        novo_lancamento = LancamentoCaixa(
+            data=date.today(),
+            descricao=f"Venda #{venda.id} - {nome_cliente}",
+            tipo='ENTRADA',
+            categoria='Entrada Cliente',
+            forma_pagamento=forma_pgto,
+            valor=valor_pedido,
+            usuario_id=current_user.id
+        )
+        db.session.add(novo_lancamento)
+    elif not status_pago and lancamentos_existentes:
+        for lanc in lancamentos_existentes:
+            db.session.delete(lanc)
     # --- FIM DA INTEGRAÇÃO ---
     db.session.commit()
     limpar_cache_dashboard()  # Limpar cache após atualizar status da venda
