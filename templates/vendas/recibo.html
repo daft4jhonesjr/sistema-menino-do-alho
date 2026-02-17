@@ -1,5 +1,75 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+{% macro render_via(titulo_via) %}
+    <div class="via-recibo">
+        <div class="via-header">
+            <img src="{{ url_for('static', filename='images/logo_menino_do_alho_amarelo1.jpeg') }}"
+                 class="logo-recibo" alt="Menino do Alho">
+            <span class="titulo-via">{{ titulo_via }}</span>
+        </div>
+
+        <div class="empresa-info">
+            <p><strong>Empresa Faturadora:</strong> {{ venda_base.empresa_faturadora }}</p>
+            <p><strong>Nota Fiscal:</strong> {{ venda_base.nf or 'N/A' }}</p>
+            <p><strong>Data da Venda:</strong> {{ venda_base.data_venda.strftime('%d/%m/%Y') }}</p>
+        </div>
+
+        <div class="cliente-section">
+            <h2>DADOS DO CLIENTE</h2>
+            <p><strong>Nome:</strong> {{ cliente.nome_cliente }}</p>
+            {% if cliente.razao_social %}
+            <p><strong>Razão Social:</strong> {{ cliente.razao_social }}</p>
+            {% endif %}
+            {% if cliente.cnpj %}
+            <p><strong>CNPJ:</strong> {{ cliente.cnpj }}</p>
+            {% endif %}
+            {% if cliente.cidade %}
+            <p><strong>Cidade:</strong> {{ cliente.cidade }}</p>
+            {% endif %}
+        </div>
+
+        <table class="tabela-produtos">
+            <thead>
+                <tr>
+                    <th>Produto</th>
+                    <th class="text-center">Quantidade</th>
+                    <th class="text-right">Preço Unitário</th>
+                    <th class="text-right">Valor Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for v in vendas %}
+                <tr>
+                    <td>{{ v.produto.nome_produto if v.produto else '-' }}</td>
+                    <td class="text-center">{{ v.quantidade_venda }}</td>
+                    <td class="text-center">
+                        R$ {{ ("{:,.2f}".format(v.calcular_total() / v.quantidade_venda if v.quantidade_venda > 0 else 0)).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                    </td>
+                    <td class="text-right">
+                        R$ {{ ("{:,.2f}".format(v.calcular_total())).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="total-section">
+            <span class="label">VALOR TOTAL:</span>
+            <span class="valor">R$ {{ ("{:,.2f}".format(total_recibo)).replace(',', 'X').replace('.', ',').replace('X', '.') }}</span>
+        </div>
+
+        <div class="rodape">
+            <div class="data">
+                <p><strong>Data de Emissão:</strong> {{ data_emissao.strftime('%d/%m/%Y') }}</p>
+            </div>
+            <div class="assinatura">
+                <div class="linha">
+                    <p>Assinatura</p>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endmacro %}
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -24,27 +94,67 @@
             max-width: 21cm;
             margin: 0 auto;
             padding: 1cm;
-            max-height: 28cm;
-            overflow: hidden;
         }
         
-        .header {
+        .via-recibo {
+            break-inside: avoid;
+            page-break-inside: avoid;
+            margin-bottom: 20px;
+        }
+
+        .via-header {
             text-align: center;
             margin-bottom: 20px;
-            border-bottom: 2px solid #000;
-            padding-bottom: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
-        
-        .header h1 {
-            font-size: 24pt;
+
+        .logo-recibo {
+            height: 80px;
+            width: auto;
+            margin-bottom: 8px;
+            object-fit: contain;
+        }
+
+        .titulo-via {
+            font-size: 10pt;
             font-weight: bold;
-            color: #047857;
-            margin-bottom: 10px;
+            color: #666;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            border: 1px solid #999;
+            padding: 4px 12px;
+            border-radius: 9999px;
+            background: #f9fafb;
         }
-        
+
+        .linha-corte {
+            display: flex;
+            align-items: center;
+            padding: 32px 0;
+            margin: 16px 0;
+            opacity: 0.7;
+        }
+
+        .linha-corte .traco {
+            flex-grow: 1;
+            border-top: 2px dashed #666;
+        }
+
+        .linha-corte .texto {
+            flex-shrink: 0;
+            margin: 0 16px;
+            color: #666;
+            font-size: 10pt;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
         .empresa-info {
             font-size: 10pt;
             color: #333;
+            margin-bottom: 15px;
         }
         
         .cliente-section {
@@ -159,12 +269,8 @@
             }
             
             .container {
-                max-height: 28cm;
-                overflow: hidden;
-            }
-            
-            .header h1 {
-                font-size: 22pt;
+                max-height: none;
+                overflow: visible;
             }
         }
         
@@ -202,74 +308,15 @@
     </div>
     
     <div class="container">
-        <!-- Cabeçalho -->
-        <div class="header">
-            <h1>MENINO DO ALHO</h1>
-            <div class="empresa-info">
-                <p><strong>Empresa Faturadora:</strong> {{ venda_base.empresa_faturadora }}</p>
-                <p><strong>Nota Fiscal:</strong> {{ venda_base.nf or 'N/A' }}</p>
-                <p><strong>Data da Venda:</strong> {{ venda_base.data_venda.strftime('%d/%m/%Y') }}</p>
-            </div>
+        {{ render_via('1ª Via - Cliente') }}
+
+        <div class="linha-corte">
+            <div class="traco"></div>
+            <span class="texto">✂️ Cortar Aqui</span>
+            <div class="traco"></div>
         </div>
-        
-        <!-- Dados do Cliente -->
-        <div class="cliente-section">
-            <h2>DADOS DO CLIENTE</h2>
-            <p><strong>Nome:</strong> {{ cliente.nome_cliente }}</p>
-            {% if cliente.razao_social %}
-            <p><strong>Razão Social:</strong> {{ cliente.razao_social }}</p>
-            {% endif %}
-            {% if cliente.cnpj %}
-            <p><strong>CNPJ:</strong> {{ cliente.cnpj }}</p>
-            {% endif %}
-            {% if cliente.cidade %}
-            <p><strong>Cidade:</strong> {{ cliente.cidade }}</p>
-            {% endif %}
-        </div>
-        
-        <!-- Tabela de Produtos -->
-        <table class="tabela-produtos">
-            <thead>
-                <tr>
-                    <th>Produto</th>
-                    <th class="text-center">Quantidade</th>
-                    <th class="text-right">Preço Unitário</th>
-                    <th class="text-right">Valor Total</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for v in vendas %}
-                <tr class="border-b border-gray-300">
-                    <td class="p-2 text-left text-sm font-medium">{{ v.produto.nome_produto if v.produto else '-' }}</td>
-                    <td class="p-2 text-center text-sm">{{ v.quantidade_venda }}</td>
-                    <td class="p-2 text-center text-sm">
-                        R$ {{ ("{:,.2f}".format(v.calcular_total() / v.quantidade_venda if v.quantidade_venda > 0 else 0)).replace(',', 'X').replace('.', ',').replace('X', '.') }}
-                    </td>
-                    <td class="p-2 text-right text-sm">
-                        R$ {{ ("{:,.2f}".format(v.calcular_total())).replace(',', 'X').replace('.', ',').replace('X', '.') }}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        
-        <!-- Total -->
-        <div class="total-section">
-            <span class="label">VALOR TOTAL:</span>
-            <span class="valor">R$ {{ ("{:,.2f}".format(total_recibo)).replace(',', 'X').replace('.', ',').replace('X', '.') }}</span>
-        </div>
-        
-        <!-- Rodapé -->
-        <div class="rodape">
-            <div class="data">
-                <p><strong>Data de Emissão:</strong> {{ data_emissao.strftime('%d/%m/%Y') }}</p>
-            </div>
-            <div class="assinatura">
-                <div class="linha">
-                    <p>Assinatura</p>
-                </div>
-            </div>
-        </div>
+
+        {{ render_via('2ª Via - Estabelecimento (Canhoto)') }}
     </div>
     
     <script>
