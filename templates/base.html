@@ -86,22 +86,36 @@
         }
     </style>
     <style>
-        /* CSS para o Redimensionador de Tabelas */
+        /* CSS para o Redimensionador de Tabelas (Responsivo) */
         table.resizable {
-            table-layout: fixed;
             width: 100%;
         }
-        table.resizable th {
-            position: relative;
-            overflow: hidden;
-            white-space: nowrap;
-            text-overflow: ellipsis;
+
+        /* Regras exclusivas para Desktop (Telas Grandes) */
+        @media (min-width: 1024px) {
+            table.resizable {
+                table-layout: fixed;
+            }
+            table.resizable th, table.resizable td {
+                position: relative;
+                overflow: hidden;
+                white-space: nowrap;
+                text-overflow: ellipsis;
+            }
         }
-        table.resizable td {
-            overflow: hidden;
-            white-space: nowrap;
-            text-overflow: ellipsis;
+
+        /* Regras exclusivas para Mobile/Tablet */
+        @media (max-width: 1023px) {
+            table.resizable th, table.resizable td {
+                white-space: nowrap;
+                padding-right: 25px;
+            }
+            .resizer {
+                display: none !important;
+            }
         }
+
+        /* Barrinha do Resizer (Desktop) */
         .resizer {
             position: absolute;
             top: 0;
@@ -114,7 +128,7 @@
             transition: background-color 0.2s;
         }
         .resizer:hover, .resizer.resizing {
-            background-color: #10b981; /* Cor Emerald-500 para combinar com o tema */
+            background-color: #10b981;
             border-right: 1px solid #047857;
         }
     </style>
