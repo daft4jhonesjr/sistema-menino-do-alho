@@ -266,7 +266,7 @@
 </div>
 
 <script>
-window.CAIXA_DELETE_URL = "{{ url_for('deletar_caixa', id=0) }}".replace('/0', '');
+window.CAIXA_DELETE_URL = "{{ url_for('deletar_caixa', id=0) }}".replace('/0', '/');
 function toggleMesCaixa(conteudoId, iconeId) {
     var conteudo = document.getElementById(conteudoId);
     var icone = document.getElementById(iconeId);
