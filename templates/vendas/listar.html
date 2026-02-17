@@ -9,14 +9,18 @@
     .venda-input-group input,
     .venda-input-group select,
     .venda-input-group .ts-wrapper .ts-control {
-        height: 50px !important;
-        min-height: 50px !important;
+        height: 42px !important;
+        min-height: 42px !important;
         border-radius: 8px !important;
-        font-size: 1rem !important;
-        padding: 0 1rem !important;
+        font-size: 0.875rem !important;
+        padding: 0 0.75rem !important;
         box-sizing: border-box !important;
         border: 1px solid #e5e7eb !important;
         line-height: 1.5 !important;
+    }
+    .venda-input-group .ts-wrapper .ts-control {
+        display: flex !important;
+        align-items: center !important;
     }
     .venda-input-group input:focus,
     .venda-input-group select:focus,
@@ -27,8 +31,8 @@
         outline: none !important;
     }
     .venda-input-group #btn-adicionar-carrinho {
-        height: 50px !important;
-        min-height: 50px !important;
+        height: 42px !important;
+        min-height: 42px !important;
         border-radius: 8px !important;
         font-size: 0.875rem !important;
         padding: 0 0.75rem !important;
@@ -39,7 +43,7 @@
     }
     /* TomSelect (Cliente): remove borda do wrapper, mantém apenas no ts-control */
     .venda-input-group .ts-wrapper {
-        min-height: 50px !important;
+        min-height: 42px !important;
         border: none !important;
         box-shadow: none !important;
         background: transparent !important;
@@ -183,9 +187,9 @@
     <form id="form-nova-venda-inline" action="{{ url_for('add_venda') }}" method="POST" class="p-4">
         <div class="venda-input-group flex flex-col gap-4 w-full">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div class="md:col-span-1" id="cliente-select-wrap">
+                <div class="md:col-span-1 relative w-full" id="cliente-select-wrap">
                     <label for="inline-cliente_id" class="block text-xs font-medium text-gray-600 dark:text-gray-200 mb-1">Cliente</label>
-                    <select id="inline-cliente_id" name="cliente_id" required class="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100 text-sm">
+                    <select id="inline-cliente_id" name="cliente_id" required class="w-full h-[42px] px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-medium transition-colors">
                         <option value="">Digite o nome...</option>
                         {% for c in clientes %}
                         <option value="{{ c.id }}">{{ c.nome_cliente }}</option>
@@ -194,7 +198,7 @@
                 </div>
                 <div class="md:col-span-2" id="produto-select-wrap">
                     <label for="inline-produto_id" class="block text-xs font-medium text-gray-600 dark:text-gray-200 mb-1">Produto</label>
-                    <select id="inline-produto_id" name="produto_id" required class="produto-select w-full rounded-md border border-gray-300 dark:border-gray-600 shadow-sm bg-white dark:bg-gray-700 px-3 py-2 text-sm min-h-[2.25rem] appearance-none pr-8 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500 focus:outline-none dark:text-gray-100">
+                    <select id="inline-produto_id" name="produto_id" required class="produto-select w-full h-[42px] px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 appearance-none pr-8 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-medium transition-colors">
                         <option value="" class="text-gray-400">Selecione o produto</option>
                         {% for p in produtos %}
                         <option value="{{ p.id }}" data-estoque="{{ p.estoque_atual }}" data-preco="{{ p.preco_custo }}">{{ p.nome_produto }} (Est.: {{ p.estoque_atual }})</option>
