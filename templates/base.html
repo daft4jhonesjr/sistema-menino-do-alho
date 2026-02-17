@@ -73,12 +73,12 @@
 <body class="bg-emerald-50 text-gray-800 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-500 min-h-screen flex flex-col">
     <!-- Header -->
     <header class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 shadow-sm">
-        <div class="container mx-auto px-4 py-5 text-center">
-            <div class="flex items-center justify-center gap-2 mb-1">
-                <span class="text-3xl md:text-4xl drop-shadow-sm">🧄</span>
-                <h1 class="text-3xl font-bold text-emerald-700 dark:text-emerald-400">Menino do Alho</h1>
+        <div class="container mx-auto px-4 py-5">
+            <div class="flex justify-center">
+                <img src="{{ url_for('static', filename='images/logo_menino_do_alho.png') }}"
+                     alt="Menino do Alho - Gestão de Vendas"
+                     class="h-32 md:h-40 w-auto object-contain mx-auto">
             </div>
-            <p class="text-gray-600 dark:text-gray-400">Gestão de Vendas e Estoque</p>
         </div>
     </header>
 
