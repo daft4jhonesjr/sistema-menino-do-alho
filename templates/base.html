@@ -756,5 +756,74 @@
             });
         });
     </script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            var tables = document.querySelectorAll('table');
+
+            tables.forEach(function(table, tableIndex) {
+                var ths = table.querySelectorAll('th');
+                var pathKey = 'colunas_ocultas_' + window.location.pathname + '_' + tableIndex;
+
+                var wrapper = table.parentElement;
+                var restoreBtn = document.createElement('button');
+                restoreBtn.innerHTML = '👁️ Restaurar Colunas Ocultas';
+                restoreBtn.className = 'text-xs text-emerald-600 hover:text-emerald-800 dark:text-emerald-400 dark:hover:text-emerald-300 font-bold mb-2 px-3 py-1 rounded border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-gray-800 transition-all';
+                restoreBtn.style.display = 'none';
+
+                if (wrapper && wrapper.classList.contains('overflow-x-auto')) {
+                    wrapper.parentElement.insertBefore(restoreBtn, wrapper);
+                } else {
+                    table.parentElement.insertBefore(restoreBtn, table);
+                }
+
+                var hiddenCols = JSON.parse(localStorage.getItem(pathKey) || '[]');
+
+                function applyVisibility() {
+                    var anyHidden = false;
+                    ths.forEach(function(th, index) {
+                        var isHidden = hiddenCols.indexOf(index) >= 0;
+                        th.style.display = isHidden ? 'none' : '';
+
+                        var rows = table.querySelectorAll('tbody tr');
+                        rows.forEach(function(row) {
+                            if (row.cells[index]) {
+                                row.cells[index].style.display = isHidden ? 'none' : '';
+                            }
+                        });
+
+                        if (isHidden) anyHidden = true;
+                    });
+                    restoreBtn.style.display = anyHidden ? 'inline-block' : 'none';
+                }
+
+                ths.forEach(function(th, index) {
+                    if (th.querySelector('.hide-col-icon')) return;
+                    var hideIcon = document.createElement('span');
+                    hideIcon.innerHTML = ' &times;';
+                    hideIcon.className = 'hide-col-icon text-gray-400 hover:text-red-500 cursor-pointer ml-1 font-bold text-base';
+                    hideIcon.title = 'Ocultar esta coluna';
+
+                    hideIcon.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        if (hiddenCols.indexOf(index) < 0) {
+                            hiddenCols.push(index);
+                            localStorage.setItem(pathKey, JSON.stringify(hiddenCols));
+                            applyVisibility();
+                        }
+                    });
+
+                    th.appendChild(hideIcon);
+                });
+
+                restoreBtn.addEventListener('click', function() {
+                    hiddenCols.length = 0;
+                    localStorage.removeItem(pathKey);
+                    applyVisibility();
+                });
+
+                applyVisibility();
+            });
+        });
+    </script>
 </body>
 </html>
