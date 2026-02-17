@@ -256,21 +256,40 @@
         
         @media print {
             @page {
-                size: A4;
                 margin: 1cm;
+                size: A4 portrait;
             }
-            
+
+            body, html {
+                margin: 0;
+                padding: 0;
+                height: 100%;
+            }
+
             body {
                 font-size: 12pt;
             }
-            
+
             .no-print {
                 display: none !important;
             }
-            
+
             .container {
                 max-height: none;
                 overflow: visible;
+            }
+
+            /* Evita quebra de página dentro de cada via */
+            .via-recibo {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+
+            /* Evita quebra APÓS a primeira via e a linha de corte */
+            .via-recibo:first-of-type,
+            .linha-corte {
+                page-break-after: avoid;
+                break-after: avoid;
             }
         }
         
