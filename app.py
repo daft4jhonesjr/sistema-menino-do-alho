@@ -3114,20 +3114,21 @@ def excluir_cliente(id):
 @app.route('/clientes/<int:cliente_id>/extrato')
 @login_required
 def extrato_cliente(cliente_id):
-    """Extrato de cobrança em PDF: vendas pendentes do cliente."""
+    """Extrato de cobrança em PDF: vendas pendentes e parciais do cliente."""
     cliente = Cliente.query.get_or_404(cliente_id)
 
-    # Filtro blindado: ignora case na situação e oculta itens de perda/brinde (R$ 0,00)
+    # Filtro: PENDENTE e PARCIAL (saldo devedor); ignora itens de perda/brinde (R$ 0,00)
     vendas_pendentes = Venda.query.filter(
         Venda.cliente_id == cliente.id,
-        Venda.situacao.ilike('pendente'),
+        Venda.situacao.in_(['PENDENTE', 'PARCIAL']),
         (Venda.preco_venda * Venda.quantidade_venda) > 0
     ).options(joinedload(Venda.produto)).order_by(Venda.data_venda).all()
 
-    total = sum(float(v.calcular_total()) for v in vendas_pendentes)
+    # Total devido = soma do saldo restante (valor da nota - já pago) de cada venda
+    total_devido = sum(float(v.calcular_total()) - (v.valor_pago or 0.0) for v in vendas_pendentes)
     data_hoje = datetime.now().strftime('%d/%m/%Y')
 
-    return render_template('extrato.html', cliente=cliente, vendas=vendas_pendentes, total=total, data_hoje=data_hoje)
+    return render_template('extrato.html', cliente=cliente, vendas=vendas_pendentes, total=total_devido, data_hoje=data_hoje)
 
 
 @app.route('/bulk_delete_clientes', methods=['POST'])
