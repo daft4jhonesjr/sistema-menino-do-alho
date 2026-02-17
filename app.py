@@ -2837,6 +2837,28 @@ def adicionar_caixa():
 def deletar_caixa(id):
     try:
         lancamento = LancamentoCaixa.query.get_or_404(id)
+
+        # --- INÍCIO DO ESTORNO REVERSO (CAIXA -> VENDA) ---
+        match = re.search(r'Venda #(\d+)', lancamento.descricao or '')
+
+        if match and lancamento.tipo == 'ENTRADA':
+            venda_id = int(match.group(1))
+            venda = Venda.query.get(venda_id)
+
+            if venda:
+                venda.valor_pago = (venda.valor_pago or 0.0) - lancamento.valor
+
+                if venda.valor_pago <= 0.01:
+                    venda.valor_pago = 0.0
+                    venda.situacao = 'PENDENTE'
+                else:
+                    valor_total_venda = float(venda.calcular_total())
+                    if venda.valor_pago < (valor_total_venda - 0.01):
+                        venda.situacao = 'PARCIAL'
+                    else:
+                        venda.situacao = 'PAGO'
+        # --- FIM DO ESTORNO REVERSO ---
+
         db.session.delete(lancamento)
         db.session.commit()
         flash('Lançamento removido do caixa.', 'success')
