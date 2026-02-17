@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% block title %}Configurações do Site - Menino do Alho{% endblock %}
+{% block content %}
+<div class="container mx-auto px-4 py-8 max-w-4xl">
+    <h2 class="text-3xl font-bold text-emerald-700 dark:text-emerald-400 mb-2">Configurações do Site</h2>
+    <p class="text-gray-600 dark:text-gray-400 mb-6">Personalize a aparência e o comportamento do sistema.</p>
+
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+        <h3 class="text-lg font-bold text-emerald-700 dark:text-emerald-500 border-b border-gray-100 dark:border-gray-700 pb-2 mb-4">Aparência e Visualização</h3>
+
+        <div class="mb-6">
+            <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Tema do Sistema (Modo Escuro)</label>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Escolha como o sistema deve se comportar visualmente.</p>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <label class="cursor-pointer">
+                    <input type="radio" name="theme_selector" value="claro" class="peer sr-only">
+                    <div class="rounded-lg border-2 border-gray-200 bg-white p-4 text-gray-700 peer-checked:border-emerald-500 peer-checked:bg-emerald-50 hover:bg-gray-50 transition-all text-center">
+                        <div class="text-2xl mb-2">☀️</div>
+                        <div class="font-bold">Modo Claro</div>
+                    </div>
+                </label>
+
+                <label class="cursor-pointer">
+                    <input type="radio" name="theme_selector" value="escuro" class="peer sr-only">
+                    <div class="rounded-lg border-2 border-gray-700 bg-gray-800 p-4 text-gray-300 peer-checked:border-emerald-500 peer-checked:bg-gray-700 hover:bg-gray-700 transition-all text-center">
+                        <div class="text-2xl mb-2">🌙</div>
+                        <div class="font-bold">Modo Escuro</div>
+                    </div>
+                </label>
+
+                <label class="cursor-pointer">
+                    <input type="radio" name="theme_selector" value="auto" class="peer sr-only">
+                    <div class="rounded-lg border-2 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-4 text-gray-700 dark:text-gray-300 peer-checked:border-emerald-500 peer-checked:bg-emerald-50 dark:peer-checked:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all text-center">
+                        <div class="text-2xl mb-2">⏳</div>
+                        <div class="font-bold">Horário do Dia</div>
+                        <div class="text-xs mt-1 text-gray-500">(Escuro após as 18h)</div>
+                    </div>
+                </label>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var radios = document.querySelectorAll('input[name="theme_selector"]');
+    var currentTheme = localStorage.getItem('menino_alho_theme') || 'claro';
+
+    radios.forEach(function(r) {
+        if (r.value === currentTheme) r.checked = true;
+
+        r.addEventListener('change', function(e) {
+            var val = e.target.value;
+            localStorage.setItem('menino_alho_theme', val);
+
+            var isDark = false;
+            if (val === 'escuro') {
+                isDark = true;
+            } else if (val === 'auto') {
+                var hour = new Date().getHours();
+                isDark = (hour >= 18 || hour < 6);
+            }
+
+            if (isDark) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

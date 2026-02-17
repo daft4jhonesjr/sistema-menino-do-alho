@@ -2231,6 +2231,12 @@ def logout():
     return redirect(url_for('login'))
 
 
+@app.route('/configuracoes')
+@login_required
+def configuracoes():
+    return render_template('configuracoes.html')
+
+
 @app.route('/perfil', methods=['GET', 'POST'])
 @login_required
 def perfil():
