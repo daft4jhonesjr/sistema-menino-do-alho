@@ -160,11 +160,6 @@
                 <a href="{{ url_for('logistica') }}" class="px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors text-sm {% if request.endpoint == 'logistica' %}bg-white/20 text-white font-medium{% else %}text-emerald-50 hover:bg-white/10 hover:text-white{% endif %}">
                     <i data-lucide="truck" class="w-4 h-4"></i>Logística
                 </a>
-                {% if current_user.is_authenticated and current_user.is_admin() %}
-                <a href="{{ url_for('admin_arquivos') }}" class="px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors text-sm {% if request.endpoint == 'admin_arquivos' %}bg-white/20 text-white font-medium{% else %}text-emerald-50 hover:bg-white/10 hover:text-white{% endif %}">
-                    <i data-lucide="folder" class="w-4 h-4"></i>📂 Arquivos do Banco
-                </a>
-                {% endif %}
                 
                 <!-- Seletor de Ano -->
                 <div class="relative" id="ano-selector-wrap">
