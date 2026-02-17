@@ -2745,7 +2745,8 @@ def caixa():
                 'saidas_pessoal_mes': 0.0,
                 'saldo_dinheiro': 0.0,
                 'saldo_cheque': 0.0,
-                'saldo_pix': 0.0
+                'saldo_pix': 0.0,
+                'saldo_boleto': 0.0
             }
         lancamentos_agrupados[chave_mes]['itens'].append(l)
         # Cálculo por forma de pagamento (Saldo líquido: Entradas - Saídas)
@@ -2757,6 +2758,8 @@ def caixa():
             lancamentos_agrupados[chave_mes]['saldo_cheque'] += valor_sinal
         elif 'pix' in forma or 'transfer' in forma:
             lancamentos_agrupados[chave_mes]['saldo_pix'] += valor_sinal
+        elif 'boleto' in forma:
+            lancamentos_agrupados[chave_mes]['saldo_boleto'] += valor_sinal
         # Cálculo de Entradas e Saídas
         if l.tipo == 'ENTRADA':
             lancamentos_agrupados[chave_mes]['entradas_mes'] += l.valor
