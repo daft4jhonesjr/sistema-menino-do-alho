@@ -4702,21 +4702,37 @@ def nova_venda():
         db.session.add(venda)
         produto.estoque_atual -= quantidade_venda
         db.session.flush()
-        # --- INÍCIO DA INTEGRAÇÃO COM CAIXA (PILOTO AUTOMÁTICO V3) ---
+        # --- INÍCIO DA INTEGRAÇÃO COM CAIXA (PILOTO AUTOMÁTICO V4) ---
         if str(venda.situacao or '').strip().upper() in ('PAGO', 'CONCLUÍDO'):
-            cliente = Cliente.query.get(venda.cliente_id)
-            nome_cliente = cliente.nome_cliente if cliente else "Cliente Avulso"
-            forma_pgto = request.form.get('forma_pagamento', 'Dinheiro')
-            novo_lanc = LancamentoCaixa(
-                data=date.today(),
-                descricao=f"Venda #{venda.id} - {nome_cliente}",
-                tipo='ENTRADA',
-                categoria='Entrada Cliente',
-                forma_pagamento=forma_pgto,
-                valor=float(venda.calcular_total()),
-                usuario_id=current_user.id
-            )
-            db.session.add(novo_lanc)
+            lancamentos_existentes = LancamentoCaixa.query.filter(
+                LancamentoCaixa.descricao.like(f"Venda #{venda.id} -%")
+            ).all()
+            if not lancamentos_existentes:
+                cliente = Cliente.query.get(venda.cliente_id)
+                nome_cliente = cliente.nome_cliente if cliente else "Cliente Avulso"
+                forma_pgto = request.form.get('forma_pagamento', 'Dinheiro') or 'Dinheiro'
+                valor_venda = float(venda.calcular_total())
+                novo_lanc = LancamentoCaixa(
+                    data=date.today(),
+                    descricao=f"Venda #{venda.id} - {nome_cliente}",
+                    tipo='ENTRADA',
+                    categoria='Entrada Cliente',
+                    forma_pagamento=forma_pgto,
+                    valor=valor_venda,
+                    usuario_id=current_user.id
+                )
+                db.session.add(novo_lanc)
+                if 'boleto' in forma_pgto.lower():
+                    repasse_lanc = LancamentoCaixa(
+                        data=date.today(),
+                        descricao=f"Venda #{venda.id} - {nome_cliente} (Repasse Fornecedor)",
+                        tipo='SAIDA',
+                        categoria='Saída Fornecedor',
+                        forma_pagamento=forma_pgto,
+                        valor=valor_venda,
+                        usuario_id=current_user.id
+                    )
+                    db.session.add(repasse_lanc)
         # --- FIM DA INTEGRAÇÃO ---
         db.session.commit()
         limpar_cache_dashboard()  # Limpar cache após nova venda
@@ -4868,7 +4884,7 @@ def editar_venda(id):
         venda.empresa_faturadora = request.form['empresa_faturadora']
         venda.situacao = request.form['situacao']
         
-        # --- INÍCIO DA INTEGRAÇÃO COM CAIXA (PILOTO AUTOMÁTICO V3) ---
+        # --- INÍCIO DA INTEGRAÇÃO COM CAIXA (PILOTO AUTOMÁTICO V4) ---
         vendas_do_pedido = _vendas_do_pedido(venda)
         venda_id_busca = vendas_do_pedido[0].id if vendas_do_pedido else venda.id
         lancamentos_existentes = LancamentoCaixa.query.filter(
@@ -4879,7 +4895,7 @@ def editar_venda(id):
         if status_pago and not lancamentos_existentes:
             cliente = Cliente.query.get(venda.cliente_id)
             nome_cliente = cliente.nome_cliente if cliente else "Cliente Avulso"
-            forma_pgto = request.form.get('forma_pagamento', 'Dinheiro')
+            forma_pgto = request.form.get('forma_pagamento', 'Dinheiro') or 'Dinheiro'
             valor_pedido = sum(float(v.calcular_total()) for v in vendas_do_pedido)
             novo_lanc = LancamentoCaixa(
                 data=date.today(),
@@ -4891,6 +4907,17 @@ def editar_venda(id):
                 usuario_id=current_user.id
             )
             db.session.add(novo_lanc)
+            if 'boleto' in forma_pgto.lower():
+                repasse_lanc = LancamentoCaixa(
+                    data=date.today(),
+                    descricao=f"Venda #{venda_id_busca} - {nome_cliente} (Repasse Fornecedor)",
+                    tipo='SAIDA',
+                    categoria='Saída Fornecedor',
+                    forma_pagamento=forma_pgto,
+                    valor=valor_pedido,
+                    usuario_id=current_user.id
+                )
+                db.session.add(repasse_lanc)
         elif not status_pago and lancamentos_existentes:
             for lanc in lancamentos_existentes:
                 db.session.delete(lanc)
@@ -5013,7 +5040,7 @@ def atualizar_status_venda(id_venda):
     novo = 'PAGO' if atual == 'PENDENTE' else 'PENDENTE'
     for v in vendas_do_pedido:
         v.situacao = novo
-    # --- INÍCIO DA INTEGRAÇÃO COM CAIXA (PILOTO AUTOMÁTICO V2) ---
+    # --- INÍCIO DA INTEGRAÇÃO COM CAIXA (PILOTO AUTOMÁTICO V4) ---
     lancamentos_existentes = LancamentoCaixa.query.filter(
         LancamentoCaixa.descricao.like(f"Venda #{venda.id} -%")
     ).all()
@@ -5033,6 +5060,17 @@ def atualizar_status_venda(id_venda):
             usuario_id=current_user.id
         )
         db.session.add(novo_lancamento)
+        if 'boleto' in forma_pgto.lower():
+            repasse_lanc = LancamentoCaixa(
+                data=date.today(),
+                descricao=f"Venda #{venda.id} - {nome_cliente} (Repasse Fornecedor)",
+                tipo='SAIDA',
+                categoria='Saída Fornecedor',
+                forma_pagamento=forma_pgto,
+                valor=valor_pedido,
+                usuario_id=current_user.id
+            )
+            db.session.add(repasse_lanc)
     elif not status_pago and lancamentos_existentes:
         for lanc in lancamentos_existentes:
             db.session.delete(lanc)
