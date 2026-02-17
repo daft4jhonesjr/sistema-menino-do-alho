@@ -83,7 +83,6 @@
                                 <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">VALOR TOTAL</th>
                                 <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Estoque Atual</th>
                                 <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Lucro Realizado</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Data Chegada</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Fornecedor</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Nacionalidade</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Tamanho</th>
@@ -116,7 +115,6 @@
                             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-right {% if produto.lucro_realizado() > 0 %}text-emerald-600 dark:text-emerald-400{% elif produto.lucro_realizado() < 0 %}text-red-600 dark:text-red-400{% else %}text-amber-600 dark:text-amber-400{% endif %}" title="{% if produto.quantidade_vendida() > 0 %}Lucro de {{ produto.lucro_medio_por_unidade() | formato_moeda }} por unidade{% else %}Nenhuma venda{% endif %}">
                                 {{ produto.lucro_realizado() | formato_moeda }}
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ produto.data_chegada.strftime('%d/%m/%Y') }}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ produto.fornecedor }}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ produto.nacionalidade }}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ produto.tamanho }}</td>
