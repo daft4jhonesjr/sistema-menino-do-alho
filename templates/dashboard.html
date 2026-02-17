@@ -41,8 +41,8 @@
 </div>
 
 <!-- Segunda linha: Pendente, Pago, Lucro, Prejuízo (4 colunas) -->
-<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
-    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-6 border-l-4 border-amber-500 cursor-pointer hover:bg-emerald-50 dark:hover:bg-gray-700 transition-all" onclick="abrirModalDashboard('pendente', 'Detalhamento: Pendentes')">
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8 sortable-grid">
+    <div data-id="card-pendente" class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-6 border-l-4 border-amber-500 cursor-pointer hover:bg-emerald-50 dark:hover:bg-gray-700 transition-all" onclick="abrirModalDashboard('pendente', 'Detalhamento: Pendentes')">
         <div class="flex items-center justify-between">
             <div>
                 <p class="text-gray-600 dark:text-gray-400 text-sm font-medium">Financeiro - Pendente</p>
@@ -52,7 +52,7 @@
         </div>
     </div>
 
-    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-6 border-l-4 border-emerald-500 cursor-pointer hover:bg-emerald-50 dark:hover:bg-gray-700 transition-all" onclick="abrirModalDashboard('pago', 'Detalhamento: Pagos')">
+    <div data-id="card-pago" class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-6 border-l-4 border-emerald-500 cursor-pointer hover:bg-emerald-50 dark:hover:bg-gray-700 transition-all" onclick="abrirModalDashboard('pago', 'Detalhamento: Pagos')">
         <div class="flex items-center justify-between">
             <div>
                 <p class="text-gray-600 dark:text-gray-400 text-sm font-medium">Financeiro - Pago</p>
@@ -62,7 +62,7 @@
         </div>
     </div>
 
-    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-6 border-l-4 {% if total_lucro >= 0 %}border-emerald-500{% else %}border-red-500{% endif %}">
+    <div data-id="card-lucro" class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-6 border-l-4 {% if total_lucro >= 0 %}border-emerald-500{% else %}border-red-500{% endif %}">
         <div class="flex items-center justify-between">
             <div>
                 <p class="text-gray-600 dark:text-gray-400 text-sm font-medium">Lucro Total do Período</p>
@@ -72,7 +72,7 @@
         </div>
     </div>
 
-    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-6 border-l-4 border-red-500 flex flex-col justify-between cursor-pointer hover:shadow-md hover:scale-105 transition-all" onclick="abrirModalPrejuizo()">
+    <div data-id="card-prejuizo" class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-6 border-l-4 border-red-500 flex flex-col justify-between cursor-pointer hover:shadow-md hover:scale-105 transition-all" onclick="abrirModalPrejuizo()">
         <div class="flex justify-between items-start mb-4">
             <div>
                 <p class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Prejuízo (Perdas)</p>
@@ -92,8 +92,8 @@
 </div>
 
 <!-- Terceira linha: Faturamento por empresa, Margem e Ticket Médio -->
-<div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
-    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-5 border-l-4 border-blue-500 cursor-pointer hover:bg-emerald-50 dark:hover:bg-gray-700 transition-all" onclick="abrirModalDashboard('paty', 'Detalhamento: PATY')">
+<div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8 sortable-grid">
+    <div data-id="card-paty" class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-5 border-l-4 border-blue-500 cursor-pointer hover:bg-emerald-50 dark:hover:bg-gray-700 transition-all" onclick="abrirModalDashboard('paty', 'Detalhamento: PATY')">
         <div class="flex items-center justify-between">
             <div>
                 <p class="text-gray-600 dark:text-gray-400 text-sm font-medium">Faturamento PATY</p>
@@ -116,7 +116,7 @@
         </div>
     </div>
 
-    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-5 border-l-4 border-emerald-500 cursor-pointer hover:bg-emerald-50 dark:hover:bg-gray-700 transition-all" onclick="abrirModalDashboard('destak', 'Detalhamento: DESTAK')">
+    <div data-id="card-destak" class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-5 border-l-4 border-emerald-500 cursor-pointer hover:bg-emerald-50 dark:hover:bg-gray-700 transition-all" onclick="abrirModalDashboard('destak', 'Detalhamento: DESTAK')">
         <div class="flex items-center justify-between">
             <div>
                 <p class="text-gray-600 dark:text-gray-400 text-sm font-medium">Faturamento DESTAK</p>
@@ -139,7 +139,7 @@
         </div>
     </div>
 
-    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-5 border-l-4 border-gray-400 cursor-pointer hover:bg-emerald-50 dark:hover:bg-gray-700 transition-all" onclick="abrirModalDashboard('avulsa', 'Detalhamento: Vendas Avulsas')">
+    <div data-id="card-avulsas" class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-5 border-l-4 border-gray-400 cursor-pointer hover:bg-emerald-50 dark:hover:bg-gray-700 transition-all" onclick="abrirModalDashboard('avulsa', 'Detalhamento: Vendas Avulsas')">
         <div class="flex items-center justify-between">
             <div>
                 <p class="text-gray-600 dark:text-gray-400 text-sm font-medium">Vendas Avulsas</p>
@@ -152,7 +152,7 @@
         </div>
     </div>
 
-    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-5 border-l-4 border-indigo-500">
+    <div data-id="card-margem" class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-5 border-l-4 border-indigo-500">
         <div class="flex items-center justify-between">
             <div>
                 <p class="text-gray-600 dark:text-gray-400 text-sm font-medium">Margem de Lucro</p>
@@ -162,7 +162,7 @@
         </div>
     </div>
 
-    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-5 border-l-4 border-cyan-500">
+    <div data-id="card-ticket" class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-5 border-l-4 border-cyan-500">
         <div class="flex items-center justify-between">
             <div>
                 <p class="text-gray-600 dark:text-gray-400 text-sm font-medium">Ticket Médio</p>
@@ -658,6 +658,8 @@
 {% endblock %}
 
 {% block scripts %}
+<!-- SortableJS CDN -->
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
 <!-- Chart.js CDN -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
@@ -1138,6 +1140,42 @@ document.addEventListener('DOMContentLoaded', function() {
             if (typeof lucide !== 'undefined') lucide.createIcons();
         });
     }
+
+    // SortableJS: Drag and Drop nos cartões do Dashboard (apenas Desktop)
+    var isDesktop = window.innerWidth >= 1024;
+    var grids = document.querySelectorAll('.sortable-grid');
+
+    grids.forEach(function(grid, index) {
+        var storageKey = 'dashboardCardOrder_' + index;
+
+        // 1. Recuperar e aplicar a ordem salva (se existir)
+        var savedOrder = localStorage.getItem(storageKey);
+        if (savedOrder) {
+            savedOrder = JSON.parse(savedOrder);
+            savedOrder.forEach(function(id) {
+                var item = grid.querySelector('[data-id="' + id + '"]');
+                if (item) {
+                    grid.appendChild(item);
+                }
+            });
+        }
+
+        // 2. Inicializar o Drag and Drop SOMENTE no Desktop
+        if (isDesktop && typeof Sortable !== 'undefined') {
+            Array.from(grid.children).forEach(function(child) {
+                child.classList.add('cursor-move', 'active:cursor-grabbing', 'transition-transform');
+            });
+            Sortable.create(grid, {
+                animation: 200,
+                ghostClass: 'opacity-40',
+                delay: 50,
+                onEnd: function() {
+                    var newOrder = Array.from(grid.children).map(function(child) { return child.getAttribute('data-id'); });
+                    localStorage.setItem(storageKey, JSON.stringify(newOrder));
+                }
+            });
+        }
+    });
 });
 </script>
 {% endblock %}
