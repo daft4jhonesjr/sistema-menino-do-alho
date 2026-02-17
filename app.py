@@ -2736,7 +2736,7 @@ def caixa():
         chave_mes = l.data.strftime('%Y-%m')
         if chave_mes not in lancamentos_agrupados:
             lancamentos_agrupados[chave_mes] = {
-                'titulo': f"{meses_pt[l.data.month]} de {l.data.year}",
+                'titulo': f"{meses_pt[l.data.month]}",
                 'id_html': f"mes-{chave_mes}",
                 'itens': [],
                 'entradas_mes': 0.0,
