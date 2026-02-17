@@ -700,13 +700,23 @@
     </script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            const tables = document.querySelectorAll('table');
+            var tables = document.querySelectorAll('table');
 
-            tables.forEach(function(table) {
+            tables.forEach(function(table, tableIndex) {
                 table.classList.add('resizable');
                 var cols = table.querySelectorAll('th');
 
-                cols.forEach(function(col) {
+                var tableKey = 'tabela_tamanhos_' + window.location.pathname + '_' + tableIndex;
+
+                var savedWidths = JSON.parse(localStorage.getItem(tableKey) || '{}');
+                cols.forEach(function(col, colIndex) {
+                    if (savedWidths[colIndex]) {
+                        col.style.width = savedWidths[colIndex] + 'px';
+                    }
+                });
+
+                cols.forEach(function(col, colIndex) {
+                    if (col.querySelector('.resizer')) return;
                     var resizer = document.createElement('div');
                     resizer.classList.add('resizer');
                     col.appendChild(resizer);
@@ -733,6 +743,12 @@
                         resizer.classList.remove('resizing');
                         document.removeEventListener('mousemove', mouseMoveHandler);
                         document.removeEventListener('mouseup', mouseUpHandler);
+
+                        var newWidths = {};
+                        cols.forEach(function(c, i) {
+                            newWidths[i] = parseInt(window.getComputedStyle(c).width, 10);
+                        });
+                        localStorage.setItem(tableKey, JSON.stringify(newWidths));
                     };
 
                     resizer.addEventListener('mousedown', mouseDownHandler);
