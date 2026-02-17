@@ -147,6 +147,7 @@ class Venda(db.Model):
     data_venda = db.Column(db.Date, default=date.today, nullable=False, index=True)  # Índice para filtros e ordenação por data
     empresa_faturadora = db.Column(db.String(20), nullable=False)
     situacao = db.Column(db.String(20), nullable=False, default='PENDENTE')
+    valor_pago = db.Column(db.Float, default=0.0)  # Valor já pago (para abatimento parcial)
     status_entrega = db.Column(db.String(50), default='PENDENTE')  # Status logístico (independente do financeiro)
     caminho_boleto = db.Column(db.String(500), nullable=True)
     caminho_nf = db.Column(db.String(500), nullable=True)

@@ -2147,6 +2147,12 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             db.session.commit()
         except (OperationalError, Exception):
             db.session.rollback()
+        # Migração: valor_pago em vendas (abatimento inteligente / pagamento parcial)
+        try:
+            db.session.execute(text('ALTER TABLE vendas ADD COLUMN valor_pago FLOAT DEFAULT 0.0'))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
         # Jhones sempre admin; criar se não existir
         u = Usuario.query.filter_by(username='Jhones').first()
         if not u:
@@ -4390,6 +4396,7 @@ def listar_vendas():
         pedidos_dict[pedido_key]['total_quantidade'] += venda.quantidade_venda
         pedidos_dict[pedido_key]['total_valor'] += float(venda.calcular_total())
         pedidos_dict[pedido_key]['total_lucro'] += float(venda.calcular_lucro())
+        pedidos_dict[pedido_key]['total_valor_pago'] = pedidos_dict[pedido_key].get('total_valor_pago', 0) + float(getattr(venda, 'valor_pago', None) or 0)
     
     # Converter dicionário para lista mantendo a ordem original (já ordenada pela query)
     pedidos_agrupados = []
@@ -4463,6 +4470,17 @@ def listar_vendas():
         pedido['caminho_nf'] = cn
         pedido['doc_boleto'] = doc_boleto  # None se não existir
         pedido['doc_nf'] = doc_nf  # None se não existir
+        # Situação: pior entre as vendas (PENDENTE > PARCIAL > PAGO)
+        situacoes = [str(v.situacao or '').strip().upper() for v in pedido.get('vendas', [])]
+        if any(s == 'PENDENTE' for s in situacoes):
+            pedido['situacao'] = 'PENDENTE'
+        elif any(s == 'PARCIAL' for s in situacoes):
+            pedido['situacao'] = 'PARCIAL'
+        else:
+            pedido['situacao'] = 'PAGO'
+        # total_valor_pago já acumulado no loop anterior
+        if 'total_valor_pago' not in pedido:
+            pedido['total_valor_pago'] = sum(float(getattr(v, 'valor_pago', None) or 0) for v in pedido.get('vendas', []))
         # Data vencimento do boleto (primeira venda do pedido que tiver)
         dv = None
         for vv in pedido.get('vendas', []):
@@ -4902,7 +4920,7 @@ def editar_venda(id):
             LancamentoCaixa.descricao.like(f"Venda #{venda_id_busca} -%")
         ).all()
         status_atual = str(venda.situacao).strip().upper() if venda.situacao else ''
-        status_pago = status_atual in ('PAGO', 'CONCLUÍDO')
+        status_pago = status_atual in ('PAGO', 'CONCLUÍDO', 'PARCIAL')
         if status_pago and not lancamentos_existentes:
             cliente = Cliente.query.get(venda.cliente_id)
             nome_cliente = cliente.nome_cliente if cliente else "Cliente Avulso"
@@ -5055,7 +5073,7 @@ def atualizar_status_venda(id_venda):
     lancamentos_existentes = LancamentoCaixa.query.filter(
         LancamentoCaixa.descricao.like(f"Venda #{venda.id} -%")
     ).all()
-    status_pago = novo and novo.upper() in ('PAGO', 'CONCLUÍDO')
+    status_pago = novo and novo.upper() in ('PAGO', 'CONCLUÍDO', 'PARCIAL')
     if status_pago and not lancamentos_existentes:
         cliente = Cliente.query.get(venda.cliente_id)
         nome_cliente = cliente.nome_cliente if cliente else "Cliente Avulso"
@@ -6104,6 +6122,72 @@ def debug_ping():
 def service_worker():
     """Serve o Service Worker com o tipo MIME correto."""
     return send_file('static/sw.js', mimetype='application/javascript')
+
+
+@app.route('/cliente/<int:id>/receber_lote', methods=['POST'])
+@login_required
+def receber_lote_cliente(id):
+    """Abatimento Inteligente: recebe valor em lote e abate nas vendas pendentes mais antigas."""
+    valor_str = (request.form.get('valor_recebido') or '0').replace('.', '').replace(',', '.')
+    valor_recebido = float(valor_str) if valor_str else 0.0
+    forma_pgto = request.form.get('forma_pagamento', 'Dinheiro')
+
+    cliente = Cliente.query.get_or_404(id)
+
+    # Busca vendas PENDENTES ou PARCIAIS, da mais velha para a mais nova
+    vendas_abertas = Venda.query.filter(
+        Venda.cliente_id == id,
+        Venda.situacao.in_(['PENDENTE', 'PARCIAL'])
+    ).order_by(Venda.data_venda.asc()).all()
+
+    valor_restante = valor_recebido
+
+    for venda in vendas_abertas:
+        if valor_restante <= 0:
+            break
+
+        venda.valor_pago = venda.valor_pago or 0.0
+        valor_total_venda = float(venda.calcular_total())
+        valor_falta = valor_total_venda - venda.valor_pago
+
+        if valor_restante >= valor_falta:
+            valor_abatido = valor_falta
+            venda.valor_pago = valor_total_venda
+            venda.situacao = 'PAGO'
+            valor_restante -= valor_falta
+        else:
+            valor_abatido = valor_restante
+            venda.valor_pago = (venda.valor_pago or 0) + valor_restante
+            venda.situacao = 'PARCIAL'
+            valor_restante = 0
+
+        novo_lanc = LancamentoCaixa(
+            data=date.today(),
+            descricao=f"Venda #{venda.id} - {cliente.nome_cliente} (Abatimento)",
+            tipo='ENTRADA',
+            categoria='Entrada Cliente',
+            forma_pagamento=forma_pgto,
+            valor=valor_abatido,
+            usuario_id=current_user.id
+        )
+        db.session.add(novo_lanc)
+
+        if 'boleto' in forma_pgto.lower():
+            repasse_lanc = LancamentoCaixa(
+                data=date.today(),
+                descricao=f"Venda #{venda.id} - {cliente.nome_cliente} (Repasse Abatimento)",
+                tipo='SAIDA',
+                categoria='Saída Fornecedor',
+                forma_pagamento=forma_pgto,
+                valor=valor_abatido,
+                usuario_id=current_user.id
+            )
+            db.session.add(repasse_lanc)
+
+    db.session.commit()
+    limpar_cache_dashboard()
+    flash(f'Abatimento de R$ {valor_recebido:,.2f} processado com sucesso para {cliente.nome_cliente}!', 'success')
+    return redirect(url_for('listar_clientes'))
 
 
 @app.route('/api/backup/excel')

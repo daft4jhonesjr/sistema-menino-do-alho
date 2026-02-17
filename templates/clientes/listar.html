@@ -75,6 +75,9 @@
                         <a href="{{ url_for('extrato_cliente', cliente_id=cliente.id) }}" target="_blank" title="Gerar Extrato em PDF" class="text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors mr-4 inline-flex items-center">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                         </a>
+                        <button type="button" class="btn-abater-lote text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 mr-4 inline-flex items-center cursor-pointer bg-transparent border-none p-0" data-id="{{ cliente.id }}" data-nome="{{ cliente.nome_cliente }}" title="Abater Lote (Receber pagamento em lote)">
+                            <i data-lucide="banknote" class="w-4 h-4"></i>
+                        </button>
                         <button type="button" class="btn-editar-cliente text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 mr-4 inline-flex items-center cursor-pointer bg-transparent border-none p-0"
                                 data-id="{{ cliente.id }}"
                                 data-nome="{{ cliente.nome_cliente }}"
@@ -146,6 +149,42 @@
                         <i data-lucide="x" class="w-4 h-4 mr-2"></i>Cancelar
                     </button>
                 </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Abater Lote (Receber Pagamento em Lote) -->
+<div id="modal-abater-lote-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
+    <div class="fixed inset-0 bg-black/50" id="modal-abater-lote-overlay"></div>
+    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-xl shadow-sm dark:shadow-none border border-gray-200 dark:border-gray-700 z-50" onclick="event.stopPropagation()">
+        <div class="sticky top-0 flex justify-between items-center px-8 py-5 bg-emerald-700 text-white rounded-t-xl z-10">
+            <h3 class="text-xl font-bold flex items-center">
+                <i data-lucide="banknote" class="w-5 h-5 mr-2"></i>Receber Pagamento em Lote
+            </h3>
+            <button type="button" class="modal-abater-lote-fechar w-10 h-10 flex items-center justify-center rounded-full hover:bg-emerald-600 text-white font-bold transition" title="Fechar">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+        <div class="p-8">
+            <form id="form-abater-lote" method="POST" action="" data-action-base="{{ url_for('receber_lote_cliente', id=0) }}">
+                <p class="text-sm text-gray-600 dark:text-gray-400 mb-4" id="modal-abater-cliente-nome">O valor informado irá quitar as dívidas mais antigas deste cliente primeiro.</p>
+                <div class="mb-4">
+                    <label for="abater_valor_recebido" class="block text-sm font-bold mb-2 text-gray-700 dark:text-gray-300">Valor Recebido (R$):</label>
+                    <input type="text" id="abater_valor_recebido" name="valor_recebido" placeholder="0,00" inputmode="decimal" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100" required>
+                </div>
+                <div class="mb-6">
+                    <label for="abater_forma_pagamento" class="block text-sm font-bold mb-2 text-gray-700 dark:text-gray-300">Forma de Pagamento:</label>
+                    <select id="abater_forma_pagamento" name="forma_pagamento" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
+                        <option value="Dinheiro">Dinheiro (Espécie)</option>
+                        <option value="Pix">Pix / Transferência</option>
+                        <option value="Cheque">Cheque</option>
+                        <option value="Boleto">Boleto Bancário</option>
+                    </select>
+                </div>
+                <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-2">
+                    <i data-lucide="check" class="w-5 h-5"></i>Processar Abatimento
+                </button>
             </form>
         </div>
     </div>
@@ -369,6 +408,43 @@
 
     document.querySelectorAll('.btn-editar-cliente').forEach(function(btn) {
         btn.addEventListener('click', function() { abrirModal(btn); });
+    });
+
+    // Modal Abater Lote
+    var wrapAbater = document.getElementById('modal-abater-lote-wrap');
+    var formAbater = document.getElementById('form-abater-lote');
+    var overlayAbater = document.getElementById('modal-abater-lote-overlay');
+    var btnsFecharAbater = document.querySelectorAll('.modal-abater-lote-fechar');
+    var actionBaseAbater = formAbater && formAbater.getAttribute('data-action-base');
+    var nomeAbater = document.getElementById('modal-abater-cliente-nome');
+
+    function abrirModalAbater(btn) {
+        var id = btn.getAttribute('data-id');
+        var nome = btn.getAttribute('data-nome') || '';
+        if (formAbater && actionBaseAbater) {
+            formAbater.action = actionBaseAbater.replace(/\/0\//, '/' + id + '/');
+        }
+        if (nomeAbater) {
+            nomeAbater.textContent = 'O valor informado irá quitar as dívidas mais antigas de "' + nome + '" primeiro.';
+        }
+        if (wrapAbater) {
+            wrapAbater.classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        }
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+    function fecharModalAbater() {
+        if (wrapAbater) {
+            wrapAbater.classList.add('hidden');
+            document.body.style.overflow = '';
+        }
+    }
+    document.querySelectorAll('.btn-abater-lote').forEach(function(btn) {
+        btn.addEventListener('click', function() { abrirModalAbater(btn); });
+    });
+    if (overlayAbater) overlayAbater.addEventListener('click', fecharModalAbater);
+    btnsFecharAbater.forEach(function(btn) {
+        btn.addEventListener('click', fecharModalAbater);
     });
     if (overlay) overlay.addEventListener('click', fecharModal);
     btnsFechar.forEach(function(btn) { btn.addEventListener('click', fecharModal); });
