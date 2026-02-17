@@ -12,7 +12,7 @@
     <td class="px-4 py-4 text-center">
         <i data-lucide="chevron-down" class="w-5 h-5 text-emerald-700 dark:text-emerald-400 pedido-chevron transition-transform"></i>
     </td>
-    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{{ pedido.data_venda.strftime('%d/%m/%Y') }}</td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{{ pedido.data_venda.strftime('%d/%m') }}</td>
     <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 dark:text-gray-100">{{ pedido.cliente_nome }}</td>
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ pedido.nf }}</td>
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 text-right">{% if pedido.total_quantidade and pedido.total_quantidade != 0 %}{{ (pedido.total_valor / pedido.total_quantidade)|formato_moeda }}{% else %}<span class="text-gray-400 dark:text-gray-500">---</span>{% endif %}</td>
