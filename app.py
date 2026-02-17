@@ -45,7 +45,6 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import pdfplumber
 import cloudinary
 import cloudinary.uploader
-import openpyxl
 
 # #region agent log
 _log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.cursor')
@@ -6110,14 +6109,13 @@ def service_worker():
 @app.route('/api/backup/excel')
 @login_required
 def backup_excel():
-    """Cofre de Dados: exporta Vendas, Clientes e Produtos para Excel (.xlsx)."""
-    wb = openpyxl.Workbook()
+    """Cofre de Dados: exporta Vendas, Clientes e Produtos para CSV."""
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=';')
 
-    # Aba 1: Vendas
-    ws_vendas = wb.active
-    ws_vendas.title = "Vendas"
-    ws_vendas.append(["ID", "Data", "Cliente", "Produto", "Qtd", "Preço Unit.", "Valor Total", "Custo Total", "Lucro", "Situação", "Status Entrega"])
-
+    # Seção 1: Vendas
+    writer.writerow(["=== VENDAS ==="])
+    writer.writerow(["ID", "Data", "Cliente", "Produto", "Qtd", "Preço Unit.", "Valor Total", "Custo Total", "Lucro", "Situação", "Status Entrega"])
     vendas = Venda.query.options(joinedload(Venda.cliente), joinedload(Venda.produto)).all()
     for v in vendas:
         cliente = v.cliente
@@ -6129,31 +6127,34 @@ def backup_excel():
         lucro = float(v.calcular_lucro())
         custo_total = valor_total - lucro
         produto_nome = v.produto.nome_produto if v.produto else "-"
+        writer.writerow([v.id, data_venda, nome_cliente, produto_nome, qtd, preco_unit, valor_total, custo_total, lucro, v.situacao or "", v.status_entrega or ""])
 
-        ws_vendas.append([v.id, data_venda, nome_cliente, produto_nome, qtd, preco_unit, valor_total, custo_total, lucro, v.situacao or "", v.status_entrega or ""])
-
-    # Aba 2: Clientes
-    ws_clientes = wb.create_sheet(title="Clientes")
-    ws_clientes.append(["ID", "Nome", "Razão Social", "CNPJ", "Cidade", "Endereço"])
+    # Seção 2: Clientes
+    writer.writerow([])
+    writer.writerow(["=== CLIENTES ==="])
+    writer.writerow(["ID", "Nome", "Razão Social", "CNPJ", "Cidade", "Endereço"])
     clientes = Cliente.query.all()
     for c in clientes:
-        ws_clientes.append([c.id, c.nome_cliente or "", c.razao_social or "", c.cnpj or "", c.cidade or "", c.endereco or ""])
+        writer.writerow([c.id, c.nome_cliente or "", c.razao_social or "", c.cnpj or "", c.cidade or "", c.endereco or ""])
 
-    # Aba 3: Estoque/Produtos
-    ws_produtos = wb.create_sheet(title="Estoque")
-    ws_produtos.append(["ID", "Nome", "Tipo", "Fornecedor", "Nacionalidade", "Tamanho", "Marca", "Preço Custo", "Qtd Entrada", "Estoque Atual", "Data Chegada"])
+    # Seção 3: Estoque/Produtos
+    writer.writerow([])
+    writer.writerow(["=== ESTOQUE ==="])
+    writer.writerow(["ID", "Nome", "Tipo", "Fornecedor", "Nacionalidade", "Tamanho", "Marca", "Preço Custo", "Qtd Entrada", "Estoque Atual", "Data Chegada"])
     produtos = Produto.query.all()
     for p in produtos:
         data_chegada = p.data_chegada.strftime('%d/%m/%Y') if p.data_chegada else ""
-        ws_produtos.append([p.id, p.nome_produto or "", p.tipo or "", p.fornecedor or "", p.nacionalidade or "", p.tamanho or "", p.marca or "", float(p.preco_custo or 0), p.quantidade_entrada or 0, p.estoque_atual or 0, data_chegada])
+        writer.writerow([p.id, p.nome_produto or "", p.tipo or "", p.fornecedor or "", p.nacionalidade or "", p.tamanho or "", p.marca or "", float(p.preco_custo or 0), p.quantidade_entrada or 0, p.estoque_atual or 0, data_chegada])
 
-    # Salvar arquivo em memória
-    out = io.BytesIO()
-    wb.save(out)
-    out.seek(0)
+    csv_data = output.getvalue()
     data_atual = datetime.now().strftime('%Y-%m-%d_%Hh%M')
-    nome_arquivo = f"Cofre_Menino_Do_Alho_{data_atual}.xlsx"
-    return send_file(out, download_name=nome_arquivo, as_attachment=True, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    nome_arquivo = f"backup_menino_do_alho_{data_atual}.csv"
+    return send_file(
+        io.BytesIO(csv_data.encode('utf-8-sig')),
+        download_name=nome_arquivo,
+        as_attachment=True,
+        mimetype='text/csv'
+    )
 
 
 @app.route('/debug-vincular')
