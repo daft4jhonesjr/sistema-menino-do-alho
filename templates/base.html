@@ -67,6 +67,39 @@
             background-color: #d1fae5 !important; /* Verde claro do hover */
         }
     </style>
+    <style>
+        /* CSS para o Redimensionador de Tabelas */
+        table.resizable {
+            table-layout: fixed;
+            width: 100%;
+        }
+        table.resizable th {
+            position: relative;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+        table.resizable td {
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+        .resizer {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 5px;
+            cursor: col-resize;
+            user-select: none;
+            height: 100%;
+            z-index: 10;
+            transition: background-color 0.2s;
+        }
+        .resizer:hover, .resizer.resizing {
+            background-color: #10b981; /* Cor Emerald-500 para combinar com o tema */
+            border-right: 1px solid #047857;
+        }
+    </style>
     <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
     {% block head_extras %}{% endblock %}
 </head>
@@ -664,6 +697,48 @@
             });
         });
     }
+    </script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const tables = document.querySelectorAll('table');
+
+            tables.forEach(function(table) {
+                table.classList.add('resizable');
+                var cols = table.querySelectorAll('th');
+
+                cols.forEach(function(col) {
+                    var resizer = document.createElement('div');
+                    resizer.classList.add('resizer');
+                    col.appendChild(resizer);
+
+                    var x = 0;
+                    var w = 0;
+
+                    var mouseDownHandler = function(e) {
+                        x = e.clientX;
+                        var styles = window.getComputedStyle(col);
+                        w = parseInt(styles.width, 10);
+
+                        document.addEventListener('mousemove', mouseMoveHandler);
+                        document.addEventListener('mouseup', mouseUpHandler);
+                        resizer.classList.add('resizing');
+                    };
+
+                    var mouseMoveHandler = function(e) {
+                        var dx = e.clientX - x;
+                        col.style.width = (w + dx) + 'px';
+                    };
+
+                    var mouseUpHandler = function() {
+                        resizer.classList.remove('resizing');
+                        document.removeEventListener('mousemove', mouseMoveHandler);
+                        document.removeEventListener('mouseup', mouseUpHandler);
+                    };
+
+                    resizer.addEventListener('mousedown', mouseDownHandler);
+                });
+            });
+        });
     </script>
 </body>
 </html>
