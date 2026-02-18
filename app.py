@@ -4786,8 +4786,14 @@ def nova_venda():
                 nome_cliente = cliente.nome_cliente if cliente else "Cliente Avulso"
                 forma_pgto = request.form.get('forma_pagamento', 'Dinheiro') or 'Dinheiro'
                 valor_venda = float(venda.calcular_total())
+                forma_pgto_upper = str(forma_pgto or '').upper()
+                data_venc = getattr(venda, 'data_vencimento', None)
+                if 'BOLETO' in forma_pgto_upper and data_venc:
+                    data_lancamento_caixa = data_venc
+                else:
+                    data_lancamento_caixa = date.today()
                 novo_lanc = LancamentoCaixa(
-                    data=date.today(),
+                    data=data_lancamento_caixa,
                     descricao=f"Venda #{venda.id} - {nome_cliente}",
                     tipo='ENTRADA',
                     categoria='Entrada Cliente',
@@ -4798,7 +4804,7 @@ def nova_venda():
                 db.session.add(novo_lanc)
                 if 'boleto' in forma_pgto.lower():
                     repasse_lanc = LancamentoCaixa(
-                        data=date.today(),
+                        data=data_lancamento_caixa,
                         descricao=f"Venda #{venda.id} - {nome_cliente} (Repasse Fornecedor)",
                         tipo='SAIDA',
                         categoria='Saída Fornecedor',
@@ -4971,8 +4977,19 @@ def editar_venda(id):
             nome_cliente = cliente.nome_cliente if cliente else "Cliente Avulso"
             forma_pgto = request.form.get('forma_pagamento', 'Dinheiro') or 'Dinheiro'
             valor_pedido = sum(float(v.calcular_total()) for v in vendas_do_pedido)
+            forma_pgto_upper = str(forma_pgto or '').upper()
+            data_venc = None
+            for v in vendas_do_pedido:
+                dv = getattr(v, 'data_vencimento', None)
+                if dv:
+                    data_venc = dv
+                    break
+            if 'BOLETO' in forma_pgto_upper and data_venc:
+                data_lancamento_caixa = data_venc
+            else:
+                data_lancamento_caixa = date.today()
             novo_lanc = LancamentoCaixa(
-                data=date.today(),
+                data=data_lancamento_caixa,
                 descricao=f"Venda #{venda_id_busca} - {nome_cliente}",
                 tipo='ENTRADA',
                 categoria='Entrada Cliente',
@@ -4983,7 +5000,7 @@ def editar_venda(id):
             db.session.add(novo_lanc)
             if 'boleto' in forma_pgto.lower():
                 repasse_lanc = LancamentoCaixa(
-                    data=date.today(),
+                    data=data_lancamento_caixa,
                     descricao=f"Venda #{venda_id_busca} - {nome_cliente} (Repasse Fornecedor)",
                     tipo='SAIDA',
                     categoria='Saída Fornecedor',
@@ -5124,8 +5141,19 @@ def atualizar_status_venda(id_venda):
         nome_cliente = cliente.nome_cliente if cliente else "Cliente Avulso"
         forma_pgto = request.form.get('forma_pagamento') or (request.get_json(silent=True) or {}).get('forma_pagamento', 'Dinheiro') or 'Dinheiro'
         valor_pedido = sum(float(v.calcular_total()) for v in vendas_do_pedido)
+        forma_pgto_upper = str(forma_pgto or '').upper()
+        data_venc = None
+        for v in vendas_do_pedido:
+            dv = getattr(v, 'data_vencimento', None)
+            if dv:
+                data_venc = dv
+                break
+        if 'BOLETO' in forma_pgto_upper and data_venc:
+            data_lancamento_caixa = data_venc
+        else:
+            data_lancamento_caixa = date.today()
         novo_lancamento = LancamentoCaixa(
-            data=date.today(),
+            data=data_lancamento_caixa,
             descricao=f"Venda #{venda.id} - {nome_cliente}",
             tipo='ENTRADA',
             categoria='Entrada Cliente',
@@ -5136,7 +5164,7 @@ def atualizar_status_venda(id_venda):
         db.session.add(novo_lancamento)
         if 'boleto' in forma_pgto.lower():
             repasse_lanc = LancamentoCaixa(
-                data=date.today(),
+                data=data_lancamento_caixa,
                 descricao=f"Venda #{venda.id} - {nome_cliente} (Repasse Fornecedor)",
                 tipo='SAIDA',
                 categoria='Saída Fornecedor',
@@ -6206,8 +6234,14 @@ def receber_lote_cliente(id):
             venda.situacao = 'PARCIAL'
             valor_restante = 0
 
+        forma_pgto_upper = str(forma_pgto or '').upper()
+        data_venc = getattr(venda, 'data_vencimento', None)
+        if 'BOLETO' in forma_pgto_upper and data_venc:
+            data_lancamento_caixa = data_venc
+        else:
+            data_lancamento_caixa = date.today()
         novo_lanc = LancamentoCaixa(
-            data=date.today(),
+            data=data_lancamento_caixa,
             descricao=f"Venda #{venda.id} - {cliente.nome_cliente} (Abatimento)",
             tipo='ENTRADA',
             categoria='Entrada Cliente',
@@ -6219,7 +6253,7 @@ def receber_lote_cliente(id):
 
         if 'boleto' in forma_pgto.lower():
             repasse_lanc = LancamentoCaixa(
-                data=date.today(),
+                data=data_lancamento_caixa,
                 descricao=f"Venda #{venda.id} - {cliente.nome_cliente} (Repasse Abatimento)",
                 tipo='SAIDA',
                 categoria='Saída Fornecedor',
