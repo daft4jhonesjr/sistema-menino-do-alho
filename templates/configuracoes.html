@@ -80,7 +80,7 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     var radios = document.querySelectorAll('input[name="theme_selector"]');
-    var currentTheme = localStorage.getItem('menino_alho_theme') || 'claro';
+    var currentTheme = localStorage.getItem('menino_alho_theme') || 'auto';
 
     radios.forEach(function(r) {
         if (r.value === currentTheme) r.checked = true;

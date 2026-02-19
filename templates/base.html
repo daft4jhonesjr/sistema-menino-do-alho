@@ -37,7 +37,7 @@
     </script>
     <script>
         (function() {
-            var theme = localStorage.getItem('menino_alho_theme') || 'claro';
+            var theme = localStorage.getItem('menino_alho_theme') || 'auto';
             var hour = new Date().getHours();
             var isDark = false;
 
@@ -54,7 +54,7 @@
             }
         })();
         setInterval(function() {
-            var theme = localStorage.getItem('menino_alho_theme') || 'claro';
+            var theme = localStorage.getItem('menino_alho_theme') || 'auto';
             if (theme !== 'auto') return;
             var hour = new Date().getHours();
             var isDark = (hour >= 18 || hour < 6);
