@@ -2735,6 +2735,7 @@ def dashboard():
 @app.route('/caixa')
 @login_required
 def caixa():
+    # Sem filtro de data: exibe todos os lançamentos (incluindo datas futuras) agrupados por mês/ano
     lancamentos = LancamentoCaixa.query.order_by(LancamentoCaixa.data.desc(), LancamentoCaixa.id.desc()).all()
     total_entradas = sum(l.valor for l in lancamentos if l.tipo == 'ENTRADA')
     total_saida_pessoal = sum(l.valor for l in lancamentos if l.tipo == 'SAIDA' and l.categoria and 'Pessoal' in l.categoria)
@@ -2835,6 +2836,27 @@ def adicionar_caixa():
     db.session.add(novo_lancamento)
     db.session.commit()
     flash('Lançamento adicionado com sucesso!', 'success')
+    return redirect(url_for('caixa'))
+
+
+@app.route('/caixa/editar/<int:id>', methods=['POST'])
+@login_required
+def editar_lancamento_caixa(id):
+    """Atualiza um lançamento existente no caixa."""
+    lancamento = LancamentoCaixa.query.get_or_404(id)
+    try:
+        lancamento.data = datetime.strptime(request.form.get('data'), '%Y-%m-%d').date()
+        valor_str = (request.form.get('valor', '0') or '0').replace('.', '').replace(',', '.')
+        lancamento.valor = float(valor_str)
+        lancamento.descricao = (request.form.get('descricao') or '').strip()
+        lancamento.tipo = request.form.get('tipo') or lancamento.tipo
+        lancamento.categoria = request.form.get('categoria') or lancamento.categoria
+        lancamento.forma_pagamento = request.form.get('forma_pagamento') or lancamento.forma_pagamento
+        db.session.commit()
+        flash('Lançamento atualizado com sucesso!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro ao atualizar lançamento: {str(e)}', 'error')
     return redirect(url_for('caixa'))
 
 
