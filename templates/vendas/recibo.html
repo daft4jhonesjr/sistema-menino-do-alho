@@ -255,41 +255,58 @@
         }
         
         @media print {
+            /* 1. Força o tamanho A4 e margem mínima na folha física */
             @page {
-                margin: 1cm;
                 size: A4 portrait;
+                margin: 0.5cm !important;
             }
 
+            /* 2. Zera margens do navegador e força as cores da tabela */
             body, html {
-                margin: 0;
-                padding: 0;
-                height: 100%;
+                margin: 0 !important;
+                padding: 0 !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                background: white !important;
+                /* O Pulo do Gato para o Safari: Reduz levemente a escala para garantir o encaixe */
+                zoom: 0.85 !important;
             }
 
-            body {
-                font-size: 12pt;
-            }
-
-            .no-print {
+            /* 3. Esconde o botão de imprimir e outros elementos desnecessários para ganhar espaço */
+            button, .no-print, .print-hidden {
                 display: none !important;
             }
 
             .container {
-                max-height: none;
-                overflow: visible;
+                max-height: none !important;
+                overflow: visible !important;
+                padding: 0.3cm !important;
             }
 
-            /* Evita quebra de página dentro de cada via */
+            /* 4. Tira os espaços sobressalentes das vias e evita quebra */
             .via-recibo {
-                page-break-inside: avoid;
-                break-inside: avoid;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+                padding: 0 !important;
+                margin-bottom: 8px !important;
             }
 
-            /* Evita quebra APÓS a primeira via e a linha de corte */
-            .via-recibo:first-of-type,
-            .linha-corte {
-                page-break-after: avoid;
-                break-after: avoid;
+            .via-header { margin-bottom: 10px !important; }
+            .logo-recibo { height: 60px !important; }
+            .cliente-section { margin: 12px 0 !important; padding: 8px !important; }
+            .tabela-produtos { margin: 12px 0 !important; }
+            .tabela-produtos th, .tabela-produtos td { padding: 5px !important; font-size: 9pt !important; }
+            .total-section { margin-top: 12px !important; padding: 10px !important; }
+            .rodape { margin-top: 15px !important; padding-top: 12px !important; }
+            .rodape .assinatura .linha { margin-top: 30px !important; }
+
+            /* Ajuste fino na linha pontilhada para não empurrar a página */
+            .linha-corte, .linha-de-corte {
+                margin-top: 15px !important;
+                margin-bottom: 15px !important;
+                padding: 0 !important;
+                page-break-before: avoid !important;
+                page-break-after: avoid !important;
             }
         }
         
@@ -329,7 +346,7 @@
     <div class="container">
         {{ render_via('1ª Via - Cliente') }}
 
-        <div class="linha-corte">
+        <div class="linha-corte linha-de-corte">
             <div class="traco"></div>
             <span class="texto">✂️ Cortar Aqui</span>
             <div class="traco"></div>
