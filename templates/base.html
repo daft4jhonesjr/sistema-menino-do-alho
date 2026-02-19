@@ -952,8 +952,8 @@
         });
     </script>
     <script>
-        // Sistema de Notificações (Toasts)
-        function showToast(message, type) {
+        // Sistema de Notificações (Toasts) + Undo Pattern
+        function showToast(message, type, undoAction) {
             type = type || 'success';
             var container = document.getElementById('toast-container');
             if (!container) return;
@@ -972,10 +972,35 @@
                 'info': '<svg class="w-6 h-6 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>'
             };
 
+            var btnUndoHtml = undoAction ? '<button type="button" class="toast-undo-btn ml-2 px-2 py-1 text-xs font-medium rounded bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-800 transition flex-shrink-0">Desfazer</button>' : '';
+            var btnCloseHtml = '<button type="button" onclick="this.closest(\'.toast-item\').remove()" class="ml-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 focus:outline-none flex-shrink-0"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>';
+
             var toast = document.createElement('div');
-            toast.className = (colors[type] || colors['success']) + ' rounded-lg p-4 flex items-center min-w-[280px] max-w-full transform transition-all duration-300 ease-out translate-x-full opacity-0';
-            toast.innerHTML = '<div class="flex-shrink-0 mr-3">' + (icons[type] || icons['success']) + '</div><div class="flex-1 font-medium text-sm"></div><button type="button" onclick="this.parentElement.remove()" class="ml-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 focus:outline-none flex-shrink-0"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>';
-            toast.querySelector('.flex-1').textContent = message || '';
+            toast.className = 'toast-item ' + (colors[type] || colors['success']) + ' rounded-lg p-4 flex items-center min-w-[280px] max-w-full transform transition-all duration-300 ease-out translate-x-full opacity-0';
+            toast.innerHTML = '<div class="flex-shrink-0 mr-3">' + (icons[type] || icons['success']) + '</div><div class="flex-1 font-medium text-sm flex items-center flex-wrap gap-1"></div>' + btnUndoHtml + btnCloseHtml;
+            var msgEl = toast.querySelector('.flex-1');
+            msgEl.innerHTML = message || '';
+
+            if (undoAction && typeof undoAction === 'function') {
+                var undoBtn = toast.querySelector('.toast-undo-btn');
+                if (undoBtn) {
+                    undoBtn.addEventListener('click', function() {
+                        undoAction();
+                        if (toast.parentElement) toast.remove();
+                    });
+                }
+                var hiddenBtn = document.createElement('button');
+                hiddenBtn.className = 'toast-undo-btn hidden';
+                hiddenBtn.type = 'button';
+                hiddenBtn.addEventListener('click', function() {
+                    undoAction();
+                    if (this.parentNode) this.remove();
+                });
+                document.body.appendChild(hiddenBtn);
+                setTimeout(function() {
+                    if (hiddenBtn.parentNode) hiddenBtn.remove();
+                }, 10000);
+            }
 
             container.appendChild(toast);
 
@@ -986,24 +1011,66 @@
                 }, 10);
             });
 
+            var duration = undoAction ? 8000 : 4000;
             setTimeout(function() {
                 toast.classList.remove('translate-x-0');
                 toast.classList.add('translate-x-full', 'opacity-0');
                 setTimeout(function() {
                     if (toast.parentElement) toast.remove();
                 }, 300);
-            }, 4000);
+            }, duration);
         }
+
+        document.addEventListener('keydown', function(e) {
+            if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
+                var target = e.target;
+                var isInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+                if (isInput) return;
+                var btns = document.querySelectorAll('.toast-undo-btn');
+                var undoBtn = btns.length > 0 ? btns[btns.length - 1] : null;
+                if (undoBtn) {
+                    e.preventDefault();
+                    undoBtn.click();
+                }
+            }
+        });
 
         document.addEventListener('DOMContentLoaded', function() {
             var flashMessages = {{ get_flashed_messages(with_categories=true) | tojson }};
             if (flashMessages && flashMessages.length > 0) {
                 flashMessages.forEach(function(item) {
                     var category = item[0] || 'info';
-                    var message = item[1] || '';
+                    var rawMessage = item[1] || '';
                     if (category === 'message') category = 'info';
                     if (category === 'danger') category = 'error';
-                    showToast(message, category);
+
+                    var message = rawMessage;
+                    var undoAction = null;
+
+                    if (rawMessage.indexOf('|UNDO_CAIXA_') !== -1) {
+                        var parts = rawMessage.split('|UNDO_CAIXA_');
+                        message = parts[0] + ' <span class="text-xs opacity-75">(Cmd+Z para desfazer)</span>';
+                        var id = parts[1];
+                        if (id) {
+                            undoAction = function() {
+                                fetch('/desfazer_caixa/' + id, { method: 'POST', credentials: 'same-origin' })
+                                    .then(function(r) { return r.json(); })
+                                    .then(function(data) {
+                                        if (data.status === 'success') {
+                                            showToast('Ação desfeita com sucesso.', 'info');
+                                            setTimeout(function() { window.location.reload(); }, 1000);
+                                        } else {
+                                            showToast('Erro ao desfazer: ' + (data.message || 'Erro desconhecido'), 'error');
+                                        }
+                                    })
+                                    .catch(function() {
+                                        showToast('Erro ao desfazer. Tente novamente.', 'error');
+                                    });
+                            };
+                        }
+                    }
+
+                    showToast(message, category, undoAction);
                 });
             }
         });

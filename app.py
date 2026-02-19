@@ -2918,7 +2918,7 @@ def adicionar_caixa():
         )
         db.session.add(novo_lancamento)
         db.session.commit()
-        flash('Lançamento adicionado com sucesso!', 'success')
+        flash(f'Lançamento adicionado com sucesso!|UNDO_CAIXA_{novo_lancamento.id}', 'success')
     return redirect(url_for('caixa'))
 
 
@@ -2941,6 +2941,36 @@ def editar_lancamento_caixa(id):
         flash(f'Erro ao atualizar lançamento: {str(e)}', 'error')
         print(f"Erro no banco (editar_lancamento_caixa): {e}")
     return redirect(url_for('caixa'))
+
+
+@app.route('/desfazer_caixa/<int:id>', methods=['POST'])
+@login_required
+def desfazer_caixa(id):
+    """Rota genérica para desfazer lançamento do caixa (retorna JSON para Undo via Toast)."""
+    try:
+        lancamento = LancamentoCaixa.query.get_or_404(id)
+        # --- Estorno reverso (Caixa -> Venda) ---
+        match = re.search(r'Venda #(\d+)', lancamento.descricao or '')
+        if match and lancamento.tipo == 'ENTRADA':
+            venda_id = int(match.group(1))
+            venda = Venda.query.get(venda_id)
+            if venda:
+                venda.valor_pago = (venda.valor_pago or 0.0) - lancamento.valor
+                if venda.valor_pago <= 0.01:
+                    venda.valor_pago = 0.0
+                    venda.situacao = 'PENDENTE'
+                else:
+                    valor_total_venda = float(venda.calcular_total())
+                    if venda.valor_pago < (valor_total_venda - 0.01):
+                        venda.situacao = 'PARCIAL'
+                    else:
+                        venda.situacao = 'PAGO'
+        db.session.delete(lancamento)
+        db.session.commit()
+        return jsonify({"status": "success", "message": "Lançamento desfeito com sucesso."})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 
 @app.route('/caixa/deletar/<int:id>', methods=['POST'])
