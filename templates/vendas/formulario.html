@@ -53,7 +53,7 @@
                 </label>
                 <input type="number" id="quantidade_venda" name="quantidade_venda" 
                        value="{{ venda.quantidade_venda if venda else '1' }}" 
-                       min="1" required inputmode="decimal" pattern="[0-9]*"
+                       min="1" required inputmode="decimal"
                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
             </div>
 
@@ -63,7 +63,7 @@
                 </label>
                 <input type="number" id="preco_venda" name="preco_venda" 
                        value="{{ venda.preco_venda if venda else '' }}" 
-                       step="0.01" required inputmode="decimal" pattern="[0-9]*"
+                       step="0.01" required inputmode="decimal"
                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
             </div>
 
