@@ -1026,49 +1026,50 @@
     </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pulltorefreshjs/0.1.22/index.umd.min.js"></script>
     <style>
-        /* Estilo do indicador de atualização */
+        /* Estilo do container minimalista (texto apenas) */
         .ptr--ptr {
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1) !important;
-            border-radius: 0 0 20px 20px;
-            z-index: 9999 !important; /* Garante que fique acima de tudo */
+            box-shadow: none !important;
+            border-bottom: 1px solid #e5e7eb;
             background: white !important;
+            z-index: 9999 !important;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 60px !important;
         }
         .dark .ptr--ptr {
-            background: #1f2937 !important; /* Modo escuro */
+            background: #1f2937 !important;
             border-bottom: 1px solid #374151;
         }
+        /* Estilo do Texto */
+        .ptr--text {
+            font-weight: 600;
+            font-size: 14px;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .dark .ptr--text {
+            color: #9ca3af;
+        }
+        /* Esconde o container do ícone */
         .ptr--icon {
-            color: #10b981 !important; /* Verde Emerald */
-            transition: transform 0.3s;
-        }
-        /* Animação de girar quando estiver carregando */
-        .ptr-loading .ptr--icon {
-            animation: spin 1s infinite linear;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            display: none !important;
         }
     </style>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Só ativa em dispositivos móveis ou telas pequenas
             if (window.innerWidth < 1024 || 'ontouchstart' in window) {
                 PullToRefresh.init({
-                    mainElement: 'body', // Onde o usuário arrasta (o corpo todo)
+                    mainElement: 'body',
                     triggerElement: 'body',
-                    instructionsPullToRefresh: '⬇️ Puxe para atualizar',
-                    instructionsReleaseToRefresh: '⬆️ Solte para recarregar',
-                    instructionsRefreshing: '🔄 Atualizando...',
-                    distThreshold: 70, // Distância mínima para disparar
-                    iconArrow: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>',
-                    iconRefreshing: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>',
+                    instructionsPullToRefresh: 'Puxe para atualizar',
+                    instructionsReleaseToRefresh: 'Solte para atualizar',
+                    instructionsRefreshing: 'Atualizando...',
+                    iconArrow: '',
+                    iconRefreshing: '',
+                    distThreshold: 60,
                     onRefresh: function() {
-                        // Adiciona classe para animar o ícone
-                        const ptrElement = document.querySelector('.ptr--ptr');
-                        if(ptrElement) ptrElement.classList.add('ptr-loading');
-
-                        // Recarrega a página de verdade
                         window.location.reload();
                     }
                 });
