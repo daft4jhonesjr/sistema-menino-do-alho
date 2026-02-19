@@ -224,7 +224,7 @@
 
             <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Valor (R$)</label>
-                <input type="text" name="valor" placeholder="0,00" required class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-lg font-bold">
+                <input type="text" id="valor" name="valor" placeholder="0,00" required class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-lg font-bold">
             </div>
 
             <div class="pt-4 flex justify-end gap-3">
@@ -270,6 +270,28 @@
 
 <script>
 window.CAIXA_DELETE_URL = "{{ url_for('deletar_caixa', id=0) }}".replace('/0', '/');
+
+// Função de Máscara de Moeda (BRL)
+function aplicarMascaraMoeda(input) {
+    if (!input) return;
+    input.addEventListener('input', function(e) {
+        var value = e.target.value.replace(/\D/g, "");
+        if (value === "") {
+            e.target.value = "";
+            return;
+        }
+        value = (parseFloat(value) / 100).toLocaleString("pt-BR", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+        e.target.value = value;
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    var inputValor = document.getElementById('valor');
+    if (inputValor) aplicarMascaraMoeda(inputValor);
+});
 window.CAIXA_ADD_URL = "{{ url_for('adicionar_caixa') }}";
 window.CAIXA_EDIT_URL_BASE = "{{ url_for('editar_lancamento_caixa', id=0) }}".replace('/0', '');
 window.DATA_HOJE = "{{ data_hoje }}";

@@ -2822,8 +2822,8 @@ def caixa():
 @login_required
 def adicionar_caixa():
     nova_data = datetime.strptime(request.form.get('data'), '%Y-%m-%d').date()
-    valor_str = request.form.get('valor', '0').replace('.', '').replace(',', '.')
-    novo_valor = float(valor_str)
+    valor_str = (request.form.get('valor') or '0').replace('.', '').replace(',', '.')
+    novo_valor = float(valor_str) if valor_str else 0.0
     novo_lancamento = LancamentoCaixa(
         data=nova_data,
         descricao=request.form.get('descricao', '').strip(),
@@ -2846,8 +2846,8 @@ def editar_lancamento_caixa(id):
     lancamento = LancamentoCaixa.query.get_or_404(id)
     try:
         lancamento.data = datetime.strptime(request.form.get('data'), '%Y-%m-%d').date()
-        valor_str = (request.form.get('valor', '0') or '0').replace('.', '').replace(',', '.')
-        lancamento.valor = float(valor_str)
+        valor_str = (request.form.get('valor') or '0').replace('.', '').replace(',', '.')
+        lancamento.valor = float(valor_str) if valor_str else 0.0
         lancamento.descricao = (request.form.get('descricao') or '').strip()
         lancamento.tipo = request.form.get('tipo') or lancamento.tipo
         lancamento.categoria = request.form.get('categoria') or lancamento.categoria
