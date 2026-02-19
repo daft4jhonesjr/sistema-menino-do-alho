@@ -137,7 +137,14 @@
                     </thead>
                     <tbody class="divide-y divide-gray-100 dark:divide-gray-700 text-sm">
                         {% for l in grupo.itens %}
-                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors" data-lanc-id="{{ l.id }}" data-lanc-data="{{ l.data.strftime('%Y-%m-%d') }}" data-lanc-desc="{{ l.descricao|e }}" data-lanc-categoria="{{ l.categoria|e }}" data-lanc-tipo="{{ l.tipo }}" data-lanc-forma="{{ l.forma_pagamento|e }}" data-lanc-valor="{{ l.valor }}">
+                        {% if l.data == hoje %}
+                        {% set row_class = "bg-emerald-50/50 dark:bg-emerald-900/20 border-l-4 border-l-emerald-500 hover:bg-emerald-100/50 dark:hover:bg-emerald-900/30" %}
+                        {% elif l.data == ontem %}
+                        {% set row_class = "bg-gray-50/50 dark:bg-gray-800/40 border-l-4 border-l-gray-500 hover:bg-gray-100/50 dark:hover:bg-gray-800/50" %}
+                        {% else %}
+                        {% set row_class = "border-l-4 border-l-transparent hover:bg-gray-50 dark:hover:bg-gray-700" %}
+                        {% endif %}
+                        <tr class="{{ row_class }} transition-colors duration-200 text-gray-700 dark:text-gray-300 border-b border-gray-100 dark:border-gray-800" data-lanc-id="{{ l.id }}" data-lanc-data="{{ l.data.strftime('%Y-%m-%d') }}" data-lanc-desc="{{ l.descricao|e }}" data-lanc-categoria="{{ l.categoria|e }}" data-lanc-tipo="{{ l.tipo }}" data-lanc-forma="{{ l.forma_pagamento|e }}" data-lanc-valor="{{ l.valor }}">
                             <td class="px-6 py-3">
                                 <input type="checkbox" name="lancamento_ids" value="{{ l.id }}" onchange="atualizarBarraMassa()" class="check-item-caixa item-grupo-{{ grupo.id_html }} w-4 h-4 text-emerald-600 bg-gray-100 border-gray-300 rounded focus:ring-emerald-500 dark:bg-gray-700 dark:border-gray-600">
                             </td>

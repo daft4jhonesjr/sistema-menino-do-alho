@@ -2822,6 +2822,8 @@ def caixa():
         grupo['saldo_final'] = saldo_acumulado
     lancamentos_agrupados = dict(sorted(lancamentos_agrupados.items(), key=lambda x: x[0], reverse=True))
     mes_atual_str = date.today().strftime('%Y-%m')
+    hoje = date.today()
+    ontem = hoje - timedelta(days=1)
 
     return render_template('caixa.html',
                          lancamentos_agrupados=lancamentos_agrupados,
@@ -2830,7 +2832,9 @@ def caixa():
                          total_saida_pessoal=total_saida_pessoal,
                          total_saida_fornecedor=total_saida_fornecedor,
                          saldo_atual=saldo_atual,
-                         data_hoje=date.today().strftime('%Y-%m-%d'))
+                         data_hoje=hoje.strftime('%Y-%m-%d'),
+                         hoje=hoje,
+                         ontem=ontem)
 
 
 def _limpar_valor_moeda(v):
