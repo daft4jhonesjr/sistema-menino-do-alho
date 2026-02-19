@@ -140,18 +140,18 @@ class Venda(db.Model):
     
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     cliente_id = db.Column(db.Integer, db.ForeignKey('clientes.id'), nullable=False, index=True)  # Índice para filtros e joins
-    produto_id = db.Column(db.Integer, db.ForeignKey('produtos.id'), nullable=False)
+    produto_id = db.Column(db.Integer, db.ForeignKey('produtos.id'), nullable=False, index=True)
     nf = db.Column(db.String(50), index=True)  # Índice para buscas por NF
     preco_venda = db.Column(db.Numeric(10, 2), nullable=False)
     quantidade_venda = db.Column(db.Integer, nullable=False)
     data_venda = db.Column(db.Date, default=date.today, nullable=False, index=True)  # Índice para filtros e ordenação por data
     empresa_faturadora = db.Column(db.String(20), nullable=False)
-    situacao = db.Column(db.String(20), nullable=False, default='PENDENTE')
+    situacao = db.Column(db.String(20), nullable=False, default='PENDENTE', index=True)
     valor_pago = db.Column(db.Float, default=0.0)  # Valor já pago (para abatimento parcial)
     status_entrega = db.Column(db.String(50), default='PENDENTE')  # Status logístico (independente do financeiro)
     caminho_boleto = db.Column(db.String(500), nullable=True)
     caminho_nf = db.Column(db.String(500), nullable=True)
-    data_vencimento = db.Column(db.Date, nullable=True)  # vencimento do boleto vinculado (extraído do PDF)
+    data_vencimento = db.Column(db.Date, nullable=True, index=True)  # vencimento do boleto vinculado (extraído do PDF)
 
     # Relacionamento com documentos
     documentos = db.relationship('Documento', backref='venda', lazy=True, cascade='all, delete-orphan', passive_deletes=True)
@@ -188,10 +188,10 @@ class LancamentoCaixa(db.Model):
     __tablename__ = 'lancamentos_caixa'
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    data = db.Column(db.Date, nullable=False)
+    data = db.Column(db.Date, nullable=False, index=True)
     descricao = db.Column(db.String(200), nullable=False)
-    tipo = db.Column(db.String(20), nullable=False)  # 'ENTRADA' ou 'SAIDA'
-    categoria = db.Column(db.String(50), nullable=False)
+    tipo = db.Column(db.String(20), nullable=False, index=True)  # 'ENTRADA' ou 'SAIDA'
+    categoria = db.Column(db.String(50), nullable=False, index=True)
     forma_pagamento = db.Column(db.String(50), nullable=False)
     valor = db.Column(db.Float, nullable=False)
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)

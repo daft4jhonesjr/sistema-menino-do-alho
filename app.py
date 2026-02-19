@@ -2756,13 +2756,25 @@ def dashboard():
 @app.route('/caixa')
 @login_required
 def caixa():
-    # Sem filtro de data: exibe todos os lançamentos (incluindo datas futuras) agrupados por mês/ano
-    lancamentos = LancamentoCaixa.query.order_by(LancamentoCaixa.data.desc(), LancamentoCaixa.id.desc()).all()
-    total_entradas = sum(l.valor for l in lancamentos if l.tipo == 'ENTRADA')
-    total_saida_pessoal = sum(l.valor for l in lancamentos if l.tipo == 'SAIDA' and l.categoria and 'Pessoal' in l.categoria)
-    total_saida_fornecedor = sum(l.valor for l in lancamentos if l.tipo == 'SAIDA' and l.categoria and 'Fornecedor' in l.categoria)
-    total_saidas = sum(l.valor for l in lancamentos if l.tipo == 'SAIDA')
-    saldo_atual = total_entradas - total_saidas
+    # Totais via agregados (rápido, sem carregar todas as linhas)
+    total_entradas = db.session.query(func.coalesce(func.sum(LancamentoCaixa.valor), 0)).filter(
+        LancamentoCaixa.tipo == 'ENTRADA'
+    ).scalar() or 0.0
+    total_saida_pessoal = db.session.query(func.coalesce(func.sum(LancamentoCaixa.valor), 0)).filter(
+        LancamentoCaixa.tipo == 'SAIDA', LancamentoCaixa.categoria.like('%Pessoal%')
+    ).scalar() or 0.0
+    total_saida_fornecedor = db.session.query(func.coalesce(func.sum(LancamentoCaixa.valor), 0)).filter(
+        LancamentoCaixa.tipo == 'SAIDA', LancamentoCaixa.categoria.like('%Fornecedor%')
+    ).scalar() or 0.0
+    total_saidas = db.session.query(func.coalesce(func.sum(LancamentoCaixa.valor), 0)).filter(
+        LancamentoCaixa.tipo == 'SAIDA'
+    ).scalar() or 0.0
+    saldo_atual = float(total_entradas) - float(total_saidas)
+
+    # Limitar a 500 lançamentos mais recentes para exibição (índices em data/tipo/categoria)
+    lancamentos = LancamentoCaixa.query.order_by(
+        LancamentoCaixa.data.desc(), LancamentoCaixa.id.desc()
+    ).limit(500).all()
     meses_pt = {1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril', 5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto', 9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'}
     lancamentos_agrupados = {}
     for l in lancamentos:
@@ -3164,7 +3176,8 @@ def importar_caixa():
 @app.route('/clientes')
 @login_required
 def listar_clientes():
-    clientes = Cliente.query.order_by(Cliente.id).all()
+    # Limitar a 500 clientes mais recentes para carregamento inicial rápido (busca no frontend filtra dentro deles)
+    clientes = Cliente.query.order_by(Cliente.id.desc()).limit(500).all()
     return render_template('clientes/listar.html', clientes=clientes)
 
 
@@ -4517,18 +4530,21 @@ def listar_vendas():
     # Obter ano ativo da sessão
     ano_ativo = session.get('ano_ativo', datetime.now().year)
     
-    # Construir query base com filtro de ano e eager loading para evitar Query N+1
-    query = Venda.query.options(
-        joinedload(Venda.cliente),  # Carrega cliente junto na mesma query
-        joinedload(Venda.produto)   # Carrega produto junto na mesma query
-    ).filter(extract('year', Venda.data_venda) == ano_ativo)
-    
-    # Aplicar filtros adicionais se presentes
+    # Subquery: IDs das 1000 vendas mais recentes (evita carregar todo o histórico)
+    subq_ids = db.session.query(Venda.id).filter(
+        extract('year', Venda.data_venda) == ano_ativo
+    )
     if produto_id:
-        query = query.filter(Venda.produto_id == produto_id)
-    
+        subq_ids = subq_ids.filter(Venda.produto_id == produto_id)
     if cliente_id:
-        query = query.filter(Venda.cliente_id == cliente_id)
+        subq_ids = subq_ids.filter(Venda.cliente_id == cliente_id)
+    subq_ids = subq_ids.order_by(desc(Venda.data_venda), desc(Venda.id)).limit(1000).subquery()
+
+    # Query base com eager loading (evita N+1) e limite de registros
+    query = Venda.query.options(
+        joinedload(Venda.cliente),
+        joinedload(Venda.produto)
+    ).filter(Venda.id.in_(subq_ids))
     
     # Ordenar por Cliente, Data (conforme escolha do usuário), NF e ID para agrupar pedidos visualmente
     # (Consumidores finais serão agrupados apenas por Cliente+Data, ignorando NF no template)
@@ -4785,10 +4801,10 @@ def listar_vendas():
     if cliente_id:
         cliente_filtro = Cliente.query.get(cliente_id)
 
-    clientes = Cliente.query.order_by(Cliente.nome_cliente).all()
-    produtos = Produto.query.filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).all()
-    todos_clientes = Cliente.query.order_by(Cliente.nome_cliente).all()
-    todos_produtos = Produto.query.order_by(Produto.nome_produto).all()
+    clientes = Cliente.query.order_by(Cliente.nome_cliente).limit(500).all()
+    produtos = Produto.query.filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
+    todos_clientes = Cliente.query.order_by(Cliente.nome_cliente).limit(500).all()
+    todos_produtos = Produto.query.order_by(Produto.nome_produto).limit(500).all()
     
     return render_template('vendas/listar.html', 
                          pedidos=pedidos_paginados,
