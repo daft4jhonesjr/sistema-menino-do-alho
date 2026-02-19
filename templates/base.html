@@ -156,6 +156,40 @@
             border-right: 1px solid #047857;
         }
     </style>
+    <style>
+        /* --- OTIMIZAÇÕES DE PERFORMANCE IOS (IPHONE/IPAD) --- */
+        /* 1. Remove o delay de 300ms do toque e remove o flash cinza ao clicar */
+        html {
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+        /* 2. Rolagem com Inércia (Efeito Manteiga) para todas as áreas de scroll */
+        .overflow-auto, .overflow-y-auto, .overflow-x-auto, table {
+            -webkit-overflow-scrolling: touch;
+        }
+        /* 3. Renderização de Fontes mais nítida */
+        body {
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        /* 4. Previne Zoom Automático irritante ao clicar em inputs (mantendo fonte legível) */
+        @media screen and (max-width: 768px) {
+            input, select, textarea {
+                font-size: 16px !important; /* O Safari dá zoom se for menor que 16px */
+            }
+            /* Corrige o 'Sticky Hover': remove efeitos de hover em touch devices para não travar a cor */
+            tr:hover, button:hover {
+                background-color: inherit;
+            }
+        }
+        /* 5. Aceleração de Hardware (Força GPU) para elementos pesados (Modais, Toasts, Tabelas) */
+        .modal-container, #toast-container, .transform {
+            transform: translateZ(0);
+            will-change: transform, opacity;
+            backface-visibility: hidden;
+            perspective: 1000px;
+        }
+    </style>
     <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
     {% block head_extras %}{% endblock %}
 </head>
