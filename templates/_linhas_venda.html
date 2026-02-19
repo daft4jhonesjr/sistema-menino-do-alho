@@ -43,43 +43,40 @@
         {% endif %}
     </td>
     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium" onclick="event.stopPropagation();">
-        <div class="flex items-center justify-end gap-2 flex-nowrap min-w-0">
-            {# NOTA FISCAL: Renderizar ícone se existir caminho_nf #}
-            {% if pedido.caminho_nf %}
-                {% set _doc_nf = pedido.doc_nf %}
-                {% set _url_nf = url_for('ver_nf_venda', id=pedido.primeira_venda_id) %}
-                {% set _tip_nf = 'Visualizar Nota Fiscal' if _doc_nf else 'Visualizar Nota Fiscal (vínculo órfão)' %}
-                <a href="{{ _url_nf }}" target="_blank" class="flex-shrink-0 p-1.5 rounded {{ 'text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30' if _doc_nf else 'text-orange-600 dark:text-orange-400 hover:text-orange-800 dark:hover:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900/30 cursor-help' }} inline-flex" title="{{ _tip_nf }}">
-                    <i data-lucide="receipt" class="w-4 h-4" aria-hidden="true"></i>
-                </a>
-            {% endif %}
-            
-            {# BOLETO: Renderizar ícone se existir caminho_boleto #}
-            {% if pedido.caminho_boleto %}
-                {% set _doc_boleto = pedido.doc_boleto %}
-                {% set _url_boleto = url_for('ver_boleto_venda', id=pedido.primeira_venda_id) %}
-                {% set _tip_boleto = 'Visualizar Boleto' if _doc_boleto else 'Visualizar Boleto (vínculo órfão)' %}
-                <a href="{{ _url_boleto }}" target="_blank" class="flex-shrink-0 p-1.5 rounded {{ 'text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30' if _doc_boleto else 'text-orange-600 dark:text-orange-400 hover:text-orange-800 dark:hover:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900/30 cursor-help' }} inline-flex" title="{{ _tip_boleto }}">
-                    <i data-lucide="paperclip" class="w-4 h-4" aria-hidden="true"></i>
-                </a>
-            {% endif %}
-            
-            {# WHATSAPP: Compartilhar resumo do pedido #}
-            <button type="button" onclick="enviarZapFromBtn(this)" class="flex-shrink-0 p-1.5 rounded text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/30 inline-flex" title="Enviar no WhatsApp"
+        <div class="flex items-center justify-end gap-1.5 flex-nowrap min-w-0">
+            {# 1. WHATSAPP: Compartilhar resumo do pedido (sempre visível) #}
+            <button type="button" onclick="enviarZapFromBtn(this)" class="flex-shrink-0 p-1.5 rounded text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/30 inline-flex transition-colors" title="Enviar no WhatsApp"
                 data-cliente="{{ pedido.cliente_nome|e }}"
                 data-produto="{% if pedido.vendas|length == 1 %}{{ pedido.vendas.0.produto.nome_produto|e }}{% else %}Pedido ({{ pedido.total_quantidade }} itens){% endif %}"
                 data-qtd="{{ pedido.total_quantidade }}"
                 data-total="{{ pedido.total_valor|formato_moeda|e }}"
                 data-vencimento="{% if pedido.data_vencimento %}{{ pedido.data_vencimento.strftime('%d/%m/%Y')|e }}{% else %}A definir{% endif %}">
-                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
             </button>
-            {# RECIBO: Sempre disponível #}
-            <a href="{{ url_for('recibo_venda', id=pedido.primeira_venda_id) }}" target="_blank" class="flex-shrink-0 p-1.5 rounded text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 inline-flex" title="Imprimir Recibo do Pedido"><i data-lucide="printer" class="w-4 h-4" aria-hidden="true"></i></a>
+            {# 2. NOTA FISCAL: Visualizar (quando documento vinculado) #}
+            {% if pedido.caminho_nf %}
+            {% set _doc_nf = pedido.doc_nf %}
+            {% set _url_nf = url_for('ver_nf_venda', id=pedido.primeira_venda_id) %}
+            <a href="{{ _url_nf }}" target="_blank" class="flex-shrink-0 p-1.5 rounded inline-flex transition-colors {{ 'text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30' if _doc_nf else 'text-orange-600 dark:text-orange-400 hover:text-orange-800 dark:hover:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900/30 cursor-help' }}" title="{{ 'Visualizar Nota Fiscal' if _doc_nf else 'Visualizar Nota Fiscal (vínculo órfão)' }}">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+            </a>
+            {% endif %}
+            {# 3. BOLETO: Visualizar (quando documento vinculado) #}
+            {% if pedido.caminho_boleto %}
+            {% set _doc_boleto = pedido.doc_boleto %}
+            {% set _url_boleto = url_for('ver_boleto_venda', id=pedido.primeira_venda_id) %}
+            <a href="{{ _url_boleto }}" target="_blank" class="flex-shrink-0 p-1.5 rounded inline-flex transition-colors {{ 'text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/30' if _doc_boleto else 'text-orange-600 dark:text-orange-400 hover:text-orange-800 dark:hover:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900/30 cursor-help' }}" title="{{ 'Visualizar Boleto' if _doc_boleto else 'Visualizar Boleto (vínculo órfão)' }}">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+            </a>
+            {% endif %}
+            {# 4. RECIBO: Imprimir (sempre disponível) #}
+            <a href="{{ url_for('recibo_venda', id=pedido.primeira_venda_id) }}" target="_blank" class="flex-shrink-0 p-1.5 rounded text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 inline-flex transition-colors" title="Imprimir Recibo do Pedido"><i data-lucide="printer" class="w-4 h-4" aria-hidden="true"></i></a>
+            {# 5. EXCLUIR #}
             <form action="{{ url_for('excluir_venda', id=pedido.primeira_venda_id) }}" method="POST" class="inline flex-shrink-0 form-excluir-pedido" 
                   data-cliente="{{ pedido.cliente_nome }}" 
                   data-nf="{{ pedido.nf }}" 
                   data-data="{{ pedido.data_venda.strftime('%d/%m/%Y') }}">
-                <button type="submit" class="p-1.5 rounded text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 inline-flex" title="Excluir Pedido Completo"><i data-lucide="trash-2" class="w-4 h-4" aria-hidden="true"></i></button>
+                <button type="submit" class="p-1.5 rounded text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 inline-flex transition-colors" title="Excluir Pedido Completo"><i data-lucide="trash-2" class="w-4 h-4" aria-hidden="true"></i></button>
             </form>
         </div>
     </td>
