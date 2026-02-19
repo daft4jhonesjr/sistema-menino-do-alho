@@ -141,6 +141,7 @@
                                     <i data-lucide="pencil" class="w-4 h-4"></i>
                                 </button>
                                 <form action="{{ url_for('excluir_produto', id=produto.id) }}" method="POST" class="inline" onsubmit="return confirm('Tem certeza que deseja excluir este produto?');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                     <button type="submit" class="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 inline-flex items-center">
                                         <i data-lucide="trash-2" class="w-4 h-4"></i>
                                     </button>
@@ -212,6 +213,7 @@
         <div class="p-8 dark:bg-gray-800">
             <div id="modal-nova-entrada-erro" class="hidden mb-4 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl text-red-800 dark:text-red-300 text-sm"></div>
             <form id="form-nova-entrada" action="{{ url_for('novo_produto') }}" method="POST" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="grid grid-cols-2 gap-4">
                     <div class="col-span-2">
                         <label for="preco_custo" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Preço de Custo (R$) <span class="text-red-500">*</span></label>
@@ -365,6 +367,7 @@
         </div>
         <div class="p-8">
             <form id="form-editar-produto" method="POST" action="" enctype="multipart/form-data" data-action-base="{{ url_for('editar_produto', id=0) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="mb-4">
                         <label for="edit_preco_custo" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Preço Custo <span class="text-red-500">*</span></label>
@@ -489,7 +492,7 @@
             btn.disabled = true;
             fetch(endpoint, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                headers: Object.assign({ 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, window.getCsrfHeaders ? window.getCsrfHeaders() : {}),
                 body: JSON.stringify({ ids: ids })
             }).then(function(r) { return r.json(); }).then(function(data) {
                 alert(data.mensagem || (data.ok ? 'Excluído(s) com sucesso.' : 'Erro ao excluir.'));
@@ -798,7 +801,7 @@
             var fd = new FormData(form);
             fetch(form.action, {
                 method: 'POST',
-                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                headers: Object.assign({ 'X-Requested-With': 'XMLHttpRequest' }, window.getCsrfHeaders ? window.getCsrfHeaders() : {}),
                 body: fd
             })
                 .then(function(r) { return r.json().then(function(j) { return { status: r.status, json: j }; }); })
@@ -863,7 +866,7 @@ function abrirModalCorrigirCategoria() {
             btnSalvar.disabled = true;
             fetch('{{ url_for("produtos_atualizar_tipo_batch") }}', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                headers: Object.assign({ 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, window.getCsrfHeaders ? window.getCsrfHeaders() : {}),
                 body: JSON.stringify({ updates: updates })
             })
                 .then(function(r) { return r.json(); })

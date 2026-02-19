@@ -192,6 +192,7 @@
                 {% endif %}
             </div>
             <form action="{{ url_for('organizar_e_vincular') }}" method="post" class="inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <button type="submit" id="btn-organizar" class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2.5 text-base font-semibold text-white shadow-md hover:bg-emerald-700 hover:shadow-lg transition focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2">
                     <i data-lucide="refresh-cw" class="w-5 h-5"></i>Organizar e Vincular Tudo
                 </button>
@@ -343,6 +344,7 @@
                 <p id="modal-vincular-doc-nome" class="text-sm text-gray-600 dark:text-gray-400 mt-1 truncate"></p>
             </div>
             <form id="form-vincular-doc" method="post" action="#" class="flex flex-col flex-1 min-h-0">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <input type="hidden" name="doc_id" id="input-vincular-doc-id" />
                 <div class="p-6 flex-1 overflow-y-auto">
                     <label for="select-vincular-pedido" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Pedido</label>

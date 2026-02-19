@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_file, current_app
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from flask_wtf.csrf import CSRFProtect
 from flask_compress import Compress
 from flask_caching import Cache
 from flask_limiter import Limiter
@@ -1114,7 +1115,9 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                 if nf_limpa and nf_limpa not in nfs_invalidas:
                     # Buscar TODAS as vendas e normalizar suas NFs para comparação
                     # Isso garante que encontramos vendas mesmo com formatos diferentes (zeros à esquerda, prefixos, etc.)
-                    todas_vendas = Venda.query.all()
+                    todas_vendas = Venda.query.options(
+                        joinedload(Venda.cliente), joinedload(Venda.produto)
+                    ).all()
                     vendas_candidatas = []
                     for v in todas_vendas:
                         if v.nf:
@@ -1751,6 +1754,8 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 login_manager.login_message = 'Faça login para acessar esta página.'
+
+csrf = CSRFProtect(app)
 
 
 # --- VACINA CONTRA TRAVAMENTO DO BANCO ---
@@ -4468,8 +4473,10 @@ def api_detalhes_mes(ano, mes):
         if mes < 1 or mes > 12:
             return jsonify({'erro': 'Mês inválido. Use valores de 1 a 12.'}), 400
         
-        # Filtrar vendas do mês e ano específicos
-        vendas_mes = Venda.query.filter(
+        # Filtrar vendas do mês e ano específicos (joinedload evita N+1)
+        vendas_mes = Venda.query.options(
+            joinedload(Venda.cliente), joinedload(Venda.produto)
+        ).filter(
             extract('year', Venda.data_venda) == ano,
             extract('month', Venda.data_venda) == mes
         ).order_by(Venda.data_venda, Venda.id).all()
@@ -5532,11 +5539,14 @@ def ver_boleto_venda(id):
     doc = Documento.query.filter(or_(Documento.caminho_arquivo == path, Documento.url_arquivo == path)).first()
     if doc and doc.url_arquivo:
         return redirect(doc.url_arquivo)
-    full = os.path.join(os.path.dirname(os.path.abspath(__file__)), path)
-    if os.path.exists(full):
-        return send_file(full, mimetype='application/pdf')
-    flash('Arquivo do boleto não encontrado no servidor.', 'error')
-    return redirect(request.referrer or url_for('listar_vendas'))
+    # Bloquear path traversal: usar apenas o nome do arquivo final
+    nome_seguro = os.path.basename(path)
+    base_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'documentos_entrada')
+    full = os.path.join(base_dir, 'boletos', nome_seguro)
+    if not os.path.isfile(full):
+        flash('Arquivo do boleto não encontrado no servidor.', 'error')
+        return redirect(request.referrer or url_for('listar_vendas'))
+    return send_file(full, mimetype='application/pdf')
 
 
 @app.route('/venda/<int:id>/ver_nf')
@@ -5557,14 +5567,18 @@ def ver_nf_venda(id):
         return redirect(url_for('listar_vendas'))
     if doc.url_arquivo:
         return redirect(doc.url_arquivo)
-    full = os.path.join(os.path.dirname(os.path.abspath(__file__)), path)
-    if os.path.exists(full):
-        return send_file(full, mimetype='application/pdf')
-    flash('Arquivo da nota fiscal não encontrado no servidor.', 'error')
-    return redirect(request.referrer or url_for('listar_vendas'))
+    # Bloquear path traversal: usar apenas o nome do arquivo final
+    nome_seguro = os.path.basename(path)
+    base_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'documentos_entrada')
+    full = os.path.join(base_dir, 'notas_fiscais', nome_seguro)
+    if not os.path.isfile(full):
+        flash('Arquivo da nota fiscal não encontrado no servidor.', 'error')
+        return redirect(request.referrer or url_for('listar_vendas'))
+    return send_file(full, mimetype='application/pdf')
 
 
 @app.route('/upload', methods=['POST'])
+@login_required
 def upload_documento():
     """
     Rota para o bot enviar arquivos. Salva na sala de espera (documentos_entrada).
@@ -5597,9 +5611,10 @@ def upload_documento():
 
 
 @app.route('/api/receber_automatico', methods=['POST'])
+@csrf.exempt
 def api_receber_automatico():
-    """API para receber arquivos automaticamente. Requer token em Authorization."""
-    token_esperado = 'SEGREDDO_DO_ALHO_2026'
+    """API para receber arquivos automaticamente. Requer token em Authorization (variável API_TOKEN)."""
+    token_esperado = os.environ.get('API_TOKEN', 'SEGREDDO_DO_ALHO_2026')
     auth = request.headers.get('Authorization', '')
     if auth != token_esperado and auth != f'Bearer {token_esperado}':
         return jsonify({'status': 'erro', 'mensagem': 'Token inválido ou ausente.'}), 403

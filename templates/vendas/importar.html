@@ -33,6 +33,7 @@
 
 <div class="bg-white rounded-lg shadow-md p-6 max-w-2xl">
     <form id="form-importar-vendas" method="POST" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         <div class="mb-4">
             <label for="arquivo" class="block text-sm font-medium text-gray-700 mb-2">
                 Selecione o arquivo <span class="text-red-500">*</span>

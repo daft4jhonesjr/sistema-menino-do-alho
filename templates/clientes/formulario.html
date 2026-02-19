@@ -12,6 +12,7 @@
 
 <div class="bg-white rounded-lg shadow-md p-6 max-w-2xl">
     <form method="POST" action="{% if cliente %}{{ url_for('editar_cliente', id=cliente.id) }}{% else %}{{ url_for('novo_cliente') }}{% endif %}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         <div class="mb-4">
             <label for="nome_cliente" class="block text-sm font-medium text-gray-700 mb-2">
                 Nome Cliente <span class="text-red-500">*</span>

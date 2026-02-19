@@ -22,6 +22,7 @@
     {% endif %}
 
     <form method="POST" action="{% if produto %}{{ url_for('editar_produto', id=produto.id) }}{% else %}{{ url_for('novo_produto') }}{% endif %}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <!-- 1. Produto (Nome gerado) - Exibido acima se editando -->
             

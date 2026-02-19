@@ -11,6 +11,7 @@
 </div>
 
 <form action="{{ url_for('admin_arquivos_deletar_massa') }}" method="POST" id="form-deletar-massa">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
     <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-hidden">
         <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">

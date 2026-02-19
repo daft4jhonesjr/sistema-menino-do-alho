@@ -42,6 +42,7 @@
 
 <!-- Tabela de lançamentos -->
 <form action="{{ url_for('deletar_massa_caixa') }}" method="POST" id="form-excluir-massa">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
     <div id="barra-acao-massa" class="hidden mb-4 flex items-center justify-between bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3 rounded-lg">
         <span class="text-red-700 dark:text-red-400 font-medium text-sm">
             <span id="contador-selecionados" class="font-bold">0</span> lançamento(s) selecionado(s)
@@ -188,6 +189,7 @@
             </button>
         </div>
         <form id="formLancamentoCaixa" action="{{ url_for('adicionar_caixa') }}" method="POST" class="p-5 space-y-4">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <input type="hidden" name="tipo" id="tipo_lancamento_hidden" value="ENTRADA">
             <div class="grid grid-cols-2 gap-4">
                 <div>
@@ -288,6 +290,7 @@
             </button>
         </div>
         <form action="{{ url_for('importar_caixa') }}" method="POST" enctype="multipart/form-data" class="p-5 space-y-4">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 text-blue-800 dark:text-blue-300 p-4 rounded-lg text-sm">
                 <p class="font-bold mb-2">Atenção ao formato do arquivo (.csv, .tsv ou .txt):</p>
                 <ul class="list-disc pl-5 space-y-1 text-xs font-medium">
