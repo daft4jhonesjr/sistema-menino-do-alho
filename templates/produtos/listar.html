@@ -200,7 +200,7 @@
 <!-- Modal Nova Entrada -->
 <div id="modal-nova-entrada-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
     <div class="fixed inset-0 bg-black/50" id="modal-nova-entrada-overlay"></div>
-    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-white rounded-xl shadow-sm border border-gray-200 z-50" onclick="event.stopPropagation()">
+    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 z-50" onclick="event.stopPropagation()">
         <div class="sticky top-0 flex justify-between items-center px-8 py-5 bg-emerald-700 text-white rounded-t-xl z-10">
             <h3 class="text-xl font-bold flex items-center">
                 <i data-lucide="package" class="w-5 h-5 mr-2"></i>Nova Entrada de Produto
@@ -209,7 +209,7 @@
                 <i data-lucide="x" class="w-5 h-5"></i>
             </button>
         </div>
-        <div class="p-8">
+        <div class="p-8 dark:bg-gray-800">
             <div id="modal-nova-entrada-erro" class="hidden mb-4 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl text-red-800 dark:text-red-300 text-sm"></div>
             <form id="form-nova-entrada" action="{{ url_for('novo_produto') }}" method="POST" enctype="multipart/form-data">
                 <div class="grid grid-cols-2 gap-4">
