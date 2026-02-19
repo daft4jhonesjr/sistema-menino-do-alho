@@ -66,6 +66,12 @@
         }, 60000);
     </script>
     <style>
+        /* Fixar corpo para evitar rubber banding com Pull to Refresh */
+        html, body {
+            overscroll-behavior-y: none;
+            width: 100%;
+            height: 100%;
+        }
         /* --- KIT DE ACABAMENTO APPLE IOS --- */
         /* 1. Fonte nativa e Safe Area Insets (Respeita o Notch e a Home Bar) */
         body {
@@ -1063,12 +1069,17 @@
                 PullToRefresh.init({
                     mainElement: 'body',
                     triggerElement: 'body',
-                    instructionsPullToRefresh: 'Puxe para atualizar',
-                    instructionsReleaseToRefresh: 'Solte para atualizar',
-                    instructionsRefreshing: 'Atualizando...',
+                    instructionsPullToRefresh: 'PUXE PARA ATUALIZAR',
+                    instructionsReleaseToRefresh: 'SOLTE PARA ATUALIZAR',
+                    instructionsRefreshing: 'ATUALIZANDO...',
                     iconArrow: '',
                     iconRefreshing: '',
-                    distThreshold: 60,
+                    distThreshold: 70,
+                    distMax: 100,
+                    distReload: 60,
+                    shouldPullToRefresh: function() {
+                        return window.scrollY === 0;
+                    },
                     onRefresh: function() {
                         window.location.reload();
                     }
