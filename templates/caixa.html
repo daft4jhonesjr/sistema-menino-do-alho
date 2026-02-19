@@ -188,16 +188,18 @@
             </button>
         </div>
         <form id="formLancamentoCaixa" action="{{ url_for('adicionar_caixa') }}" method="POST" class="p-5 space-y-4">
+            <input type="hidden" name="tipo" id="tipo_lancamento_hidden" value="ENTRADA">
             <div class="grid grid-cols-2 gap-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Data</label>
                     <input type="date" name="data" value="{{ data_hoje }}" required class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tipo</label>
-                    <select name="tipo" required class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
-                        <option value="ENTRADA">Entrada (Receita)</option>
-                        <option value="SAIDA">Saída (Despesa)</option>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Categoria</label>
+                    <select name="categoria" id="categoria_lancamento" required class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
+                        <option value="Entrada Cliente">Entrada Cliente</option>
+                        <option value="Saída Pessoal">Saída Pessoal</option>
+                        <option value="Saída Fornecedor">Saída Fornecedor</option>
                     </select>
                 </div>
             </div>
@@ -208,17 +210,7 @@
             </div>
 
             <div class="grid grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Categoria</label>
-                    <select name="categoria" required class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
-                        <option value="Entrada Cliente">Entrada Cliente</option>
-                        <option value="Fundo de Caixa">Fundo de Caixa</option>
-                        <option value="Saída Pessoal">Saída Pessoal</option>
-                        <option value="Saída Fornecedor">Saída Fornecedor</option>
-                        <option value="Despesa Operacional">Despesa Operacional (Gasolina, etc)</option>
-                    </select>
-                </div>
-                <div id="container-forma-simples">
+                <div id="container-forma-simples" class="col-span-2 md:col-span-1">
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Forma / Conta</label>
                     <select name="forma_pagamento" id="forma_pagamento" required class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
                         <option value="Dinheiro">Dinheiro (Espécie)</option>
@@ -385,7 +377,23 @@ document.addEventListener('DOMContentLoaded', function() {
     if (btnVoltar) btnVoltar.onclick = ativarModoSimples;
 
     window.resetModoSplit = ativarModoSimples;
+
+    // Auto-atualizar Tipo conforme Categoria (Entrada Cliente -> ENTRADA, Saída* -> SAIDA)
+    var catSelect = document.getElementById('categoria_lancamento');
+    if (catSelect) {
+        catSelect.addEventListener('change', function() { atualizarTipoPorCategoria(this, 'tipo_lancamento_hidden'); });
+    }
 });
+function atualizarTipoPorCategoria(categoriaSelect, tipoInputId) {
+    var tipoInput = document.getElementById(tipoInputId);
+    if (!tipoInput) return;
+    var valor = (categoriaSelect.value || '').toLowerCase();
+    if (valor.indexOf('entrada') >= 0) {
+        tipoInput.value = 'ENTRADA';
+    } else if (valor.indexOf('saída') >= 0 || valor.indexOf('saida') >= 0) {
+        tipoInput.value = 'SAIDA';
+    }
+}
 window.CAIXA_ADD_URL = "{{ url_for('adicionar_caixa') }}";
 window.CAIXA_EDIT_URL_BASE = "{{ url_for('editar_lancamento_caixa', id=0) }}".replace('/0', '');
 window.DATA_HOJE = "{{ data_hoje }}";
@@ -399,9 +407,9 @@ function abrirModalNovo() {
     form.querySelector('[name="data"]').value = window.DATA_HOJE;
     form.querySelector('[name="descricao"]').value = '';
     form.querySelector('[name="valor"]').value = '';
-    form.querySelector('[name="tipo"]').value = 'ENTRADA';
     form.querySelector('[name="categoria"]').value = 'Entrada Cliente';
-    form.querySelector('[name="forma_pagamento"]').value = 'Dinheiro';
+    var tipoInput = form.querySelector('[name="tipo"]');
+    if (tipoInput) tipoInput.value = 'ENTRADA';
     if (typeof window.resetModoSplit === 'function') window.resetModoSplit();
     document.querySelectorAll('.split-only').forEach(function(el) { el.style.display = ''; });
     var hiddenId = document.getElementById('editLancamentoId');
@@ -428,7 +436,8 @@ function abrirModalEditar(tr) {
     form.querySelector('[name="data"]').value = dataVal;
     form.querySelector('[name="descricao"]').value = desc;
     form.querySelector('[name="valor"]').value = valorStr.replace('.', ',');
-    form.querySelector('[name="tipo"]').value = tipo;
+    var tipoInput = form.querySelector('[name="tipo"]');
+    if (tipoInput) tipoInput.value = tipo;
     var catSelect = form.querySelector('[name="categoria"]');
     if (catSelect) {
         if (!Array.prototype.find.call(catSelect.options, function(o) { return o.value === categoria; })) {
