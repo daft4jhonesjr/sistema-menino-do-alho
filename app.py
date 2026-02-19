@@ -2202,16 +2202,16 @@ def _log_vendas_login_hits():
         return
     try:
         _debug_log("app.py:before_request", "request hit", {"path": path, "method": method}, "H3")
-        except Exception as e:
-            try:
-                import time as _t
-                os.makedirs(_log_dir, exist_ok=True)
-                line = json.dumps({"location": "app.py:before_request", "message": "before_request_error", "data": {"error": str(e)}, "hypothesisId": "H3", "timestamp": int(_t.time() * 1000), "sessionId": "debug-session", "runId": "run1"}, ensure_ascii=False) + "\n"
-                with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
-                    f.write(line)
-                    f.flush()
-            except Exception as e2:
-                print(f"[DEBUG] Falha ao registrar log de fallback: {e2}")
+    except Exception:
+        try:
+            import time as _t
+            os.makedirs(_log_dir, exist_ok=True)
+            line = json.dumps({"location": "app.py:before_request", "message": "before_request_error", "data": {"error": "debug_log_failed"}, "hypothesisId": "H3", "timestamp": int(_t.time() * 1000), "sessionId": "debug-session", "runId": "run1"}, ensure_ascii=False) + "\n"
+            with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+                f.write(line)
+                f.flush()
+        except Exception as fallback_err:
+            print("[DEBUG] Falha ao registrar log de fallback: " + str(fallback_err))
     # #endregion
 
 
