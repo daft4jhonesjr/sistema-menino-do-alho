@@ -2002,72 +2002,72 @@ def admin_required(f):
 
 # Bootstrap do banco: NÃO executa na importação se SKIP_DB_BOOTSTRAP=1 (usado pelo migrate_recreate_db.py)
 if not os.environ.get('SKIP_DB_BOOTSTRAP'):
-with app.app_context():
-    db.create_all()
-    try:
-        db.session.execute(text('ALTER TABLE produtos ADD COLUMN preco_venda_alvo NUMERIC(10,2)'))
-        db.session.commit()
-    except (OperationalError, Exception):
-        db.session.rollback()
-    # Migração: adicionar quantidade_entrada e popular com estoque_atual existente
-    try:
-        db.session.execute(text('ALTER TABLE produtos ADD COLUMN quantidade_entrada INTEGER DEFAULT 0'))
-        db.session.commit()
-        db.session.execute(text('UPDATE produtos SET quantidade_entrada = estoque_atual WHERE quantidade_entrada = 0 OR quantidade_entrada IS NULL'))
-        db.session.commit()
-    except (OperationalError, Exception):
+    with app.app_context():
+        db.create_all()
         try:
-            db.session.execute(text('UPDATE produtos SET quantidade_entrada = estoque_atual WHERE quantidade_entrada = 0 OR quantidade_entrada IS NULL'))
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
-    # Migração: criar tabela documentos se não existir
-    try:
-        db.session.execute(text('''
-            CREATE TABLE IF NOT EXISTS documentos (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                caminho_arquivo VARCHAR(500) NOT NULL UNIQUE,
-                tipo VARCHAR(20) NOT NULL,
-                cnpj VARCHAR(18),
-                numero_nf VARCHAR(50),
-                razao_social VARCHAR(200),
-                data_vencimento DATE,
-                venda_id INTEGER,
-                data_processamento DATE NOT NULL,
-                FOREIGN KEY (venda_id) REFERENCES vendas(id)
-            )
-        '''))
-        db.session.commit()
-    except (OperationalError, Exception) as e:
-        db.session.rollback()
-    # Migração: caminho_pdf em vendas (PDF vinculado) — apenas para DBs antigos
-    try:
-        db.session.execute(text('ALTER TABLE vendas ADD COLUMN caminho_pdf VARCHAR(500)'))
-        db.session.commit()
-    except (OperationalError, Exception):
-        db.session.rollback()
-    # Migração: caminho_boleto e caminho_nf em vendas
-    for col in ('caminho_boleto', 'caminho_nf'):
-        try:
-            db.session.execute(text(f'ALTER TABLE vendas ADD COLUMN {col} VARCHAR(500)'))
+            db.session.execute(text('ALTER TABLE produtos ADD COLUMN preco_venda_alvo NUMERIC(10,2)'))
             db.session.commit()
         except (OperationalError, Exception):
             db.session.rollback()
-    # Índice em vendas.nf para buscas por NF
-    try:
-        db.session.execute(text('CREATE INDEX IF NOT EXISTS ix_vendas_nf ON vendas(nf)'))
-        db.session.commit()
-    except (OperationalError, Exception):
-        db.session.rollback()
-    # Cache OCR: nf_extraida em documentos (evita re-rodar OCR)
-    try:
-        db.session.execute(text('ALTER TABLE documentos ADD COLUMN nf_extraida VARCHAR(50)'))
-        db.session.commit()
-    except (OperationalError, Exception):
-        db.session.rollback()
-    try:
-        db.session.execute(text("UPDATE documentos SET nf_extraida = numero_nf WHERE nf_extraida IS NULL AND numero_nf IS NOT NULL"))
-        db.session.commit()
+        # Migração: adicionar quantidade_entrada e popular com estoque_atual existente
+        try:
+            db.session.execute(text('ALTER TABLE produtos ADD COLUMN quantidade_entrada INTEGER DEFAULT 0'))
+            db.session.commit()
+            db.session.execute(text('UPDATE produtos SET quantidade_entrada = estoque_atual WHERE quantidade_entrada = 0 OR quantidade_entrada IS NULL'))
+            db.session.commit()
+        except (OperationalError, Exception):
+            try:
+                db.session.execute(text('UPDATE produtos SET quantidade_entrada = estoque_atual WHERE quantidade_entrada = 0 OR quantidade_entrada IS NULL'))
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+        # Migração: criar tabela documentos se não existir
+        try:
+            db.session.execute(text('''
+                CREATE TABLE IF NOT EXISTS documentos (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    caminho_arquivo VARCHAR(500) NOT NULL UNIQUE,
+                    tipo VARCHAR(20) NOT NULL,
+                    cnpj VARCHAR(18),
+                    numero_nf VARCHAR(50),
+                    razao_social VARCHAR(200),
+                    data_vencimento DATE,
+                    venda_id INTEGER,
+                    data_processamento DATE NOT NULL,
+                    FOREIGN KEY (venda_id) REFERENCES vendas(id)
+                )
+            '''))
+            db.session.commit()
+        except (OperationalError, Exception) as e:
+            db.session.rollback()
+        # Migração: caminho_pdf em vendas (PDF vinculado) — apenas para DBs antigos
+        try:
+            db.session.execute(text('ALTER TABLE vendas ADD COLUMN caminho_pdf VARCHAR(500)'))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
+        # Migração: caminho_boleto e caminho_nf em vendas
+        for col in ('caminho_boleto', 'caminho_nf'):
+            try:
+                db.session.execute(text(f'ALTER TABLE vendas ADD COLUMN {col} VARCHAR(500)'))
+                db.session.commit()
+            except (OperationalError, Exception):
+                db.session.rollback()
+        # Índice em vendas.nf para buscas por NF
+        try:
+            db.session.execute(text('CREATE INDEX IF NOT EXISTS ix_vendas_nf ON vendas(nf)'))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
+        # Cache OCR: nf_extraida em documentos (evita re-rodar OCR)
+        try:
+            db.session.execute(text('ALTER TABLE documentos ADD COLUMN nf_extraida VARCHAR(50)'))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
+        try:
+            db.session.execute(text("UPDATE documentos SET nf_extraida = numero_nf WHERE nf_extraida IS NULL AND numero_nf IS NOT NULL"))
+            db.session.commit()
         except (OperationalError, Exception):
             db.session.rollback()
         # Migração: usuario_id em documentos (quem processou/recuperou)
@@ -2110,52 +2110,50 @@ with app.app_context():
                 db.session.commit()
             except (OperationalError, Exception):
                 db.session.rollback()
-    except (OperationalError, Exception):
-        db.session.rollback()
-    # Migração: data_vencimento em vendas (vencimento do boleto extraído do PDF)
-    try:
-        db.session.execute(text('ALTER TABLE vendas ADD COLUMN data_vencimento DATE'))
-        db.session.commit()
-    except (OperationalError, Exception):
-        db.session.rollback()
-    # Backfill data_vencimento em vendas a partir dos Documentos (boletos) vinculados
-    try:
-        for v in Venda.query.filter(Venda.caminho_boleto.isnot(None)).filter(Venda.data_vencimento.is_(None)):
-            doc = Documento.query.filter_by(caminho_arquivo=v.caminho_boleto).first()
-            if doc and doc.data_vencimento:
-                v.data_vencimento = doc.data_vencimento
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
-    # Verificar se caminho_pdf ainda existe (não foi dropado em migração anterior)
-        uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
-        tem_caminho_pdf = False
-        if uri and uri.startswith("sqlite"):
-    colunas_vendas = [r[1] for r in db.session.execute(text('PRAGMA table_info(vendas)')).fetchall()]
-    tem_caminho_pdf = 'caminho_pdf' in colunas_vendas
-    if tem_caminho_pdf:
+        # Migração: data_vencimento em vendas (vencimento do boleto extraído do PDF)
         try:
-            rp = db.session.execute(text("SELECT id, caminho_pdf FROM vendas WHERE caminho_pdf IS NOT NULL AND trim(caminho_pdf) != ''"))
-            for row in rp:
-                vid, path = row[0], (row[1] or '').strip()
-                if not path:
-                    continue
-                doc = Documento.query.filter_by(venda_id=vid, caminho_arquivo=path).first()
-                v = Venda.query.get(vid)
-                if not v:
-                    continue
-                if doc:
-                    if doc.tipo == 'BOLETO':
-                        v.caminho_boleto = path
-                    else:
-                        v.caminho_nf = path
-                else:
-                    v.caminho_boleto = path
+            db.session.execute(text('ALTER TABLE vendas ADD COLUMN data_vencimento DATE'))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
+        # Backfill data_vencimento em vendas a partir dos Documentos (boletos) vinculados
+        try:
+            for v in Venda.query.filter(Venda.caminho_boleto.isnot(None)).filter(Venda.data_vencimento.is_(None)):
+                doc = Documento.query.filter_by(caminho_arquivo=v.caminho_boleto).first()
+                if doc and doc.data_vencimento:
+                    v.data_vencimento = doc.data_vencimento
             db.session.commit()
         except Exception:
             db.session.rollback()
-        try:
-            db.session.execute(text('ALTER TABLE vendas DROP COLUMN caminho_pdf'))
+        # Verificar se caminho_pdf ainda existe (não foi dropado em migração anterior)
+        uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
+        tem_caminho_pdf = False
+        if uri and uri.startswith("sqlite"):
+            colunas_vendas = [r[1] for r in db.session.execute(text('PRAGMA table_info(vendas)')).fetchall()]
+            tem_caminho_pdf = 'caminho_pdf' in colunas_vendas
+        if tem_caminho_pdf:
+            try:
+                rp = db.session.execute(text("SELECT id, caminho_pdf FROM vendas WHERE caminho_pdf IS NOT NULL AND trim(caminho_pdf) != ''"))
+                for row in rp:
+                    vid, path = row[0], (row[1] or '').strip()
+                    if not path:
+                        continue
+                    doc = Documento.query.filter_by(venda_id=vid, caminho_arquivo=path).first()
+                    v = Venda.query.get(vid)
+                    if not v:
+                        continue
+                    if doc:
+                        if doc.tipo == 'BOLETO':
+                            v.caminho_boleto = path
+                        else:
+                            v.caminho_nf = path
+                    else:
+                        v.caminho_boleto = path
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+            try:
+                db.session.execute(text('ALTER TABLE vendas DROP COLUMN caminho_pdf'))
                 db.session.commit()
             except (OperationalError, Exception):
                 db.session.rollback()
@@ -2182,16 +2180,16 @@ with app.app_context():
             db.session.commit()
         except (OperationalError, Exception):
             db.session.rollback()
-    # Jhones sempre admin; criar se não existir
-    u = Usuario.query.filter_by(username='Jhones').first()
-    if not u:
-        u = Usuario(username='Jhones', password_hash=generate_password_hash('admin123'), role='admin')
-        db.session.add(u)
-        db.session.commit()
-    try:
-        _debug_log("app.py:bootstrap", "App started, debug.log active", {"path": DEBUG_LOG_PATH}, "ALL", run_id="bootstrap")
-    except Exception:
-        pass
+        # Jhones sempre admin; criar se não existir
+        u = Usuario.query.filter_by(username='Jhones').first()
+        if not u:
+            u = Usuario(username='Jhones', password_hash=generate_password_hash('admin123'), role='admin')
+            db.session.add(u)
+            db.session.commit()
+        try:
+            _debug_log("app.py:bootstrap", "App started, debug.log active", {"path": DEBUG_LOG_PATH}, "ALL", run_id="bootstrap")
+        except Exception:
+            pass
 
 
 @app.before_request
@@ -2230,7 +2228,7 @@ def login():
             flash('Preencha usuário e senha.', 'error')
             return render_template('auth/login.html')
         try:
-        user = Usuario.query.filter_by(username=username).first()
+            user = Usuario.query.filter_by(username=username).first()
         except Exception:
             db.session.rollback()
             try:
@@ -3243,9 +3241,9 @@ def novo_cliente():
 @login_required
 def editar_cliente(id):
     try:
-    cliente = Cliente.query.get_or_404(id)
+        cliente = Cliente.query.get_or_404(id)
 
-    if request.method == 'POST':
+        if request.method == 'POST':
             cnpj_raw = request.form.get('cnpj', '').strip() or None
             cnpj = None
             if cnpj_raw:
@@ -3256,7 +3254,7 @@ def editar_cliente(id):
                 if cliente_existente and cliente_existente.id != cliente.id:
                     flash(f'CNPJ já está cadastrado para o cliente {cliente_existente.nome_cliente}', 'error')
                     return render_template('clientes/formulario.html', cliente=cliente)
-            
+
             cliente.nome_cliente = request.form.get('nome_cliente') or cliente.nome_cliente
             cliente.razao_social = request.form.get('razao_social', '')
             cliente.cnpj = cnpj
@@ -3268,8 +3266,8 @@ def editar_cliente(id):
 
         return render_template('clientes/formulario.html', cliente=cliente)
 
-        except Exception as e:
-            db.session.rollback()
+    except Exception as e:
+        db.session.rollback()
         print(f"ERRO CRÍTICO NA EDIÇÃO DE CLIENTE {id}: {str(e)}")
         flash(f'Erro interno ao processar cliente: {str(e)}', 'error')
         return redirect(url_for('listar_clientes'))
@@ -3535,11 +3533,11 @@ def _validar_sacola(tipo, nacionalidade, marca, tamanho):
 
     # SACOLA: nacionalidade N/A, marca SOPACK, tamanho P/M/G ou S/N
     if t == 'SACOLA':
-    nacionalidade = 'N/A'
-    marca = 'SOPACK'
+        nacionalidade = 'N/A'
+        marca = 'SOPACK'
         tam_clean = tam.replace(' ', '')
         if tam_clean not in ('P', 'M', 'G', 'S/N'):
-        raise ValueError('Para SACOLA, tamanho deve ser P, M, G ou S/N.')
+            raise ValueError('Para SACOLA, tamanho deve ser P, M, G ou S/N.')
         return nacionalidade, marca, tam_clean
 
     # ALHO: exige nacionalidade (ARGENTINO/NACIONAL/CHINES) e tamanho numérico
@@ -5303,25 +5301,25 @@ def excluir_venda(id):
     vendas_do_pedido = query.all()
     
     try:
-    # Restaurar estoque de todos os produtos do pedido
-    logs = []
-    for v in vendas_do_pedido:
-        produto = v.produto
-        quantidade = v.quantidade_venda
-        nome_produto = produto.nome_produto  # Salvar antes de deletar
-        produto.estoque_atual += quantidade
-        logs.append(f"{quantidade} unidades devolvidas ao produto [{nome_produto}]")
-        db.session.delete(v)
-    
-    db.session.commit()
+        # Restaurar estoque de todos os produtos do pedido
+        logs = []
+        for v in vendas_do_pedido:
+            produto = v.produto
+            quantidade = v.quantidade_venda
+            nome_produto = produto.nome_produto  # Salvar antes de deletar
+            produto.estoque_atual += quantidade
+            logs.append(f"{quantidade} unidades devolvidas ao produto [{nome_produto}]")
+            db.session.delete(v)
+
+        db.session.commit()
         limpar_cache_dashboard()  # Limpar cache após excluir venda
-    
-    # Log detalhado usando variáveis salvas
-    print(f"Pedido excluído (Cliente: {nome_cliente}, NF: {nf_pedido or 'N/A'}, Data: {data_pedido.strftime('%d/%m/%Y')}):")
-    for log in logs:
-        print(f"  - {log}")
-    
-    flash(f'Pedido completo excluído com sucesso! {len(vendas_do_pedido)} item(ns) removido(s).', 'success')
+
+        # Log detalhado usando variáveis salvas
+        print(f"Pedido excluído (Cliente: {nome_cliente}, NF: {nf_pedido or 'N/A'}, Data: {data_pedido.strftime('%d/%m/%Y')}):")
+        for log in logs:
+            print(f"  - {log}")
+
+        flash(f'Pedido completo excluído com sucesso! {len(vendas_do_pedido)} item(ns) removido(s).', 'success')
     except Exception as e:
         db.session.rollback()  # OBRIGATÓRIO para destravar o sistema em caso de erro
         print(f"Erro ao deletar venda: {e}")
