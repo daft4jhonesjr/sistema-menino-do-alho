@@ -391,22 +391,28 @@ window.CAIXA_EDIT_URL_BASE = "{{ url_for('editar_lancamento_caixa', id=0) }}".re
 window.DATA_HOJE = "{{ data_hoje }}";
 
 function abrirModalNovo() {
+    var form = document.getElementById('formLancamentoCaixa');
+    var modal = document.getElementById('modalNovoLancamento');
+    if (!form || !modal) return;
     document.getElementById('modalLancamentoTitulo').textContent = 'Novo Lançamento no Caixa';
-    document.getElementById('formLancamentoCaixa').action = window.CAIXA_ADD_URL;
-    document.getElementById('formLancamentoCaixa').querySelector('[name="data"]').value = window.DATA_HOJE;
-    document.getElementById('formLancamentoCaixa').querySelector('[name="descricao"]').value = '';
-    document.getElementById('formLancamentoCaixa').querySelector('[name="valor"]').value = '';
-    document.getElementById('formLancamentoCaixa').querySelector('[name="tipo"]').value = 'ENTRADA';
-    document.getElementById('formLancamentoCaixa').querySelector('[name="categoria"]').value = 'Entrada Cliente';
-    document.getElementById('formLancamentoCaixa').querySelector('[name="forma_pagamento"]').value = 'Dinheiro';
+    form.action = window.CAIXA_ADD_URL;
+    form.querySelector('[name="data"]').value = window.DATA_HOJE;
+    form.querySelector('[name="descricao"]').value = '';
+    form.querySelector('[name="valor"]').value = '';
+    form.querySelector('[name="tipo"]').value = 'ENTRADA';
+    form.querySelector('[name="categoria"]').value = 'Entrada Cliente';
+    form.querySelector('[name="forma_pagamento"]').value = 'Dinheiro';
     if (typeof window.resetModoSplit === 'function') window.resetModoSplit();
     document.querySelectorAll('.split-only').forEach(function(el) { el.style.display = ''; });
     var hiddenId = document.getElementById('editLancamentoId');
     if (hiddenId) hiddenId.remove();
-    document.getElementById('modalNovoLancamento').classList.remove('hidden');
+    modal.classList.remove('hidden');
 }
 
 function abrirModalEditar(tr) {
+    var form = document.getElementById('formLancamentoCaixa');
+    var modal = document.getElementById('modalNovoLancamento');
+    if (!form || !modal) return;
     document.querySelectorAll('.split-only').forEach(function(el) { el.style.display = 'none'; });
     if (typeof window.resetModoSplit === 'function') window.resetModoSplit();
     var id = tr.getAttribute('data-lanc-id');
@@ -418,30 +424,34 @@ function abrirModalEditar(tr) {
     var valor = parseFloat(tr.getAttribute('data-lanc-valor')) || 0;
     var valorStr = valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     document.getElementById('modalLancamentoTitulo').textContent = 'Editar Lançamento';
-    document.getElementById('formLancamentoCaixa').action = window.CAIXA_EDIT_URL_BASE + '/' + id;
-    document.getElementById('formLancamentoCaixa').querySelector('[name="data"]').value = dataVal;
-    document.getElementById('formLancamentoCaixa').querySelector('[name="descricao"]').value = desc;
-    document.getElementById('formLancamentoCaixa').querySelector('[name="valor"]').value = valorStr.replace('.', ',');
-    document.getElementById('formLancamentoCaixa').querySelector('[name="tipo"]').value = tipo;
-    var catSelect = document.getElementById('formLancamentoCaixa').querySelector('[name="categoria"]');
-    if (!Array.prototype.find.call(catSelect.options, function(o) { return o.value === categoria; })) {
-        var opt = document.createElement('option');
-        opt.value = categoria;
-        opt.textContent = categoria;
-        catSelect.appendChild(opt);
+    form.action = window.CAIXA_EDIT_URL_BASE + '/' + id;
+    form.querySelector('[name="data"]').value = dataVal;
+    form.querySelector('[name="descricao"]').value = desc;
+    form.querySelector('[name="valor"]').value = valorStr.replace('.', ',');
+    form.querySelector('[name="tipo"]').value = tipo;
+    var catSelect = form.querySelector('[name="categoria"]');
+    if (catSelect) {
+        if (!Array.prototype.find.call(catSelect.options, function(o) { return o.value === categoria; })) {
+            var opt = document.createElement('option');
+            opt.value = categoria;
+            opt.textContent = categoria;
+            catSelect.appendChild(opt);
+        }
+        catSelect.value = categoria;
     }
-    catSelect.value = categoria;
-    var formaSelect = document.getElementById('formLancamentoCaixa').querySelector('[name="forma_pagamento"]');
-    if (!Array.prototype.find.call(formaSelect.options, function(o) { return o.value === forma; })) {
-        var optF = document.createElement('option');
-        optF.value = forma;
-        optF.textContent = forma;
-        formaSelect.appendChild(optF);
+    var formaSelect = form.querySelector('[name="forma_pagamento"]');
+    if (formaSelect) {
+        if (!Array.prototype.find.call(formaSelect.options, function(o) { return o.value === forma; })) {
+            var optF = document.createElement('option');
+            optF.value = forma;
+            optF.textContent = forma;
+            formaSelect.appendChild(optF);
+        }
+        formaSelect.value = forma;
     }
-    formaSelect.value = forma;
     var hiddenId = document.getElementById('editLancamentoId');
     if (hiddenId) hiddenId.remove();
-    document.getElementById('modalNovoLancamento').classList.remove('hidden');
+    modal.classList.remove('hidden');
 }
 function toggleMesCaixa(conteudoId, iconeId) {
     var conteudo = document.getElementById(conteudoId);

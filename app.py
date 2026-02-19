@@ -2202,16 +2202,16 @@ def _log_vendas_login_hits():
         return
     try:
         _debug_log("app.py:before_request", "request hit", {"path": path, "method": method}, "H3")
-    except Exception as e:
-        try:
-            import time as _t
-            os.makedirs(_log_dir, exist_ok=True)
-            line = json.dumps({"location": "app.py:before_request", "message": "before_request_error", "data": {"error": str(e)}, "hypothesisId": "H3", "timestamp": int(_t.time() * 1000), "sessionId": "debug-session", "runId": "run1"}, ensure_ascii=False) + "\n"
-            with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
-                f.write(line)
-                f.flush()
-        except Exception:
-            pass
+        except Exception as e:
+            try:
+                import time as _t
+                os.makedirs(_log_dir, exist_ok=True)
+                line = json.dumps({"location": "app.py:before_request", "message": "before_request_error", "data": {"error": str(e)}, "hypothesisId": "H3", "timestamp": int(_t.time() * 1000), "sessionId": "debug-session", "runId": "run1"}, ensure_ascii=False) + "\n"
+                with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+                    f.write(line)
+                    f.flush()
+            except Exception as e2:
+                print(f"[DEBUG] Falha ao registrar log de fallback: {e2}")
     # #endregion
 
 
@@ -3216,8 +3216,15 @@ def novo_cliente():
                     flash(msg, 'error')
                     return render_template('clientes/formulario.html', cliente=None)
 
+            nome_cliente = (request.form.get('nome_cliente') or '').strip()
+            if not nome_cliente:
+                msg = 'Nome do cliente é obrigatório.'
+                if _is_ajax():
+                    return jsonify(ok=False, mensagem=msg), 400
+                flash(msg, 'error')
+                return render_template('clientes/formulario.html', cliente=None)
             cliente = Cliente(
-                nome_cliente=request.form['nome_cliente'],
+                nome_cliente=nome_cliente,
                 razao_social=request.form.get('razao_social', ''),
                 cnpj=cnpj,
                 cidade=request.form.get('cidade', ''),
@@ -3782,12 +3789,28 @@ def novo_produto():
             flash(msg, 'error')
             return render_template('produtos/formulario.html', produto=None)
 
-        tipo = request.form['tipo'].strip()
+        tipo = (request.form.get('tipo') or '').strip()
         nacionalidade = request.form.get('nacionalidade', '').strip()
         marca = request.form.get('marca', '').strip()
         tamanho = request.form.get('tamanho', '').strip()
-        quantidade_entrada = int(request.form['quantidade_entrada'])
-        data_chegada = date.fromisoformat(request.form['data_chegada']) if request.form.get('data_chegada') else date.today()
+        try:
+            quantidade_entrada = int(request.form.get('quantidade_entrada', 0))
+        except (ValueError, TypeError):
+            quantidade_entrada = 0
+        data_chegada_raw = request.form.get('data_chegada')
+        data_chegada = date.fromisoformat(data_chegada_raw) if data_chegada_raw else date.today()
+        if not tipo:
+            msg = 'Tipo é obrigatório!'
+            if _is_ajax():
+                return jsonify(ok=False, mensagem=msg), 400
+            flash(msg, 'error')
+            return render_template('produtos/formulario.html', produto=None)
+        if quantidade_entrada <= 0:
+            msg = 'Quantidade de entrada deve ser maior que zero.'
+            if _is_ajax():
+                return jsonify(ok=False, mensagem=msg), 400
+            flash(msg, 'error')
+            return render_template('produtos/formulario.html', produto=None)
         try:
             nacionalidade, marca, tamanho = _validar_sacola(tipo, nacionalidade, marca, tamanho)
         except ValueError as e:
@@ -3858,11 +3881,14 @@ def editar_produto(id):
             flash('Caminhoneiro é obrigatório!', 'error')
             return redirect(url_for('listar_produtos'))
         
-        tipo = request.form['tipo'].strip()
+        tipo = (request.form.get('tipo') or '').strip()
         nacionalidade = request.form.get('nacionalidade', '').strip()
         marca = request.form.get('marca', '').strip()
         tamanho = request.form.get('tamanho', '').strip()
-        quantidade_entrada = int(request.form.get('quantidade_entrada', 0))
+        try:
+            quantidade_entrada = int(request.form.get('quantidade_entrada', 0))
+        except (ValueError, TypeError):
+            quantidade_entrada = 0
         try:
             nacionalidade, marca, tamanho = _validar_sacola(tipo, nacionalidade, marca, tamanho)
         except ValueError as e:
@@ -3870,8 +3896,9 @@ def editar_produto(id):
             return redirect(url_for('listar_produtos'))
         
         # Atualizar data de chegada se fornecida, senão manter a atual
-        if request.form.get('data_chegada'):
-            data_chegada = date.fromisoformat(request.form['data_chegada'])
+        data_chegada_raw = request.form.get('data_chegada')
+        if data_chegada_raw:
+            data_chegada = date.fromisoformat(data_chegada_raw)
         else:
             data_chegada = produto.data_chegada
         
@@ -4912,9 +4939,9 @@ def logistica_bulk_update():
 def nova_venda():
     if request.method == 'POST':
         try:
-            produto_id = int(request.form['produto_id'])
-            quantidade_venda = int(request.form['quantidade_venda'])
-        except (KeyError, ValueError, TypeError):
+            produto_id = int(request.form.get('produto_id', 0))
+            quantidade_venda = int(request.form.get('quantidade_venda', 0))
+        except (ValueError, TypeError):
             msg = 'Produto e quantidade são obrigatórios.'
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
@@ -4944,15 +4971,30 @@ def nova_venda():
         # ✅ Valores negativos no preço são permitidos (para ajustes, perdas, etc.)
         # Não há validação que impeça preços negativos
 
+        cliente_id_raw = request.form.get('cliente_id')
+        data_venda_raw = request.form.get('data_venda')
+        empresa_faturadora = request.form.get('empresa_faturadora', 'PATY')
+        situacao = request.form.get('situacao', 'PENDENTE')
+        try:
+            cliente_id = int(cliente_id_raw) if cliente_id_raw else None
+        except (ValueError, TypeError):
+            cliente_id = None
+        if not cliente_id:
+            msg = 'Cliente é obrigatório.'
+            if _is_ajax():
+                return jsonify(ok=False, mensagem=msg), 400
+            clientes = Cliente.query.all()
+            produtos = Produto.query.filter(Produto.estoque_atual > 0).all()
+            return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
         venda = Venda(
-            cliente_id=int(request.form['cliente_id']),
+            cliente_id=cliente_id,
             produto_id=produto_id,
             nf=request.form.get('nf', ''),
             preco_venda=Decimal(str(_limpar_valor_moeda(request.form.get('preco_venda', 0)))),
             quantidade_venda=quantidade_venda,
-            data_venda=date.fromisoformat(request.form['data_venda']) if request.form.get('data_venda') else date.today(),
-            empresa_faturadora=request.form['empresa_faturadora'],
-            situacao=request.form['situacao']
+            data_venda=date.fromisoformat(data_venda_raw) if data_venda_raw else date.today(),
+            empresa_faturadora=empresa_faturadora,
+            situacao=situacao
         )
         db.session.add(venda)
         produto.estoque_atual -= quantidade_venda
@@ -5158,8 +5200,15 @@ def editar_venda(id):
     quantidade_original = venda.quantidade_venda
     
     if request.method == 'POST':
-        produto_id = int(request.form['produto_id'])
-        quantidade_venda = int(request.form['quantidade_venda'])
+        try:
+            produto_id = int(request.form.get('produto_id', 0))
+            quantidade_venda = int(request.form.get('quantidade_venda', 0))
+        except (ValueError, TypeError):
+            flash('Produto e quantidade são obrigatórios.', 'error')
+            return redirect(url_for('listar_vendas'))
+        if not produto_id:
+            flash('Produto é obrigatório.', 'error')
+            return redirect(url_for('listar_vendas'))
         
         produto = Produto.query.get_or_404(produto_id)
         
@@ -5186,15 +5235,20 @@ def editar_venda(id):
             produto.estoque_atual -= quantidade_venda
         
         # Atualizar venda
-        venda.cliente_id = int(request.form['cliente_id'])
+        try:
+            cliente_id = int(request.form.get('cliente_id', 0))
+        except (ValueError, TypeError):
+            cliente_id = venda.cliente_id
+        data_venda_raw = request.form.get('data_venda')
+        venda.cliente_id = cliente_id if cliente_id else venda.cliente_id
         venda.produto_id = produto_id
         venda.nf = request.form.get('nf', '')
         venda.preco_venda = Decimal(str(_limpar_valor_moeda(request.form.get('preco_venda', 0))))
         venda.quantidade_venda = quantidade_venda
-        if request.form.get('data_venda'):
-            venda.data_venda = date.fromisoformat(request.form['data_venda'])
-        venda.empresa_faturadora = request.form['empresa_faturadora']
-        venda.situacao = request.form['situacao']
+        if data_venda_raw:
+            venda.data_venda = date.fromisoformat(data_venda_raw)
+        venda.empresa_faturadora = request.form.get('empresa_faturadora', venda.empresa_faturadora or 'PATY')
+        venda.situacao = request.form.get('situacao', venda.situacao or 'PENDENTE')
         
         # --- INÍCIO DA INTEGRAÇÃO COM CAIXA (PILOTO AUTOMÁTICO V4) ---
         vendas_do_pedido = _vendas_do_pedido(venda)
