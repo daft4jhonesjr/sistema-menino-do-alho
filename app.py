@@ -2834,17 +2834,21 @@ def caixa():
 
 
 def _limpar_valor_moeda(v):
-    """Converte string BRL (1.000,00) para float. Ordem CRUCIAL: 1) remove pontos de milhar, 2) troca vírgula por ponto."""
+    """Converte string BRL (R$ 1.000,00 ou 1.000,00) ou número (300.5) para float.
+    Remove R$, espaços. Se tem vírgula: formato BR (remove pontos de milhar, vírgula→ponto).
+    Se não tem vírgula: mantém ponto como decimal (ex: 300.5)."""
     if not v:
         return 0.0
-    v = str(v).strip()
-    # 1. Remove TODOS os pontos de milhar (evita "1.000.00" → ValueError)
-    v = v.replace('.', '')
-    # 2. Troca a vírgula decimal por ponto
-    v = v.replace(',', '.')
     try:
-        return float(v) if v else 0.0
-    except ValueError:
+        s = str(v).strip().replace('R$', '').replace(' ', '').strip()
+        if not s:
+            return 0.0
+        # Se tem vírgula, assume formato BR (1.234,56)
+        if ',' in s:
+            s = s.replace('.', '').replace(',', '.')
+        # Caso contrário mantém ponto como decimal (300.5)
+        return float(s)
+    except (ValueError, AttributeError):
         return 0.0
 
 
@@ -3728,7 +3732,7 @@ def novo_produto():
             tamanho=tamanho,
             fornecedor=fornecedor,
             caminhoneiro=caminhoneiro,
-            preco_custo=Decimal(preco_custo),
+            preco_custo=Decimal(str(_limpar_valor_moeda(preco_custo))),
             preco_venda_alvo=None,
             quantidade_entrada=quantidade_entrada,  # Quantidade original que entrou
             estoque_atual=quantidade_entrada,  # Inicia com a mesma quantidade
@@ -3812,7 +3816,7 @@ def editar_produto(id):
         produto.tamanho = tamanho
         produto.fornecedor = fornecedor
         produto.caminhoneiro = caminhoneiro
-        produto.preco_custo = Decimal(preco_custo)
+        produto.preco_custo = Decimal(str(_limpar_valor_moeda(preco_custo)))
         produto.data_chegada = data_chegada
         produto.nome_produto = nome_produto
 
@@ -4869,7 +4873,7 @@ def nova_venda():
             cliente_id=int(request.form['cliente_id']),
             produto_id=produto_id,
             nf=request.form.get('nf', ''),
-            preco_venda=Decimal(request.form['preco_venda']),
+            preco_venda=Decimal(str(_limpar_valor_moeda(request.form.get('preco_venda', 0)))),
             quantidade_venda=quantidade_venda,
             data_venda=date.fromisoformat(request.form['data_venda']) if request.form.get('data_venda') else date.today(),
             empresa_faturadora=request.form['empresa_faturadora'],
@@ -4968,7 +4972,7 @@ def processar_carrinho():
                 cliente_id = int(obj.get('cliente_id'))
                 produto_id = int(obj.get('produto_id'))
                 quantidade_venda = int(obj.get('quantidade_venda', 0))
-                preco_venda = Decimal(str(obj.get('preco_venda', 0)))
+                preco_venda = Decimal(str(_limpar_valor_moeda(obj.get('preco_venda', 0))))
                 empresa_faturadora = (obj.get('empresa_faturadora') or '').strip() or None
                 situacao = (obj.get('situacao') or 'PENDENTE').strip()
                 nf = (obj.get('nf') or '').strip() or None
@@ -5110,7 +5114,7 @@ def editar_venda(id):
         venda.cliente_id = int(request.form['cliente_id'])
         venda.produto_id = produto_id
         venda.nf = request.form.get('nf', '')
-        venda.preco_venda = Decimal(request.form['preco_venda'])
+        venda.preco_venda = Decimal(str(_limpar_valor_moeda(request.form.get('preco_venda', 0))))
         venda.quantidade_venda = quantidade_venda
         if request.form.get('data_venda'):
             venda.data_venda = date.fromisoformat(request.form['data_venda'])
