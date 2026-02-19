@@ -3451,24 +3451,35 @@ def gerar_nome_produto(tipo, nacionalidade, marca, data_chegada, tamanho):
 
 
 def _validar_sacola(tipo, nacionalidade, marca, tamanho):
-    """Valida e normaliza campos quando tipo é SACOLA. Retorna (nacionalidade, marca, tamanho) ou levanta ValueError."""
+    """Valida e normaliza campos conforme o tipo. Retorna (nacionalidade, marca, tamanho) ou levanta ValueError."""
     t = (tipo or '').strip().upper()
-    if t != 'SACOLA':
-        nac = (nacionalidade or '').strip().upper()
+    nac = (nacionalidade or '').strip().upper().replace('N/A', 'NA')
+    tam = (tamanho or '').strip().upper().replace('N/A', 'NA')
+
+    # SACOLA: nacionalidade N/A, marca SOPACK, tamanho P/M/G ou S/N
+    if t == 'SACOLA':
+        nacionalidade = 'N/A'
+        marca = 'SOPACK'
+        tam_clean = tam.replace(' ', '')
+        if tam_clean not in ('P', 'M', 'G', 'S/N'):
+            raise ValueError('Para SACOLA, tamanho deve ser P, M, G ou S/N.')
+        return nacionalidade, marca, tam_clean
+
+    # ALHO: exige nacionalidade (ARGENTINO/NACIONAL/CHINES) e tamanho numérico
+    if t == 'ALHO':
         if nac not in ('ARGENTINO', 'NACIONAL', 'CHINES'):
             raise ValueError('Nacionalidade deve ser ARGENTINO, NACIONAL ou CHINES.')
         tamanhos_ok = ['4', '5', '6', '7', '8', '9', '10']
-        if (tamanho or '').strip() not in tamanhos_ok:
+        if tam not in tamanhos_ok:
             raise ValueError('Tamanho deve ser 4, 5, 6, 7, 8, 9 ou 10.')
-        return (nacionalidade or '').strip(), (marca or '').strip(), (tamanho or '').strip()
+        return (nacionalidade or '').strip(), (marca or '').strip(), tam
 
-    # SACOLA: nacionalidade N/A, marca SOPACK, tamanho P/M/G ou S/N
-    nacionalidade = 'N/A'
-    marca = 'SOPACK'
-    t = (tamanho or '').strip().upper().replace(' ', '')
-    if t not in ('P', 'M', 'G', 'S/N'):
-        raise ValueError('Para SACOLA, tamanho deve ser P, M, G ou S/N.')
-    return nacionalidade, marca, t
+    # CAFE e outros tipos: aceita N/A para nacionalidade e tamanho
+    if nac in ('NA', 'N/A', ''):
+        nac = 'N/A'
+    if tam in ('NA', 'N/A', ''):
+        tam = 'N/A'
+    return nac, (marca or '').strip(), tam
 
 
 @app.route('/produtos')

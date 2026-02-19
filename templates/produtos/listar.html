@@ -248,7 +248,7 @@
                             <option value="SERVE BEM">SERVE BEM</option>
                         </select>
                     </div>
-                    <div class="mb-4" id="nacionalidade-wrap">
+                    <div class="mb-4" id="container_nacionalidade">
                         <label for="nacionalidade" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Nacionalidade <span class="text-red-500" id="nacionalidade-asterisco">*</span></label>
                         <input type="hidden" id="nacionalidade_hidden" value="N/A">
                         <select id="nacionalidade" name="nacionalidade" required class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
@@ -260,7 +260,7 @@
                         </select>
                         <p class="mt-1 text-sm text-gray-500 dark:text-gray-400 hidden" id="nacionalidade-na-msg">N/A para SACOLA</p>
                     </div>
-                    <div class="mb-4">
+                    <div class="mb-4" id="container_tamanho">
                         <label for="tamanho" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tamanho <span class="text-red-500">*</span></label>
                         <select id="tamanho" name="tamanho" required data-initial="" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                             <option value="">Selecione...</option>
@@ -625,6 +625,8 @@
     var btnSalvar = document.getElementById('modal-nova-entrada-salvar');
     var dataChegada = document.getElementById('data_chegada');
     var tipoSelect = document.getElementById('tipo');
+    var containerNac = document.getElementById('container_nacionalidade');
+    var containerTam = document.getElementById('container_tamanho');
     var nacionalidadeSelect = document.getElementById('nacionalidade');
     var nacionalidadeHidden = document.getElementById('nacionalidade_hidden');
     var nacionalidadeAsterisco = document.getElementById('nacionalidade-asterisco');
@@ -644,6 +646,9 @@
         if (dataChegada && !dataChegada.value) {
             dataChegada.value = new Date().toISOString().split('T')[0];
         }
+        aplicarModoSacola();
+        aplicarModoCafe();
+        aplicarVisibilidadeNacTam();
         if (typeof lucide !== 'undefined') lucide.createIcons();
     }
     function fechar() {
@@ -656,6 +661,27 @@
     }
 
     function isSacola() { return tipoSelect && tipoSelect.value === 'SACOLA'; }
+    function isAlho() { return tipoSelect && tipoSelect.value.toUpperCase().includes('ALHO'); }
+
+    function aplicarVisibilidadeNacTam() {
+        var tipo = (tipoSelect && tipoSelect.value) ? tipoSelect.value.toUpperCase() : '';
+        if (isAlho()) {
+            if (containerNac) containerNac.style.display = 'block';
+            if (containerTam) containerTam.style.display = 'block';
+            if (nacionalidadeSelect) { nacionalidadeSelect.required = true; nacionalidadeSelect.setAttribute('name', 'nacionalidade'); if (nacionalidadeHidden) nacionalidadeHidden.removeAttribute('name'); if (nacionalidadeSelect.value === 'NA' || nacionalidadeSelect.value === 'N/A') nacionalidadeSelect.value = ''; }
+            if (tamanhoSelect) { tamanhoSelect.required = true; if (tamanhoSelect.value === 'NA' || tamanhoSelect.value === 'N/A') tamanhoSelect.value = ''; }
+        } else if (isSacola()) {
+            if (containerNac) containerNac.style.display = 'none';
+            if (containerTam) containerTam.style.display = 'block';
+            if (nacionalidadeSelect) { nacionalidadeSelect.required = false; nacionalidadeSelect.removeAttribute('name'); if (nacionalidadeHidden) { nacionalidadeHidden.setAttribute('name', 'nacionalidade'); nacionalidadeHidden.value = 'NA'; } }
+        } else {
+            if (containerNac) containerNac.style.display = 'none';
+            if (containerTam) containerTam.style.display = 'none';
+            if (nacionalidadeSelect) { nacionalidadeSelect.required = false; nacionalidadeSelect.value = 'NA'; nacionalidadeSelect.removeAttribute('name'); if (nacionalidadeHidden) { nacionalidadeHidden.setAttribute('name', 'nacionalidade'); nacionalidadeHidden.value = 'NA'; } }
+            if (tamanhoSelect) { tamanhoSelect.required = false; tamanhoSelect.value = 'NA'; }
+        }
+    }
+
     function aplicarModoSacola() {
         var initialTamanho = (tamanhoSelect && tamanhoSelect.getAttribute('data-initial')) ? tamanhoSelect.getAttribute('data-initial') : '';
         var opts = [], keepVal = '';
@@ -753,11 +779,13 @@
     if (tipoSelect) {
         aplicarModoSacola();
         aplicarModoCafe();
+        aplicarVisibilidadeNacTam();
         tipoSelect.addEventListener('change', function() {
             tamanhoSelect.setAttribute('data-initial', tamanhoSelect.value || '');
             if (tipoSelect.value === 'SACOLA' && marcaInput.getAttribute('name') === 'marca') marcaInput.setAttribute('data-initial', marcaInput.value || '');
             aplicarModoSacola();
-            aplicarModoCafe(); // Aplicar automação de CAFÉ após aplicar modo SACOLA
+            aplicarModoCafe();
+            aplicarVisibilidadeNacTam();
         });
     }
 
