@@ -1655,6 +1655,12 @@ app.config.from_object(Config)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
+# Sessão e "Lembrar-me": persistir por 30 dias
+app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=30)
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
+app.config['REMEMBER_COOKIE_HTTPONLY'] = True
+app.config['REMEMBER_COOKIE_SECURE'] = True  # Segurança extra (HTTPS)
+
 # Configurações para manter a conexão com o banco sempre viva (Blindagem contra EOF Error)
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
     'pool_pre_ping': True,   # Testa a conexão antes de usar (evita "SSL SYSCALL error: EOF detected")
