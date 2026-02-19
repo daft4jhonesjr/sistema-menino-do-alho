@@ -32,7 +32,7 @@
                 </label>
                 <input type="number" id="preco_custo" name="preco_custo" 
                        value="{{ produto.preco_custo if produto else '' }}" 
-                       step="0.01" min="0" required
+                       step="0.01" min="0" required inputmode="decimal" pattern="[0-9]*"
                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
             </div>
 
@@ -43,7 +43,7 @@
                 </label>
                 <input type="number" id="quantidade_entrada" name="quantidade_entrada" 
                        value="{% if produto %}0{% else %}1{% endif %}" 
-                       min="0" required
+                       min="0" required inputmode="decimal" pattern="[0-9]*"
                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
                 {% if produto %}
                 <p class="mt-1 text-sm text-gray-500">Estoque atual: <strong>{{ produto.estoque_atual }}</strong></p>
@@ -131,7 +131,7 @@
                 <input type="hidden" id="marca_hidden" value="SOPACK">
                 <input type="text" id="marca" name="marca" 
                        value="{{ produto.marca if produto else '' }}" 
-                       required
+                       required autocapitalize="words" autocomplete="off" spellcheck="false"
                        placeholder="Ex: IMPORFOZ"
                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
             </div>
@@ -143,7 +143,7 @@
                 </label>
                 <input type="text" id="caminhoneiro" name="caminhoneiro" 
                        value="{{ produto.caminhoneiro if produto else '' }}"
-                       required
+                       required autocapitalize="words" autocomplete="off" spellcheck="false"
                        placeholder="Ex: ALEXANDRE"
                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
             </div>

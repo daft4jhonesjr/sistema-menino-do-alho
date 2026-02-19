@@ -18,7 +18,7 @@
             </label>
             <input type="text" id="nome_cliente" name="nome_cliente" 
                    value="{{ cliente.nome_cliente if cliente else '' }}" 
-                   required
+                   required autocapitalize="words" autocomplete="off" spellcheck="false"
                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
         </div>
 
@@ -28,6 +28,7 @@
             </label>
             <input type="text" id="razao_social" name="razao_social" 
                    value="{{ cliente.razao_social if cliente else '' }}"
+                   autocapitalize="words" autocomplete="off" spellcheck="false"
                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
         </div>
 
@@ -47,6 +48,7 @@
             </label>
             <input type="text" id="cidade" name="cidade" 
                    value="{{ cliente.cidade if cliente else '' }}"
+                   autocapitalize="words" autocomplete="off" spellcheck="false"
                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
         </div>
 
@@ -57,6 +59,7 @@
             <input type="text" id="endereco" name="endereco" 
                    value="{{ cliente.endereco if cliente else '' }}"
                    placeholder="Rua, número, bairro, cidade - para abrir no Google Maps"
+                   autocapitalize="words" autocomplete="off" spellcheck="false"
                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
         </div>
 
