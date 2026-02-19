@@ -855,6 +855,26 @@ function abrirModalAddItem(idVenda) {
     }
 })();
 
+// Compartilhar pedido no WhatsApp
+function enviarZap(cliente, produto, qtd, total, vencimento) {
+    var msg = 'Olá *' + (cliente || 'Cliente') + '*! 🧄%0A';
+    msg += 'Aqui está o resumo do seu pedido no Menino do Alho:%0A%0A';
+    msg += '📦 *' + (produto || 'Pedido') + '* (x' + (qtd || '0') + ')%0A';
+    msg += '💰 Total: *' + (total || 'R$ 0,00') + '*%0A';
+    msg += '📅 Vencimento: ' + (vencimento || 'A definir') + '%0A%0A';
+    msg += '_Obrigado pela preferência!_';
+    window.open('https://wa.me/?text=' + msg, '_blank');
+}
+function enviarZapFromBtn(btn) {
+    if (!btn) return;
+    var cliente = btn.getAttribute('data-cliente') || '';
+    var produto = btn.getAttribute('data-produto') || '';
+    var qtd = btn.getAttribute('data-qtd') || '';
+    var total = btn.getAttribute('data-total') || '';
+    var vencimento = btn.getAttribute('data-vencimento') || '';
+    enviarZap(cliente, produto, qtd, total, vencimento);
+}
+
 (function() {
     // Bulk delete: checkboxes, barra flutuante, modal de confirmação
     var master = document.getElementById('bulk-master');
