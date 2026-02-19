@@ -213,7 +213,7 @@
                 </div>
                 <div id="container-forma-simples">
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Forma / Conta</label>
-                    <select name="forma_pagamento" id="forma_pagamento" class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
+                    <select name="forma_pagamento" id="forma_pagamento" required class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
                         <option value="Dinheiro">Dinheiro (Espécie)</option>
                         <option value="Pix">Pix / Transferência</option>
                         <option value="Cheque">Cheque</option>
@@ -228,9 +228,9 @@
             <div id="container-modo-simples">
                 <div class="flex items-center justify-between gap-2 mb-1">
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Valor (R$)</label>
-                    <span id="btn-split" class="text-sm text-emerald-600 dark:text-emerald-400 cursor-pointer hover:underline font-bold flex items-center gap-1">🔀 Dividir em dois pagamentos</span>
+                    <span id="btn-split" class="split-only text-sm text-emerald-600 dark:text-emerald-400 cursor-pointer hover:underline font-bold flex items-center gap-1">🔀 Dividir em dois pagamentos</span>
                 </div>
-                <input type="text" id="valor" name="valor" placeholder="0,00" class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-lg font-bold">
+                <input type="text" id="valor" name="valor" placeholder="0,00" required class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-lg font-bold">
             </div>
 
             <!-- Modo Dividido: dois valores com duas formas -->
@@ -393,12 +393,15 @@ function abrirModalNovo() {
     document.getElementById('formLancamentoCaixa').querySelector('[name="categoria"]').value = 'Entrada Cliente';
     document.getElementById('formLancamentoCaixa').querySelector('[name="forma_pagamento"]').value = 'Dinheiro';
     if (typeof window.resetModoSplit === 'function') window.resetModoSplit();
+    document.querySelectorAll('.split-only').forEach(function(el) { el.style.display = ''; });
     var hiddenId = document.getElementById('editLancamentoId');
     if (hiddenId) hiddenId.remove();
     document.getElementById('modalNovoLancamento').classList.remove('hidden');
 }
 
 function abrirModalEditar(tr) {
+    document.querySelectorAll('.split-only').forEach(function(el) { el.style.display = 'none'; });
+    if (typeof window.resetModoSplit === 'function') window.resetModoSplit();
     var id = tr.getAttribute('data-lanc-id');
     var dataVal = tr.getAttribute('data-lanc-data');
     var desc = tr.getAttribute('data-lanc-desc') || '';

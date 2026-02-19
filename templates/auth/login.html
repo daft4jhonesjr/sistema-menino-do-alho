@@ -1,6 +1,12 @@
 <!DOCTYPE html>
 <html lang="pt-BR" class="font-sans antialiased">
 <head>
+    <script>
+        (function() {
+            var h = new Date().getHours();
+            if (h >= 18 || h < 6) document.documentElement.classList.add('dark');
+        })();
+    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - Menino do Alho</title>
@@ -8,24 +14,24 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] } } } };</script>
+    <script>tailwind.config = { darkMode: 'class', theme: { extend: { fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] } } } };</script>
     <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
 </head>
-<body class="bg-emerald-50 min-h-screen flex flex-col items-center justify-center p-4">
+<body class="bg-emerald-50 dark:bg-gray-900 min-h-screen flex flex-col items-center justify-center p-4">
     <div class="w-full max-w-md">
         <div class="flex justify-center mb-6">
             <img src="{{ url_for('static', filename='images/logo_menino_do_alho_amarelo1.jpeg') }}"
                  alt="Menino do Alho - Gestão de Vendas"
                  class="h-32 md:h-48 w-auto object-contain mx-auto rounded-full mix-blend-multiply">
         </div>
-        <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-            <h2 class="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-                <i data-lucide="log-in" class="w-5 h-5 mr-2 text-emerald-600"></i>Entrar
+        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+            <h2 class="text-lg font-semibold text-gray-800 dark:text-white mb-4 flex items-center">
+                <i data-lucide="log-in" class="w-5 h-5 mr-2 text-emerald-600 dark:text-emerald-400"></i>Entrar
             </h2>
             {% with messages = get_flashed_messages(with_categories=true) %}
                 {% if messages %}
                     {% for category, message in messages %}
-                        <div class="mb-4 p-3 rounded-lg text-sm flex items-center {% if category == 'error' %}bg-red-50 text-red-700 border border-red-200{% else %}bg-emerald-50 text-emerald-800 border border-emerald-200{% endif %}">
+                        <div class="mb-4 p-3 rounded-lg text-sm flex items-center {% if category == 'error' %}bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800{% else %}bg-emerald-50 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800{% endif %}">
                             <i data-lucide="{% if category == 'error' %}alert-circle{% else %}check-circle{% endif %}" class="w-4 h-4 mr-2 flex-shrink-0"></i>
                             {{ message }}
                         </div>
@@ -35,17 +41,17 @@
             <form method="POST" action="{{ url_for('login') }}" class="space-y-4">
                 <input type="hidden" name="next" value="{{ request.args.get('next', '') }}">
                 <div>
-                    <label for="username" class="block text-sm font-medium text-gray-700 mb-1">Usuário</label>
+                    <label for="username" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Usuário</label>
                     <input type="text" id="username" name="username" required autofocus
-                           class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm"
+                           class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                            placeholder="Digite seu usuário">
                 </div>
                 <div>
-                    <label for="login_password" class="block text-sm font-medium text-gray-700 mb-1">Senha</label>
+                    <label for="login_password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Senha</label>
                     <div class="relative">
                         <input type="password" name="password" id="login_password" placeholder="Digite sua senha"
-                               class="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-emerald-500 focus:border-emerald-500 pr-10" required>
-                        <button type="button" onclick="togglePasswordVisibility()" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-emerald-600 transition-colors">
+                               class="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2.5 focus:ring-emerald-500 focus:border-emerald-500 pr-10 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400" required>
+                        <button type="button" onclick="togglePasswordVisibility()" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 dark:text-gray-500 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors">
                             <svg id="eye_icon_open" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
@@ -56,12 +62,20 @@
                         </button>
                     </div>
                 </div>
+                <div class="flex items-center justify-between mb-6">
+                    <div class="flex items-center">
+                        <input id="remember" name="remember" type="checkbox" class="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-gray-300 rounded cursor-pointer dark:bg-gray-700 dark:border-gray-600">
+                        <label for="remember" class="ml-2 block text-sm text-gray-900 dark:text-gray-300 cursor-pointer">
+                            Permanecer conectado
+                        </label>
+                    </div>
+                </div>
                 <button type="submit" class="w-full bg-emerald-700 text-white py-2.5 rounded-xl hover:bg-emerald-600 transition font-medium flex items-center justify-center">
                     <i data-lucide="log-in" class="w-4 h-4 mr-2"></i>Entrar
                 </button>
             </form>
-            <p class="mt-4 text-center text-sm text-gray-500">
-                Não tem conta? <a href="{{ url_for('cadastro') }}" class="text-emerald-600 hover:text-emerald-700 font-medium">Cadastre-se</a>
+            <p class="mt-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                Não tem conta? <a href="{{ url_for('cadastro') }}" class="text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 font-medium">Cadastre-se</a>
             </p>
         </div>
     </div>

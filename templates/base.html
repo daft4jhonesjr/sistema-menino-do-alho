@@ -160,13 +160,6 @@
     {% block head_extras %}{% endblock %}
 </head>
 <body class="bg-emerald-50 text-gray-800 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-500 min-h-screen flex flex-col">
-    <!-- Pull-to-Refresh Indicator (Mobile PWA) -->
-    <div id="ptr-indicator" class="fixed top-0 left-1/2 transform -translate-x-1/2 -translate-y-full z-50 transition-transform duration-200 ease-out flex items-center justify-center w-10 h-10 bg-white dark:bg-gray-800 rounded-full shadow-lg border border-gray-200 dark:border-gray-700 mt-4">
-        <svg id="ptr-spinner" class="w-6 h-6 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-        </svg>
-    </div>
-
     <!-- Header -->
     <header class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 shadow-sm">
         <div class="container mx-auto px-4 py-5">
@@ -964,54 +957,65 @@
                 .catch(function() {});
         });
     </script>
+    <script src="https://unpkg.com/pulltorefreshjs"></script>
+    <style>
+        /* Estilos do Pull to Refresh */
+        .ptr--ptr {
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1) !important;
+            border-radius: 0 0 20px 20px;
+            background: white !important;
+            z-index: 9999 !important;
+        }
+        .dark .ptr--ptr {
+            background: #1f2937 !important; /* gray-800 */
+            border-bottom: 1px solid #374151;
+        }
+
+        /* Ícone base */
+        .ptr--icon {
+            transition: transform 0.3s ease;
+            color: #10b981; /* emerald-500 */
+        }
+
+        /* Animação de Giro (Spin) */
+        @keyframes ptr-spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .ptr-loading .ptr--icon {
+            animation: ptr-spin 1s infinite linear;
+        }
+
+        /* Texto */
+        .ptr--text {
+            font-weight: bold;
+            font-size: 14px;
+            color: #4b5563;
+        }
+        .dark .ptr--text {
+            color: #d1d5db;
+        }
+    </style>
+
     <script>
-        // Lógica do Pull-to-Refresh (Mobile PWA)
         document.addEventListener('DOMContentLoaded', function() {
-            var ptrIndicator = document.getElementById('ptr-indicator');
-            var ptrSpinner = document.getElementById('ptr-spinner');
-            if (!ptrIndicator || !ptrSpinner) return;
+            // Ícone de Seta Circular (SVG)
+            const iconArrow = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"/></svg>';
 
-            var touchStartY = 0;
-            var isPulling = false;
-            var pullThreshold = 80;
-
-            if ('ontouchstart' in window) {
-                document.addEventListener('touchstart', function(e) {
-                    if (window.scrollY === 0) {
-                        touchStartY = e.touches[0].clientY;
-                        isPulling = true;
-                        ptrIndicator.style.transition = 'none';
-                    }
-                }, { passive: true });
-
-                document.addEventListener('touchmove', function(e) {
-                    if (!isPulling) return;
-                    var touchY = e.touches[0].clientY;
-                    var pullDistance = touchY - touchStartY;
-                    if (pullDistance > 0 && window.scrollY === 0) {
-                        var moveY = Math.min(pullDistance * 0.4, 100);
-                        ptrIndicator.style.transform = 'translate(-50%, calc(-100% + ' + moveY + 'px))';
-                        ptrSpinner.style.transform = 'rotate(' + pullDistance + 'deg)';
-                    }
-                }, { passive: true });
-
-                document.addEventListener('touchend', function(e) {
-                    if (!isPulling) return;
-                    isPulling = false;
-                    var touchEndY = e.changedTouches[0].clientY;
-                    var pullDistance = touchEndY - touchStartY;
-                    ptrIndicator.style.transition = 'transform 0.3s ease-out';
-
-                    if (pullDistance > pullThreshold && window.scrollY === 0) {
-                        ptrSpinner.classList.add('animate-spin');
-                        ptrSpinner.style.transform = '';
-                        ptrIndicator.style.transform = 'translate(-50%, 20px)';
-                        setTimeout(function() {
-                            window.location.reload();
-                        }, 400);
-                    } else {
-                        ptrSpinner.style.transform = '';
-                        ptrIndicator.style.transform = 'translate(-50%, -100%)';
+            if (('ontouchstart' in window) || (window.innerWidth < 1024)) {
+                PullToRefresh.init({
+                    mainElement: 'body',
+                    triggerElement: 'body',
+                    instructionsPullToRefresh: 'Puxe para atualizar',
+                    instructionsReleaseToRefresh: 'Solte para recarregar',
+                    instructionsRefreshing: 'Atualizando...',
+                    distThreshold: 70,
+                    iconArrow: iconArrow,
+                    iconRefreshing: iconArrow,
+                    onRefresh: function() {
+                        document.querySelector('.ptr--ptr').classList.add('ptr-loading');
+                        window.location.reload();
                     }
                 });
             }

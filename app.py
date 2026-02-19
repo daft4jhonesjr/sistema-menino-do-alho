@@ -2226,7 +2226,8 @@ def login():
         if not user or not check_password_hash(user.password_hash, password):
             flash('Usuário ou senha inválidos.', 'error')
             return render_template('auth/login.html')
-        login_user(user)
+        remember = True if request.form.get('remember') else False
+        login_user(user, remember=remember)
         # #region agent log
         try:
             _debug_log("app.py:login", "login success", {"user": user.username}, "H3")
@@ -2832,24 +2833,72 @@ def caixa():
                          data_hoje=date.today().strftime('%Y-%m-%d'))
 
 
+def _parse_valor_br(valor_str):
+    """Converte string BR (1.000,00) para float."""
+    if not valor_str:
+        return 0.0
+    s = str(valor_str).replace('.', '').replace(',', '.')
+    return float(s) if s else 0.0
+
+
 @app.route('/caixa/adicionar', methods=['POST'])
 @login_required
 def adicionar_caixa():
     nova_data = datetime.strptime(request.form.get('data'), '%Y-%m-%d').date()
-    valor_str = (request.form.get('valor') or '0').replace('.', '').replace(',', '.')
-    novo_valor = float(valor_str) if valor_str else 0.0
-    novo_lancamento = LancamentoCaixa(
-        data=nova_data,
-        descricao=request.form.get('descricao', '').strip(),
-        tipo=request.form.get('tipo'),
-        categoria=request.form.get('categoria'),
-        forma_pagamento=request.form.get('forma_pagamento'),
-        valor=novo_valor,
-        usuario_id=current_user.id
-    )
-    db.session.add(novo_lancamento)
-    db.session.commit()
-    flash('Lançamento adicionado com sucesso!', 'success')
+    descricao_base = (request.form.get('descricao') or '').strip()
+    tipo = request.form.get('tipo')
+    categoria = request.form.get('categoria')
+
+    if request.form.get('is_split') == 'true':
+        # Modo dividido: dois lançamentos com formas de pagamento diferentes
+        valor1 = _parse_valor_br(request.form.get('valor1'))
+        valor2 = _parse_valor_br(request.form.get('valor2'))
+        forma1 = request.form.get('forma1') or 'Dinheiro'
+        forma2 = request.form.get('forma2') or 'Dinheiro'
+        if valor1 <= 0 and valor2 <= 0:
+            flash('Informe pelo menos um valor nos pagamentos divididos.', 'error')
+            return redirect(url_for('caixa'))
+        lancamentos = []
+        if valor1 > 0:
+            lancamentos.append(LancamentoCaixa(
+                data=nova_data,
+                descricao=f"{descricao_base} (Parte 1)",
+                tipo=tipo,
+                categoria=categoria,
+                forma_pagamento=forma1,
+                valor=valor1,
+                usuario_id=current_user.id
+            ))
+        if valor2 > 0:
+            lancamentos.append(LancamentoCaixa(
+                data=nova_data,
+                descricao=f"{descricao_base} (Parte 2)",
+                tipo=tipo,
+                categoria=categoria,
+                forma_pagamento=forma2,
+                valor=valor2,
+                usuario_id=current_user.id
+            ))
+        for lanc in lancamentos:
+            db.session.add(lanc)
+        db.session.commit()
+        flash('Lançamentos divididos adicionados com sucesso!', 'success')
+    else:
+        # Modo simples: um único lançamento
+        valor_str = (request.form.get('valor') or '0').replace('.', '').replace(',', '.')
+        novo_valor = float(valor_str) if valor_str else 0.0
+        novo_lancamento = LancamentoCaixa(
+            data=nova_data,
+            descricao=descricao_base,
+            tipo=tipo,
+            categoria=categoria,
+            forma_pagamento=request.form.get('forma_pagamento'),
+            valor=novo_valor,
+            usuario_id=current_user.id
+        )
+        db.session.add(novo_lancamento)
+        db.session.commit()
+        flash('Lançamento adicionado com sucesso!', 'success')
     return redirect(url_for('caixa'))
 
 
