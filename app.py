@@ -4,7 +4,7 @@ from flask_compress import Compress
 from flask_caching import Cache
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from models import db, Cliente, Produto, ProdutoFoto, Venda, Usuario, Configuracao, TipoProduto, Nacionalidade, Tamanho, Fornecedor, EmpresaFaturadora, SituacaoVenda, Documento, LancamentoCaixa
+from models import db, Cliente, Produto, ProdutoFoto, Venda, Usuario, Configuracao, Documento, LancamentoCaixa
 from config import Config
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -22,7 +22,7 @@ def get_hoje_brasil():
         return date.today()
 from functools import wraps
 from sqlalchemy import func, desc, asc, text, or_, extract
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, OperationalError
 import pandas as pd
 import os
@@ -3285,9 +3285,13 @@ def editar_cliente(id):
 @login_required
 def excluir_cliente(id):
     cliente = Cliente.query.get_or_404(id)
-    db.session.delete(cliente)
-    db.session.commit()
-    flash('Cliente excluído com sucesso!', 'success')
+    try:
+        db.session.delete(cliente)
+        db.session.commit()
+        flash('Cliente excluído com sucesso!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash('Não é possível excluir este cliente, pois ele possui vínculos no sistema.', 'error')
     return redirect(url_for('listar_clientes'))
 
 
@@ -4899,10 +4903,14 @@ def logistica():
 def toggle_entrega(venda_id):
     """Alterna o status de entrega entre PENDENTE e ENTREGUE."""
     venda = Venda.query.get_or_404(venda_id)
-    venda.status_entrega = 'ENTREGUE' if (venda.status_entrega or 'PENDENTE') == 'PENDENTE' else 'PENDENTE'
-    db.session.commit()
-    flash('Status de entrega atualizado com sucesso!', 'success')
     status = request.form.get('status', request.args.get('status', 'PENDENTE'))
+    try:
+        venda.status_entrega = 'ENTREGUE' if (venda.status_entrega or 'PENDENTE') == 'PENDENTE' else 'PENDENTE'
+        db.session.commit()
+        flash('Status de entrega atualizado com sucesso!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash('Erro ao atualizar status de entrega. Tente novamente.', 'error')
     return redirect(url_for('logistica', status=status))
 
 
@@ -5527,8 +5535,8 @@ def ver_boleto_venda(id):
     full = os.path.join(os.path.dirname(os.path.abspath(__file__)), path)
     if os.path.exists(full):
         return send_file(full, mimetype='application/pdf')
-        flash('Arquivo do boleto não encontrado.', 'error')
-        return redirect(url_for('listar_vendas'))
+    flash('Arquivo do boleto não encontrado no servidor.', 'error')
+    return redirect(request.referrer or url_for('listar_vendas'))
 
 
 @app.route('/venda/<int:id>/ver_nf')
@@ -5552,8 +5560,8 @@ def ver_nf_venda(id):
     full = os.path.join(os.path.dirname(os.path.abspath(__file__)), path)
     if os.path.exists(full):
         return send_file(full, mimetype='application/pdf')
-        flash('Arquivo da nota fiscal não encontrado no sistema de arquivos.', 'error')
-        return redirect(url_for('listar_vendas'))
+    flash('Arquivo da nota fiscal não encontrado no servidor.', 'error')
+    return redirect(request.referrer or url_for('listar_vendas'))
 
 
 @app.route('/upload', methods=['POST'])
