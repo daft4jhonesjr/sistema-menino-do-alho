@@ -13,7 +13,8 @@
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/logo_menino_do_alho_amarelo1.jpeg') }}">
     <meta name="apple-mobile-web-app-title" content="Menino do Alho">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="format-detection" content="telephone=no">
     
     <!-- Theme color para navegadores -->
     <meta name="theme-color" content="#198754">
@@ -65,6 +66,32 @@
     </script>
     <style>
         body { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; }
+
+        /* --- KIT DE ACABAMENTO APPLE IOS --- */
+        /* 1. Safe Area Insets (Respeita o Notch e a Home Bar) */
+        body {
+            padding-top: env(safe-area-inset-top);
+            padding-bottom: env(safe-area-inset-bottom);
+            padding-left: env(safe-area-inset-left);
+            padding-right: env(safe-area-inset-right);
+            /* Evita o "bounce" branco no fundo geral, mantendo só nas tabelas */
+            overscroll-behavior-y: none;
+        }
+        /* 2. Bloqueio de Seleção (Para parecer App e não Site) */
+        .btn, button, nav, .menu-item, h1, h2, h3, label {
+            -webkit-touch-callout: none; /* Desativa menu de toque longo */
+            -webkit-user-select: none;   /* Desativa seleção de texto */
+            user-select: none;
+        }
+        /* 3. Correção de Scroll Travado no iOS */
+        .overflow-auto, .overflow-y-auto {
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior-y: auto; /* Devolve o elástico apenas onde tem scroll interno */
+        }
+        /* 4. Safe Area no Header (para logo não colar no notch; útil se header for fixed/sticky) */
+        body > header:first-of-type {
+            padding-top: env(safe-area-inset-top);
+        }
 
         /* Vacina contra Fundo Branco em Inputs no Modo Escuro */
         .dark input, .dark select, .dark textarea {
@@ -991,64 +1018,51 @@
                 .catch(function() {});
         });
     </script>
-    <script src="https://unpkg.com/pulltorefreshjs"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pulltorefreshjs/0.1.22/index.umd.min.js"></script>
     <style>
-        /* Estilos do Pull to Refresh */
+        /* Estilo do indicador de atualização */
         .ptr--ptr {
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1) !important;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1) !important;
             border-radius: 0 0 20px 20px;
+            z-index: 9999 !important; /* Garante que fique acima de tudo */
             background: white !important;
-            z-index: 9999 !important;
         }
         .dark .ptr--ptr {
-            background: #1f2937 !important; /* gray-800 */
+            background: #1f2937 !important; /* Modo escuro */
             border-bottom: 1px solid #374151;
         }
-
-        /* Ícone base */
         .ptr--icon {
-            transition: transform 0.3s ease;
-            color: #10b981; /* emerald-500 */
+            color: #10b981 !important; /* Verde Emerald */
+            transition: transform 0.3s;
         }
-
-        /* Animação de Giro (Spin) */
-        @keyframes ptr-spin {
+        /* Animação de girar quando estiver carregando */
+        .ptr-loading .ptr--icon {
+            animation: spin 1s infinite linear;
+        }
+        @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-
-        .ptr-loading .ptr--icon {
-            animation: ptr-spin 1s infinite linear;
-        }
-
-        /* Texto */
-        .ptr--text {
-            font-weight: bold;
-            font-size: 14px;
-            color: #4b5563;
-        }
-        .dark .ptr--text {
-            color: #d1d5db;
-        }
     </style>
-
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Ícone de Seta Circular (SVG)
-            const iconArrow = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"/></svg>';
-
-            if (('ontouchstart' in window) || (window.innerWidth < 1024)) {
+            // Só ativa em dispositivos móveis ou telas pequenas
+            if (window.innerWidth < 1024 || 'ontouchstart' in window) {
                 PullToRefresh.init({
-                    mainElement: 'body',
+                    mainElement: 'body', // Onde o usuário arrasta (o corpo todo)
                     triggerElement: 'body',
-                    instructionsPullToRefresh: 'Puxe para atualizar',
-                    instructionsReleaseToRefresh: 'Solte para recarregar',
-                    instructionsRefreshing: 'Atualizando...',
-                    distThreshold: 70,
-                    iconArrow: iconArrow,
-                    iconRefreshing: iconArrow,
+                    instructionsPullToRefresh: '⬇️ Puxe para atualizar',
+                    instructionsReleaseToRefresh: '⬆️ Solte para recarregar',
+                    instructionsRefreshing: '🔄 Atualizando...',
+                    distThreshold: 70, // Distância mínima para disparar
+                    iconArrow: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>',
+                    iconRefreshing: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>',
                     onRefresh: function() {
-                        document.querySelector('.ptr--ptr').classList.add('ptr-loading');
+                        // Adiciona classe para animar o ícone
+                        const ptrElement = document.querySelector('.ptr--ptr');
+                        if(ptrElement) ptrElement.classList.add('ptr-loading');
+
+                        // Recarrega a página de verdade
                         window.location.reload();
                     }
                 });
