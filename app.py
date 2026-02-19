@@ -2833,12 +2833,19 @@ def caixa():
                          data_hoje=date.today().strftime('%Y-%m-%d'))
 
 
-def _parse_valor_br(valor_str):
-    """Converte string BR (1.000,00) para float."""
-    if not valor_str:
+def _limpar_valor_moeda(v):
+    """Converte string BRL (1.000,00) para float. Ordem CRUCIAL: 1) remove pontos de milhar, 2) troca vírgula por ponto."""
+    if not v:
         return 0.0
-    s = str(valor_str).replace('.', '').replace(',', '.')
-    return float(s) if s else 0.0
+    v = str(v).strip()
+    # 1. Remove TODOS os pontos de milhar (evita "1.000.00" → ValueError)
+    v = v.replace('.', '')
+    # 2. Troca a vírgula decimal por ponto
+    v = v.replace(',', '.')
+    try:
+        return float(v) if v else 0.0
+    except ValueError:
+        return 0.0
 
 
 @app.route('/caixa/adicionar', methods=['POST'])
@@ -2851,8 +2858,8 @@ def adicionar_caixa():
 
     if request.form.get('is_split') == 'true':
         # Modo dividido: dois lançamentos com formas de pagamento diferentes
-        valor1 = _parse_valor_br(request.form.get('valor1'))
-        valor2 = _parse_valor_br(request.form.get('valor2'))
+        valor1 = _limpar_valor_moeda(request.form.get('valor1'))
+        valor2 = _limpar_valor_moeda(request.form.get('valor2'))
         forma1 = request.form.get('forma1') or 'Dinheiro'
         forma2 = request.form.get('forma2') or 'Dinheiro'
         if valor1 <= 0 and valor2 <= 0:
@@ -2885,8 +2892,7 @@ def adicionar_caixa():
         flash('Lançamentos divididos adicionados com sucesso!', 'success')
     else:
         # Modo simples: um único lançamento
-        valor_str = (request.form.get('valor') or '0').replace('.', '').replace(',', '.')
-        novo_valor = float(valor_str) if valor_str else 0.0
+        novo_valor = _limpar_valor_moeda(request.form.get('valor'))
         novo_lancamento = LancamentoCaixa(
             data=nova_data,
             descricao=descricao_base,
@@ -2909,8 +2915,7 @@ def editar_lancamento_caixa(id):
     lancamento = LancamentoCaixa.query.get_or_404(id)
     try:
         lancamento.data = datetime.strptime(request.form.get('data'), '%Y-%m-%d').date()
-        valor_str = (request.form.get('valor') or '0').replace('.', '').replace(',', '.')
-        lancamento.valor = float(valor_str) if valor_str else 0.0
+        lancamento.valor = _limpar_valor_moeda(request.form.get('valor'))
         lancamento.descricao = (request.form.get('descricao') or '').strip()
         lancamento.tipo = request.form.get('tipo') or lancamento.tipo
         lancamento.categoria = request.form.get('categoria') or lancamento.categoria
