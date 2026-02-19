@@ -1041,6 +1041,16 @@
                 flashMessages.forEach(function(item) {
                     var category = item[0] || 'info';
                     var rawMessage = item[1] || '';
+
+                    if (rawMessage.indexOf('pendente(s) de correção') !== -1 || rawMessage.indexOf('documento(s) processado(s)') !== -1) {
+                        var hideUntil = localStorage.getItem('snooze_boleto_warning');
+                        var now = new Date().getTime();
+                        if (hideUntil && now < parseInt(hideUntil, 10)) {
+                            return;
+                        }
+                        localStorage.setItem('snooze_boleto_warning', String(now + 7200000));
+                    }
+
                     if (category === 'message') category = 'info';
                     if (category === 'danger') category = 'error';
 
