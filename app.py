@@ -5020,6 +5020,57 @@ def processar_carrinho():
         return jsonify(ok=False, mensagem=str(e)), 500
 
 
+@app.route('/venda/adicionar_item', methods=['POST'])
+@login_required
+def venda_adicionar_item():
+    """Adiciona um novo item (produto) a um pedido/venda existente. Baixa estoque e mantém dados do pedido."""
+    venda_id = request.form.get('venda_id')
+    produto_id = request.form.get('produto_id')
+    quantidade_venda = request.form.get('quantidade_venda')
+    preco_venda_raw = request.form.get('preco_venda')
+
+    if not venda_id or not produto_id or not quantidade_venda or not preco_venda_raw:
+        flash('Preencha todos os campos obrigatórios.', 'error')
+        return redirect(url_for('listar_vendas'))
+
+    try:
+        venda_id = int(venda_id)
+        produto_id = int(produto_id)
+        quantidade_venda = int(quantidade_venda)
+    except (ValueError, TypeError):
+        flash('Dados inválidos.', 'error')
+        return redirect(url_for('listar_vendas'))
+
+    venda_existente = Venda.query.get_or_404(venda_id)
+    produto = Produto.query.get_or_404(produto_id)
+
+    preco_venda = _limpar_valor_moeda(preco_venda_raw)
+    if preco_venda <= 0:
+        flash('Preço unitário inválido.', 'error')
+        return redirect(url_for('listar_vendas'))
+
+    if produto.estoque_atual < quantidade_venda:
+        flash(f'Estoque insuficiente! Disponível: {produto.estoque_atual}', 'error')
+        return redirect(url_for('listar_vendas'))
+
+    nova_venda = Venda(
+        cliente_id=venda_existente.cliente_id,
+        produto_id=produto_id,
+        nf=venda_existente.nf or '',
+        preco_venda=Decimal(str(preco_venda)),
+        quantidade_venda=quantidade_venda,
+        data_venda=venda_existente.data_venda,
+        empresa_faturadora=venda_existente.empresa_faturadora,
+        situacao=venda_existente.situacao,
+    )
+    db.session.add(nova_venda)
+    produto.estoque_atual -= quantidade_venda
+    db.session.commit()
+    limpar_cache_dashboard()
+    flash('Produto adicionado ao pedido com sucesso!', 'success')
+    return redirect(url_for('listar_vendas'))
+
+
 @app.route('/vendas/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
 def editar_venda(id):

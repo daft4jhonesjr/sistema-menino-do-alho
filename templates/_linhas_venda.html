@@ -116,6 +116,11 @@
                     {% endfor %}
                 </tbody>
             </table>
+            <div class="mt-3 flex items-center gap-2">
+                <button type="button" onclick="abrirModalAddItem('{{ pedido.primeira_venda_id }}')" class="text-xs bg-emerald-600 hover:bg-emerald-700 text-white py-1 px-3 rounded flex items-center gap-1">
+                    <i data-lucide="plus" class="w-3.5 h-3.5"></i> Adicionar Produto
+                </button>
+            </div>
         </div>
     </td>
 </tr>
