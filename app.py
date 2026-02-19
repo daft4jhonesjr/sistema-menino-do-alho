@@ -28,6 +28,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 import pandas as pd
 import os
 import re
+import urllib.parse
 import tempfile
 import json
 import csv
@@ -5547,6 +5548,44 @@ def ver_boleto_venda(id):
         flash('Arquivo do boleto não encontrado no servidor.', 'error')
         return redirect(request.referrer or url_for('listar_vendas'))
     return send_file(full, mimetype='application/pdf')
+
+
+@app.route('/venda/<int:id>/whatsapp')
+@login_required
+def enviar_whatsapp_boleto(id):
+    """Redireciona para o WhatsApp com mensagem de cobrança e link do boleto."""
+    venda = Venda.query.options(joinedload(Venda.cliente)).get_or_404(id)
+    if not (venda.caminho_boleto or '').strip():
+        flash('Boleto não vinculado a este pedido. Vincule um boleto antes de enviar cobrança.', 'error')
+        return redirect(request.referrer or url_for('listar_vendas'))
+    if not venda.cliente:
+        flash('Cliente não encontrado para esta venda.', 'error')
+        return redirect(request.referrer or url_for('listar_vendas'))
+    telefone = getattr(venda.cliente, 'telefone', None) or ''
+    telefone = (telefone or '').strip()
+    if not telefone:
+        flash('Este cliente não possui um telefone cadastrado.', 'error')
+        return redirect(request.referrer or url_for('listar_vendas'))
+    telefone_limpo = re.sub(r'\D', '', telefone)
+    if len(telefone_limpo) <= 11:
+        telefone_limpo = '55' + telefone_limpo
+    link_boleto = url_for('ver_boleto_venda', id=venda.id, _external=True)
+    vendas_pedido = Venda.query.filter_by(
+        cliente_id=venda.cliente_id,
+        data_venda=venda.data_venda,
+        nf=venda.nf
+    ).all()
+    valor_total = sum(float(v.calcular_total()) for v in vendas_pedido)
+    mensagem = (
+        f"Olá, tudo bem? 🧄\n\n"
+        f"Segue o link do seu boleto referente à NF {venda.nf or 'S/N'} "
+        f"no valor de R$ {valor_total:,.2f}.\n\n"
+        f"📄 Acesse ou baixe seu boleto aqui:\n{link_boleto}\n\n"
+        f"Qualquer dúvida, estamos à disposição!"
+    )
+    mensagem_codificada = urllib.parse.quote(mensagem)
+    url_whatsapp = f"https://wa.me/{telefone_limpo}?text={mensagem_codificada}"
+    return redirect(url_whatsapp)
 
 
 @app.route('/venda/<int:id>/ver_nf')
