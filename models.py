@@ -15,6 +15,9 @@ class Usuario(UserMixin, db.Model):
     role = db.Column(db.String(20), nullable=False, default='user')  # 'admin' ou 'user'
     profile_image_url = db.Column(db.String(500), nullable=True)  # URL da foto de perfil (Cloudinary)
     nome = db.Column(db.String(100), nullable=True)  # Nome completo/real do usuário
+    notifica_boletos = db.Column(db.Boolean, default=True)
+    notifica_radar = db.Column(db.Boolean, default=True)
+    notifica_logistica = db.Column(db.Boolean, default=True)
 
     def is_admin(self):
         """Jhones é sempre admin. Demais seguem role."""

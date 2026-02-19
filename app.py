@@ -1640,7 +1640,7 @@ def _listar_documentos_recem_chegados(user_id=None):
         diag = _diagnosticar_vinculo_falhou(doc)
         nf_nao = diag is not None and diag.get('cenario') == 'C' and 'não localizada' in (diag.get('mensagem') or '')
         documentos.append({
-            'doc': doc,
+                'doc': doc,
             'nome_arquivo': os.path.basename(doc.caminho_arquivo or ''),
             'leitura_ok': True,
             'nf_nao_encontrada': nf_nao,
@@ -2002,28 +2002,28 @@ def admin_required(f):
 
 # Bootstrap do banco: NÃO executa na importação se SKIP_DB_BOOTSTRAP=1 (usado pelo migrate_recreate_db.py)
 if not os.environ.get('SKIP_DB_BOOTSTRAP'):
-    with app.app_context():
-        db.create_all()
+with app.app_context():
+    db.create_all()
+    try:
+        db.session.execute(text('ALTER TABLE produtos ADD COLUMN preco_venda_alvo NUMERIC(10,2)'))
+        db.session.commit()
+    except (OperationalError, Exception):
+        db.session.rollback()
+    # Migração: adicionar quantidade_entrada e popular com estoque_atual existente
+    try:
+        db.session.execute(text('ALTER TABLE produtos ADD COLUMN quantidade_entrada INTEGER DEFAULT 0'))
+        db.session.commit()
+        db.session.execute(text('UPDATE produtos SET quantidade_entrada = estoque_atual WHERE quantidade_entrada = 0 OR quantidade_entrada IS NULL'))
+        db.session.commit()
+    except (OperationalError, Exception):
         try:
-            db.session.execute(text('ALTER TABLE produtos ADD COLUMN preco_venda_alvo NUMERIC(10,2)'))
-            db.session.commit()
-        except (OperationalError, Exception):
-            db.session.rollback()
-        # Migração: adicionar quantidade_entrada e popular com estoque_atual existente
-        try:
-            db.session.execute(text('ALTER TABLE produtos ADD COLUMN quantidade_entrada INTEGER DEFAULT 0'))
-            db.session.commit()
             db.session.execute(text('UPDATE produtos SET quantidade_entrada = estoque_atual WHERE quantidade_entrada = 0 OR quantidade_entrada IS NULL'))
             db.session.commit()
-        except (OperationalError, Exception):
-            try:
-                db.session.execute(text('UPDATE produtos SET quantidade_entrada = estoque_atual WHERE quantidade_entrada = 0 OR quantidade_entrada IS NULL'))
-                db.session.commit()
-            except Exception:
-                db.session.rollback()
-        # Migração: criar tabela documentos se não existir
-        try:
-            db.session.execute(text('''
+        except Exception:
+            db.session.rollback()
+    # Migração: criar tabela documentos se não existir
+    try:
+        db.session.execute(text('''
             CREATE TABLE IF NOT EXISTS documentos (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 caminho_arquivo VARCHAR(500) NOT NULL UNIQUE,
@@ -2037,37 +2037,37 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
                 FOREIGN KEY (venda_id) REFERENCES vendas(id)
             )
         '''))
-            db.session.commit()
-        except (OperationalError, Exception) as e:
-            db.session.rollback()
-        # Migração: caminho_pdf em vendas (PDF vinculado) — apenas para DBs antigos
+        db.session.commit()
+    except (OperationalError, Exception) as e:
+        db.session.rollback()
+    # Migração: caminho_pdf em vendas (PDF vinculado) — apenas para DBs antigos
+    try:
+        db.session.execute(text('ALTER TABLE vendas ADD COLUMN caminho_pdf VARCHAR(500)'))
+        db.session.commit()
+    except (OperationalError, Exception):
+        db.session.rollback()
+    # Migração: caminho_boleto e caminho_nf em vendas
+    for col in ('caminho_boleto', 'caminho_nf'):
         try:
-            db.session.execute(text('ALTER TABLE vendas ADD COLUMN caminho_pdf VARCHAR(500)'))
+            db.session.execute(text(f'ALTER TABLE vendas ADD COLUMN {col} VARCHAR(500)'))
             db.session.commit()
         except (OperationalError, Exception):
             db.session.rollback()
-        # Migração: caminho_boleto e caminho_nf em vendas
-        for col in ('caminho_boleto', 'caminho_nf'):
-            try:
-                db.session.execute(text(f'ALTER TABLE vendas ADD COLUMN {col} VARCHAR(500)'))
-                db.session.commit()
-            except (OperationalError, Exception):
-                db.session.rollback()
-        # Índice em vendas.nf para buscas por NF
-        try:
-            db.session.execute(text('CREATE INDEX IF NOT EXISTS ix_vendas_nf ON vendas(nf)'))
-            db.session.commit()
-        except (OperationalError, Exception):
-            db.session.rollback()
-        # Cache OCR: nf_extraida em documentos (evita re-rodar OCR)
-        try:
-            db.session.execute(text('ALTER TABLE documentos ADD COLUMN nf_extraida VARCHAR(50)'))
-            db.session.commit()
-        except (OperationalError, Exception):
-            db.session.rollback()
-        try:
-            db.session.execute(text("UPDATE documentos SET nf_extraida = numero_nf WHERE nf_extraida IS NULL AND numero_nf IS NOT NULL"))
-            db.session.commit()
+    # Índice em vendas.nf para buscas por NF
+    try:
+        db.session.execute(text('CREATE INDEX IF NOT EXISTS ix_vendas_nf ON vendas(nf)'))
+        db.session.commit()
+    except (OperationalError, Exception):
+        db.session.rollback()
+    # Cache OCR: nf_extraida em documentos (evita re-rodar OCR)
+    try:
+        db.session.execute(text('ALTER TABLE documentos ADD COLUMN nf_extraida VARCHAR(50)'))
+        db.session.commit()
+    except (OperationalError, Exception):
+        db.session.rollback()
+    try:
+        db.session.execute(text("UPDATE documentos SET nf_extraida = numero_nf WHERE nf_extraida IS NULL AND numero_nf IS NOT NULL"))
+        db.session.commit()
         except (OperationalError, Exception):
             db.session.rollback()
         # Migração: usuario_id em documentos (quem processou/recuperou)
@@ -2103,50 +2103,59 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             db.session.commit()
         except (OperationalError, Exception):
             db.session.rollback()
-        # Migração: data_vencimento em vendas (vencimento do boleto extraído do PDF)
-        try:
-            db.session.execute(text('ALTER TABLE vendas ADD COLUMN data_vencimento DATE'))
-            db.session.commit()
-        except (OperationalError, Exception):
-            db.session.rollback()
-        # Backfill data_vencimento em vendas a partir dos Documentos (boletos) vinculados
-        try:
-            for v in Venda.query.filter(Venda.caminho_boleto.isnot(None)).filter(Venda.data_vencimento.is_(None)):
-                doc = Documento.query.filter_by(caminho_arquivo=v.caminho_boleto).first()
-                if doc and doc.data_vencimento:
-                    v.data_vencimento = doc.data_vencimento
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
-        # Verificar se caminho_pdf ainda existe (não foi dropado em migração anterior)
+        # Migração: preferências de notificação em usuarios
+        for col in ('notifica_boletos', 'notifica_radar', 'notifica_logistica'):
+            try:
+                db.session.execute(text(f'ALTER TABLE usuarios ADD COLUMN {col} BOOLEAN DEFAULT 1'))
+                db.session.commit()
+            except (OperationalError, Exception):
+                db.session.rollback()
+    except (OperationalError, Exception):
+        db.session.rollback()
+    # Migração: data_vencimento em vendas (vencimento do boleto extraído do PDF)
+    try:
+        db.session.execute(text('ALTER TABLE vendas ADD COLUMN data_vencimento DATE'))
+        db.session.commit()
+    except (OperationalError, Exception):
+        db.session.rollback()
+    # Backfill data_vencimento em vendas a partir dos Documentos (boletos) vinculados
+    try:
+        for v in Venda.query.filter(Venda.caminho_boleto.isnot(None)).filter(Venda.data_vencimento.is_(None)):
+            doc = Documento.query.filter_by(caminho_arquivo=v.caminho_boleto).first()
+            if doc and doc.data_vencimento:
+                v.data_vencimento = doc.data_vencimento
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+    # Verificar se caminho_pdf ainda existe (não foi dropado em migração anterior)
         uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
         tem_caminho_pdf = False
         if uri and uri.startswith("sqlite"):
-            colunas_vendas = [r[1] for r in db.session.execute(text('PRAGMA table_info(vendas)')).fetchall()]
-            tem_caminho_pdf = 'caminho_pdf' in colunas_vendas
-        if tem_caminho_pdf:
-            try:
-                rp = db.session.execute(text("SELECT id, caminho_pdf FROM vendas WHERE caminho_pdf IS NOT NULL AND trim(caminho_pdf) != ''"))
-                for row in rp:
-                    vid, path = row[0], (row[1] or '').strip()
-                    if not path:
-                        continue
-                    doc = Documento.query.filter_by(venda_id=vid, caminho_arquivo=path).first()
-                    v = Venda.query.get(vid)
-                    if not v:
-                        continue
-                    if doc:
-                        if doc.tipo == 'BOLETO':
-                            v.caminho_boleto = path
-                        else:
-                            v.caminho_nf = path
-                    else:
+    colunas_vendas = [r[1] for r in db.session.execute(text('PRAGMA table_info(vendas)')).fetchall()]
+    tem_caminho_pdf = 'caminho_pdf' in colunas_vendas
+    if tem_caminho_pdf:
+        try:
+            rp = db.session.execute(text("SELECT id, caminho_pdf FROM vendas WHERE caminho_pdf IS NOT NULL AND trim(caminho_pdf) != ''"))
+            for row in rp:
+                vid, path = row[0], (row[1] or '').strip()
+                if not path:
+                    continue
+                doc = Documento.query.filter_by(venda_id=vid, caminho_arquivo=path).first()
+                v = Venda.query.get(vid)
+                if not v:
+                    continue
+                if doc:
+                    if doc.tipo == 'BOLETO':
                         v.caminho_boleto = path
-                db.session.commit()
-            except Exception:
-                db.session.rollback()
-            try:
-                db.session.execute(text('ALTER TABLE vendas DROP COLUMN caminho_pdf'))
+                    else:
+                        v.caminho_nf = path
+                else:
+                    v.caminho_boleto = path
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+        try:
+            db.session.execute(text('ALTER TABLE vendas DROP COLUMN caminho_pdf'))
                 db.session.commit()
             except (OperationalError, Exception):
                 db.session.rollback()
@@ -2173,16 +2182,16 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             db.session.commit()
         except (OperationalError, Exception):
             db.session.rollback()
-        # Jhones sempre admin; criar se não existir
-        u = Usuario.query.filter_by(username='Jhones').first()
-        if not u:
-            u = Usuario(username='Jhones', password_hash=generate_password_hash('admin123'), role='admin')
-            db.session.add(u)
-            db.session.commit()
-        try:
-            _debug_log("app.py:bootstrap", "App started, debug.log active", {"path": DEBUG_LOG_PATH}, "ALL", run_id="bootstrap")
-        except Exception:
-            pass
+    # Jhones sempre admin; criar se não existir
+    u = Usuario.query.filter_by(username='Jhones').first()
+    if not u:
+        u = Usuario(username='Jhones', password_hash=generate_password_hash('admin123'), role='admin')
+        db.session.add(u)
+        db.session.commit()
+    try:
+        _debug_log("app.py:bootstrap", "App started, debug.log active", {"path": DEBUG_LOG_PATH}, "ALL", run_id="bootstrap")
+    except Exception:
+        pass
 
 
 @app.before_request
@@ -2221,7 +2230,7 @@ def login():
             flash('Preencha usuário e senha.', 'error')
             return render_template('auth/login.html')
         try:
-            user = Usuario.query.filter_by(username=username).first()
+        user = Usuario.query.filter_by(username=username).first()
         except Exception:
             db.session.rollback()
             try:
@@ -2252,10 +2261,18 @@ def logout():
     return redirect(url_for('login'))
 
 
-@app.route('/configuracoes')
+@app.route('/configuracoes', methods=['GET', 'POST'])
 @login_required
 def configuracoes():
-    return render_template('configuracoes.html')
+    usuario = current_user
+    if request.method == 'POST':
+        usuario.notifica_boletos = 'notifica_boletos' in request.form
+        usuario.notifica_radar = 'notifica_radar' in request.form
+        usuario.notifica_logistica = 'notifica_logistica' in request.form
+        db.session.commit()
+        flash('Configurações de notificação atualizadas com sucesso!', 'success')
+        return redirect(url_for('configuracoes'))
+    return render_template('configuracoes.html', usuario=usuario)
 
 
 @app.route('/perfil', methods=['GET', 'POST'])
@@ -2568,7 +2585,7 @@ def dashboard():
         func.sum((Venda.preco_venda - Produto.preco_custo) * Venda.quantidade_venda)
     ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
      .filter(filtro_ano_venda).scalar() or 0
-
+    
     # KPI 5b: Prejuízo/Perdas - vendas com lucro negativo - FILTRADO POR ANO
     prejuizo_expr = (Venda.preco_venda - Produto.preco_custo) * Venda.quantidade_venda
     total_prejuizo = db.session.query(
@@ -3226,9 +3243,9 @@ def novo_cliente():
 @login_required
 def editar_cliente(id):
     try:
-        cliente = Cliente.query.get_or_404(id)
+    cliente = Cliente.query.get_or_404(id)
 
-        if request.method == 'POST':
+    if request.method == 'POST':
             cnpj_raw = request.form.get('cnpj', '').strip() or None
             cnpj = None
             if cnpj_raw:
@@ -3239,7 +3256,7 @@ def editar_cliente(id):
                 if cliente_existente and cliente_existente.id != cliente.id:
                     flash(f'CNPJ já está cadastrado para o cliente {cliente_existente.nome_cliente}', 'error')
                     return render_template('clientes/formulario.html', cliente=cliente)
-
+            
             cliente.nome_cliente = request.form.get('nome_cliente') or cliente.nome_cliente
             cliente.razao_social = request.form.get('razao_social', '')
             cliente.cnpj = cnpj
@@ -3251,8 +3268,8 @@ def editar_cliente(id):
 
         return render_template('clientes/formulario.html', cliente=cliente)
 
-    except Exception as e:
-        db.session.rollback()
+        except Exception as e:
+            db.session.rollback()
         print(f"ERRO CRÍTICO NA EDIÇÃO DE CLIENTE {id}: {str(e)}")
         flash(f'Erro interno ao processar cliente: {str(e)}', 'error')
         return redirect(url_for('listar_clientes'))
@@ -3518,11 +3535,11 @@ def _validar_sacola(tipo, nacionalidade, marca, tamanho):
 
     # SACOLA: nacionalidade N/A, marca SOPACK, tamanho P/M/G ou S/N
     if t == 'SACOLA':
-        nacionalidade = 'N/A'
-        marca = 'SOPACK'
+    nacionalidade = 'N/A'
+    marca = 'SOPACK'
         tam_clean = tam.replace(' ', '')
         if tam_clean not in ('P', 'M', 'G', 'S/N'):
-            raise ValueError('Para SACOLA, tamanho deve ser P, M, G ou S/N.')
+        raise ValueError('Para SACOLA, tamanho deve ser P, M, G ou S/N.')
         return nacionalidade, marca, tam_clean
 
     # ALHO: exige nacionalidade (ARGENTINO/NACIONAL/CHINES) e tamanho numérico
@@ -3684,26 +3701,26 @@ def listar_produtos():
         if tipo_key not in produtos_por_tipo:
             produtos_por_tipo[tipo_key] = []
         produtos_por_tipo[tipo_key].append(item)
-    
+
     # Ordenar produtos dentro de cada tipo por data
     for tipo in produtos_por_tipo:
         produtos_por_tipo[tipo].sort(
             key=lambda x: x['produto'].data_chegada.date() if hasattr(x['produto'].data_chegada, 'date') else x['produto'].data_chegada,
             reverse=reverse_order
         )
-    
+
     # Tipos em ordem preferencial
     preferidos = ['ALHO', 'SACOLA', 'CAFE', 'OUTROS']
     restantes = sorted(k for k in produtos_por_tipo if k not in preferidos)
     tipos_ordenados = [t for t in preferidos if t in produtos_por_tipo and produtos_por_tipo[t]] + restantes
-    
+
     produtos_agrupados = {}
     for tipo in tipos_ordenados:
         produtos_agrupados[tipo] = produtos_por_tipo[tipo]
-    
+
     outros_itens = produtos_agrupados.get('OUTROS', [])
     produtos_outros = [{'id': it['produto'].id, 'nome_produto': it['produto'].nome_produto} for it in outros_itens]
-    
+
     # Criar objeto pagination simulado
     class Pagination:
         def __init__(self, page, per_page, total):
@@ -3726,7 +3743,7 @@ def listar_produtos():
         return render_template('_linhas_entrada.html', 
                              produtos_agrupados=produtos_agrupados,
                              current_page=page)
-    
+
     return render_template(
         'produtos/listar.html',
         produtos_agrupados=produtos_agrupados,
@@ -3865,7 +3882,7 @@ def editar_produto(id):
         # Se houver nova entrada, somar ao estoque atual
         if quantidade_entrada > 0:
             produto.estoque_atual += quantidade_entrada
-        
+
         produto.tipo = tipo
         produto.nacionalidade = nacionalidade
         produto.marca = marca
@@ -3875,7 +3892,7 @@ def editar_produto(id):
         produto.preco_custo = Decimal(str(_limpar_valor_moeda(preco_custo)))
         produto.data_chegada = data_chegada
         produto.nome_produto = nome_produto
-
+        
         # Upload de fotos adicionais para Cloudinary (até 5 no total)
         fotos_existentes = ProdutoFoto.query.filter_by(produto_id=produto.id).count()
         slots_disponiveis = max(0, 5 - fotos_existentes)
@@ -5286,25 +5303,25 @@ def excluir_venda(id):
     vendas_do_pedido = query.all()
     
     try:
-        # Restaurar estoque de todos os produtos do pedido
-        logs = []
-        for v in vendas_do_pedido:
-            produto = v.produto
-            quantidade = v.quantidade_venda
-            nome_produto = produto.nome_produto  # Salvar antes de deletar
-            produto.estoque_atual += quantidade
-            logs.append(f"{quantidade} unidades devolvidas ao produto [{nome_produto}]")
-            db.session.delete(v)
-        
-        db.session.commit()
+    # Restaurar estoque de todos os produtos do pedido
+    logs = []
+    for v in vendas_do_pedido:
+        produto = v.produto
+        quantidade = v.quantidade_venda
+        nome_produto = produto.nome_produto  # Salvar antes de deletar
+        produto.estoque_atual += quantidade
+        logs.append(f"{quantidade} unidades devolvidas ao produto [{nome_produto}]")
+        db.session.delete(v)
+    
+    db.session.commit()
         limpar_cache_dashboard()  # Limpar cache após excluir venda
-        
-        # Log detalhado usando variáveis salvas
-        print(f"Pedido excluído (Cliente: {nome_cliente}, NF: {nf_pedido or 'N/A'}, Data: {data_pedido.strftime('%d/%m/%Y')}):")
-        for log in logs:
-            print(f"  - {log}")
-        
-        flash(f'Pedido completo excluído com sucesso! {len(vendas_do_pedido)} item(ns) removido(s).', 'success')
+    
+    # Log detalhado usando variáveis salvas
+    print(f"Pedido excluído (Cliente: {nome_cliente}, NF: {nf_pedido or 'N/A'}, Data: {data_pedido.strftime('%d/%m/%Y')}):")
+    for log in logs:
+        print(f"  - {log}")
+    
+    flash(f'Pedido completo excluído com sucesso! {len(vendas_do_pedido)} item(ns) removido(s).', 'success')
     except Exception as e:
         db.session.rollback()  # OBRIGATÓRIO para destravar o sistema em caso de erro
         print(f"Erro ao deletar venda: {e}")
@@ -5457,8 +5474,8 @@ def ver_boleto_venda(id):
     full = os.path.join(os.path.dirname(os.path.abspath(__file__)), path)
     if os.path.exists(full):
         return send_file(full, mimetype='application/pdf')
-    flash('Arquivo do boleto não encontrado.', 'error')
-    return redirect(url_for('listar_vendas'))
+        flash('Arquivo do boleto não encontrado.', 'error')
+        return redirect(url_for('listar_vendas'))
 
 
 @app.route('/venda/<int:id>/ver_nf')
@@ -5482,8 +5499,8 @@ def ver_nf_venda(id):
     full = os.path.join(os.path.dirname(os.path.abspath(__file__)), path)
     if os.path.exists(full):
         return send_file(full, mimetype='application/pdf')
-    flash('Arquivo da nota fiscal não encontrado no sistema de arquivos.', 'error')
-    return redirect(url_for('listar_vendas'))
+        flash('Arquivo da nota fiscal não encontrado no sistema de arquivos.', 'error')
+        return redirect(url_for('listar_vendas'))
 
 
 @app.route('/upload', methods=['POST'])
