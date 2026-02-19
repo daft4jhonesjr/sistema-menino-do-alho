@@ -3212,23 +3212,22 @@ def novo_cliente():
 @app.route('/clientes/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
 def editar_cliente(id):
-    cliente = Cliente.query.get_or_404(id)
-    if request.method == 'POST':
-        try:
+    try:
+        cliente = Cliente.query.get_or_404(id)
+
+        if request.method == 'POST':
             cnpj_raw = request.form.get('cnpj', '').strip() or None
-            # Aceitar CNPJ com ou sem formatação; salvar apenas dígitos (14) no banco
             cnpj = None
             if cnpj_raw:
                 cnpj_limpo = re.sub(r'\D', '', cnpj_raw)
                 cnpj = cnpj_limpo if len(cnpj_limpo) == 14 else None
             if cnpj and cnpj != (cliente.cnpj or ''):
-                # Verificar se CNPJ já existe em outro cliente
                 cliente_existente = Cliente.query.filter_by(cnpj=cnpj).first()
                 if cliente_existente and cliente_existente.id != cliente.id:
                     flash(f'CNPJ já está cadastrado para o cliente {cliente_existente.nome_cliente}', 'error')
                     return render_template('clientes/formulario.html', cliente=cliente)
-            
-            cliente.nome_cliente = request.form['nome_cliente']
+
+            cliente.nome_cliente = request.form.get('nome_cliente') or cliente.nome_cliente
             cliente.razao_social = request.form.get('razao_social', '')
             cliente.cnpj = cnpj
             cliente.cidade = request.form.get('cidade', '')
@@ -3236,10 +3235,14 @@ def editar_cliente(id):
             db.session.commit()
             flash('Cliente atualizado com sucesso!', 'success')
             return redirect(url_for('listar_clientes'))
-        except Exception as e:
-            db.session.rollback()
-            flash(f'Erro ao atualizar cliente: {str(e)}', 'error')
-    return render_template('clientes/formulario.html', cliente=cliente)
+
+        return render_template('clientes/formulario.html', cliente=cliente)
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"ERRO CRÍTICO NA EDIÇÃO DE CLIENTE {id}: {str(e)}")
+        flash(f'Erro interno ao processar cliente: {str(e)}', 'error')
+        return redirect(url_for('listar_clientes'))
 
 
 @app.route('/clientes/excluir/<int:id>', methods=['POST'])
