@@ -185,11 +185,11 @@
 <!-- Linha de inserção: campos alinhados com a tabela -->
 <div class="mb-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-hidden">
     <form id="form-nova-venda-inline" action="{{ url_for('add_venda') }}" method="POST" class="p-4">
-        <div class="venda-input-group flex flex-col gap-4 w-full">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+        <div class="venda-input-group flex flex-col gap-5 w-full">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-5 items-start">
                 <div class="md:col-span-1 flex flex-col justify-start relative w-full" id="cliente-select-wrap">
                     <label for="inline-cliente_id" class="block text-xs font-medium text-gray-600 dark:text-gray-200 mb-1">Cliente</label>
-                    <select id="inline-cliente_id" name="cliente_id" required class="w-full h-[42px] px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-medium transition-colors">
+                    <select id="inline-cliente_id" name="cliente_id" required class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-emerald-500 dark:focus:border-emerald-500 shadow-sm">
                         <option value="">Digite o nome...</option>
                         {% for c in clientes %}
                         <option value="{{ c.id }}">{{ c.nome_cliente }}</option>
@@ -198,7 +198,7 @@
                 </div>
                 <div class="md:col-span-2 flex flex-col justify-start" id="produto-select-wrap">
                     <label for="inline-produto_id" class="block text-xs font-medium text-gray-600 dark:text-gray-200 mb-1">Produto</label>
-                    <select id="inline-produto_id" name="produto_id" required class="produto-select w-full h-[42px] px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 appearance-none pr-8 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-medium transition-colors">
+                    <select id="inline-produto_id" name="produto_id" required class="produto-select bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-emerald-500 dark:focus:border-emerald-500 shadow-sm appearance-none pr-8">
                         <option value="" class="text-gray-400">Selecione o produto</option>
                         {% for p in produtos %}
                         <option value="{{ p.id }}" data-estoque="{{ p.estoque_atual }}" data-preco="{{ p.preco_custo }}">{{ p.nome_produto }} (Est.: {{ p.estoque_atual }})</option>
@@ -207,32 +207,32 @@
                     <p id="inline-estoque-info" class="mt-0.5 text-xs text-gray-500 dark:text-gray-400"></p>
                 </div>
             </div>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-5">
                 <div>
                     <label for="inline-nf" class="block text-xs font-medium text-gray-600 dark:text-gray-200 mb-1">NF</label>
-                    <input type="text" id="inline-nf" name="nf" placeholder="00123" class="w-full px-2 py-2 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100 text-sm">
+                    <input type="text" id="inline-nf" name="nf" placeholder="00123" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-emerald-500 dark:focus:border-emerald-500 shadow-sm">
                 </div>
                 <div>
                     <label for="inline-quantidade_venda" class="block text-xs font-medium text-gray-600 dark:text-gray-200 mb-1">Qtd</label>
-                    <input type="number" id="inline-quantidade_venda" name="quantidade_venda" value="1" min="1" required placeholder="1" class="w-full px-2 py-2 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100 text-sm">
+                    <input type="number" id="inline-quantidade_venda" name="quantidade_venda" value="1" min="1" required placeholder="1" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-emerald-500 dark:focus:border-emerald-500 shadow-sm">
                 </div>
                 <div>
                     <label for="preco" class="block text-xs font-medium text-gray-600 dark:text-gray-200 mb-1">Preço</label>
-                    <input type="text" id="preco" name="preco_venda" required placeholder="R$ 0,00" class="preco-input w-full px-2 py-2 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100 text-sm" autocomplete="off">
+                    <input type="text" id="preco" name="preco_venda" required placeholder="R$ 0,00" class="preco-input bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-emerald-500 dark:focus:border-emerald-500 shadow-sm" autocomplete="off">
                 </div>
                 <div>
                     <label for="inline-valor-total" class="block text-xs font-medium text-gray-600 dark:text-gray-200 mb-1">Total</label>
-                    <input type="text" id="inline-valor-total" readonly placeholder="R$ 0,00" class="w-full px-2 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-sm cursor-default" tabindex="-1" title="Calculado automaticamente (Preço × Quantidade)">
+                    <input type="text" id="inline-valor-total" readonly placeholder="R$ 0,00" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white shadow-sm cursor-default" tabindex="-1" title="Calculado automaticamente (Preço × Quantidade)">
                 </div>
             </div>
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-5 items-end">
                 <div>
                     <label for="inline-data_venda" class="block text-xs font-medium text-gray-600 dark:text-gray-200 mb-1">Data</label>
-                    <input type="date" id="inline-data_venda" name="data_venda" class="w-full text-xs md:text-sm px-2 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 appearance-none text-center md:text-left">
+                    <input type="date" id="inline-data_venda" name="data_venda" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:focus:ring-emerald-500 dark:focus:border-emerald-500 shadow-sm">
                 </div>
                 <div>
                     <label for="inline-empresa_faturadora" class="block text-xs font-medium text-gray-600 dark:text-gray-200 mb-1">Empresa</label>
-                    <select id="inline-empresa_faturadora" name="empresa_faturadora" required class="w-full px-2 py-2 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100 text-sm">
+                    <select id="inline-empresa_faturadora" name="empresa_faturadora" required class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:focus:ring-emerald-500 dark:focus:border-emerald-500 shadow-sm">
                         <option value="">--</option>
                         <option value="DESTAK">DESTAK</option>
                         <option value="PATY">PATY</option>
@@ -241,7 +241,7 @@
                 </div>
                 <div>
                     <label for="inline-situacao" class="block text-xs font-medium text-gray-600 dark:text-gray-200 mb-1">Situação</label>
-                    <select id="inline-situacao" name="situacao" required class="w-full px-2 py-2 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100 text-sm">
+                    <select id="inline-situacao" name="situacao" required class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:focus:ring-emerald-500 dark:focus:border-emerald-500 shadow-sm">
                         <option value="PENDENTE">PENDENTE</option>
                         <option value="PAGO">PAGO</option>
                     </select>
@@ -358,7 +358,7 @@
     </div>
     <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-hidden">
         <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700" data-bulk-module="vendas" id="tabela-vendas">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 resizable" data-bulk-module="vendas" data-table-id="vendas" id="tabela-vendas">
                 <thead class="bg-gray-50 dark:bg-gray-900/50">
                     <tr>
                         <th class="px-3 py-3 text-center w-12">

@@ -65,6 +65,29 @@
     </script>
     <style>
         body { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; }
+
+        /* Vacina contra Fundo Branco em Inputs no Modo Escuro */
+        .dark input, .dark select, .dark textarea {
+            background-color: #374151 !important;
+            color: #ffffff !important;
+            border-color: #4b5563 !important;
+        }
+
+        .dark input:focus, .dark select:focus, .dark textarea:focus {
+            border-color: #10b981 !important;
+            box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.5) !important;
+            background-color: #374151 !important;
+        }
+
+        /* Correção Suprema para Autofill do Chrome/Safari */
+        .dark input:-webkit-autofill,
+        .dark input:-webkit-autofill:hover,
+        .dark input:-webkit-autofill:focus,
+        .dark input:-webkit-autofill:active {
+            -webkit-box-shadow: 0 0 0 30px #374151 inset !important;
+            -webkit-text-fill-color: white !important;
+            transition: background-color 5000s ease-in-out 0s;
+        }
         
         /* Estilos para agrupamento visual de vendas por NF */
         .venda-grupo-par {
@@ -137,6 +160,13 @@
     {% block head_extras %}{% endblock %}
 </head>
 <body class="bg-emerald-50 text-gray-800 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-500 min-h-screen flex flex-col">
+    <!-- Pull-to-Refresh Indicator (Mobile PWA) -->
+    <div id="ptr-indicator" class="fixed top-0 left-1/2 transform -translate-x-1/2 -translate-y-full z-50 transition-transform duration-200 ease-out flex items-center justify-center w-10 h-10 bg-white dark:bg-gray-800 rounded-full shadow-lg border border-gray-200 dark:border-gray-700 mt-4">
+        <svg id="ptr-spinner" class="w-6 h-6 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        </svg>
+    </div>
+
     <!-- Header -->
     <header class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 shadow-sm">
         <div class="container mx-auto px-4 py-5">
@@ -238,20 +268,6 @@
         </div>
     </nav>
 
-    <!-- Flash Messages -->
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            <div class="container mx-auto px-4 mt-4">
-                {% for category, message in messages %}
-                    <div class="mb-4 p-4 rounded-xl border border-gray-200 shadow-sm {% if category == 'error' %}bg-red-50 text-red-700 border-red-200{% elif category == 'warning' %}bg-amber-50 text-amber-800 border-amber-200{% else %}bg-emerald-50 text-emerald-800 border-emerald-200{% endif %} flex items-center">
-                        <i data-lucide="{% if category == 'error' %}alert-circle{% elif category == 'warning' %}alert-triangle{% else %}check-circle{% endif %}" class="w-5 h-5 mr-3 flex-shrink-0"></i>
-                        {{ message }}
-                    </div>
-                {% endfor %}
-            </div>
-        {% endif %}
-    {% endwith %}
-
     <!-- Main Content -->
     <main class="container mx-auto px-4 py-6 flex-1">
         {% block content %}{% endblock %}
@@ -263,6 +279,9 @@
             <p>&copy; 2026 Menino do Alho - Sistema de Gestão</p>
         </div>
     </footer>
+
+    <!-- Container de Toasts (Notificações Flutuantes) -->
+    <div id="toast-container" class="fixed top-5 right-5 z-[9999] flex flex-col gap-3 max-w-sm w-full"></div>
 
     <!-- Modal: Vendas por Produto/Cliente -->
     <div id="modal-vendas-overlay" class="fixed inset-0 bg-black/50 z-40 hidden" onclick="fecharModalVendas()"></div>
@@ -794,7 +813,8 @@
 
             tables.forEach(function(table, tableIndex) {
                 var ths = table.querySelectorAll('th');
-                var pathKey = 'colunas_ocultas_' + window.location.pathname + '_' + tableIndex;
+                var tableId = table.getAttribute('data-table-id');
+                var pathKey = tableId ? ('hidden_cols_' + tableId) : ('colunas_ocultas_' + window.location.pathname + '_' + tableIndex);
 
                 var wrapper = table.parentElement;
                 var restoreBtn = document.createElement('button');
@@ -854,7 +874,72 @@
                 });
 
                 applyVisibility();
+
+                var tbody = table.querySelector('tbody');
+                if (tbody) {
+                    var observer = new MutationObserver(function() {
+                        applyVisibility();
+                    });
+                    observer.observe(tbody, { childList: true });
+                }
             });
+        });
+    </script>
+    <script>
+        // Sistema de Notificações (Toasts)
+        function showToast(message, type) {
+            type = type || 'success';
+            var container = document.getElementById('toast-container');
+            if (!container) return;
+
+            var colors = {
+                'success': 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 border-l-4 border-emerald-500 text-gray-800 dark:text-white shadow-lg',
+                'error': 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 border-l-4 border-red-500 text-gray-800 dark:text-white shadow-lg',
+                'warning': 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 border-l-4 border-yellow-500 text-gray-800 dark:text-white shadow-lg',
+                'info': 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 border-l-4 border-blue-500 text-gray-800 dark:text-white shadow-lg'
+            };
+
+            var icons = {
+                'success': '<svg class="w-6 h-6 text-emerald-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>',
+                'error': '<svg class="w-6 h-6 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>',
+                'warning': '<svg class="w-6 h-6 text-yellow-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>',
+                'info': '<svg class="w-6 h-6 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>'
+            };
+
+            var toast = document.createElement('div');
+            toast.className = (colors[type] || colors['success']) + ' rounded-lg p-4 flex items-center min-w-[280px] max-w-full transform transition-all duration-300 ease-out translate-x-full opacity-0';
+            toast.innerHTML = '<div class="flex-shrink-0 mr-3">' + (icons[type] || icons['success']) + '</div><div class="flex-1 font-medium text-sm"></div><button type="button" onclick="this.parentElement.remove()" class="ml-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 focus:outline-none flex-shrink-0"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>';
+            toast.querySelector('.flex-1').textContent = message || '';
+
+            container.appendChild(toast);
+
+            requestAnimationFrame(function() {
+                setTimeout(function() {
+                    toast.classList.remove('translate-x-full', 'opacity-0');
+                    toast.classList.add('translate-x-0');
+                }, 10);
+            });
+
+            setTimeout(function() {
+                toast.classList.remove('translate-x-0');
+                toast.classList.add('translate-x-full', 'opacity-0');
+                setTimeout(function() {
+                    if (toast.parentElement) toast.remove();
+                }, 300);
+            }, 4000);
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            var flashMessages = {{ get_flashed_messages(with_categories=true) | tojson }};
+            if (flashMessages && flashMessages.length > 0) {
+                flashMessages.forEach(function(item) {
+                    var category = item[0] || 'info';
+                    var message = item[1] || '';
+                    if (category === 'message') category = 'info';
+                    if (category === 'danger') category = 'error';
+                    showToast(message, category);
+                });
+            }
         });
     </script>
     <script>
@@ -877,6 +962,59 @@
                     }
                 })
                 .catch(function() {});
+        });
+    </script>
+    <script>
+        // Lógica do Pull-to-Refresh (Mobile PWA)
+        document.addEventListener('DOMContentLoaded', function() {
+            var ptrIndicator = document.getElementById('ptr-indicator');
+            var ptrSpinner = document.getElementById('ptr-spinner');
+            if (!ptrIndicator || !ptrSpinner) return;
+
+            var touchStartY = 0;
+            var isPulling = false;
+            var pullThreshold = 80;
+
+            if ('ontouchstart' in window) {
+                document.addEventListener('touchstart', function(e) {
+                    if (window.scrollY === 0) {
+                        touchStartY = e.touches[0].clientY;
+                        isPulling = true;
+                        ptrIndicator.style.transition = 'none';
+                    }
+                }, { passive: true });
+
+                document.addEventListener('touchmove', function(e) {
+                    if (!isPulling) return;
+                    var touchY = e.touches[0].clientY;
+                    var pullDistance = touchY - touchStartY;
+                    if (pullDistance > 0 && window.scrollY === 0) {
+                        var moveY = Math.min(pullDistance * 0.4, 100);
+                        ptrIndicator.style.transform = 'translate(-50%, calc(-100% + ' + moveY + 'px))';
+                        ptrSpinner.style.transform = 'rotate(' + pullDistance + 'deg)';
+                    }
+                }, { passive: true });
+
+                document.addEventListener('touchend', function(e) {
+                    if (!isPulling) return;
+                    isPulling = false;
+                    var touchEndY = e.changedTouches[0].clientY;
+                    var pullDistance = touchEndY - touchStartY;
+                    ptrIndicator.style.transition = 'transform 0.3s ease-out';
+
+                    if (pullDistance > pullThreshold && window.scrollY === 0) {
+                        ptrSpinner.classList.add('animate-spin');
+                        ptrSpinner.style.transform = '';
+                        ptrIndicator.style.transform = 'translate(-50%, 20px)';
+                        setTimeout(function() {
+                            window.location.reload();
+                        }, 400);
+                    } else {
+                        ptrSpinner.style.transform = '';
+                        ptrIndicator.style.transform = 'translate(-50%, -100%)';
+                    }
+                });
+            }
         });
     </script>
 </body>

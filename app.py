@@ -1655,6 +1655,15 @@ app.config.from_object(Config)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
+# Configurações para manter a conexão com o banco sempre viva (Blindagem contra EOF Error)
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_pre_ping': True,   # Testa a conexão antes de usar (evita "SSL SYSCALL error: EOF detected")
+    'pool_recycle': 300,     # Recria conexões a cada 5 minutos para evitar timeout do servidor
+    'pool_timeout': 30,      # Espera 30s por uma conexão antes de dar erro
+    'pool_size': 10,         # Mantém até 10 conexões abertas
+    'max_overflow': 20       # Em pico, pode abrir mais 20
+}
+
 # Configurar Rate Limiting para proteção contra brute force
 limiter = Limiter(
     key_func=get_remote_address,
@@ -1771,11 +1780,16 @@ def limpar_sessao_anterior():
 @app.teardown_appcontext
 def shutdown_session(exception=None):
     """
-    Faxina automática: Toda vez que o site terminar de responder 
+    Faxina automática: Toda vez que o site terminar de responder
     (ou se der erro), ele fecha a conexão com o banco e limpa a memória.
     Isso evita o erro 'PendingRollbackError'.
     """
-    db.session.remove()
+    try:
+        if exception:
+            db.session.rollback()
+        db.session.remove()
+    except Exception as e:
+        print(f"Erro ao fechar conexão DB: {e}")
 
 
 @app.after_request
@@ -2857,6 +2871,7 @@ def editar_lancamento_caixa(id):
     except Exception as e:
         db.session.rollback()
         flash(f'Erro ao atualizar lançamento: {str(e)}', 'error')
+        print(f"Erro no banco (editar_lancamento_caixa): {e}")
     return redirect(url_for('caixa'))
 
 

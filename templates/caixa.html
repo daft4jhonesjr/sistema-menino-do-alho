@@ -211,9 +211,9 @@
                         <option value="Despesa Operacional">Despesa Operacional (Gasolina, etc)</option>
                     </select>
                 </div>
-                <div>
+                <div id="container-forma-simples">
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Forma / Conta</label>
-                    <select name="forma_pagamento" required class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
+                    <select name="forma_pagamento" id="forma_pagamento" class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
                         <option value="Dinheiro">Dinheiro (Espécie)</option>
                         <option value="Pix">Pix / Transferência</option>
                         <option value="Cheque">Cheque</option>
@@ -222,9 +222,53 @@
                 </div>
             </div>
 
-            <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Valor (R$)</label>
-                <input type="text" id="valor" name="valor" placeholder="0,00" required class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-lg font-bold">
+            <input type="hidden" name="is_split" id="is_split" value="false">
+
+            <!-- Modo Simples: valor único -->
+            <div id="container-modo-simples">
+                <div class="flex items-center justify-between gap-2 mb-1">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Valor (R$)</label>
+                    <span id="btn-split" class="text-sm text-emerald-600 dark:text-emerald-400 cursor-pointer hover:underline font-bold flex items-center gap-1">🔀 Dividir em dois pagamentos</span>
+                </div>
+                <input type="text" id="valor" name="valor" placeholder="0,00" class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-lg font-bold">
+            </div>
+
+            <!-- Modo Dividido: dois valores com duas formas -->
+            <div id="container-modo-dividido" class="hidden space-y-4">
+                <div class="flex items-center justify-between gap-2 mb-1">
+                    <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Pagamento dividido</span>
+                    <span id="btn-voltar-split" class="text-sm text-amber-600 dark:text-amber-400 cursor-pointer hover:underline font-bold flex items-center gap-1">↩️ Voltar para pagamento único</span>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Valor 1 (R$)</label>
+                        <input type="text" id="valor1" name="valor1" placeholder="0,00" class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500 font-bold">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Forma 1</label>
+                        <select name="forma1" id="forma1" class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
+                            <option value="Dinheiro">Dinheiro (Espécie)</option>
+                            <option value="Pix">Pix / Transferência</option>
+                            <option value="Cheque">Cheque</option>
+                            <option value="Boleto">Boleto Bancário</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Valor 2 (R$)</label>
+                        <input type="text" id="valor2" name="valor2" placeholder="0,00" class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500 font-bold">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Forma 2</label>
+                        <select name="forma2" id="forma2" class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
+                            <option value="Dinheiro">Dinheiro (Espécie)</option>
+                            <option value="Pix">Pix / Transferência</option>
+                            <option value="Cheque">Cheque</option>
+                            <option value="Boleto">Boleto Bancário</option>
+                        </select>
+                    </div>
+                </div>
             </div>
 
             <div class="pt-4 flex justify-end gap-3">
@@ -291,6 +335,49 @@ function aplicarMascaraMoeda(input) {
 document.addEventListener('DOMContentLoaded', function() {
     var inputValor = document.getElementById('valor');
     if (inputValor) aplicarMascaraMoeda(inputValor);
+    var inputValor1 = document.getElementById('valor1');
+    if (inputValor1) aplicarMascaraMoeda(inputValor1);
+    var inputValor2 = document.getElementById('valor2');
+    if (inputValor2) aplicarMascaraMoeda(inputValor2);
+
+    // Toggle Modo Dividir Pagamento
+    var btnSplit = document.getElementById('btn-split');
+    var btnVoltar = document.getElementById('btn-voltar-split');
+    var containerSimples = document.getElementById('container-modo-simples');
+    var containerDividido = document.getElementById('container-modo-dividido');
+    var containerFormaSimples = document.getElementById('container-forma-simples');
+    var isSplitInput = document.getElementById('is_split');
+    var valorInput = document.getElementById('valor');
+    var valor1Input = document.getElementById('valor1');
+    var valor2Input = document.getElementById('valor2');
+    var formaPagamentoSelect = document.getElementById('forma_pagamento');
+
+    function ativarModoDividido() {
+        containerSimples.classList.add('hidden');
+        containerDividido.classList.remove('hidden');
+        containerFormaSimples.classList.add('hidden');
+        isSplitInput.value = 'true';
+        valorInput.removeAttribute('required');
+        formaPagamentoSelect.removeAttribute('required');
+        valor1Input.setAttribute('required', 'required');
+        valor2Input.setAttribute('required', 'required');
+    }
+    function ativarModoSimples() {
+        containerSimples.classList.remove('hidden');
+        containerDividido.classList.add('hidden');
+        containerFormaSimples.classList.remove('hidden');
+        isSplitInput.value = 'false';
+        valorInput.setAttribute('required', 'required');
+        formaPagamentoSelect.setAttribute('required', 'required');
+        valor1Input.removeAttribute('required');
+        valor2Input.removeAttribute('required');
+        valor1Input.value = '';
+        valor2Input.value = '';
+    }
+    if (btnSplit) btnSplit.onclick = ativarModoDividido;
+    if (btnVoltar) btnVoltar.onclick = ativarModoSimples;
+
+    window.resetModoSplit = ativarModoSimples;
 });
 window.CAIXA_ADD_URL = "{{ url_for('adicionar_caixa') }}";
 window.CAIXA_EDIT_URL_BASE = "{{ url_for('editar_lancamento_caixa', id=0) }}".replace('/0', '');
@@ -305,6 +392,7 @@ function abrirModalNovo() {
     document.getElementById('formLancamentoCaixa').querySelector('[name="tipo"]').value = 'ENTRADA';
     document.getElementById('formLancamentoCaixa').querySelector('[name="categoria"]').value = 'Entrada Cliente';
     document.getElementById('formLancamentoCaixa').querySelector('[name="forma_pagamento"]').value = 'Dinheiro';
+    if (typeof window.resetModoSplit === 'function') window.resetModoSplit();
     var hiddenId = document.getElementById('editLancamentoId');
     if (hiddenId) hiddenId.remove();
     document.getElementById('modalNovoLancamento').classList.remove('hidden');
