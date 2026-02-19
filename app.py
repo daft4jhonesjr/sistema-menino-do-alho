@@ -12,7 +12,6 @@ from sqlalchemy import event
 from sqlalchemy.engine import Engine
 import pytz
 from utils import otimizar_imagem, otimizar_imagem_em_memoria
-from backup import realizar_backup
 
 def get_hoje_brasil():
     """Retorna a data de hoje no fuso horário do Brasil (Recife/São Paulo)."""
@@ -1721,16 +1720,7 @@ def background_organizar_tudo(usuario_id):
 # Criar pasta de uploads se não existir
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# Realizar backup automático do banco de dados ao iniciar
-try:
-    sucesso, mensagem, caminho = realizar_backup()
-    if sucesso:
-        print(f"[INICIO] {mensagem}")
-    else:
-        print(f"[INICIO] AVISO: {mensagem}")
-except Exception as e:
-    print(f"[INICIO] ERRO ao realizar backup automático: {e}")
-    # Não bloquear inicialização se backup falhar
+# Backup SQLite removido: sistema usa PostgreSQL em produção (DATABASE_URL)
 
 db.init_app(app)
 
@@ -2103,13 +2093,24 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             db.session.commit()
         except (OperationalError, Exception):
             db.session.rollback()
-        # Migração: preferências de notificação em usuarios
-        for col in ('notifica_boletos', 'notifica_radar', 'notifica_logistica'):
+        # --- MIGRACAO AUTOMATICA: Colunas de notificacao em usuarios (PostgreSQL) ---
+        try:
+            # ADD COLUMN IF NOT EXISTS garante que só cria na primeira vez (PostgreSQL)
+            db.session.execute(text('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS notifica_boletos BOOLEAN DEFAULT TRUE'))
+            db.session.execute(text('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS notifica_radar BOOLEAN DEFAULT TRUE'))
+            db.session.execute(text('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS notifica_logistica BOOLEAN DEFAULT TRUE'))
+            db.session.commit()
+            print("Migração: Colunas de notificação verificadas/adicionadas com sucesso.")
+        except Exception as e:
+            db.session.rollback()
+            # Fallback para SQLite (não suporta IF NOT EXISTS em ADD COLUMN)
             try:
-                db.session.execute(text(f'ALTER TABLE usuarios ADD COLUMN {col} BOOLEAN DEFAULT 1'))
-                db.session.commit()
+                for col in ('notifica_boletos', 'notifica_radar', 'notifica_logistica'):
+                    db.session.execute(text(f'ALTER TABLE usuarios ADD COLUMN {col} BOOLEAN DEFAULT 1'))
+                    db.session.commit()
             except (OperationalError, Exception):
                 db.session.rollback()
+            print(f"Migração ignorada (provavelmente banco SQLite local ou erro): {e}")
         # Migração: data_vencimento em vendas (vencimento do boleto extraído do PDF)
         try:
             db.session.execute(text('ALTER TABLE vendas ADD COLUMN data_vencimento DATE'))
