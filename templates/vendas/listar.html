@@ -402,15 +402,6 @@
             </table>
         </div>
     </div>
-    
-    <!-- Botão Carregar Mais (apenas na vista lista) -->
-    {% if pagination and pagination.has_next %}
-    <div id="wrap-carregar-mais" class="mt-6 flex justify-center">
-        <button id="btn-carregar-mais" class="bg-emerald-700 text-white px-8 py-3 rounded-xl hover:bg-emerald-600 transition font-semibold flex items-center shadow-sm">
-            <i data-lucide="chevron-down" class="w-5 h-5 mr-2"></i>Carregar Mais Vendas
-        </button>
-    </div>
-    {% endif %}
 
     <!-- Vista em Cards (Grade) -->
     <div id="view-grade" class="hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
@@ -462,6 +453,15 @@
         </div>
         {% endif %}
     </div>
+
+    <!-- Botão Carregar Mais (visível em Lista e Grade) -->
+    {% if pagination and pagination.has_next %}
+    <div id="wrap-carregar-mais" class="mt-6 flex justify-center pb-6">
+        <button id="btn-carregar-mais" class="bg-emerald-700 text-white px-8 py-3 rounded-xl hover:bg-emerald-600 transition font-semibold flex items-center shadow-sm">
+            <i data-lucide="chevron-down" class="w-5 h-5 mr-2"></i>Carregar Mais Vendas
+        </button>
+    </div>
+    {% endif %}
 </div>
 
 <!-- Modal Confirmação Exclusão em Massa -->
@@ -919,7 +919,6 @@ function abrirModalAddItem(idVenda) {
 function mudarVisualizacao(modo) {
     var lista = document.getElementById('view-lista');
     var grade = document.getElementById('view-grade');
-    var wrapCarregarMais = document.getElementById('wrap-carregar-mais');
     var btnLista = document.getElementById('btn-lista');
     var btnGrade = document.getElementById('btn-grade');
     var activeClasses = ['bg-white', 'dark:bg-gray-600', 'shadow', 'text-emerald-600', 'dark:text-emerald-400'];
@@ -928,13 +927,11 @@ function mudarVisualizacao(modo) {
     if (modo === 'grade') {
         lista.classList.add('hidden');
         grade.classList.remove('hidden');
-        if (wrapCarregarMais) wrapCarregarMais.classList.add('hidden');
         if (btnGrade) { activeClasses.forEach(function(c) { btnGrade.classList.add(c); }); inactiveClasses.forEach(function(c) { btnGrade.classList.remove(c); }); }
         if (btnLista) { activeClasses.forEach(function(c) { btnLista.classList.remove(c); }); inactiveClasses.forEach(function(c) { btnLista.classList.add(c); }); }
     } else {
         lista.classList.remove('hidden');
         grade.classList.add('hidden');
-        if (wrapCarregarMais) wrapCarregarMais.classList.remove('hidden');
         if (btnLista) { activeClasses.forEach(function(c) { btnLista.classList.add(c); }); inactiveClasses.forEach(function(c) { btnLista.classList.remove(c); }); }
         if (btnGrade) { activeClasses.forEach(function(c) { btnGrade.classList.remove(c); }); inactiveClasses.forEach(function(c) { btnGrade.classList.add(c); }); }
     }
@@ -1722,6 +1719,8 @@ document.addEventListener('DOMContentLoaded', function() {
     
     if (!btnCarregarMais || !tbody) return;
     
+    var viewGrade = document.getElementById('view-grade');
+
     btnCarregarMais.addEventListener('click', function() {
         if (carregando) return;
         
@@ -1729,42 +1728,40 @@ document.addEventListener('DOMContentLoaded', function() {
         btnCarregarMais.disabled = true;
         btnCarregarMais.innerHTML = '<i data-lucide="loader-2" class="w-5 h-5 mr-2 animate-spin"></i>Carregando...';
         
-        // Construir URL com parâmetros da página atual
         var urlParams = new URLSearchParams(window.location.search);
         urlParams.set('page', paginaAtual + 1);
         urlParams.set('ajax', '1');
-        
-        // Manter filtros e ordenação
         var url = '{{ url_for("listar_vendas") }}?' + urlParams.toString();
         
         fetch(url, {
             method: 'GET',
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest'
-            }
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
         })
         .then(function(response) {
-            if (!response.ok) {
-                throw new Error('Erro ao carregar vendas');
-            }
-            return response.text();
+            if (!response.ok) throw new Error('Erro ao carregar vendas');
+            return response.json();
         })
-        .then(function(html) {
-            if (!html || html.trim() === '') {
-                // Não há mais vendas, esconder botão
-                btnCarregarMais.parentElement.style.display = 'none';
+        .then(function(data) {
+            var rowsHtml = (data && data.rows) ? data.rows.trim() : '';
+            var cardsHtml = (data && data.cards) ? data.cards.trim() : '';
+            if (!rowsHtml && !cardsHtml) {
+                if (btnCarregarMais.parentElement) btnCarregarMais.parentElement.style.display = 'none';
                 carregando = false;
                 return;
             }
             
-            // Contar quantas linhas de resumo existem antes de adicionar
             var linhasAntes = tbody.querySelectorAll('tr.pedido-resumo').length;
             
-            // Inserir HTML diretamente no final do tbody usando insertAdjacentHTML
-            // Isso preserva a estrutura correta e evita problemas de manipulação de DOM
-            tbody.insertAdjacentHTML('beforeend', html.trim());
+            if (rowsHtml) {
+                tbody.insertAdjacentHTML('beforeend', rowsHtml);
+            }
             
-            // Contar quantas linhas de resumo existem depois de adicionar
+            if (cardsHtml && viewGrade) {
+                var emptyDiv = viewGrade.querySelector('.col-span-full');
+                if (emptyDiv) emptyDiv.remove();
+                viewGrade.insertAdjacentHTML('beforeend', cardsHtml);
+            }
+            
             var linhasDepois = tbody.querySelectorAll('tr.pedido-resumo').length;
             var pedidosCarregados = linhasDepois - linhasAntes;
             

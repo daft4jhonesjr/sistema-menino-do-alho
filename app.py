@@ -4770,10 +4770,10 @@ def listar_vendas():
     is_ajax = request.args.get('ajax', type=int) == 1
     
     if is_ajax:
-        # Renderizar apenas o template parcial com as linhas
-        return render_template('_linhas_venda.html', 
-                             pedidos=pedidos_paginados,
-                             current_page=page)
+        # Renderizar linhas (tabela) e cards (grade) para paginação em ambos os modos
+        rows_html = render_template('_linhas_venda.html', pedidos=pedidos_paginados, current_page=page)
+        cards_html = render_template('_cards_venda.html', pedidos=pedidos_paginados)
+        return jsonify(rows=rows_html, cards=cards_html)
     
     # Buscar informações do filtro para exibição
     produto_filtro = None
