@@ -173,25 +173,6 @@
     </div>
 </div>
 
-<!-- Análise Geral de Vendas (Gráficos Doughnut) -->
-<div class="mt-8 mb-8">
-    <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-4">Análise Geral de Vendas</h2>
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 border border-gray-100 dark:border-gray-700">
-            <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-400 text-center mb-4">Por Situação</h3>
-            <div class="relative h-48 w-full"><canvas id="chartSituacao"></canvas></div>
-        </div>
-        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 border border-gray-100 dark:border-gray-700">
-            <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-400 text-center mb-4">Por Forma de Pagamento</h3>
-            <div class="relative h-48 w-full"><canvas id="chartPagamento"></canvas></div>
-        </div>
-        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 border border-gray-100 dark:border-gray-700">
-            <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-400 text-center mb-4">Por Empresa Faturadora</h3>
-            <div class="relative h-48 w-full"><canvas id="chartEmpresa"></canvas></div>
-        </div>
-    </div>
-</div>
-
 <!-- Documentos Recém-Chegados -->
 <section class="mb-8">
     <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
@@ -843,46 +824,6 @@
             }
         }
     });
-})();
-
-// Gráficos Doughnut (Situação, Forma de Pagamento, Empresa Faturadora)
-(function() {
-    var dados = {{ graficos_data | tojson | safe }};
-    var coresElegantes = [
-        '#10B981', // Emerald 500
-        '#3B82F6', // Blue 500
-        '#F59E0B', // Amber 500
-        '#EF4444', // Red 500
-        '#8B5CF6', // Violet 500
-        '#64748B'  // Slate 500
-    ];
-    function criarGrafico(idElemento, dadosObjeto) {
-        var ctx = document.getElementById(idElemento);
-        if (!ctx || !dadosObjeto || Object.keys(dadosObjeto).length === 0) return;
-        new Chart(ctx, {
-            type: 'doughnut',
-            data: {
-                labels: Object.keys(dadosObjeto),
-                datasets: [{
-                    data: Object.values(dadosObjeto),
-                    backgroundColor: coresElegantes,
-                    borderWidth: 0,
-                    hoverOffset: 4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                cutout: '70%',
-                plugins: {
-                    legend: { position: 'bottom', labels: { boxWidth: 12, usePointStyle: true, color: '#6B7280' } }
-                }
-            }
-        });
-    }
-    criarGrafico('chartSituacao', dados.situacao);
-    criarGrafico('chartPagamento', dados.pagamento);
-    criarGrafico('chartEmpresa', dados.empresa);
 })();
 
 // Modal de vínculo de documentos

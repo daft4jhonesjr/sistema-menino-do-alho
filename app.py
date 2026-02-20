@@ -2781,22 +2781,6 @@ def dashboard():
     
     faturamento_total = float(total_pendente) + float(total_pago)
 
-    # Agregações para os Gráficos (Situação, Forma de Pagamento, Empresa Faturadora)
-    dist_situacao = db.session.query(Venda.situacao, func.count(Venda.id)).filter(
-        Venda.situacao != None, filtro_ano_venda
-    ).group_by(Venda.situacao).all()
-    dist_pagamento = db.session.query(Venda.forma_pagamento, func.count(Venda.id)).filter(
-        Venda.forma_pagamento != None, filtro_ano_venda
-    ).group_by(Venda.forma_pagamento).all()
-    dist_empresa = db.session.query(Venda.empresa_faturadora, func.count(Venda.id)).filter(
-        Venda.empresa_faturadora != None, filtro_ano_venda
-    ).group_by(Venda.empresa_faturadora).all()
-    graficos_data = {
-        'situacao': {str(k): v for k, v in dist_situacao if k},
-        'pagamento': {str(k): v for k, v in dist_pagamento if k},
-        'empresa': {str(k): v for k, v in dist_empresa if k}
-    }
-
     # Radar de Recompra: alertas por cliente/produto (média calculada por produto)
     alertas_recompra = get_radar_recompra()
     
@@ -2832,7 +2816,6 @@ def dashboard():
                          data_lucro=data_lucro,
                          data_caixas=data_caixas,
                          detalhamento_mensal=detalhamento_mensal,
-                         graficos_data=graficos_data,
                          alertas_recompra=alertas_recompra)
 
 
@@ -4949,6 +4932,23 @@ def listar_vendas():
     todos_clientes = Cliente.query.order_by(Cliente.nome_cliente).limit(500).all()
     todos_produtos = Produto.query.order_by(Produto.nome_produto).limit(500).all()
     
+    # Agregações para os Gráficos (Situação, Forma de Pagamento, Empresa Faturadora)
+    filtro_ano_venda = extract('year', Venda.data_venda) == ano_ativo
+    dist_situacao = db.session.query(Venda.situacao, func.count(Venda.id)).filter(
+        Venda.situacao != None, filtro_ano_venda
+    ).group_by(Venda.situacao).all()
+    dist_pagamento = db.session.query(Venda.forma_pagamento, func.count(Venda.id)).filter(
+        Venda.forma_pagamento != None, filtro_ano_venda
+    ).group_by(Venda.forma_pagamento).all()
+    dist_empresa = db.session.query(Venda.empresa_faturadora, func.count(Venda.id)).filter(
+        Venda.empresa_faturadora != None, filtro_ano_venda
+    ).group_by(Venda.empresa_faturadora).all()
+    graficos_data = {
+        'situacao': {str(k): v for k, v in dist_situacao if k},
+        'pagamento': {str(k): v for k, v in dist_pagamento if k},
+        'empresa': {str(k): v for k, v in dist_empresa if k}
+    }
+    
     return render_template('vendas/listar.html', 
                          pedidos=pedidos_paginados,
                          pagination=pagination,
@@ -4960,7 +4960,8 @@ def listar_vendas():
                          todos_produtos=todos_produtos,
                          ordem_data=ordem_data,
                          ordenar_por=ordenar_por,
-                         filtro_vencidos=filtro_vencidos)
+                         filtro_vencidos=filtro_vencidos,
+                         graficos_data=graficos_data)
 
 
 @app.route('/logistica')
