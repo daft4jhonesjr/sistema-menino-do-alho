@@ -3074,7 +3074,19 @@ def deletar_caixa(id):
 @app.route('/caixa/deletar_massa', methods=['POST'])
 @login_required
 def deletar_massa_caixa():
+    deletar_tudo = request.form.get('deletar_tudo') == '1'
     ids = request.form.getlist('lancamento_ids')
+
+    if deletar_tudo:
+        try:
+            count = LancamentoCaixa.query.delete()
+            db.session.commit()
+            flash(f'{count} lançamentos apagados com sucesso!', 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Erro ao excluir lançamentos: {str(e)}', 'error')
+        return redirect(url_for('caixa'))
+
     if not ids:
         flash('Nenhum lançamento selecionado para exclusão.', 'error')
         return redirect(url_for('caixa'))
