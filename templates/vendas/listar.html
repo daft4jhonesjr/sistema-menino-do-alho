@@ -395,8 +395,30 @@
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Lucro Total</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Vencimento</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Empresa</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Situação</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Forma Pagto</th>
+                        {% set url_th_situacao = {} %}
+                        {% if request.args.get('produto_id') %}{% set _ = url_th_situacao.update({'produto_id': request.args.get('produto_id')}) %}{% endif %}
+                        {% if request.args.get('cliente_id') %}{% set _ = url_th_situacao.update({'cliente_id': request.args.get('cliente_id')}) %}{% endif %}
+                        {% if filtro_vencidos %}{% set _ = url_th_situacao.update({'filtro_vencidos': 1}) %}{% endif %}
+                        {% set _ = url_th_situacao.update({'ordem_data': ordem_data}) %}
+                        {% set _ = url_th_situacao.update({'ordenar_por': 'situacao'}) %}
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                            <a href="{{ url_for('listar_vendas', **url_th_situacao) }}" class="flex items-center gap-1 no-underline text-inherit">
+                                Situação
+                                <svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path></svg>
+                            </a>
+                        </th>
+                        {% set url_th_forma = {} %}
+                        {% if request.args.get('produto_id') %}{% set _ = url_th_forma.update({'produto_id': request.args.get('produto_id')}) %}{% endif %}
+                        {% if request.args.get('cliente_id') %}{% set _ = url_th_forma.update({'cliente_id': request.args.get('cliente_id')}) %}{% endif %}
+                        {% if filtro_vencidos %}{% set _ = url_th_forma.update({'filtro_vencidos': 1}) %}{% endif %}
+                        {% set _ = url_th_forma.update({'ordem_data': ordem_data}) %}
+                        {% set _ = url_th_forma.update({'ordenar_por': 'forma_pagamento'}) %}
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                            <a href="{{ url_for('listar_vendas', **url_th_forma) }}" class="flex items-center gap-1 no-underline text-inherit">
+                                Forma Pagto
+                                <svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path></svg>
+                            </a>
+                        </th>
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Ações</th>
                     </tr>
                 </thead>

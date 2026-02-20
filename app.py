@@ -4623,7 +4623,8 @@ def listar_vendas():
     cliente_id = request.args.get('cliente_id', type=int)
     filtro_vencidos = request.args.get('filtro_vencidos', type=int) == 1
 
-    # Ordenação por data ou vencimento (padrão: decrescente)
+    # Ordenação por data, vencimento ou colunas clicáveis (situacao, forma_pagamento)
+    ordenar_por = request.args.get('ordenar_por')
     ordem_data = request.args.get('ordem_data') or session.get('ordem_data_vendas', 'decrescente')
     if ordem_data not in ('crescente', 'decrescente', 'vencimento_crescente', 'vencimento_decrescente'):
         ordem_data = 'decrescente'
@@ -4731,11 +4732,9 @@ def listar_vendas():
             pedidos_agrupados.append(pedidos_dict[pedido_key])
             pedidos_keys_vistos.add(pedido_key)
     
-    # Ordenar pedidos por data_venda conforme escolha do usuário (exceto se for por vencimento)
-    # A ordenação por vencimento é feita após o loop que define data_vencimento
-    if ordem_data in ('crescente', 'decrescente'):
+    # Ordenar pedidos por data (ordenar_por e vencimento são aplicados após o loop que define situacao)
+    if not ordenar_por and ordem_data in ('crescente', 'decrescente'):
         reverse_order = (ordem_data == 'decrescente')
-        # Normalizar data_venda para comparação (garantir que seja date, não datetime)
         pedidos_agrupados.sort(
             key=lambda x: x['data_venda'].date() if hasattr(x['data_venda'], 'date') else x['data_venda'],
             reverse=reverse_order
@@ -4829,9 +4828,21 @@ def listar_vendas():
     _debug_log("app.py:listar-summary", "Pedidos com NF/boleto", {"total_pedidos": len(pedidos_agrupados), "com_nf": n_nf, "com_boleto": n_boleto}, "H3")
     # #endregion
     
-    # Ordenação por vencimento (se solicitado)
-    # Pedidos sem vencimento ficam no final
-    if ordem_data == 'vencimento_crescente':
+    # Ordenação por coluna clicável (situacao, forma_pagamento) ou por vencimento
+    # Situacao e forma_pagamento usam data_venda desc como critério secundário
+    if ordenar_por == 'situacao':
+        pedidos_agrupados.sort(
+            key=lambda x: (x.get('data_venda').date() if hasattr(x.get('data_venda'), 'date') else x.get('data_venda') or date.min),
+            reverse=True
+        )
+        pedidos_agrupados.sort(key=lambda x: str(x.get('situacao') or ''))
+    elif ordenar_por == 'forma_pagamento':
+        pedidos_agrupados.sort(
+            key=lambda x: (x.get('data_venda').date() if hasattr(x.get('data_venda'), 'date') else x.get('data_venda') or date.min),
+            reverse=True
+        )
+        pedidos_agrupados.sort(key=lambda x: str(x.get('forma_pagamento') or ''))
+    elif ordem_data == 'vencimento_crescente':
         pedidos_agrupados.sort(
             key=lambda x: (x.get('data_vencimento') is None, x.get('data_vencimento') or date.max)
         )
@@ -4919,6 +4930,7 @@ def listar_vendas():
                          todos_clientes=todos_clientes,
                          todos_produtos=todos_produtos,
                          ordem_data=ordem_data,
+                         ordenar_por=ordenar_por,
                          filtro_vencidos=filtro_vencidos)
 
 
