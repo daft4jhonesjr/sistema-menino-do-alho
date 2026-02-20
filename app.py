@@ -2769,6 +2769,22 @@ def dashboard():
     
     faturamento_total = float(total_pendente) + float(total_pago)
 
+    # Agregações para os Gráficos (Situação, Forma de Pagamento, Empresa Faturadora)
+    dist_situacao = db.session.query(Venda.situacao, func.count(Venda.id)).filter(
+        Venda.situacao != None, filtro_ano_venda
+    ).group_by(Venda.situacao).all()
+    dist_pagamento = db.session.query(Venda.forma_pagamento, func.count(Venda.id)).filter(
+        Venda.forma_pagamento != None, filtro_ano_venda
+    ).group_by(Venda.forma_pagamento).all()
+    dist_empresa = db.session.query(Venda.empresa_faturadora, func.count(Venda.id)).filter(
+        Venda.empresa_faturadora != None, filtro_ano_venda
+    ).group_by(Venda.empresa_faturadora).all()
+    graficos_data = {
+        'situacao': {str(k): v for k, v in dist_situacao if k},
+        'pagamento': {str(k): v for k, v in dist_pagamento if k},
+        'empresa': {str(k): v for k, v in dist_empresa if k}
+    }
+
     # Radar de Recompra: alertas por cliente/produto (média calculada por produto)
     alertas_recompra = get_radar_recompra()
     
@@ -2804,6 +2820,7 @@ def dashboard():
                          data_lucro=data_lucro,
                          data_caixas=data_caixas,
                          detalhamento_mensal=detalhamento_mensal,
+                         graficos_data=graficos_data,
                          alertas_recompra=alertas_recompra)
 
 

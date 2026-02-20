@@ -184,7 +184,7 @@
 
 <!-- Linha de inserção: campos alinhados com a tabela -->
 <div class="mb-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-hidden">
-    <form id="form-nova-venda-inline" action="{{ url_for('add_venda') }}" method="POST" class="p-4">
+        <form id="form-nova-venda-inline" action="{{ url_for('add_venda') }}" method="POST" class="p-4" novalidate>
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         <div class="venda-input-group flex flex-col gap-5 w-full">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-5 items-start">
@@ -285,6 +285,7 @@
                     <th class="px-4 py-2 text-right text-xs font-medium text-emerald-800 dark:text-emerald-300 uppercase">Preço</th>
                     <th class="px-4 py-2 text-right text-xs font-medium text-emerald-800 dark:text-emerald-300 uppercase">Lucro</th>
                     <th class="px-4 py-2 text-right text-xs font-medium text-emerald-800 dark:text-emerald-300 uppercase">Total</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-emerald-800 dark:text-emerald-300 uppercase">Forma Pagto</th>
                     <th class="px-4 py-2 w-12"></th>
                 </tr>
             </thead>
@@ -1250,7 +1251,8 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!dataVal) dataVal = new Date().toISOString().split('T')[0];
         var empresa = (form.querySelector('[name="empresa_faturadora"]') && form.querySelector('[name="empresa_faturadora"]').value) || '';
         var situacao = (form.querySelector('[name="situacao"]') && form.querySelector('[name="situacao"]').value) || 'PENDENTE';
-        var formaPagamento = (form.querySelector('[name="forma_pagamento"]') && form.querySelector('[name="forma_pagamento"]').value) || '';
+        var formaPagEl = document.getElementById('inline-forma_pagamento');
+        var formaPagamento = (formaPagEl && formaPagEl.value) ? String(formaPagEl.value).trim() : '';
         if (!cid || !pid) return null;
         if (qtd < 1 || preco <= 0 || !empresa) return null;
         var total = preco * qtd;
@@ -1299,6 +1301,7 @@ document.addEventListener('DOMContentLoaded', function() {
             var lucro = typeof it.lucro === 'number' ? it.lucro : 0;
             var lucroStr = formatoMoeda(lucro);
             var lucroClass = lucro > 0 ? 'text-emerald-600 dark:text-emerald-400 font-medium' : (lucro < 0 ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-amber-600 dark:text-amber-400 font-medium');
+            var formaPagStr = (it.forma_pagamento && it.forma_pagamento.trim()) ? it.forma_pagamento : '-';
             tr.innerHTML =
                 '<td class="px-4 py-2 text-sm font-medium text-gray-900 dark:text-gray-100">' + (it.cliente_nome || '-') + '</td>' +
                 '<td class="px-4 py-2 text-sm text-gray-900 dark:text-gray-100">' + (it.produto_nome || '-') + '</td>' +
@@ -1307,6 +1310,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 '<td class="px-4 py-2 text-sm text-gray-900 dark:text-gray-100 text-right">' + precoStr + '</td>' +
                 '<td class="px-4 py-2 text-sm text-right ' + lucroClass + '">' + lucroStr + '</td>' +
                 '<td class="px-4 py-2 text-sm font-bold text-gray-900 dark:text-gray-100 text-right">' + totalStr + '</td>' +
+                '<td class="px-4 py-2 text-sm text-gray-900 dark:text-gray-100"><span class="px-2 py-0.5 text-xs rounded ' + (formaPagStr !== '-' ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300' : 'text-gray-400 dark:text-gray-500') + '">' + formaPagStr + '</span></td>' +
                 '<td class="px-4 py-2 text-right"><button type="button" class="carrinho-remover text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 inline-flex p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/30" data-index="' + i + '" title="Remover do carrinho"><i data-lucide="trash-2" class="w-4 h-4"></i></button></td>';
             carrinhoTbody.appendChild(tr);
         }
