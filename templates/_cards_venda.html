@@ -8,16 +8,19 @@
             <h3 class="font-bold text-lg text-gray-800 dark:text-white">{{ pedido.cliente_nome }}</h3>
             <span class="text-xs text-gray-500 dark:text-gray-400">NF: {{ pedido.nf or '-' }}</span>
         </div>
-        <span class="px-2 py-1 text-xs rounded-full {{ 'bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300' if pedido.situacao == 'PENDENTE' else 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300' }}">
-            {{ pedido.situacao }}
-        </span>
+        <div class="text-right">
+            <span class="text-[10px] text-gray-500 dark:text-gray-400 uppercase block">Situação</span>
+            <span class="px-2 py-1 text-xs rounded-full {{ 'bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300' if pedido.situacao == 'PENDENTE' else 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300' }}">
+                {{ pedido.situacao }}
+            </span>
+        </div>
     </div>
     <div class="text-sm text-gray-600 dark:text-gray-300 mb-3">
         <p class="text-gray-500 dark:text-gray-400">📦 {{ pedido.total_quantidade }} itens</p>
         <p class="font-bold text-emerald-600 dark:text-emerald-400 text-lg mt-1">{{ pedido.total_valor|formato_moeda }}</p>
         <p class="text-xs mt-1">📅 Venc.: {% if pedido.data_vencimento %}{{ pedido.data_vencimento.strftime('%d/%m/%Y') }}{% else %}---{% endif %}</p>
         {% if pedido.forma_pagamento %}
-        <p class="text-xs mt-1"><span class="px-2 py-0.5 rounded {% if pedido.forma_pagamento|upper == 'BOLETO' %}bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300{% else %}bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300{% endif %}">{{ pedido.forma_pagamento }}</span></p>
+        <p class="text-xs mt-1"><span class="text-gray-500 dark:text-gray-400 uppercase">Forma Pagto:</span> <span class="px-2 py-0.5 rounded {% if pedido.forma_pagamento|upper == 'BOLETO' %}bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300{% else %}bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300{% endif %}">{{ pedido.forma_pagamento }}</span></p>
         {% endif %}
     </div>
     <div class="flex justify-end gap-2 pt-3 border-t border-gray-100 dark:border-gray-700 flex-wrap">
