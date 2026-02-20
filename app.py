@@ -1964,6 +1964,34 @@ def inject_ano_ativo():
     }
 
 
+@app.context_processor
+def injetar_alertas():
+    """Disponibiliza alertas_sistema (boletos vencendo, radar, logística) em todos os templates."""
+    alertas = []
+    try:
+        if current_user.is_authenticated:
+            # 1. Alerta de Boletos Vencendo
+            if getattr(current_user, 'notifica_boletos', False):
+                boletos_vencendo = Venda.query.filter(
+                    Venda.situacao == 'PENDENTE',
+                    Venda.data_vencimento <= date.today()
+                ).count()
+                if boletos_vencendo > 0:
+                    alertas.append({
+                        'id': 'alerta_boletos',
+                        'titulo': 'Cobranças Pendentes',
+                        'mensagem': f'Você tem {boletos_vencendo} boleto(s) vencendo hoje ou atrasados.',
+                        'cor': 'red',
+                        'cor_border': 'border-red-500',
+                        'cor_text': 'text-red-600',
+                        'link': url_for('listar_vendas', filtro_vencidos=1, ordem_data='decrescente')
+                    })
+            # (As lógicas do Radar e da Logística serão expandidas no futuro, a base está pronta)
+    except Exception:
+        pass
+    return dict(alertas_sistema=alertas)
+
+
 @app.route('/alterar_ano/<int:ano>')
 @login_required
 def alterar_ano(ano):

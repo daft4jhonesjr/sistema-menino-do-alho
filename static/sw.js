@@ -4,8 +4,6 @@ const CACHE_NAME = 'menino-alho-v1';
 const ASSETS_TO_CACHE = [
     '/static/images/logo_menino_do_alho_amarelo1.jpeg',
     '/static/manifest.json',
-    '/static/icon-192x192.png',
-    '/static/icon-512x512.png',
     'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js',
     'https://cdnjs.cloudflare.com/ajax/libs/pulltorefreshjs/0.1.22/index.umd.min.js'
 ];

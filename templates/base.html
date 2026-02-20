@@ -1168,5 +1168,55 @@
             }
         });
     </script>
+
+    {% if alertas_sistema %}
+    <!-- Container de Alertas do Sistema (Boletos, Radar, Logística) -->
+    <div id="alertas-sistema-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-3">
+        {% for alerta in alertas_sistema %}
+        <div id="{{ alerta.id }}" class="hidden max-w-sm w-full bg-white dark:bg-gray-800 shadow-lg rounded-lg pointer-events-auto overflow-hidden transition-all duration-300 transform translate-y-2 opacity-0 border-l-4 {{ alerta.cor_border|default('border-red-500') }}">
+            <div class="p-4 flex items-start">
+                <div class="flex-1">
+                    <p class="text-sm font-bold text-gray-900 dark:text-white">{{ alerta.titulo }}</p>
+                    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ alerta.mensagem }}</p>
+                    {% if alerta.link %}
+                    <a href="{{ alerta.link }}" class="mt-2 inline-block text-xs font-semibold {{ alerta.cor_text|default('text-red-600') }} hover:opacity-80">Ver detalhes &rarr;</a>
+                    {% endif %}
+                </div>
+                <button type="button" onclick="fecharAlerta('{{ alerta.id }}')" class="ml-4 text-gray-400 hover:text-gray-500 focus:outline-none flex-shrink-0">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    <script>
+    function fecharAlerta(alertaId) {
+        var el = document.getElementById(alertaId);
+        if (el) {
+            el.classList.add('opacity-0', 'translate-y-2');
+            setTimeout(function() { el.classList.add('hidden'); }, 300);
+            localStorage.setItem('silenciar_' + alertaId, String(new Date().getTime() + 2 * 60 * 60 * 1000));
+        }
+    }
+    document.addEventListener('DOMContentLoaded', function() {
+        var tempoAtual = new Date().getTime();
+        {% for alerta in alertas_sistema %}
+        (function() {
+            var alertaId = '{{ alerta.id }}';
+            var silencioAte = localStorage.getItem('silenciar_' + alertaId);
+            if (!silencioAte || tempoAtual > parseInt(silencioAte, 10)) {
+                var el = document.getElementById(alertaId);
+                if (el) {
+                    el.classList.remove('hidden');
+                    setTimeout(function() {
+                        el.classList.remove('opacity-0', 'translate-y-2');
+                    }, 100);
+                }
+            }
+        })();
+        {% endfor %}
+    });
+    </script>
+    {% endif %}
 </body>
 </html>
