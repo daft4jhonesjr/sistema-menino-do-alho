@@ -2002,14 +2002,27 @@ document.addEventListener('DOMContentLoaded', function() {
         '#64748B'  // Slate 500
     ];
     function criarGrafico(idElemento, dadosObjeto) {
-        var ctx = document.getElementById(idElemento);
+        const ctx = document.getElementById(idElemento);
         if (!ctx || !dadosObjeto || Object.keys(dadosObjeto).length === 0) return;
+        
+        const valores = Object.values(dadosObjeto);
+        const labelsOriginais = Object.keys(dadosObjeto);
+        
+        // Calcula o total para a porcentagem
+        const total = valores.reduce((acc, val) => acc + val, 0);
+        // Cria novas labels com o formato: "Nome: Valor (X%)"
+        const labelsComPorcentagem = labelsOriginais.map((label, index) => {
+            const valor = valores[index];
+            const porcentagem = total > 0 ? ((valor / total) * 100).toFixed(1) : 0;
+            return `${label}: ${valor} (${porcentagem}%)`;
+        });
+        
         new Chart(ctx, {
             type: 'doughnut',
             data: {
-                labels: Object.keys(dadosObjeto),
+                labels: labelsComPorcentagem,
                 datasets: [{
-                    data: Object.values(dadosObjeto),
+                    data: valores,
                     backgroundColor: coresElegantes,
                     borderWidth: 0,
                     hoverOffset: 4
@@ -2018,9 +2031,26 @@ document.addEventListener('DOMContentLoaded', function() {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                cutout: '70%',
+                cutout: '65%',
                 plugins: {
-                    legend: { position: 'bottom', labels: { boxWidth: 12, usePointStyle: true, color: '#6B7280' } }
+                    legend: { 
+                        position: 'bottom', 
+                        labels: { 
+                            boxWidth: 12, 
+                            usePointStyle: true, 
+                            color: '#6B7280',
+                            font: { size: 11 }
+                        } 
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const valor = context.parsed;
+                                const porcentagem = total > 0 ? ((valor / total) * 100).toFixed(1) : 0;
+                                return ` ${valor} registro(s) - ${porcentagem}%`;
+                            }
+                        }
+                    }
                 }
             }
         });
