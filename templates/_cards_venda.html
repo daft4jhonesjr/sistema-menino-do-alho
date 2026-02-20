@@ -1,7 +1,17 @@
 {% if pedidos %}
 {% for pedido in pedidos %}
+{% set data_pedido = pedido.data_venda.date() if hasattr(pedido.data_venda, 'date') else pedido.data_venda %}
 {% set row_vencida = pedido.is_vencido %}
-<div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 {{ 'border-l-4 border-l-red-500' if row_vencida else 'border-l-4 border-l-emerald-500' }}">
+{% if row_vencida %}
+{% set card_bg_class = 'bg-white dark:bg-gray-800' %}
+{% elif data_pedido == hoje %}
+{% set card_bg_class = 'bg-emerald-50 dark:bg-emerald-900/20' %}
+{% elif data_pedido == ontem %}
+{% set card_bg_class = 'bg-blue-50 dark:bg-blue-900/20' %}
+{% else %}
+{% set card_bg_class = 'bg-white dark:bg-gray-800' %}
+{% endif %}
+<div class="{{ card_bg_class }} rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 {{ 'border-l-4 border-l-red-500' if row_vencida else 'border-l-4 border-l-emerald-500' }}">
     <div class="flex justify-between items-start mb-2">
         <div>
             <span class="text-xs text-gray-500 dark:text-gray-400">{{ pedido.data_venda.strftime('%d/%m/%Y') }}</span>

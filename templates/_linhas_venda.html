@@ -1,11 +1,25 @@
 {% if pedidos %}
 {% for pedido in pedidos %}
-{% set zebra_class = 'bg-white dark:bg-gray-800' if loop.index % 2 == 0 else 'bg-emerald-50/50 dark:bg-emerald-900/20' %}
-{% set zebra_bg_class = 'bg-white dark:bg-gray-800' if loop.index % 2 == 0 else 'bg-emerald-50/30 dark:bg-emerald-900/30' %}
+{% set data_pedido = pedido.data_venda.date() if hasattr(pedido.data_venda, 'date') else pedido.data_venda %}
 {% set row_vencida = pedido.is_vencido %}
 {% set pedido_unique_id = 'pedido-' ~ pedido.primeira_venda_id %}
+{% if row_vencida %}
+{% set row_bg_class = 'linha-vencida-abatimento' %}
+{% set row_hover_class = 'hover:bg-red-100 dark:hover:bg-red-900/40' %}
+{% elif data_pedido == hoje %}
+{% set row_bg_class = 'bg-emerald-50 dark:bg-emerald-900/20' %}
+{% set row_hover_class = 'hover:bg-emerald-100 dark:hover:bg-emerald-900/40' %}
+{% elif data_pedido == ontem %}
+{% set row_bg_class = 'bg-blue-50 dark:bg-blue-900/20' %}
+{% set row_hover_class = 'hover:bg-blue-100 dark:hover:bg-blue-900/40' %}
+{% else %}
+{% set row_bg_class = 'bg-white dark:bg-gray-800' if loop.index % 2 == 0 else 'bg-emerald-50/50 dark:bg-emerald-900/20' %}
+{% set row_hover_class = 'hover:bg-emerald-100 dark:hover:bg-emerald-900/40' %}
+{% endif %}
+{% set zebra_class = row_bg_class %}
+{% set zebra_bg_class = 'bg-white dark:bg-gray-800' if loop.index % 2 == 0 else 'bg-emerald-50/30 dark:bg-emerald-900/30' %}
 <!-- Linha de Resumo do Pedido (Expansível) -->
-<tr class="pedido-resumo cursor-pointer transition {{ 'linha-vencida-abatimento' if row_vencida else zebra_class }} {{ 'hover:bg-red-100 dark:hover:bg-red-900/40' if row_vencida else 'hover:bg-emerald-100 dark:hover:bg-emerald-900/40' }}" data-pedido-id="{{ pedido_unique_id }}" data-venda-ids="{{ pedido.vendas|map(attribute='id')|list|tojson }}" data-lucro-total="{{ pedido.total_lucro }}">
+<tr class="pedido-resumo cursor-pointer transition {{ row_bg_class }} {{ row_hover_class }} border-b border-gray-200 dark:border-gray-700" data-pedido-id="{{ pedido_unique_id }}" data-venda-ids="{{ pedido.vendas|map(attribute='id')|list|tojson }}" data-lucro-total="{{ pedido.total_lucro }}">
     <td class="px-3 py-4 text-center" onclick="event.stopPropagation();">
         <input type="checkbox" class="bulk-row-check rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" data-venda-ids="{{ pedido.vendas|map(attribute='id')|list|tojson }}" data-lucro-total="{{ pedido.total_lucro }}">
     </td>

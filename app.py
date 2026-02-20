@@ -1965,6 +1965,18 @@ def inject_ano_ativo():
 
 
 @app.context_processor
+def injetar_datas():
+    """Disponibiliza hoje e ontem (fuso Brasil) em todos os templates para destaque visual por data."""
+    try:
+        hoje = get_hoje_brasil()
+        ontem = hoje - timedelta(days=1)
+        return dict(hoje=hoje, ontem=ontem)
+    except Exception:
+        hoje = date.today()
+        return dict(hoje=hoje, ontem=hoje - timedelta(days=1))
+
+
+@app.context_processor
 def injetar_alertas():
     """Disponibiliza alertas_sistema (boletos vencendo, radar, logística) em todos os templates."""
     alertas = []
