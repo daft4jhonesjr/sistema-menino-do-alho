@@ -475,6 +475,28 @@
         return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
     }
 
+    // Máscara de moeda em tempo real (formato BR: 1.234,56)
+    function mascaraMoeda(campo) {
+        var valor = (campo.value || '').replace(/\D/g, '');
+        if (valor === '') {
+            campo.value = '';
+            return;
+        }
+        valor = (parseInt(valor, 10) / 100).toFixed(2) + '';
+        valor = valor.replace('.', ',');
+        valor = valor.replace(/(\d)(\d{3})(\d{3}),/g, '$1.$2.$3,');
+        valor = valor.replace(/(\d)(\d{3}),/g, '$1.$2,');
+        campo.value = valor;
+    }
+
+    // Formata número para exibição em input (ex: 1600 -> "1.600,00")
+    function formatarMoedaParaExibir(val) {
+        if (val === '' || val === null || val === undefined) return '';
+        var s = String(val).replace(',', '.');
+        var n = parseFloat(s) || 0;
+        return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
     function abrirModalVendas(tipo, id) {
         var overlay = document.getElementById('modal-vendas-overlay');
         var modal = document.getElementById('modal-vendas');
