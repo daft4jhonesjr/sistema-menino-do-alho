@@ -418,6 +418,7 @@
                                 <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Lucro</th>
                                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Empresa</th>
                                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Situação</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pagamento</th>
                             </tr>
                         </thead>
                         <tbody id="modal-vendas-tbody" class="bg-white divide-y divide-gray-200"></tbody>
@@ -672,6 +673,8 @@
                     var lucroStr = formatoMoeda(lucro);
                     var lucroClass = lucro >= 0 ? 'text-emerald-600' : 'text-red-600';
                     var sitClass = v.situacao === 'PAGO' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800';
+                    var formaPag = (v.forma_pagamento || '-').toString().toUpperCase();
+                    var formaPagClass = formaPag === 'BOLETO' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
                     tr.innerHTML =
                         '<td class="px-4 py-3 text-sm text-gray-900">' + (v.data || '-') + '</td>' +
                         '<td class="px-4 py-3 text-sm text-gray-900">' + (v.nf || '-') + '</td>' +
@@ -681,7 +684,8 @@
                         '<td class="px-4 py-3 text-sm font-medium text-gray-900 text-right">' + valorStr + '</td>' +
                         '<td class="px-4 py-3 text-sm font-medium text-right ' + lucroClass + '">' + lucroStr + '</td>' +
                         '<td class="px-4 py-3 text-sm text-gray-900">' + (v.empresa || '-') + '</td>' +
-                        '<td class="px-4 py-3"><span class="px-3 py-1 text-xs font-semibold rounded-full ' + sitClass + '">' + (v.situacao || 'PENDENTE') + '</span></td>';
+                        '<td class="px-4 py-3"><span class="px-3 py-1 text-xs font-semibold rounded-full ' + sitClass + '">' + (v.situacao || 'PENDENTE') + '</span></td>' +
+                        '<td class="px-4 py-3"><span class="px-2 py-1 text-xs font-medium rounded ' + formaPagClass + '">' + (v.forma_pagamento || '-') + '</span></td>';
                     tbody.appendChild(tr);
                     
                     nfAnterior = nfAtual;

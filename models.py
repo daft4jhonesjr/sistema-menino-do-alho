@@ -152,6 +152,7 @@ class Venda(db.Model):
     situacao = db.Column(db.String(20), nullable=False, default='PENDENTE', index=True)
     valor_pago = db.Column(db.Float, default=0.0)  # Valor já pago (para abatimento parcial)
     status_entrega = db.Column(db.String(50), default='PENDENTE')  # Status logístico (independente do financeiro)
+    forma_pagamento = db.Column(db.String(50), nullable=True)  # Dinheiro, Pix, Boleto, Cheque, etc.
     caminho_boleto = db.Column(db.String(500), nullable=True)
     caminho_nf = db.Column(db.String(500), nullable=True)
     data_vencimento = db.Column(db.Date, nullable=True, index=True)  # vencimento do boleto vinculado (extraído do PDF)

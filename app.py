@@ -2215,6 +2215,12 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             db.session.commit()
         except (OperationalError, Exception):
             db.session.rollback()
+        # Migração: forma_pagamento em vendas (Dinheiro, Pix, Boleto, Cheque, etc.)
+        try:
+            db.session.execute(text('ALTER TABLE vendas ADD COLUMN forma_pagamento VARCHAR(50)'))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
         # Jhones sempre admin; criar se não existir
         u = Usuario.query.filter_by(username='Jhones').first()
         if not u:
@@ -4410,6 +4416,7 @@ def api_vendas_por_filtro():
             'lucro': float(v.calcular_lucro()),
             'empresa': v.empresa_faturadora or '-',
             'situacao': v.situacao,
+            'forma_pagamento': v.forma_pagamento or '-',
             'grupo_cor': grupo_atual,  # 1 = par (cinza claro), 2 = ímpar (branco)
         })
         
@@ -6097,6 +6104,7 @@ _VENDAS_RAW_IMPORT_MAP = [
     ('data_venda', 6),
     ('empresa', 7),
     ('situacao', 8),
+    ('forma_pagamento', 9),
 ]
 
 
@@ -6308,7 +6316,9 @@ def importar_vendas():
                         situacao_val = 'PENDENTE'
                     else:
                         situacao_val = 'PENDENTE'  # Padrão de segurança
-                    
+                    # Forma de pagamento (10ª coluna: Dinheiro, Pix, Boleto, Cheque, etc.)
+                    forma_pagamento_raw = _strip_quotes(row.get('forma_pagamento', row.get('forma', '')))
+                    forma_pagamento_val = (forma_pagamento_raw or '').strip() or None
                     venda = Venda(
                         cliente_id=cliente.id,
                         produto_id=produto.id,
@@ -6317,7 +6327,8 @@ def importar_vendas():
                         quantidade_venda=quantidade_venda,
                         data_venda=data_venda,
                         empresa_faturadora=empresa_val,
-                        situacao=situacao_val
+                        situacao=situacao_val,
+                        forma_pagamento=forma_pagamento_val
                     )
                     db.session.add(venda)
                     produto.estoque_atual -= quantidade_venda
