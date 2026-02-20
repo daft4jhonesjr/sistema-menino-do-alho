@@ -30,6 +30,15 @@
         {% endif %}
     </td>
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ pedido.empresa_faturadora }}</td>
+    <td class="px-6 py-4 whitespace-nowrap text-center">
+        {% if pedido.forma_pagamento %}
+        <span class="px-2 py-1 text-xs font-semibold rounded-full {% if pedido.forma_pagamento|upper == 'BOLETO' %}bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300{% else %}bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200{% endif %}">
+            {{ pedido.forma_pagamento }}
+        </span>
+        {% else %}
+        --
+        {% endif %}
+    </td>
     <td class="px-6 py-4 whitespace-nowrap">
         {% if pedido.situacao == 'PENDENTE' %}
         <button type="button" class="badge-situacao-toggle px-3 py-1 text-xs font-semibold rounded-full bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 cursor-pointer hover:bg-amber-200 dark:hover:bg-amber-800 hover:ring-2 hover:ring-amber-400 transition focus:outline-none focus:ring-2 focus:ring-amber-400" data-venda-id="{{ pedido.primeira_venda_id }}" data-nf="{{ pedido.nf if pedido.nf and pedido.nf != '-' else 'N/A' }}" data-situacao="PENDENTE" data-cliente="{{ pedido.cliente_nome }}" data-valor="{{ pedido.total_valor|formato_moeda }}" title="Clique para marcar como pago">{{ pedido.situacao }}</button>
@@ -76,7 +85,7 @@
 </tr>
 <!-- Linha de Detalhes (Oculta por padrão) -->
 <tr class="pedido-detalhes hidden {{ zebra_class }}" data-pedido-id="{{ pedido_unique_id }}">
-    <td colspan="13" class="px-0 py-0">
+    <td colspan="14" class="px-0 py-0">
         <div class="{{ zebra_bg_class }} border-l-4 border-emerald-300 dark:border-emerald-600 px-6 py-4">
             <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead class="bg-gray-100 dark:bg-gray-900/50">
@@ -107,7 +116,8 @@
                                 data-nf="{{ venda.nf or '' }}"
                                 data-data="{{ venda.data_venda.strftime('%Y-%m-%d') }}"
                                 data-empresa="{{ venda.empresa_faturadora or '' }}"
-                                data-situacao="{{ venda.situacao or 'PENDENTE' }}">
+                                data-situacao="{{ venda.situacao or 'PENDENTE' }}"
+                                data-forma-pagamento="{{ venda.forma_pagamento or '' }}">
                             <i data-lucide="pencil" class="w-4 h-4"></i>
                         </button>
                         </td>

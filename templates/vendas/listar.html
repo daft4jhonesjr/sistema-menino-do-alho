@@ -226,7 +226,7 @@
                     <input type="text" id="inline-valor-total" readonly placeholder="R$ 0,00" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white shadow-sm cursor-default" tabindex="-1" title="Calculado automaticamente (Preço × Quantidade)">
                 </div>
             </div>
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-5 items-end">
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-5 items-end">
                 <div>
                     <label for="inline-data_venda" class="block text-xs font-medium text-gray-600 dark:text-gray-200 mb-1">Data</label>
                     <input type="date" id="inline-data_venda" name="data_venda" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:focus:ring-emerald-500 dark:focus:border-emerald-500 shadow-sm">
@@ -245,6 +245,17 @@
                     <select id="inline-situacao" name="situacao" required class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:focus:ring-emerald-500 dark:focus:border-emerald-500 shadow-sm">
                         <option value="PENDENTE">PENDENTE</option>
                         <option value="PAGO">PAGO</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="inline-forma_pagamento" class="block text-xs font-medium text-gray-600 dark:text-gray-200 mb-1">Forma de Pagto</label>
+                    <select id="inline-forma_pagamento" name="forma_pagamento" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:focus:ring-emerald-500 dark:focus:border-emerald-500 shadow-sm">
+                        <option value="">Selecione...</option>
+                        <option value="BOLETO">Boleto</option>
+                        <option value="DINHEIRO">Dinheiro</option>
+                        <option value="PIX">Pix</option>
+                        <option value="CHEQUE">Cheque</option>
+                        <option value="TRANSFERENCIA">Transferência</option>
                     </select>
                 </div>
                 <div>
@@ -385,6 +396,7 @@
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Vencimento</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Empresa</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Situação</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Forma Pagto</th>
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Ações</th>
                     </tr>
                 </thead>
@@ -394,7 +406,7 @@
                         {% include '_linhas_venda.html' %}
                     {% else %}
                     <tr id="vendas-empty-row">
-                        <td colspan="13" class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                        <td colspan="14" class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
                             {% if filtro_vencidos %}Nenhum pedido vencido há mais de 1 dia (para enviar ao fornecedor).{% else %}Nenhuma venda registrada ainda.{% endif %}
                         </td>
                     </tr>
@@ -579,6 +591,17 @@
                             <option value="PENDENTE">PENDENTE</option>
                             <option value="PARCIAL">PARCIAL</option>
                             <option value="PAGO">PAGO</option>
+                        </select>
+                    </div>
+                    <div class="mb-4">
+                        <label for="edit_forma_pagamento" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Forma de Pagto</label>
+                        <select id="edit_forma_pagamento" name="forma_pagamento" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
+                            <option value="">Selecione...</option>
+                            <option value="BOLETO">Boleto</option>
+                            <option value="DINHEIRO">Dinheiro</option>
+                            <option value="PIX">Pix</option>
+                            <option value="CHEQUE">Cheque</option>
+                            <option value="TRANSFERENCIA">Transferência</option>
                         </select>
                     </div>
                 </div>
@@ -835,6 +858,7 @@
         var data = btn.getAttribute('data-data') || '';
         var empresa = btn.getAttribute('data-empresa') || '';
         var situacao = btn.getAttribute('data-situacao') || 'PENDENTE';
+        var formaPagamento = btn.getAttribute('data-forma-pagamento') || '';
 
         form.action = actionBase.replace(/\/0$/, '/') + id;
         document.getElementById('edit_cliente_id').value = clienteId;
@@ -845,6 +869,8 @@
         document.getElementById('edit_data_venda').value = data;
         document.getElementById('edit_empresa_faturadora').value = empresa;
         document.getElementById('edit_situacao').value = situacao;
+        var editFormaPag = document.getElementById('edit_forma_pagamento');
+        if (editFormaPag) editFormaPag.value = formaPagamento;
 
         wrap.classList.remove('hidden');
         document.body.style.overflow = 'hidden';
@@ -1202,6 +1228,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!dataVal) dataVal = new Date().toISOString().split('T')[0];
         var empresa = (form.querySelector('[name="empresa_faturadora"]') && form.querySelector('[name="empresa_faturadora"]').value) || '';
         var situacao = (form.querySelector('[name="situacao"]') && form.querySelector('[name="situacao"]').value) || 'PENDENTE';
+        var formaPagamento = (form.querySelector('[name="forma_pagamento"]') && form.querySelector('[name="forma_pagamento"]').value) || '';
         if (!cid || !pid) return null;
         if (qtd < 1 || preco <= 0 || !empresa) return null;
         var total = preco * qtd;
@@ -1219,7 +1246,8 @@ document.addEventListener('DOMContentLoaded', function() {
             lucro: lucro,
             data_venda: dataVal,
             empresa_faturadora: empresa,
-            situacao: situacao
+            situacao: situacao,
+            forma_pagamento: formaPagamento || null
         };
     }
 
@@ -1290,7 +1318,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 preco_venda: it.preco_venda,
                 data_venda: it.data_venda,
                 empresa_faturadora: it.empresa_faturadora,
-                situacao: it.situacao
+                situacao: it.situacao,
+                forma_pagamento: it.forma_pagamento || null
             };
         });
     }
@@ -1891,6 +1920,7 @@ document.addEventListener('DOMContentLoaded', function() {
         var data = btn.getAttribute('data-data') || '';
         var empresa = btn.getAttribute('data-empresa') || '';
         var situacao = btn.getAttribute('data-situacao') || 'PENDENTE';
+        var formaPagamento = btn.getAttribute('data-forma-pagamento') || '';
 
         form.action = actionBase.replace(/\/0$/, '/') + id;
         document.getElementById('edit_cliente_id').value = clienteId;
@@ -1901,6 +1931,8 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('edit_data_venda').value = data;
         document.getElementById('edit_empresa_faturadora').value = empresa;
         document.getElementById('edit_situacao').value = situacao;
+        var editFormaPag = document.getElementById('edit_forma_pagamento');
+        if (editFormaPag) editFormaPag.value = formaPagamento;
 
         wrap.classList.remove('hidden');
         document.body.style.overflow = 'hidden';

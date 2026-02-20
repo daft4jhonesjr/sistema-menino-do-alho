@@ -4695,6 +4695,7 @@ def listar_vendas():
                 'data_venda': venda.data_venda,
                 'empresa_faturadora': venda.empresa_faturadora,
                 'situacao': venda.situacao,
+                'forma_pagamento': getattr(venda, 'forma_pagamento', None),
                 'is_consumidor_final': is_consumidor_final,
                 'vendas': [],
                 'total_quantidade': 0,
@@ -5049,6 +5050,7 @@ def nova_venda():
             clientes = Cliente.query.all()
             produtos = Produto.query.filter(Produto.estoque_atual > 0).all()
             return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
+        forma_pagamento = (request.form.get('forma_pagamento') or '').strip() or None
         venda = Venda(
             cliente_id=cliente_id,
             produto_id=produto_id,
@@ -5057,7 +5059,8 @@ def nova_venda():
             quantidade_venda=quantidade_venda,
             data_venda=date.fromisoformat(data_venda_raw) if data_venda_raw else date.today(),
             empresa_faturadora=empresa_faturadora,
-            situacao=situacao
+            situacao=situacao,
+            forma_pagamento=forma_pagamento
         )
         db.session.add(venda)
         produto.estoque_atual -= quantidade_venda
@@ -5155,6 +5158,7 @@ def processar_carrinho():
                 preco_venda = Decimal(str(_limpar_valor_moeda(obj.get('preco_venda', 0))))
                 empresa_faturadora = (obj.get('empresa_faturadora') or '').strip() or None
                 situacao = (obj.get('situacao') or 'PENDENTE').strip()
+                forma_pagamento = (obj.get('forma_pagamento') or '').strip() or None
                 nf = (obj.get('nf') or '').strip() or None
                 data_venda_raw = obj.get('data_venda')
                 if data_venda_raw:
@@ -5191,6 +5195,7 @@ def processar_carrinho():
                 data_venda=data_venda,
                 empresa_faturadora=empresa_faturadora,
                 situacao=situacao,
+                forma_pagamento=forma_pagamento,
             )
             db.session.add(venda)
             produto.estoque_atual -= quantidade_venda
@@ -5312,6 +5317,8 @@ def editar_venda(id):
             venda.data_venda = date.fromisoformat(data_venda_raw)
         venda.empresa_faturadora = request.form.get('empresa_faturadora', venda.empresa_faturadora or 'PATY')
         venda.situacao = request.form.get('situacao', venda.situacao or 'PENDENTE')
+        fp = request.form.get('forma_pagamento')
+        venda.forma_pagamento = (fp or '').strip() or None
         
         # --- INÍCIO DA INTEGRAÇÃO COM CAIXA (PILOTO AUTOMÁTICO V4) ---
         vendas_do_pedido = _vendas_do_pedido(venda)
