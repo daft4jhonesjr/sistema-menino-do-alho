@@ -2005,24 +2005,28 @@ document.addEventListener('DOMContentLoaded', function() {
         const ctx = document.getElementById(idElemento);
         if (!ctx || !dadosObjeto || Object.keys(dadosObjeto).length === 0) return;
         
-        const valores = Object.values(dadosObjeto);
         const labelsOriginais = Object.keys(dadosObjeto);
+        const valoresTotais = labelsOriginais.map(k => dadosObjeto[k].total);
+        const valoresCount = labelsOriginais.map(k => dadosObjeto[k].count);
         
-        // Calcula o total para a porcentagem
-        const total = valores.reduce((acc, val) => acc + val, 0);
-        // Cria novas labels com o formato: "Nome: Valor (X%)"
-        const labelsComPorcentagem = labelsOriginais.map((label, index) => {
-            const valor = valores[index];
-            const porcentagem = total > 0 ? ((valor / total) * 100).toFixed(1) : 0;
-            return `${label}: ${valor} (${porcentagem}%)`;
+        // Calcula a soma financeira total daquele gráfico
+        const somaGeral = valoresTotais.reduce((acc, val) => acc + val, 0);
+        
+        // Formatador para Reais Brasileiros
+        const formatarMoeda = (valor) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
+        // Cria as labels com o R$ e a %
+        const labelsComDetalhes = labelsOriginais.map((label, index) => {
+            const totalCategoria = valoresTotais[index];
+            const porcentagem = somaGeral > 0 ? ((totalCategoria / somaGeral) * 100).toFixed(1) : 0;
+            return `${label}: ${formatarMoeda(totalCategoria)} (${porcentagem}%)`;
         });
         
         new Chart(ctx, {
             type: 'doughnut',
             data: {
-                labels: labelsComPorcentagem,
+                labels: labelsComDetalhes,
                 datasets: [{
-                    data: valores,
+                    data: valoresTotais,
                     backgroundColor: coresElegantes,
                     borderWidth: 0,
                     hoverOffset: 4
@@ -2035,19 +2039,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 plugins: {
                     legend: { 
                         position: 'bottom', 
-                        labels: { 
-                            boxWidth: 12, 
-                            usePointStyle: true, 
-                            color: '#6B7280',
-                            font: { size: 11 }
-                        } 
+                        labels: { boxWidth: 12, usePointStyle: true, color: '#6B7280', font: { size: 11 } } 
                     },
                     tooltip: {
                         callbacks: {
                             label: function(context) {
-                                const valor = context.parsed;
-                                const porcentagem = total > 0 ? ((valor / total) * 100).toFixed(1) : 0;
-                                return ` ${valor} registro(s) - ${porcentagem}%`;
+                                const index = context.dataIndex;
+                                const totalCategoria = valoresTotais[index];
+                                const countCategoria = valoresCount[index];
+                                const porcentagem = somaGeral > 0 ? ((totalCategoria / somaGeral) * 100).toFixed(1) : 0;
+                                return ` ${countCategoria} venda(s) - ${formatarMoeda(totalCategoria)} (${porcentagem}%)`;
                             }
                         }
                     }

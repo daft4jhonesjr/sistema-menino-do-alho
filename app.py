@@ -4933,22 +4933,23 @@ def listar_vendas():
     todos_produtos = Produto.query.order_by(Produto.nome_produto).limit(500).all()
     
     # Agregações para os Gráficos (Situação, Forma de Pagamento, Empresa Faturadora)
-    # Apenas no fluxo HTML completo (não AJAX). Em caso de erro, usa dados vazios para evitar 500.
+    # Volume financeiro: soma de preco_venda * quantidade_venda por categoria
     try:
         filtro_ano_venda = extract('year', Venda.data_venda) == ano_ativo
-        dist_situacao = db.session.query(Venda.situacao, func.count(Venda.id)).filter(
+        soma_total = func.sum(Venda.preco_venda * Venda.quantidade_venda)
+        dist_situacao = db.session.query(Venda.situacao, func.count(Venda.id), soma_total).filter(
             Venda.situacao != None, filtro_ano_venda
         ).group_by(Venda.situacao).all()
-        dist_pagamento = db.session.query(Venda.forma_pagamento, func.count(Venda.id)).filter(
+        dist_pagamento = db.session.query(Venda.forma_pagamento, func.count(Venda.id), soma_total).filter(
             Venda.forma_pagamento != None, filtro_ano_venda
         ).group_by(Venda.forma_pagamento).all()
-        dist_empresa = db.session.query(Venda.empresa_faturadora, func.count(Venda.id)).filter(
+        dist_empresa = db.session.query(Venda.empresa_faturadora, func.count(Venda.id), soma_total).filter(
             Venda.empresa_faturadora != None, filtro_ano_venda
         ).group_by(Venda.empresa_faturadora).all()
         graficos_data = {
-            'situacao': {str(k): v for k, v in dist_situacao if k},
-            'pagamento': {str(k): v for k, v in dist_pagamento if k},
-            'empresa': {str(k): v for k, v in dist_empresa if k}
+            'situacao': {str(k): {'count': c, 'total': float(t or 0)} for k, c, t in dist_situacao if k},
+            'pagamento': {str(k): {'count': c, 'total': float(t or 0)} for k, c, t in dist_pagamento if k},
+            'empresa': {str(k): {'count': c, 'total': float(t or 0)} for k, c, t in dist_empresa if k}
         }
     except Exception:
         graficos_data = {'situacao': {}, 'pagamento': {}, 'empresa': {}}
