@@ -5656,8 +5656,21 @@ def ver_nf_venda(id):
     return send_file(full, mimetype='application/pdf')
 
 
+def _token_upload_required(f):
+    """Permite autenticação via token no header Authorization (para robô)."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token_esperado = os.environ.get('API_TOKEN', 'SEGREDDO_DO_ALHO_2026')
+        auth = request.headers.get('Authorization', '')
+        if auth == token_esperado or auth == f'Bearer {token_esperado}':
+            return f(*args, **kwargs)
+        return jsonify({'mensagem': 'Token inválido ou ausente.'}), 403
+    return decorated
+
+
 @app.route('/upload', methods=['POST'])
-@login_required
+@csrf.exempt
+@_token_upload_required
 def upload_documento():
     """
     Rota para o bot enviar arquivos. Salva na sala de espera (documentos_entrada).
