@@ -1992,7 +1992,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <script>
 // Gráficos Doughnut (Situação, Forma de Pagamento, Empresa Faturadora)
 (function() {
-    var dados = {{ graficos_data | tojson | safe }};
+    var dados = {{ (graficos_data or {'situacao': {}, 'pagamento': {}, 'empresa': {}}) | tojson | safe }};
     var coresElegantes = [
         '#10B981', // Emerald 500
         '#3B82F6', // Blue 500
