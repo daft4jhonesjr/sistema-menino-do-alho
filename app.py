@@ -46,6 +46,9 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import pdfplumber
 import cloudinary
 import cloudinary.uploader
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 # #region agent log
 _log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.cursor')
@@ -1680,6 +1683,13 @@ limiter = Limiter(
     storage_uri="memory://",
     default_limits=["200 per day", "50 per hour"]
 )
+
+# Configuração de E-mail (Relatório Mensal)
+MAIL_SERVER = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
+MAIL_PORT = int(os.environ.get('MAIL_PORT', 587))
+MAIL_USERNAME = os.environ.get('MAIL_USERNAME')
+MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
+CRON_SECRET = os.environ.get('CRON_SECRET', 'senha_super_secreta_123')
 
 # Configurar compressão Gzip para HTML, CSS, JS e JSON
 Compress(app)
@@ -6785,6 +6795,87 @@ def receber_lote_cliente(id):
     limpar_cache_dashboard()
     flash(f'Abatimento de R$ {valor_recebido:,.2f} processado com sucesso para {cliente.nome_cliente}!', 'success')
     return redirect(url_for('listar_clientes'))
+
+
+@app.route('/api/disparar_relatorio')
+def disparar_relatorio():
+    """Envia relatório financeiro mensal por e-mail para admins cadastrados.
+    Protegido por token: /api/disparar_relatorio?token=SEU_CRON_SECRET"""
+    token = request.args.get('token')
+    if token != CRON_SECRET:
+        return jsonify({'erro': 'Acesso negado'}), 403
+
+    if not MAIL_USERNAME or not MAIL_PASSWORD:
+        return jsonify({'erro': 'Credenciais de e-mail não configuradas (MAIL_USERNAME / MAIL_PASSWORD)'}), 500
+
+    hoje = datetime.today()
+    primeiro_dia_mes_atual = hoje.replace(day=1)
+    ultimo_dia_mes_passado = primeiro_dia_mes_atual - timedelta(days=1)
+    mes_passado = ultimo_dia_mes_passado.month
+    ano_passado = ultimo_dia_mes_passado.year
+
+    meses_pt = {1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril', 5: 'Maio', 6: 'Junho',
+                7: 'Julho', 8: 'Agosto', 9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'}
+    mes_ano_str = f"{meses_pt.get(mes_passado, '')} de {ano_passado}"
+
+    vendas_mes = Venda.query.filter(
+        extract('month', Venda.data_venda) == mes_passado,
+        extract('year', Venda.data_venda) == ano_passado
+    ).options(joinedload(Venda.produto)).all()
+
+    faturamento_total = sum(v.calcular_total() for v in vendas_mes)
+    lucro_total = sum(v.calcular_lucro() for v in vendas_mes)
+    qtd_vendas = len(vendas_mes)
+    ticket_medio = faturamento_total / qtd_vendas if qtd_vendas > 0 else 0
+
+    faturamento_fmt = formato_moeda(faturamento_total)
+    lucro_fmt = formato_moeda(lucro_total)
+    ticket_fmt = formato_moeda(ticket_medio)
+
+    admins = Usuario.query.filter(
+        Usuario.role == 'admin',
+        Usuario.email != None,
+        Usuario.email != ''
+    ).all()
+    admins_jhones = Usuario.query.filter(
+        Usuario.username == 'Jhones',
+        Usuario.email != None,
+        Usuario.email != ''
+    ).all()
+    todos_admins = {a.id: a for a in admins + admins_jhones}
+
+    if not todos_admins:
+        return jsonify({'msg': 'Nenhum administrador com e-mail cadastrado.'}), 200
+
+    try:
+        server = smtplib.SMTP(MAIL_SERVER, MAIL_PORT)
+        server.starttls()
+        server.login(MAIL_USERNAME, MAIL_PASSWORD)
+
+        enviados = 0
+        for admin in todos_admins.values():
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = f"📈 Relatório Mensal: {mes_ano_str} — Menino do Alho"
+            msg['From'] = MAIL_USERNAME
+            msg['To'] = admin.email
+
+            html = render_template('emails/relatorio.html',
+                                   nome=admin.nome or admin.username,
+                                   mes_ano=mes_ano_str,
+                                   faturamento=faturamento_fmt,
+                                   lucro=lucro_fmt,
+                                   qtd_vendas=qtd_vendas,
+                                   ticket_medio=ticket_fmt)
+
+            msg.attach(MIMEText(html, 'html'))
+            server.send_message(msg)
+            enviados += 1
+
+        server.quit()
+        return jsonify({'msg': f'Relatórios enviados com sucesso para {enviados} admin(s).'}), 200
+    except Exception as e:
+        print(f"Erro ao enviar relatório por e-mail: {e}")
+        return jsonify({'erro': str(e)}), 500
 
 
 @app.route('/api/backup/excel')
