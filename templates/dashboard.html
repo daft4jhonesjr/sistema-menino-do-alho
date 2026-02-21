@@ -368,12 +368,25 @@
         <h5 class="text-gray-600 dark:text-gray-400 mb-3 flex items-center text-base font-semibold">
             <i data-lucide="calendar" class="w-5 h-5 mr-2 text-emerald-600"></i>Detalhamento Mensal
         </h5>
-        <div class="flex flex-wrap gap-3">
+        <div class="flex flex-wrap gap-4 mt-4">
             {% for item in detalhamento_mensal %}
-            <button type="button" onclick="abrirDetalhesMes({{ item.ano }}, {{ item.mes_numero }})" class="flex items-center px-3 py-2 rounded-xl bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 hover:border-emerald-300 dark:hover:border-emerald-700 cursor-pointer transition">
-                <span class="font-bold text-gray-900 dark:text-gray-100 mr-2">{{ item.mes }}</span>
-                <span class="font-bold text-emerald-600">{{ item.lucro|formato_moeda }}</span>
-            </button>
+            <div onclick="abrirDetalhesMes({{ item.ano }}, {{ item.mes_numero }})" class="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3 flex flex-col min-w-[200px] shadow-sm cursor-pointer hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-300 dark:hover:border-emerald-700 transition">
+                <div class="flex justify-between items-center mb-2 border-b border-gray-200 dark:border-gray-700 pb-2">
+                    <span class="font-bold text-gray-800 dark:text-white">{{ item.mes_ano|default(item.mes) }}</span>
+                    <span class="font-semibold text-emerald-600 dark:text-emerald-400">{{ item.faturamento|formato_moeda }}</span>
+                </div>
+                <div class="flex justify-between text-xs text-gray-500 dark:text-gray-400 space-x-2">
+                    <div class="flex items-center gap-1" title="Caixas de Alho">
+                        <span>🧄</span> <span class="font-medium">{{ item.qtd_alho|default(0) }} cx</span>
+                    </div>
+                    <div class="flex items-center gap-1" title="Café">
+                        <span>☕</span> <span class="font-medium">{{ item.qtd_cafe|default(0) }}</span>
+                    </div>
+                    <div class="flex items-center gap-1" title="Sacolas">
+                        <span>🛍️</span> <span class="font-medium">{{ item.qtd_sacola|default(0) }}</span>
+                    </div>
+                </div>
+            </div>
             {% endfor %}
         </div>
     </div>

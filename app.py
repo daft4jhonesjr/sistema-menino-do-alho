@@ -22,7 +22,7 @@ def get_hoje_brasil():
     except Exception:
         return date.today()
 from functools import wraps
-from sqlalchemy import func, desc, asc, text, or_, extract
+from sqlalchemy import func, desc, asc, text, or_, extract, case
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, OperationalError
 import pandas as pd
@@ -2727,10 +2727,17 @@ def dashboard():
         # Versão SQLite - usa strftime
         coluna_mes = func.strftime('%Y-%m', Venda.data_venda)
     
+    qtd_alho = func.sum(case((Produto.nome_produto.ilike('%alho%'), Venda.quantidade_venda), else_=0))
+    qtd_cafe = func.sum(case((or_(Produto.nome_produto.ilike('%café%'), Produto.nome_produto.ilike('%cafe%')), Venda.quantidade_venda), else_=0))
+    qtd_sacola = func.sum(case((Produto.nome_produto.ilike('%sacola%'), Venda.quantidade_venda), else_=0))
     evolucao_mensal = db.session.query(
         coluna_mes.label('mes_ano'),
         func.sum((Venda.preco_venda - Produto.preco_custo) * Venda.quantidade_venda).label('lucro_mensal'),
-        func.sum(Venda.quantidade_venda).label('quantidade_mensal')
+        func.sum(Venda.preco_venda * Venda.quantidade_venda).label('faturamento_mensal'),
+        func.sum(Venda.quantidade_venda).label('quantidade_mensal'),
+        qtd_alho.label('qtd_alho'),
+        qtd_cafe.label('qtd_cafe'),
+        qtd_sacola.label('qtd_sacola')
     ).join(Produto, Venda.produto_id == Produto.id)\
      .filter(filtro_ano_venda)\
      .group_by(coluna_mes)\
@@ -2741,7 +2748,7 @@ def dashboard():
     data_lucro = []
     data_caixas = []
     
-    for mes_ano, lucro, quantidade in evolucao_mensal:
+    for mes_ano, lucro, faturamento, quantidade, qa, qc, qs in evolucao_mensal:
         # Converter '2026-01' para 'Jan/26'
         try:
             ano, mes = mes_ano.split('-')
@@ -2754,9 +2761,9 @@ def dashboard():
         data_lucro.append(float(lucro) if lucro else 0)
         data_caixas.append(int(quantidade) if quantidade else 0)
     
-    # Detalhamento mensal para exibir acima do gráfico (lista de {mes, lucro, ano, mes_numero})
+    # Detalhamento mensal para exibir acima do gráfico (lista de {mes, lucro, faturamento, ano, mes_numero, qtd_alho, qtd_cafe, qtd_sacola})
     detalhamento_mensal = []
-    for mes_ano, lucro, quantidade in evolucao_mensal:
+    for mes_ano, lucro, faturamento, quantidade, qtd_alho, qtd_cafe, qtd_sacola in evolucao_mensal:
         try:
             ano_str, mes_str = mes_ano.split('-')  # mes_ano é string no formato '2026-01'
             ano_completo = int(ano_str)
@@ -2766,17 +2773,27 @@ def dashboard():
             label = f"{mes_nome}/{ano_str[2:]}"
             detalhamento_mensal.append({
                 'mes': label,
+                'mes_ano': label,
                 'lucro': float(lucro) if lucro else 0,
+                'faturamento': float(faturamento) if faturamento else 0,
                 'ano': ano_completo,
-                'mes_numero': mes_numero
+                'mes_numero': mes_numero,
+                'qtd_alho': int(qtd_alho) if qtd_alho else 0,
+                'qtd_cafe': int(qtd_cafe) if qtd_cafe else 0,
+                'qtd_sacola': int(qtd_sacola) if qtd_sacola else 0
             })
         except (ValueError, IndexError, AttributeError):
             # Fallback se houver erro no parsing
             detalhamento_mensal.append({
                 'mes': str(mes_ano),
+                'mes_ano': str(mes_ano),
                 'lucro': float(lucro) if lucro else 0,
+                'faturamento': float(faturamento) if faturamento else 0,
                 'ano': ano_ativo,
-                'mes_numero': 1
+                'mes_numero': 1,
+                'qtd_alho': 0,
+                'qtd_cafe': 0,
+                'qtd_sacola': 0
             })
     
     faturamento_total = float(total_pendente) + float(total_pago)

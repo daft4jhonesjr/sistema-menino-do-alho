@@ -355,7 +355,7 @@
     <!-- Modal: Vendas por Produto/Cliente -->
     <div id="modal-vendas-overlay" class="fixed inset-0 bg-black/50 z-40 hidden" onclick="fecharModalVendas()"></div>
     <div id="modal-vendas" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden pointer-events-none">
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 max-w-3xl w-full max-h-[85vh] flex flex-col pointer-events-auto overflow-hidden">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm dark:shadow-none border border-gray-200 dark:border-gray-700 max-w-6xl w-full max-h-[85vh] flex flex-col pointer-events-auto overflow-hidden">
             <div class="bg-emerald-700 text-white rounded-t-xl">
                 <div class="flex items-center justify-between px-6 py-4">
                     <h3 id="modal-vendas-titulo" class="text-lg font-bold flex items-center">
@@ -405,23 +405,23 @@
                     </div>
                 </div>
                 
-                <div id="modal-vendas-tabela-wrapper" class="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
-                    <table class="min-w-full divide-y divide-gray-200">
-                        <thead class="bg-gray-50">
+                <div id="modal-vendas-tabela-wrapper" class="overflow-x-auto w-full rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                        <thead class="bg-gray-50 dark:bg-gray-900/50">
                             <tr>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Data</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">NF</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Produto</th>
-                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Qtd</th>
-                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Preço Unit.</th>
-                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Valor</th>
-                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Lucro</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Empresa</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Situação</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pagamento</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Data</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">NF</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Produto</th>
+                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Qtd</th>
+                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Preço Unit.</th>
+                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Valor</th>
+                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Lucro</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Empresa</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Situação</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Pagamento</th>
                             </tr>
                         </thead>
-                        <tbody id="modal-vendas-tbody" class="bg-white divide-y divide-gray-200"></tbody>
+                        <tbody id="modal-vendas-tbody" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700"></tbody>
                     </table>
                 </div>
                 
@@ -665,7 +665,7 @@
                         classeGrupo += ' venda-grupo-separador';
                     }
                     
-                    tr.className = classeGrupo + ' hover:bg-emerald-50 transition';
+                    tr.className = classeGrupo + ' hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition';
                     
                     var precoUnitStr = formatoMoeda(v.preco_unitario || 0);
                     var valorStr = formatoMoeda(v.valor || 0);
@@ -676,16 +676,16 @@
                     var formaPag = (v.forma_pagamento || '-').toString().toUpperCase();
                     var formaPagClass = formaPag === 'BOLETO' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
                     tr.innerHTML =
-                        '<td class="px-4 py-3 text-sm text-gray-900">' + (v.data || '-') + '</td>' +
-                        '<td class="px-4 py-3 text-sm text-gray-900">' + (v.nf || '-') + '</td>' +
-                        '<td class="px-4 py-3 text-sm text-gray-900">' + (v.produto || '-') + '</td>' +
-                        '<td class="px-4 py-3 text-sm text-gray-900 text-right">' + (v.quantidade || 0) + '</td>' +
-                        '<td class="px-4 py-3 text-sm text-gray-900 text-right">' + precoUnitStr + '</td>' +
-                        '<td class="px-4 py-3 text-sm font-medium text-gray-900 text-right">' + valorStr + '</td>' +
-                        '<td class="px-4 py-3 text-sm font-medium text-right ' + lucroClass + '">' + lucroStr + '</td>' +
-                        '<td class="px-4 py-3 text-sm text-gray-900">' + (v.empresa || '-') + '</td>' +
-                        '<td class="px-4 py-3"><span class="px-3 py-1 text-xs font-semibold rounded-full ' + sitClass + '">' + (v.situacao || 'PENDENTE') + '</span></td>' +
-                        '<td class="px-4 py-3"><span class="px-2 py-1 text-xs font-medium rounded ' + formaPagClass + '">' + (v.forma_pagamento || '-') + '</span></td>';
+                        '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">' + (v.data || '-') + '</td>' +
+                        '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">' + (v.nf || '-') + '</td>' +
+                        '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">' + (v.produto || '-') + '</td>' +
+                        '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 text-right whitespace-nowrap">' + (v.quantidade || 0) + '</td>' +
+                        '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 text-right whitespace-nowrap">' + precoUnitStr + '</td>' +
+                        '<td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100 text-right whitespace-nowrap">' + valorStr + '</td>' +
+                        '<td class="px-4 py-3 text-sm font-medium text-right whitespace-nowrap ' + lucroClass + '">' + lucroStr + '</td>' +
+                        '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">' + (v.empresa || '-') + '</td>' +
+                        '<td class="px-4 py-3 whitespace-nowrap"><span class="px-3 py-1 text-xs font-semibold rounded-full ' + sitClass + '">' + (v.situacao || 'PENDENTE') + '</span></td>' +
+                        '<td class="px-4 py-3 whitespace-nowrap"><span class="px-2 py-1 text-xs font-medium rounded ' + formaPagClass + '">' + (v.forma_pagamento || '-') + '</span></td>';
                     tbody.appendChild(tr);
                     
                     nfAnterior = nfAtual;
