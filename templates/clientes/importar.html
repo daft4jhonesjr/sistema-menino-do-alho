@@ -4,26 +4,26 @@
 
 {% block content %}
 <div class="mb-6">
-    <h2 class="text-3xl font-bold text-verde-floresta mb-2">Importar Clientes</h2>
-    <p class="text-gray-600">Cole a lista (copiada do Excel, separada por TAB) ou faça upload de um arquivo Excel (.xlsx) ou CSV (.csv)</p>
+    <h2 class="text-3xl font-bold text-emerald-700 dark:text-emerald-400 mb-2">Importar Clientes</h2>
+    <p class="text-gray-600 dark:text-gray-400">Cole a lista (copiada do Excel, separada por TAB) ou faça upload de um arquivo Excel (.xlsx) ou CSV (.csv)</p>
 </div>
 
 {% if erros_detalhados is defined and erros_detalhados %}
-<div class="mb-6 bg-red-50 border-2 border-red-300 rounded-lg p-5 shadow-sm" id="import-feedback-box">
+<div class="mb-6 bg-red-50 dark:bg-red-900/20 border-2 border-red-300 dark:border-red-800 rounded-lg p-5 shadow-sm" id="import-feedback-box">
     <div class="flex items-start">
         <div class="flex-shrink-0">
-            <i class="fas fa-exclamation-triangle text-red-600 text-2xl"></i>
+            <i class="fas fa-exclamation-triangle text-red-600 dark:text-red-400 text-2xl"></i>
         </div>
         <div class="ml-4 flex-1">
-            <h3 class="text-lg font-bold text-red-800 mb-2">Ops! Encontramos alguns probleminhas</h3>
+            <h3 class="text-lg font-bold text-red-800 dark:text-red-300 mb-2">Ops! Encontramos alguns probleminhas</h3>
             {% if sucesso is defined and sucesso > 0 %}
-            <p class="text-red-700 mb-3">Importação parcial: <strong>{{ sucesso }}</strong> registros importados, <strong>{{ erros }}</strong> erro(s). Corrija os itens abaixo e importe novamente.</p>
+            <p class="text-red-700 dark:text-red-400 mb-3">Importação parcial: <strong>{{ sucesso }}</strong> registros importados, <strong>{{ erros }}</strong> erro(s). Corrija os itens abaixo e importe novamente.</p>
             {% else %}
-            <p class="text-red-700 mb-3"><strong>{{ erros }}</strong> erro(s) encontrado(s). Confira as mensagens abaixo, ajuste sua planilha e tente novamente.</p>
+            <p class="text-red-700 dark:text-red-400 mb-3"><strong>{{ erros }}</strong> erro(s) encontrado(s). Confira as mensagens abaixo, ajuste sua planilha e tente novamente.</p>
             {% endif %}
             <ul class="space-y-2 max-h-64 overflow-y-auto pr-2">
                 {% for msg in erros_detalhados %}
-                <li class="text-sm text-red-800 flex items-start"><span class="text-red-500 mr-2">•</span> {{ msg }}</li>
+                <li class="text-sm text-red-800 dark:text-red-300 flex items-start"><span class="text-red-500 mr-2">•</span> {{ msg }}</li>
                 {% endfor %}
             </ul>
         </div>
@@ -31,39 +31,39 @@
 </div>
 {% endif %}
 
-<div class="bg-white rounded-lg shadow-md p-6 max-w-2xl">
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow-md dark:shadow-none border border-transparent dark:border-gray-700 p-6 max-w-2xl">
     <form method="POST" enctype="multipart/form-data">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         <div class="mb-4">
-            <label for="lista_raw" class="block text-sm font-medium text-gray-700 mb-2">
+            <label for="lista_raw" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Cole a lista (uma linha por cliente, campos separados por TAB)
             </label>
             <textarea id="lista_raw" name="lista_raw" rows="8" placeholder="Ex.: DINHO 4	CAPIM FRIOS	17.995.737/0001-94	Juazeiro-BA (copie do Excel; TAB entre colunas)"
-                      class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent font-mono text-sm"></textarea>
-            <p class="mt-1 text-xs text-gray-500">
+                      class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent font-mono text-sm placeholder-gray-400 dark:placeholder-gray-500"></textarea>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 Ordem: Apelido [TAB] Razão Social [TAB] CNPJ [TAB] Cidade. Razão Social vazia = usa Apelido. CNPJ com aspas/quebras é limpo automaticamente.
             </p>
         </div>
 
-        <div class="mb-4 text-center text-gray-500 font-medium">— ou —</div>
+        <div class="mb-4 text-center text-gray-500 dark:text-gray-500 font-medium">— ou —</div>
 
         <div class="mb-4">
-            <label for="arquivo" class="block text-sm font-medium text-gray-700 mb-2">
+            <label for="arquivo" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Selecione um arquivo
             </label>
             <input type="file" id="arquivo" name="arquivo" 
                    accept=".xlsx,.xls,.csv" 
-                   class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
-            <p class="mt-2 text-sm text-gray-500">
+                   class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-emerald-50 file:text-emerald-700 dark:file:bg-emerald-900/30 dark:file:text-emerald-400 hover:file:bg-emerald-100 dark:hover:file:bg-emerald-800/40">
+            <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
                 Formatos aceitos: .xlsx, .xls, .csv (CSV com TAB é tratado como lista raw)
             </p>
         </div>
 
-        <div class="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <h3 class="font-semibold text-blue-900 mb-2">
+        <div class="mb-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+            <h3 class="font-semibold text-blue-900 dark:text-blue-400 mb-2">
                 <i class="fas fa-info-circle mr-2"></i>Formato esperado (arquivo ou colagem):
             </h3>
-            <ul class="text-sm text-blue-800 space-y-1">
+            <ul class="text-sm text-blue-800 dark:text-blue-300 space-y-1">
                 <li>• <strong>Apelido / nome_cliente</strong> (obrigatório — chave de busca; se já existir, atualiza os demais campos)</li>
                 <li>• <strong>Razão Social</strong> (se vazio, usa o Apelido)</li>
                 <li>• <strong>CNPJ</strong> (opcional, único; aspas e quebras de linha são removidas)</li>
@@ -75,7 +75,7 @@
             <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-md transition-colors flex items-center">
                 <i data-lucide="upload" class="w-4 h-4 mr-2"></i>Importar
             </button>
-            <a href="{{ url_for('listar_clientes') }}" class="px-4 py-2 bg-gray-300 text-gray-700 font-medium rounded-md hover:bg-gray-400 transition-colors flex items-center">
+            <a href="{{ url_for('listar_clientes') }}" class="px-4 py-2 bg-gray-300 dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-medium rounded-md hover:bg-gray-400 dark:hover:bg-gray-600 transition-colors flex items-center">
                 <i data-lucide="x" class="w-4 h-4 mr-2"></i>Cancelar
             </a>
         </div>

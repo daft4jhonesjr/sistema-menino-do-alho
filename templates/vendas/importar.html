@@ -4,26 +4,26 @@
 
 {% block content %}
 <div class="mb-6">
-    <h2 class="text-3xl font-bold text-verde-floresta mb-2">Importar Vendas</h2>
-    <p class="text-gray-600">Faça upload de um arquivo Excel (.xlsx) ou CSV (.csv)</p>
+    <h2 class="text-3xl font-bold text-emerald-700 dark:text-emerald-400 mb-2">Importar Vendas</h2>
+    <p class="text-gray-600 dark:text-gray-400">Faça upload de um arquivo Excel (.xlsx) ou CSV (.csv)</p>
 </div>
 
 {% if erros_detalhados is defined and erros_detalhados %}
-<div class="mb-6 bg-red-50 border-2 border-red-300 rounded-lg p-5 shadow-sm" id="import-feedback-box">
+<div class="mb-6 bg-red-50 dark:bg-red-900/20 border-2 border-red-300 dark:border-red-800 rounded-lg p-5 shadow-sm" id="import-feedback-box">
     <div class="flex items-start">
         <div class="flex-shrink-0">
-            <i class="fas fa-exclamation-triangle text-red-600 text-2xl"></i>
+            <i class="fas fa-exclamation-triangle text-red-600 dark:text-red-400 text-2xl"></i>
         </div>
         <div class="ml-4 flex-1">
-            <h3 class="text-lg font-bold text-red-800 mb-2">Ops! Encontramos alguns probleminhas</h3>
+            <h3 class="text-lg font-bold text-red-800 dark:text-red-300 mb-2">Ops! Encontramos alguns probleminhas</h3>
             {% if sucesso is defined and sucesso > 0 %}
-            <p class="text-red-700 mb-3">Importação parcial: <strong>{{ sucesso }}</strong> nova(s) venda(s) importada(s).{% if ignorados|default(0) > 0 %} <strong>{{ ignorados }}</strong> ignorada(s) (duplicadas).{% endif %} <strong>{{ erros }}</strong> erro(s). Corrija os itens abaixo e importe novamente.</p>
+            <p class="text-red-700 dark:text-red-400 mb-3">Importação parcial: <strong>{{ sucesso }}</strong> nova(s) venda(s) importada(s).{% if ignorados|default(0) > 0 %} <strong>{{ ignorados }}</strong> ignorada(s) (duplicadas).{% endif %} <strong>{{ erros }}</strong> erro(s). Corrija os itens abaixo e importe novamente.</p>
             {% else %}
-            <p class="text-red-700 mb-3"><strong>{{ erros }}</strong> erro(s) encontrado(s).{% if ignorados|default(0) > 0 %} <strong>{{ ignorados }}</strong> ignorada(s) (duplicadas).{% endif %} Confira as mensagens abaixo, ajuste sua planilha e importe novamente.</p>
+            <p class="text-red-700 dark:text-red-400 mb-3"><strong>{{ erros }}</strong> erro(s) encontrado(s).{% if ignorados|default(0) > 0 %} <strong>{{ ignorados }}</strong> ignorada(s) (duplicadas).{% endif %} Confira as mensagens abaixo, ajuste sua planilha e importe novamente.</p>
             {% endif %}
             <ul class="space-y-2 max-h-64 overflow-y-auto pr-2">
                 {% for msg in erros_detalhados %}
-                <li class="text-sm text-red-800 flex items-start"><span class="text-red-500 mr-2">•</span> {{ msg }}</li>
+                <li class="text-sm text-red-800 dark:text-red-300 flex items-start"><span class="text-red-500 mr-2">•</span> {{ msg }}</li>
                 {% endfor %}
             </ul>
         </div>
@@ -31,27 +31,27 @@
 </div>
 {% endif %}
 
-<div class="bg-white rounded-lg shadow-md p-6 max-w-2xl">
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow-md dark:shadow-none border border-transparent dark:border-gray-700 p-6 max-w-2xl">
     <form id="form-importar-vendas" method="POST" enctype="multipart/form-data">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         <div class="mb-4">
-            <label for="arquivo" class="block text-sm font-medium text-gray-700 mb-2">
+            <label for="arquivo" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Selecione o arquivo <span class="text-red-500">*</span>
             </label>
             <input type="file" id="arquivo" name="arquivo" 
                    accept=".xlsx,.xls,.csv" 
                    required
-                   class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
-            <p class="mt-2 text-sm text-gray-500">
+                   class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-emerald-50 file:text-emerald-700 dark:file:bg-emerald-900/30 dark:file:text-emerald-400 hover:file:bg-emerald-100 dark:hover:file:bg-emerald-800/40">
+            <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
                 Formatos aceitos: .xlsx, .xls, .csv
             </p>
         </div>
 
-        <div class="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <h3 class="font-semibold text-blue-900 mb-2">
+        <div class="mb-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+            <h3 class="font-semibold text-blue-900 dark:text-blue-400 mb-2">
                 <i class="fas fa-info-circle mr-2"></i>Formato esperado:
             </h3>
-            <ul class="text-sm text-blue-800 space-y-1">
+            <ul class="text-sm text-blue-800 dark:text-blue-300 space-y-1">
                 <li>• <strong>cliente</strong> ou <strong>nome_cliente</strong> (obrigatório): Nome do cliente cadastrado</li>
                 <li>• <strong>cnpj</strong> (opcional): CNPJ do cliente (alternativa ao nome)</li>
                 <li>• <strong>produto</strong> ou <strong>nome_produto</strong> (obrigatório): Nome completo do produto</li>
@@ -63,7 +63,7 @@
                 <li>• <strong>situacao</strong> (opcional): PENDENTE ou PAGO</li>
                 <li>• <strong>forma_pagamento</strong> (opcional): Dinheiro, Pix, Boleto, Cheque, etc.</li>
             </ul>
-            <p class="mt-3 text-sm text-blue-900 font-semibold">
+            <p class="mt-3 text-sm text-blue-900 dark:text-blue-300 font-semibold">
                 <i class="fas fa-exclamation-triangle mr-2"></i>
                 Importante: O sistema validará se o cliente e produto existem, e se há estoque suficiente antes de importar.
             </p>
@@ -71,20 +71,20 @@
 
         <!-- Pré-visualização dos Dados -->
         <div id="preview-container" class="mb-6 hidden">
-            <h3 class="text-lg font-semibold text-verde-floresta mb-3">
+            <h3 class="text-lg font-semibold text-emerald-700 dark:text-emerald-400 mb-3">
                 <i class="fas fa-eye mr-2"></i>Pré-visualização dos Dados
             </h3>
-            <div class="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200">
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md dark:shadow-none overflow-hidden border border-gray-200 dark:border-gray-700">
                 <div class="overflow-x-auto">
-                    <table id="preview-table" class="min-w-full divide-y divide-gray-200">
-                        <thead class="bg-gray-50">
+                    <table id="preview-table" class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                        <thead class="bg-gray-50 dark:bg-gray-900/50">
                             <tr id="preview-header"></tr>
                         </thead>
-                        <tbody id="preview-body" class="bg-white divide-y divide-gray-200"></tbody>
+                        <tbody id="preview-body" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700"></tbody>
                     </table>
                 </div>
-                <div class="px-4 py-2 bg-gray-50 border-t border-gray-200">
-                    <p class="text-xs text-gray-600">
+                <div class="px-4 py-2 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-200 dark:border-gray-700">
+                    <p class="text-xs text-gray-600 dark:text-gray-400">
                         <i class="fas fa-info-circle mr-1"></i>
                         Mostrando as primeiras <span id="preview-row-count">5</span> linhas do arquivo
                     </p>
@@ -97,16 +97,16 @@
                 <button type="submit" id="btn-importar" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-md transition-colors flex items-center">
                     <i data-lucide="upload" class="w-4 h-4 mr-2"></i>Importar
                 </button>
-                <a href="{{ url_for('listar_vendas') }}" class="px-4 py-2 bg-gray-300 text-gray-700 font-medium rounded-md hover:bg-gray-400 transition-colors flex items-center">
+                <a href="{{ url_for('listar_vendas') }}" class="px-4 py-2 bg-gray-300 dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-medium rounded-md hover:bg-gray-400 dark:hover:bg-gray-600 transition-colors flex items-center">
                     <i data-lucide="x" class="w-4 h-4 mr-2"></i>Cancelar
                 </a>
             </div>
             <div id="loading-importacao" class="hidden mt-4">
-                <p class="text-emerald-600 mb-1 font-bold flex items-center gap-2">
+                <p class="text-emerald-600 dark:text-emerald-400 mb-1 font-bold flex items-center gap-2">
                     <i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>
                     Lendo planilha e verificando duplicatas... Aguarde.
                 </p>
-                <div class="h-4 w-full rounded-full bg-gray-200 overflow-hidden">
+                <div class="h-4 w-full rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
                     <div class="h-full bg-emerald-500 rounded-full animate-pulse" style="width: 100%"></div>
                 </div>
             </div>
@@ -125,7 +125,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const previewBody = document.getElementById('preview-body');
     const previewRowCount = document.getElementById('preview-row-count');
     
-    // Ordem das colunas desejada: CLIENTE, NF, PRODUTO, PREÇO VENDA, QTD VENDA, DATA, EMPRESA, SITUAÇÃO
     const columnOrder = [
         'cliente', 'nome_cliente',
         'nf', 'nota_fiscal', 'nota',
@@ -137,7 +136,6 @@ document.addEventListener('DOMContentLoaded', function() {
         'situacao', 'situação', 'status'
     ];
     
-    // Mapeamento de nomes de colunas para exibição
     const columnDisplayNames = {
         'cliente': 'CLIENTE',
         'nome_cliente': 'CLIENTE',
@@ -163,7 +161,6 @@ document.addEventListener('DOMContentLoaded', function() {
         'status': 'SITUAÇÃO'
     };
     
-    // Função para normalizar nome de coluna
     function normalizarNomeColuna(s) {
         if (!s) return '';
         s = String(s).trim().toLowerCase();
@@ -172,7 +169,6 @@ document.addEventListener('DOMContentLoaded', function() {
         return s;
     }
     
-    // Função para formatar preço (padrão brasileiro)
     function formatarPreco(val) {
         if (!val) return 'R$ 0,00';
         const num = parseFloat(val);
@@ -180,38 +176,32 @@ document.addEventListener('DOMContentLoaded', function() {
         return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(num);
     }
     
-    // Função para formatar situação
     function formatarSituacao(val) {
         if (!val) return 'PENDENTE';
         const s = String(val).trim().toUpperCase();
         return s === 'PAGO' ? 'PAGO' : 'PENDENTE';
     }
     
-    // Função para obter classe CSS da situação
     function getSituacaoClass(val) {
         const s = formatarSituacao(val);
         return s === 'PAGO' 
-            ? 'px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800'
-            : 'px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800';
+            ? 'px-2 py-1 text-xs font-semibold rounded-full bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300'
+            : 'px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-300';
     }
     
-    // Função para processar e exibir os dados
     function processAndDisplayData(jsonData) {
         if (jsonData.length === 0) {
             previewContainer.classList.add('hidden');
             return;
         }
         
-        // Normalizar nomes das colunas (primeira linha)
         const headers = jsonData[0].map(h => normalizarNomeColuna(h));
         
-        // Mapear todas as colunas disponíveis
         const columnIndices = {};
         headers.forEach((header, index) => {
             columnIndices[header] = index;
         });
         
-        // Ordenar colunas conforme a ordem desejada
         const foundColumns = [];
         columnOrder.forEach(colName => {
             const normalized = normalizarNomeColuna(colName);
@@ -220,23 +210,20 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
         
-        // Adicionar outras colunas que não estão na ordem
         headers.forEach((header) => {
             if (!foundColumns.includes(header)) {
                 foundColumns.push(header);
             }
         });
         
-        // Criar cabeçalho da tabela
         previewHeader.innerHTML = '';
         foundColumns.forEach(colName => {
             const th = document.createElement('th');
-            th.className = 'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider';
+            th.className = 'px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider';
             th.textContent = columnDisplayNames[colName] || colName.toUpperCase();
             previewHeader.appendChild(th);
         });
         
-        // Criar corpo da tabela (máximo 5 linhas)
         previewBody.innerHTML = '';
         const maxRows = Math.min(5, jsonData.length - 1);
         previewRowCount.textContent = maxRows;
@@ -244,7 +231,7 @@ document.addEventListener('DOMContentLoaded', function() {
         for (let i = 1; i <= maxRows && i < jsonData.length; i++) {
             const row = jsonData[i];
             const tr = document.createElement('tr');
-            tr.className = 'hover:bg-gray-50';
+            tr.className = 'hover:bg-gray-50 dark:hover:bg-gray-700/50';
             
             foundColumns.forEach(colName => {
                 const td = document.createElement('td');
@@ -253,10 +240,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     ? String(row[colIndex]) 
                     : '';
                 
-                // Formatação especial por tipo de coluna
                 const normalizedCol = normalizarNomeColuna(colName);
                 if (normalizedCol.includes('preco') || normalizedCol.includes('preço')) {
-                    td.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium';
+                    td.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 text-right font-medium';
                     td.textContent = formatarPreco(cellValue);
                 } else if (normalizedCol.includes('situacao') || normalizedCol.includes('situação') || normalizedCol.includes('status')) {
                     td.className = 'px-6 py-4 whitespace-nowrap';
@@ -266,10 +252,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     span.textContent = situacao;
                     td.appendChild(span);
                 } else if (normalizedCol.includes('quantidade') || normalizedCol.includes('qtd')) {
-                    td.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right';
+                    td.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 text-right';
                     td.textContent = cellValue || '0';
                 } else {
-                    td.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-900';
+                    td.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100';
                     td.textContent = cellValue || '-';
                 }
                 
@@ -303,7 +289,6 @@ document.addEventListener('DOMContentLoaded', function() {
                         return;
                     }
                     
-                    // Parse CSV simples
                     const parseCSVLine = (line) => {
                         const result = [];
                         let current = '';
@@ -356,7 +341,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Barra de progresso ao enviar formulário de importação
     var formImportar = document.getElementById('form-importar-vendas');
     var btnImportar = document.getElementById('btn-importar');
     var loadingImportacao = document.getElementById('loading-importacao');
