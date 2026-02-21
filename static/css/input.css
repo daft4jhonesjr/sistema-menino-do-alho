@@ -12,3 +12,14 @@
     min-width: 0;
   }
 }
+
+.modal-aberto {
+  overflow: hidden !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  touch-action: none;
+  position: fixed;
+  width: 100%;
+  left: 0;
+  top: 0;
+}

@@ -591,13 +591,13 @@
         }
 
         wrap.classList.remove('hidden');
-        document.body.style.overflow = 'hidden';
+        travarFundo();
         if (typeof lucide !== 'undefined') lucide.createIcons();
     }
 
     function fecharModalEditarProduto() {
         wrap.classList.add('hidden');
-        document.body.style.overflow = '';
+        liberarFundo();
     }
 
     document.querySelectorAll('.btn-editar-produto').forEach(function(btn) {
@@ -644,7 +644,7 @@
     function abrir() {
         if (wrap) {
             wrap.classList.remove('hidden');
-            document.body.style.overflow = 'hidden';
+            travarFundo();
         }
         if (dataChegada && !dataChegada.value) {
             dataChegada.value = new Date().toISOString().split('T')[0];
@@ -657,7 +657,7 @@
     function fechar() {
         if (wrap) {
             wrap.classList.add('hidden');
-            document.body.style.overflow = '';
+            liberarFundo();
         }
         erroDiv.classList.add('hidden');
         erroDiv.textContent = '';
@@ -829,7 +829,7 @@ function abrirModalCorrigirCategoria() {
     var w = document.getElementById('modal-corrigir-categoria-wrap');
     if (!w) return;
     w.classList.remove('hidden');
-    document.body.style.overflow = 'hidden';
+    travarFundo();
     if (typeof lucide !== 'undefined') lucide.createIcons();
 }
 (function() {
@@ -842,7 +842,7 @@ function abrirModalCorrigirCategoria() {
     function fechar() {
         if (wrap) {
             wrap.classList.add('hidden');
-            document.body.style.overflow = '';
+            liberarFundo();
         }
         if (erroDiv) { erroDiv.classList.add('hidden'); erroDiv.textContent = ''; }
     }

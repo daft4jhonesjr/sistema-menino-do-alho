@@ -342,14 +342,14 @@
     function abrir() {
         if (wrap) {
             wrap.classList.remove('hidden');
-            document.body.style.overflow = 'hidden';
+            travarFundo();
         }
         if (typeof lucide !== 'undefined') lucide.createIcons();
     }
     function fechar() {
         if (wrap) {
             wrap.classList.add('hidden');
-            document.body.style.overflow = '';
+            liberarFundo();
         }
         erroDiv.classList.add('hidden');
         erroDiv.textContent = '';
@@ -441,12 +441,12 @@
         document.getElementById('edit_cidade').value = cidade;
         document.getElementById('edit_endereco').value = endereco;
         wrap.classList.remove('hidden');
-        document.body.style.overflow = 'hidden';
+        travarFundo();
         if (typeof lucide !== 'undefined') lucide.createIcons();
     }
     function fecharModal() {
         wrap.classList.add('hidden');
-        document.body.style.overflow = '';
+        liberarFundo();
     }
 
     document.querySelectorAll('.btn-editar-cliente').forEach(function(btn) {
@@ -472,14 +472,14 @@
         }
         if (wrapAbater) {
             wrapAbater.classList.remove('hidden');
-            document.body.style.overflow = 'hidden';
+            travarFundo();
         }
         if (typeof lucide !== 'undefined') lucide.createIcons();
     }
     function fecharModalAbater() {
         if (wrapAbater) {
             wrapAbater.classList.add('hidden');
-            document.body.style.overflow = '';
+            liberarFundo();
         }
     }
     document.querySelectorAll('.btn-abater-lote').forEach(function(btn) {

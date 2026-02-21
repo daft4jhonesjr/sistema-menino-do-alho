@@ -708,7 +708,7 @@
 <!-- Modal Adicionar Item a Venda Existente -->
 <div id="modalAddItemExistente-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
     <div class="fixed inset-0 bg-black/50" id="modalAddItemExistente-overlay"></div>
-    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white dark:bg-gray-800 rounded-xl shadow-sm dark:shadow-none border border-gray-200 dark:border-gray-700 z-50" onclick="event.stopPropagation()">
+    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-xl shadow-sm dark:shadow-none border border-gray-200 dark:border-gray-700 z-50" onclick="event.stopPropagation()">
         <div class="flex justify-between items-center px-6 py-4 bg-emerald-700 text-white rounded-t-xl">
             <h3 class="text-lg font-bold flex items-center">
                 <i data-lucide="plus-circle" class="w-5 h-5 mr-2"></i>Adicionar Produto ao Pedido
@@ -988,13 +988,13 @@
         if (editFormaPag) editFormaPag.value = formaPagamento;
 
         wrap.classList.remove('hidden');
-        document.body.style.overflow = 'hidden';
+        travarFundo();
         if (typeof lucide !== 'undefined') lucide.createIcons();
     }
 
     function fecharModalEditarVenda() {
         wrap.classList.add('hidden');
-        document.body.style.overflow = '';
+        liberarFundo();
     }
 
     document.querySelectorAll('.btn-editar-venda').forEach(function(btn) {
@@ -1025,7 +1025,7 @@ function abrirModalAddItem(idVenda) {
     if (quantidadeInput) quantidadeInput.value = '1';
     if (precoInput) precoInput.value = '';
     wrap.classList.remove('hidden');
-    document.body.style.overflow = 'hidden';
+    travarFundo();
     if (typeof lucide !== 'undefined') lucide.createIcons();
 }
 
@@ -1037,7 +1037,7 @@ function abrirModalAddItem(idVenda) {
 
     function fecharModalAddItem() {
         if (wrap) wrap.classList.add('hidden');
-        document.body.style.overflow = '';
+        liberarFundo();
     }
 
     if (overlay) overlay.addEventListener('click', fecharModalAddItem);
@@ -2086,7 +2086,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (editFormaPag) editFormaPag.value = formaPagamento;
 
         wrap.classList.remove('hidden');
-        document.body.style.overflow = 'hidden';
+        travarFundo();
         if (typeof lucide !== 'undefined') lucide.createIcons();
     }
 })();

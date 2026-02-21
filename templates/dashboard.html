@@ -865,8 +865,8 @@
     var selectPedido = document.getElementById('select-vincular-pedido');
     var docNomeEl = document.getElementById('modal-vincular-doc-nome');
 
-    function showModal() { modal.classList.remove('hidden'); }
-    function hideModal() { modal.classList.add('hidden'); }
+    function showModal() { modal.classList.remove('hidden'); travarFundo(); }
+    function hideModal() { modal.classList.add('hidden'); liberarFundo(); }
 
     function loadPedidos() {
         selectPedido.innerHTML = '<option value="">Carregando…</option>';
@@ -951,6 +951,7 @@ function abrirDetalhesMes(ano, mes) {
     var titulo = document.getElementById('modal-detalhes-mes-titulo');
     
     // Mostrar modal e loading
+    travarFundo();
     overlay.classList.remove('hidden');
     modal.classList.remove('hidden');
     loading.classList.remove('hidden');
@@ -1047,6 +1048,7 @@ function abrirDetalhesMes(ano, mes) {
 function fecharModalDetalhesMes() {
     document.getElementById('modal-detalhes-mes-overlay').classList.add('hidden');
     document.getElementById('modal-detalhes-mes').classList.add('hidden');
+    liberarFundo();
 }
 
 function abrirModalDashboard(filtro, titulo) {
@@ -1067,6 +1069,7 @@ function abrirModalDashboard(filtro, titulo) {
     loading.classList.remove('hidden');
     conteudo.classList.add('hidden');
     overlay.classList.remove('hidden');
+    travarFundo();
 
     fetch('/api/dashboard/detalhes/' + filtro)
         .then(function(response) { return response.json(); })
@@ -1111,6 +1114,7 @@ function abrirModalDashboard(filtro, titulo) {
 
 function fecharModalDashboard() {
     document.getElementById('modal-dashboard-detalhes-overlay').classList.add('hidden');
+    liberarFundo();
 }
 
 var ITENS_POR_PAGINA = 20;
@@ -1169,10 +1173,12 @@ function inicializarScrollInfinito(tbodyId, sentinelaId, scrollContainerId) {
 
 function abrirModalPrejuizo() {
     document.getElementById('modalPrejuizo').classList.remove('hidden');
+    travarFundo();
     inicializarScrollInfinito('tbody-prejuizo', 'sentinela-prejuizo', 'scroll-container-prejuizo');
 }
 function fecharModalPrejuizo() {
     document.getElementById('modalPrejuizo').classList.add('hidden');
+    liberarFundo();
 }
 
 // Função helper para formatar moeda (reutilizar se já existir)

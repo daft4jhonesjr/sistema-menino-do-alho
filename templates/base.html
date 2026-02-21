@@ -243,6 +243,19 @@
     {% block head_extras %}{% endblock %}
 </head>
 <body class="bg-emerald-50 text-gray-800 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-500 min-h-screen flex flex-col">
+    <script>
+    var _scrollPosAnteModal = 0;
+    function travarFundo() {
+        _scrollPosAnteModal = window.scrollY;
+        document.body.style.top = '-' + _scrollPosAnteModal + 'px';
+        document.body.classList.add('modal-aberto');
+    }
+    function liberarFundo() {
+        document.body.classList.remove('modal-aberto');
+        document.body.style.top = '';
+        window.scrollTo(0, _scrollPosAnteModal);
+    }
+    </script>
     <!-- Header -->
     <header class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 shadow-sm">
         <div class="container mx-auto px-4 py-5">
@@ -543,6 +556,7 @@
         modalVendasPaginaAtual = 1;
         modalVendasNfAnterior = null;
 
+        travarFundo();
         overlay.classList.remove('hidden');
         modal.classList.remove('hidden');
         loading.classList.remove('hidden');
@@ -770,6 +784,7 @@
     function fecharModalVendas() {
         document.getElementById('modal-vendas-overlay').classList.add('hidden');
         document.getElementById('modal-vendas').classList.add('hidden');
+        liberarFundo();
     }
 
     function mudarAbaModalProduto(aba) {
