@@ -184,11 +184,18 @@
         </button>
         <div class="flex flex-wrap items-center gap-4">
             <div class="text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700">
-                <span class="font-medium">Status:</span> 
-                <span class="text-blue-600">{{ total_documentos }} boletos lidos</span>, 
-                <span class="text-emerald-600">{{ documentos_vinculados }} vinculados com sucesso</span>
+                <span class="font-medium">Status:</span>
+                <span class="text-blue-600">{{ total_boletos }} boleto{{ 's' if total_boletos != 1 else '' }}</span> +
+                <span class="text-indigo-600 dark:text-indigo-400">{{ total_notas }} NF{{ 's' if total_notas != 1 else '' }}</span>
+                <span class="text-gray-400 mx-0.5">|</span>
+                <span class="text-emerald-600">{{ boletos_vinculados + notas_vinculadas }} vinculados</span>
+                {% if documentos_sem_vinculo > 0 %}
+                <span class="text-gray-400 mx-0.5">|</span>
+                <span class="text-amber-600 dark:text-amber-400">{{ documentos_sem_vinculo }} pendente{{ 's' if documentos_sem_vinculo != 1 else '' }}</span>
+                {% endif %}
                 {% if erros > 0 %}
-                , <span class="text-red-600">{{ erros }} com erro de cadastro</span>
+                <span class="text-gray-400 mx-0.5">|</span>
+                <span class="text-red-600">{{ erros }} com erro</span>
                 {% endif %}
             </div>
             <form action="{{ url_for('organizar_e_vincular') }}" method="post" class="inline">

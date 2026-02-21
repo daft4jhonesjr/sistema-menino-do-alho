@@ -2658,6 +2658,10 @@ def dashboard():
     total_documentos = Documento.query.count()
     documentos_vinculados = Documento.query.filter(Documento.venda_id.isnot(None)).count()
     documentos_sem_vinculo = total_documentos - documentos_vinculados
+    total_boletos = Documento.query.filter(Documento.tipo == 'BOLETO').count()
+    total_notas = Documento.query.filter(Documento.tipo == 'NOTA_FISCAL').count()
+    boletos_vinculados = Documento.query.filter(Documento.tipo == 'BOLETO', Documento.venda_id.isnot(None)).count()
+    notas_vinculadas = Documento.query.filter(Documento.tipo == 'NOTA_FISCAL', Documento.venda_id.isnot(None)).count()
     
     if vinculos_novos > 0:
         flash(f"✅ Sucesso: {vinculos_novos} documento(s) vinculado(s) automaticamente pela NF.", 'success')
@@ -2894,6 +2898,10 @@ def dashboard():
                          total_documentos=total_documentos,
                          documentos_vinculados=documentos_vinculados,
                          documentos_sem_vinculo=documentos_sem_vinculo,
+                         total_boletos=total_boletos,
+                         total_notas=total_notas,
+                         boletos_vinculados=boletos_vinculados,
+                         notas_vinculadas=notas_vinculadas,
                          processados=processados,
                          vinculos_novos=vinculos_novos,
                          erros=len(erros),  # Passar número de erros para o template
