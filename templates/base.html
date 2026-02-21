@@ -133,22 +133,31 @@
         
         /* Estilos para agrupamento visual de vendas por NF */
         .venda-grupo-par {
-            background-color: #f8f9fa !important; /* Cinza muito claro */
+            background-color: #f8f9fa !important;
         }
-        
         .venda-grupo-impar {
-            background-color: #ffffff !important; /* Branco */
+            background-color: #ffffff !important;
         }
-        
-        /* Borda de separação no início de cada novo grupo (quando NF muda) */
         .venda-grupo-separador {
             border-top: 2px solid #dee2e6 !important;
         }
-        
-        /* Garantir que o hover funcione mesmo com background customizado */
         .venda-grupo-par:hover,
         .venda-grupo-impar:hover {
-            background-color: #d1fae5 !important; /* Verde claro do hover */
+            background-color: #d1fae5 !important;
+        }
+        /* Dark mode */
+        .dark .venda-grupo-par {
+            background-color: #1f2937 !important; /* gray-800 */
+        }
+        .dark .venda-grupo-impar {
+            background-color: #111827 !important; /* gray-900 */
+        }
+        .dark .venda-grupo-separador {
+            border-top-color: #4b5563 !important; /* gray-600 */
+        }
+        .dark .venda-grupo-par:hover,
+        .dark .venda-grupo-impar:hover {
+            background-color: #064e3b33 !important; /* emerald-900/20 */
         }
     </style>
     <style>
