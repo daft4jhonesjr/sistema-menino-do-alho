@@ -107,6 +107,7 @@
     .pedido-chevron { transition: transform 0.2s ease-in-out; }
     .pedido-detalhes { transition: opacity 0.2s ease-in-out; }
     .pedido-resumo { user-select: none; }
+    .filtro-empresa-oculto { display: none !important; }
     .badge-situacao-toggle:hover { opacity: 0.9; }
     .badge-status-transition {
         animation: badge-status-pulse 0.4s ease-out;
@@ -2232,33 +2233,44 @@ function prepararNovoProdutoRelacionado() {
 })();
 
 // Filtro dinâmico por Empresa (tabela + cards, sem recarregar)
+// Usa classe CSS dedicada para não conflitar com o toggle hidden do expandir/recolher
 (function() {
     var selectFiltro = document.getElementById('filtro-empresa');
     if (!selectFiltro) return;
 
+    var CLASSE_FILTRO = 'filtro-empresa-oculto';
+
     function filtrarPorEmpresa() {
         var val = (selectFiltro.value || 'TODAS').toUpperCase();
 
-        // Filtra linhas da tabela (pedido-resumo + pedido-detalhes)
         document.querySelectorAll('tr.pedido-resumo').forEach(function(tr) {
             var emp = (tr.getAttribute('data-empresa') || '').toUpperCase();
-            var visivel = (val === 'TODAS' || emp === val);
-            tr.style.display = visivel ? '' : 'none';
+            var ocultar = (val !== 'TODAS' && emp !== val);
+
+            tr.classList.toggle(CLASSE_FILTRO, ocultar);
+
             var pid = tr.getAttribute('data-pedido-id');
             if (pid) {
                 var detalhes = document.querySelector('tr.pedido-detalhes[data-pedido-id="' + pid + '"]');
-                if (detalhes) detalhes.style.display = visivel && !detalhes.classList.contains('hidden') ? '' : 'none';
+                if (detalhes) {
+                    detalhes.classList.toggle(CLASSE_FILTRO, ocultar);
+                    if (ocultar && !detalhes.classList.contains('hidden')) {
+                        detalhes.classList.add('hidden');
+                        var chevron = tr.querySelector('.pedido-chevron');
+                        if (chevron) chevron.style.transform = 'rotate(0deg)';
+                    }
+                }
             }
         });
 
-        // Filtra cards (view-grade inline + AJAX)
         document.querySelectorAll('#view-grade > div[data-empresa]').forEach(function(card) {
             var emp = (card.getAttribute('data-empresa') || '').toUpperCase();
-            card.style.display = (val === 'TODAS' || emp === val) ? '' : 'none';
+            card.classList.toggle(CLASSE_FILTRO, val !== 'TODAS' && emp !== val);
         });
     }
 
     selectFiltro.addEventListener('change', filtrarPorEmpresa);
+    window._filtrarPorEmpresa = filtrarPorEmpresa;
 })();
 </script>
 {% endblock %}
