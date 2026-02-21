@@ -2551,73 +2551,87 @@ def index():
     return redirect(url_for('dashboard'))
 
 
+def _categoria_produto(nome_produto_bruto):
+    """Agrupa produtos em categorias mestras para o Radar de Recompra."""
+    nome = str(nome_produto_bruto).upper()
+    if 'ALHO' in nome:
+        return 'ALHO'
+    if 'SACOLA' in nome:
+        return 'SACOLA'
+    if 'CAFÉ' in nome or 'CAFE' in nome:
+        return 'CAFÉ'
+    palavras = nome.split()
+    return palavras[0] if palavras else 'OUTROS'
+
+
 def get_radar_recompra():
-    """Calcula alertas de recompra por cliente e produto. A média de dias entre compras é calculada
-    individualmente por produto para cada cliente (evita falsos positivos ao misturar Alho e Sacola)."""
-    from datetime import datetime, timedelta
-    clientes = Cliente.query.all()
-    alertas = []
+    """Calcula alertas de recompra baseado no consumo diário real (caixas/dia).
+    Fórmula: consumo_diario = qtd_consumida_historico / dias_corridos
+             duracao_estimada = qtd_ultima_compra / consumo_diario
+             data_prevista = data_ultima_compra + duracao_estimada"""
     hoje = datetime.now().date()
+    alertas = []
 
-    for cliente in clientes:
-        vendas = Venda.query.filter_by(cliente_id=cliente.id).order_by(Venda.data_venda.asc()).all()
+    vendas_all = Venda.query.options(
+        joinedload(Venda.cliente), joinedload(Venda.produto)
+    ).order_by(Venda.cliente_id, Venda.data_venda.asc()).all()
 
-        # Agrupar datas de venda por categoria mestra (ALHO, SACOLA, CAFÉ, etc.)
-        # Agrupa marcas e tamanhos diferentes do mesmo tipo na mesma 'gaveta'
-        vendas_por_produto = {}
-        for venda in vendas:
-            nome_produto_bruto = str(venda.produto.nome_produto if venda.produto else 'Produto Desconhecido').upper()
-            # Define a categoria mestra baseada em palavras-chave
-            if 'ALHO' in nome_produto_bruto:
-                categoria = 'ALHO'
-            elif 'SACOLA' in nome_produto_bruto:
-                categoria = 'SACOLA'
-            elif 'CAFÉ' in nome_produto_bruto or 'CAFE' in nome_produto_bruto:
-                categoria = 'CAFÉ'
-            else:
-                # Se não for nenhum dos principais, agrupa pela primeira palavra (ex: 'CEBOLA')
-                palavras = nome_produto_bruto.split()
-                categoria = palavras[0] if palavras else 'OUTROS'
+    grupos = {}
+    for v in vendas_all:
+        nome_prod = v.produto.nome_produto if v.produto else 'Desconhecido'
+        cat = _categoria_produto(nome_prod)
+        key = (v.cliente_id, cat)
+        if key not in grupos:
+            grupos[key] = {'cliente_nome': v.cliente.nome_cliente, 'categoria': cat, 'vendas': []}
+        grupos[key]['vendas'].append(v)
 
-            if categoria not in vendas_por_produto:
-                vendas_por_produto[categoria] = []
-            vendas_por_produto[categoria].append(venda.data_venda)
+    for (cliente_id, cat), grupo in grupos.items():
+        vendas_hist = grupo['vendas']
+        cliente_nome = grupo['cliente_nome']
 
-        # Calcular média individualmente para cada categoria
-        for categoria, datas in vendas_por_produto.items():
-            if len(datas) >= 2:
-                intervalos = []
-                for i in range(1, len(datas)):
-                    dias = (datas[i] - datas[i - 1]).days
-                    if dias > 0:  # Ignora compras no mesmo dia
-                        intervalos.append(dias)
+        if len(vendas_hist) < 2:
+            continue
 
-                if intervalos:
-                    media_dias = sum(intervalos) / len(intervalos)
-                    ultima_venda = datas[-1]
-                    proxima_compra = ultima_venda + timedelta(days=media_dias)
-                    dias_para_comprar = (proxima_compra - hoje).days
+        primeira = vendas_hist[0]
+        ultima = vendas_hist[-1]
+        dias_corridos = (ultima.data_venda - primeira.data_venda).days
+        if dias_corridos <= 0:
+            continue
 
-                    if dias_para_comprar <= 4:
-                        if dias_para_comprar < 0:
-                            status = 'Atrasado'
-                            cor = 'text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/30'
-                        elif dias_para_comprar == 0:
-                            status = 'É Hoje!'
-                            cor = 'text-orange-600 dark:text-orange-400 bg-orange-100 dark:bg-orange-900/30'
-                        else:
-                            status = f'Em {dias_para_comprar} dias'
-                            cor = 'text-yellow-600 dark:text-yellow-400 bg-yellow-100 dark:bg-yellow-900/30'
+        qtd_consumida = sum(v.quantidade_venda for v in vendas_hist[:-1])
+        if qtd_consumida <= 0:
+            continue
 
-                        alertas.append({
-                            'cliente_nome': cliente.nome_cliente,
-                            'produto': categoria,
-                            'ultima_venda': ultima_venda.strftime('%d/%m/%Y'),
-                            'media_dias': round(media_dias),
-                            'status': status,
-                            'cor': cor,
-                            'dias_restantes': dias_para_comprar
-                        })
+        consumo_diario = qtd_consumida / dias_corridos
+        qtd_ultima = ultima.quantidade_venda
+        duracao_estimada = qtd_ultima / consumo_diario
+        data_prevista = ultima.data_venda + timedelta(days=int(round(duracao_estimada)))
+        dias_restantes = (data_prevista - hoje).days
+
+        if dias_restantes > 4:
+            continue
+
+        if dias_restantes < 0:
+            status = 'Atrasado'
+            cor = 'text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/30'
+        elif dias_restantes == 0:
+            status = 'É Hoje!'
+            cor = 'text-orange-600 dark:text-orange-400 bg-orange-100 dark:bg-orange-900/30'
+        else:
+            status = f'Em {dias_restantes} dias'
+            cor = 'text-yellow-600 dark:text-yellow-400 bg-yellow-100 dark:bg-yellow-900/30'
+
+        alertas.append({
+            'cliente_nome': cliente_nome,
+            'produto': cat,
+            'ultima_venda': ultima.data_venda.strftime('%d/%m/%Y'),
+            'duracao_dias': round(duracao_estimada),
+            'consumo_dia': round(consumo_diario, 2),
+            'qtd_ultima': qtd_ultima,
+            'status': status,
+            'cor': cor,
+            'dias_restantes': dias_restantes
+        })
 
     alertas.sort(key=lambda x: x['dias_restantes'])
     return alertas
