@@ -2465,6 +2465,28 @@ def editar_usuario_completo(id):
     return redirect(url_for('gerenciar_usuarios'))
 
 
+@app.route('/gerenciar_usuarios/excluir/<int:id>', methods=['POST'])
+@login_required
+@admin_required
+def excluir_usuario(id):
+    if current_user.id == id:
+        flash('Você não pode excluir a sua própria conta!', 'error')
+        return redirect(url_for('gerenciar_usuarios'))
+    u = Usuario.query.get_or_404(id)
+    if u.username == 'Jhones':
+        flash('O administrador principal (Jhones) não pode ser excluído.', 'warning')
+        return redirect(url_for('gerenciar_usuarios'))
+    try:
+        nome = u.username
+        db.session.delete(u)
+        db.session.commit()
+        flash(f'Usuário "{nome}" excluído com sucesso.', 'success')
+    except Exception:
+        db.session.rollback()
+        flash('Erro ao excluir usuário.', 'error')
+    return redirect(url_for('gerenciar_usuarios'))
+
+
 @app.route('/gerenciar_usuarios/alterar_role/<int:id>', methods=['POST'])
 @login_required
 @admin_required
