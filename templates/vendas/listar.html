@@ -494,6 +494,22 @@
                 </a>
                 {% endif %}
                 <a href="{{ url_for('recibo_venda', id=pedido.primeira_venda_id) }}" target="_blank" rel="noopener noreferrer" class="p-1.5 rounded text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-transform hover:scale-110" title="Imprimir Recibo"><i data-lucide="printer" class="w-5 h-5"></i></a>
+                {% set v0 = pedido.vendas[0] if pedido.vendas else None %}
+                {% if v0 %}
+                <button type="button" class="btn-editar-venda p-1.5 rounded text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-transform hover:scale-110 bg-transparent border-none cursor-pointer" title="Editar Venda"
+                    data-id="{{ v0.id }}"
+                    data-cliente-id="{{ v0.cliente_id }}"
+                    data-produto-id="{{ v0.produto_id }}"
+                    data-qtd="{{ v0.quantidade_venda }}"
+                    data-preco="{{ v0.preco_venda }}"
+                    data-nf="{{ v0.nf or '' }}"
+                    data-data="{{ v0.data_venda.strftime('%Y-%m-%d') }}"
+                    data-empresa="{{ v0.empresa_faturadora or '' }}"
+                    data-situacao="{{ v0.situacao or 'PENDENTE' }}"
+                    data-forma-pagamento="{{ v0.forma_pagamento or '' }}">
+                    <i data-lucide="pencil" class="w-5 h-5"></i>
+                </button>
+                {% endif %}
                 <form action="{{ url_for('excluir_venda', id=pedido.primeira_venda_id) }}" method="POST" class="inline form-excluir-pedido" data-cliente="{{ pedido.cliente_nome }}" data-nf="{{ pedido.nf }}" data-data="{{ pedido.data_venda.strftime('%d/%m/%Y') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                     <button type="submit" class="p-1.5 rounded text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 transition-transform hover:scale-110" title="Excluir Pedido" onclick="return confirm('Excluir este pedido?');"><i data-lucide="trash-2" class="w-5 h-5"></i></button>
@@ -1838,7 +1854,17 @@ document.addEventListener('DOMContentLoaded', function() {
             if (cardsHtml && viewGrade) {
                 var emptyDiv = viewGrade.querySelector('.col-span-full');
                 if (emptyDiv) emptyDiv.remove();
+                var cardsAntes = viewGrade.querySelectorAll('.btn-editar-venda').length;
                 viewGrade.insertAdjacentHTML('beforeend', cardsHtml);
+                var todosCardsBtn = viewGrade.querySelectorAll('.btn-editar-venda');
+                Array.from(todosCardsBtn).slice(cardsAntes).forEach(function(btn) {
+                    if (!btn.hasAttribute('data-pagination-initialized')) {
+                        btn.setAttribute('data-pagination-initialized', 'true');
+                        btn.addEventListener('click', function() {
+                            abrirModalEditarVenda(btn);
+                        });
+                    }
+                });
             }
             
             var linhasDepois = tbody.querySelectorAll('tr.pedido-resumo').length;

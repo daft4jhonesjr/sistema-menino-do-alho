@@ -3297,10 +3297,10 @@ def importar_caixa():
 def listar_clientes():
     ordem = request.args.get('ordem', 'asc')
     if ordem == 'desc':
-        clientes = Cliente.query.order_by(Cliente.nome_cliente.desc()).limit(500).all()
+        clientes = Cliente.query.order_by(Cliente.id.desc()).limit(500).all()
     else:
         ordem = 'asc'
-        clientes = Cliente.query.order_by(Cliente.nome_cliente.asc()).limit(500).all()
+        clientes = Cliente.query.order_by(Cliente.id.asc()).limit(500).all()
     return render_template('clientes/listar.html', clientes=clientes, ordem=ordem)
 
 
