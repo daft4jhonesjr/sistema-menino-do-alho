@@ -371,9 +371,9 @@
         <h5 class="text-gray-600 dark:text-gray-400 mb-3 flex items-center text-base font-semibold">
             <i data-lucide="calendar" class="w-5 h-5 mr-2 text-emerald-600"></i>Detalhamento Mensal
         </h5>
-        <div class="flex flex-wrap gap-4 mt-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
             {% for item in detalhamento_mensal %}
-            <div onclick="abrirDetalhesMes({{ item.ano }}, {{ item.mes_numero }})" class="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3 flex flex-col min-w-[220px] shadow-sm cursor-pointer hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-300 dark:hover:border-emerald-700 transition">
+            <div onclick="abrirDetalhesMes({{ item.ano }}, {{ item.mes_numero }})" class="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3 flex flex-col shadow-sm cursor-pointer hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-300 dark:hover:border-emerald-700 transition">
                 <div class="mb-2 border-b border-gray-200 dark:border-gray-700 pb-2">
                     <span class="font-bold text-gray-800 dark:text-white">{{ item.mes_ano|default(item.mes) }}</span>
                 </div>
