@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_file, current_app
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-from flask_wtf.csrf import CSRFProtect
+from flask_wtf.csrf import CSRFProtect, generate_csrf
 from flask_compress import Compress
 from flask_caching import Cache
 from flask_limiter import Limiter
@@ -6048,6 +6048,7 @@ def admin_reprocessar_vencimentos():
             <p class="text-sm text-emerald-800"><strong>Vendas sem data de vencimento:</strong> {total_sem_vencimento}</p>
         </div>
         <form method="POST" class="flex gap-3">
+            <input type="hidden" name="csrf_token" value="{generate_csrf()}"/>
             <button type="submit" class="bg-emerald-700 text-white px-6 py-3 rounded-xl hover:bg-emerald-600 transition font-semibold">
                 Executar Reprocessamento
             </button>
