@@ -33,6 +33,11 @@
                 <input type="text" name="username" value="{{ user.username }}" class="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 focus:ring-emerald-500 focus:border-emerald-500 font-medium text-gray-800 dark:text-gray-100 dark:bg-gray-700">
             </div>
             <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">E-mail (Opcional)</label>
+                <input type="email" name="email" value="{{ user.email or '' }}" placeholder="seu@email.com" class="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-3 focus:ring-emerald-500 focus:border-emerald-500 font-medium text-gray-800 dark:text-gray-100 dark:bg-gray-700">
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Utilizado para receber novidades e avisos do sistema.</p>
+            </div>
+            <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nível de Acesso</label>
                 <input type="text" value="{{ 'Administrador' if user.role == 'admin' else 'Usuário Comum' }}" class="w-full border border-gray-200 dark:border-gray-600 rounded-lg p-3 bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed" disabled>
             </div>

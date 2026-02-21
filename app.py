@@ -2139,6 +2139,12 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             db.session.commit()
         except (OperationalError, Exception):
             db.session.rollback()
+        # Migração: email em usuarios
+        try:
+            db.session.execute(text('ALTER TABLE usuarios ADD COLUMN email VARCHAR(150)'))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
         # --- MIGRACAO AUTOMATICA: Colunas de notificacao em usuarios (PostgreSQL) ---
         try:
             # ADD COLUMN IF NOT EXISTS garante que só cria na primeira vez (PostgreSQL)
@@ -2335,6 +2341,8 @@ def perfil():
         imagem = request.files.get('profile_image')
         # Atualizar Nome Real/Completo
         current_user.nome = novo_nome_real if novo_nome_real else None
+        novo_email = request.form.get('email', '').strip()
+        current_user.email = novo_email if novo_email else None
         # Atualizar Username (com verificação de duplicidade)
         if novo_username and novo_username != current_user.username:
             if Usuario.query.filter_by(username=novo_username).first():
@@ -2397,7 +2405,8 @@ def cadastro():
         elif Usuario.query.filter_by(username=username).first():
             erro = 'Este usuário já está em uso.'
         else:
-            u = Usuario(username=username, password_hash=generate_password_hash(senha), role='user')
+            email_cadastro = (request.form.get('email') or '').strip() or None
+            u = Usuario(username=username, password_hash=generate_password_hash(senha), role='user', email=email_cadastro)
             db.session.add(u)
             db.session.commit()
             flash('Cadastro realizado! Faça login.', 'success')
