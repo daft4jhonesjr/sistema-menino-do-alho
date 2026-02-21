@@ -416,7 +416,14 @@
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Valor Total</th>
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Lucro Total</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Vencimento</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Empresa</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">
+                            <select id="filtro-empresa" class="bg-transparent text-gray-500 dark:text-gray-400 font-medium uppercase cursor-pointer border-none p-0 focus:ring-0 text-xs tracking-wider appearance-none pr-4" style="background-image:url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 20 20%22%3E%3Cpath stroke=%22%236b7280%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%222%22 d=%22m6 8 4 4 4-4%22/%3E%3C/svg%3E');background-repeat:no-repeat;background-position:right 0 center;background-size:14px;">
+                                <option value="TODAS">Empresa ▾</option>
+                                <option value="DESTAK">DESTAK</option>
+                                <option value="PATY">PATY</option>
+                                <option value="NENHUM">NENHUM</option>
+                            </select>
+                        </th>
                         {% set url_th_situacao = {} %}
                         {% if request.args.get('produto_id') %}{% set _ = url_th_situacao.update({'produto_id': request.args.get('produto_id')}) %}{% endif %}
                         {% if request.args.get('cliente_id') %}{% set _ = url_th_situacao.update({'cliente_id': request.args.get('cliente_id')}) %}{% endif %}
@@ -465,7 +472,7 @@
         {% if pedidos %}
         {% for pedido in pedidos %}
         {% set row_vencida = pedido.is_vencido %}
-        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 {{ 'border-l-4 border-l-red-500' if row_vencida else 'border-l-4 border-l-emerald-500' }}">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 {{ 'border-l-4 border-l-red-500' if row_vencida else 'border-l-4 border-l-emerald-500' }}" data-empresa="{{ (pedido.empresa_faturadora or 'NENHUM') | upper }}">
             <div class="flex justify-between items-start mb-2">
                 <div>
                     <span class="text-xs text-gray-500 dark:text-gray-400">{{ pedido.data_venda.strftime('%d/%m/%Y') }}</span>
@@ -1945,6 +1952,12 @@ document.addEventListener('DOMContentLoaded', function() {
             if (typeof lucide !== 'undefined') {
                 lucide.createIcons();
             }
+
+            // Re-aplicar filtro de empresa aos novos elementos
+            var filtroEmp = document.getElementById('filtro-empresa');
+            if (filtroEmp && filtroEmp.value !== 'TODAS') {
+                filtroEmp.dispatchEvent(new Event('change'));
+            }
             
             initAccordion();
             
@@ -2147,6 +2160,36 @@ document.addEventListener('DOMContentLoaded', function() {
     criarGrafico('chartSituacao', dados.situacao);
     criarGrafico('chartPagamento', dados.pagamento);
     criarGrafico('chartEmpresa', dados.empresa);
+})();
+
+// Filtro dinâmico por Empresa (tabela + cards, sem recarregar)
+(function() {
+    var selectFiltro = document.getElementById('filtro-empresa');
+    if (!selectFiltro) return;
+
+    function filtrarPorEmpresa() {
+        var val = (selectFiltro.value || 'TODAS').toUpperCase();
+
+        // Filtra linhas da tabela (pedido-resumo + pedido-detalhes)
+        document.querySelectorAll('tr.pedido-resumo').forEach(function(tr) {
+            var emp = (tr.getAttribute('data-empresa') || '').toUpperCase();
+            var visivel = (val === 'TODAS' || emp === val);
+            tr.style.display = visivel ? '' : 'none';
+            var pid = tr.getAttribute('data-pedido-id');
+            if (pid) {
+                var detalhes = document.querySelector('tr.pedido-detalhes[data-pedido-id="' + pid + '"]');
+                if (detalhes) detalhes.style.display = visivel && !detalhes.classList.contains('hidden') ? '' : 'none';
+            }
+        });
+
+        // Filtra cards (view-grade inline + AJAX)
+        document.querySelectorAll('#view-grade > div[data-empresa]').forEach(function(card) {
+            var emp = (card.getAttribute('data-empresa') || '').toUpperCase();
+            card.style.display = (val === 'TODAS' || emp === val) ? '' : 'none';
+        });
+    }
+
+    selectFiltro.addEventListener('change', filtrarPorEmpresa);
 })();
 </script>
 {% endblock %}

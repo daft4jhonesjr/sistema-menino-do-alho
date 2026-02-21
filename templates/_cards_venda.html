@@ -13,7 +13,7 @@
 {% else %}
 {% set card_bg_class = 'bg-white dark:bg-gray-800' %}
 {% endif %}
-<div class="{{ card_bg_class }} rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 {{ 'border-l-4 border-l-red-500' if row_vencida else 'border-l-4 border-l-emerald-500' }}">
+<div class="{{ card_bg_class }} rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 {{ 'border-l-4 border-l-red-500' if row_vencida else 'border-l-4 border-l-emerald-500' }}" data-empresa="{{ (pedido.empresa_faturadora or 'NENHUM') | upper }}">
     <div class="flex justify-between items-start mb-2">
         <div>
             <span class="text-xs text-gray-500 dark:text-gray-400">{{ pedido.data_venda.strftime('%d/%m/%Y') }}</span>

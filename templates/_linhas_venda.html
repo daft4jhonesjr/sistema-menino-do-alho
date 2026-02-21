@@ -21,7 +21,7 @@
 {% set zebra_class = row_bg_class %}
 {% set zebra_bg_class = 'bg-white dark:bg-gray-800' if loop.index % 2 == 0 else 'bg-emerald-50/30 dark:bg-emerald-900/30' %}
 <!-- Linha de Resumo do Pedido (Expansível) -->
-<tr class="pedido-resumo cursor-pointer transition {{ row_bg_class }} {{ row_hover_class }} border-b border-gray-200 dark:border-gray-700" data-pedido-id="{{ pedido_unique_id }}" data-venda-ids="{{ pedido.vendas|map(attribute='id')|list|tojson }}" data-lucro-total="{{ pedido.total_lucro }}">
+<tr class="pedido-resumo cursor-pointer transition {{ row_bg_class }} {{ row_hover_class }} border-b border-gray-200 dark:border-gray-700" data-pedido-id="{{ pedido_unique_id }}" data-venda-ids="{{ pedido.vendas|map(attribute='id')|list|tojson }}" data-lucro-total="{{ pedido.total_lucro }}" data-empresa="{{ (pedido.empresa_faturadora or 'NENHUM') | upper }}">
     <td class="px-3 py-4 text-center" onclick="event.stopPropagation();">
         <input type="checkbox" class="bulk-row-check rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" data-venda-ids="{{ pedido.vendas|map(attribute='id')|list|tojson }}" data-lucro-total="{{ pedido.total_lucro }}">
     </td>
