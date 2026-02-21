@@ -481,6 +481,7 @@
                     data-situacao="{{ pedido.situacao }}"
                     data-cliente="{{ pedido.cliente_nome }}"
                     data-valor="{{ pedido.total_valor|formato_moeda }}"
+                    data-forma-pagamento="{{ pedido.forma_pagamento or '' }}"
                     title="{{ 'Clique para marcar como pago' if pedido.situacao == 'PENDENTE' else 'Clique para reverter para pendente' }}">{{ pedido.situacao }}</button>
                 {% endif %}
             </div>
@@ -819,9 +820,28 @@
         var cliente = btn.getAttribute('data-cliente') || '—';
         var nf = btn.getAttribute('data-nf') || 'N/A';
         var valor = btn.getAttribute('data-valor') || '—';
+        var formaPag = (btn.getAttribute('data-forma-pagamento') || '').trim();
         document.getElementById('modal-confirmar-cliente').textContent = cliente;
         document.getElementById('modal-confirmar-nf').textContent = nf;
         document.getElementById('modal-confirmar-valor').textContent = valor;
+        var selectCaixa = document.getElementById('modal-confirmar-forma-pagamento');
+        if (selectCaixa && formaPag && formaPag !== 'None') {
+            var fp = formaPag.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            var matched = false;
+            for (var i = 0; i < selectCaixa.options.length; i++) {
+                var optVal = selectCaixa.options[i].value.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                var optTxt = selectCaixa.options[i].text.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                if (optVal === fp || optTxt.indexOf(fp) !== -1) {
+                    selectCaixa.value = selectCaixa.options[i].value;
+                    matched = true;
+                    break;
+                }
+            }
+            if (matched) {
+                selectCaixa.classList.add('ring-2', 'ring-emerald-500', 'transition-all');
+                setTimeout(function() { selectCaixa.classList.remove('ring-2', 'ring-emerald-500'); }, 1200);
+            }
+        }
         modalConfirmarBtn = btn;
         modalBackdrop.classList.remove('hidden');
         modalEl.classList.remove('hidden');
@@ -861,6 +881,7 @@
                 replacement.setAttribute('data-situacao', novo);
                 replacement.setAttribute('data-cliente', cliente);
                 replacement.setAttribute('data-valor', valor);
+                replacement.setAttribute('data-forma-pagamento', btn.getAttribute('data-forma-pagamento') || formaPagamento || '');
                 replacement.title = novo === 'PAGO' ? 'Clique para reverter para pendente' : 'Clique para marcar como pago';
                 replacement.textContent = novo;
                 btn.parentNode.replaceChild(replacement, btn);

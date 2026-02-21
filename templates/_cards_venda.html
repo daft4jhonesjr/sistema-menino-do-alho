@@ -31,6 +31,7 @@
                 data-situacao="{{ pedido.situacao }}"
                 data-cliente="{{ pedido.cliente_nome }}"
                 data-valor="{{ pedido.total_valor|formato_moeda }}"
+                data-forma-pagamento="{{ pedido.forma_pagamento or '' }}"
                 title="{{ 'Clique para marcar como pago' if pedido.situacao == 'PENDENTE' else 'Clique para reverter para pendente' }}">{{ pedido.situacao }}</button>
             {% endif %}
         </div>
