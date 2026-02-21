@@ -593,7 +593,7 @@
                 <i data-lucide="x" class="w-5 h-5"></i>
             </button>
         </div>
-        <div class="flex-1 overflow-auto p-6">
+        <div id="scroll-container-detalhes" class="flex-1 overflow-auto p-6">
             <div id="modal-dashboard-detalhes-loading" class="text-center py-12 text-gray-500 dark:text-gray-400 hidden">
                 Carregando...
             </div>
@@ -612,11 +612,14 @@
                     <tbody id="tabela-detalhes-body" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                     </tbody>
                 </table>
-                <div class="text-center py-4 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-100 dark:border-gray-700">
-                    <button id="btn-mais-detalhes" type="button" onclick="carregarMais('tabela-detalhes-body', 'btn-mais-detalhes')" class="hidden inline-flex items-center gap-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-medium py-2 px-6 rounded-full text-sm shadow-sm transition-all">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                        Carregar mais resultados
-                    </button>
+                <div id="sentinela-detalhes" class="w-full text-center py-4 hidden">
+                    <div class="inline-flex items-center gap-2 text-gray-500 dark:text-gray-400">
+                        <svg class="animate-spin h-5 w-5 text-emerald-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span class="text-sm font-medium">Carregando mais...</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -635,7 +638,7 @@
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
             </button>
         </div>
-        <div class="p-0 max-h-[60vh] overflow-y-auto">
+        <div id="scroll-container-prejuizo" class="p-0 max-h-[60vh] overflow-y-auto">
             <table class="w-full text-left whitespace-nowrap">
                 <thead class="bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-400 text-xs uppercase font-bold sticky top-0 shadow-sm">
                     <tr>
@@ -666,11 +669,14 @@
                     {% endfor %}
                 </tbody>
             </table>
-            <div class="text-center py-4 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-100 dark:border-gray-700">
-                <button id="btn-mais-prejuizo" type="button" onclick="carregarMais('tbody-prejuizo', 'btn-mais-prejuizo')" class="hidden inline-flex items-center gap-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-medium py-2 px-6 rounded-full text-sm shadow-sm transition-all">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                    Carregar mais resultados
-                </button>
+            <div id="sentinela-prejuizo" class="w-full text-center py-4 hidden">
+                <div class="inline-flex items-center gap-2 text-gray-500 dark:text-gray-400">
+                    <svg class="animate-spin h-5 w-5 text-emerald-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span class="text-sm font-medium">Carregando mais...</span>
+                </div>
             </div>
         </div>
         <div class="bg-gray-50 dark:bg-gray-900 p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end">
@@ -1049,8 +1055,12 @@ function abrirModalDashboard(filtro, titulo) {
 
     tituloEl.innerHTML = '<i data-lucide="list" class="w-5 h-5 mr-2"></i>' + titulo;
     tbody.innerHTML = '';
-    var btnMais = document.getElementById('btn-mais-detalhes');
-    if (btnMais) btnMais.classList.add('hidden');
+    var sentinela = document.getElementById('sentinela-detalhes');
+    if (sentinela) sentinela.classList.add('hidden');
+    if (_observersAtivos['sentinela-detalhes']) {
+        _observersAtivos['sentinela-detalhes'].disconnect();
+        delete _observersAtivos['sentinela-detalhes'];
+    }
     loading.classList.remove('hidden');
     conteudo.classList.add('hidden');
     overlay.classList.remove('hidden');
@@ -1085,7 +1095,7 @@ function abrirModalDashboard(filtro, titulo) {
                     tbody.appendChild(tr);
                 });
             }
-            inicializarPaginacao('tabela-detalhes-body', 'btn-mais-detalhes');
+            inicializarScrollInfinito('tabela-detalhes-body', 'sentinela-detalhes', 'scroll-container-detalhes');
             if (typeof lucide !== 'undefined') lucide.createIcons();
         })
         .catch(function(error) {
@@ -1100,44 +1110,63 @@ function fecharModalDashboard() {
     document.getElementById('modal-dashboard-detalhes-overlay').classList.add('hidden');
 }
 
-const ITENS_POR_PAGINA = 20;
-function inicializarPaginacao(tbodyId, btnId) {
+var ITENS_POR_PAGINA = 20;
+var _observersAtivos = {};
+function inicializarScrollInfinito(tbodyId, sentinelaId, scrollContainerId) {
     var tbody = document.getElementById(tbodyId);
-    if (!tbody) return;
+    var sentinela = document.getElementById(sentinelaId);
+    if (!tbody || !sentinela) return;
+
+    if (_observersAtivos[sentinelaId]) {
+        _observersAtivos[sentinelaId].disconnect();
+        delete _observersAtivos[sentinelaId];
+    }
+
     var linhas = tbody.querySelectorAll('tr');
+    var totalOcultar = 0;
     linhas.forEach(function(linha, index) {
         if (linha.querySelector('td[colspan]')) return;
         if (index >= ITENS_POR_PAGINA) {
             linha.classList.add('hidden', 'linha-paginada');
+            totalOcultar++;
         } else {
             linha.classList.remove('hidden', 'linha-paginada');
         }
     });
-    var btn = document.getElementById(btnId);
-    if (btn) {
+
+    if (totalOcultar === 0) {
+        sentinela.classList.add('hidden');
+        return;
+    }
+    sentinela.classList.remove('hidden');
+
+    var obsOptions = { rootMargin: '100px', threshold: 0.1 };
+    if (scrollContainerId) {
+        var rootEl = document.getElementById(scrollContainerId);
+        if (rootEl) obsOptions.root = rootEl;
+    }
+
+    var observer = new IntersectionObserver(function(entries) {
+        if (!entries[0].isIntersecting) return;
         var ocultas = tbody.querySelectorAll('tr.linha-paginada.hidden');
-        if (ocultas.length > 0) {
-            btn.classList.remove('hidden');
-        } else {
-            btn.classList.add('hidden');
+        for (var i = 0; i < ITENS_POR_PAGINA && i < ocultas.length; i++) {
+            ocultas[i].classList.remove('hidden');
         }
-    }
-}
-function carregarMais(tbodyId, btnId) {
-    var tbody = document.getElementById(tbodyId);
-    var ocultas = tbody.querySelectorAll('tr.linha-paginada.hidden');
-    for (var i = 0; i < ITENS_POR_PAGINA && i < ocultas.length; i++) {
-        ocultas[i].classList.remove('hidden');
-    }
-    if (ocultas.length <= ITENS_POR_PAGINA) {
-        var btn = document.getElementById(btnId);
-        if (btn) btn.classList.add('hidden');
-    }
+        var restantes = tbody.querySelectorAll('tr.linha-paginada.hidden');
+        if (restantes.length === 0) {
+            sentinela.classList.add('hidden');
+            observer.disconnect();
+            delete _observersAtivos[sentinelaId];
+        }
+    }, obsOptions);
+
+    observer.observe(sentinela);
+    _observersAtivos[sentinelaId] = observer;
 }
 
 function abrirModalPrejuizo() {
     document.getElementById('modalPrejuizo').classList.remove('hidden');
-    inicializarPaginacao('tbody-prejuizo', 'btn-mais-prejuizo');
+    inicializarScrollInfinito('tbody-prejuizo', 'sentinela-prejuizo', 'scroll-container-prejuizo');
 }
 function fecharModalPrejuizo() {
     document.getElementById('modalPrejuizo').classList.add('hidden');
