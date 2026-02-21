@@ -143,11 +143,11 @@
                     <tbody class="divide-y divide-gray-100 dark:divide-gray-700 text-sm">
                         {% for l in grupo.itens %}
                         {% if l.data == hoje %}
-                        {% set row_class = "bg-emerald-50/50 dark:bg-emerald-900/20 border-l-4 border-l-emerald-500 hover:bg-emerald-100/50 dark:hover:bg-emerald-900/30" %}
+                        {% set row_class = "bg-emerald-50 dark:bg-emerald-900/20 border-l-4 border-l-emerald-500 hover:bg-emerald-100 dark:hover:bg-emerald-900/30" %}
                         {% elif l.data == ontem %}
-                        {% set row_class = "bg-gray-50/50 dark:bg-gray-800/40 border-l-4 border-l-gray-500 hover:bg-gray-100/50 dark:hover:bg-gray-800/50" %}
+                        {% set row_class = "bg-blue-50 dark:bg-blue-900/20 border-l-4 border-l-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30" %}
                         {% else %}
-                        {% set row_class = "border-l-4 border-l-transparent hover:bg-gray-50 dark:hover:bg-gray-700" %}
+                        {% set row_class = "border-l-4 border-l-transparent hover:bg-gray-100 dark:hover:bg-gray-700" ~ (" bg-white dark:bg-gray-800" if loop.index is odd else " bg-gray-50/60 dark:bg-gray-800/50") %}
                         {% endif %}
                         <tr class="{{ row_class }} transition-colors duration-200 text-gray-700 dark:text-gray-300 border-b border-gray-100 dark:border-gray-800" data-lanc-id="{{ l.id }}" data-lanc-data="{{ l.data.strftime('%Y-%m-%d') }}" data-lanc-desc="{{ l.descricao|e }}" data-lanc-categoria="{{ l.categoria|e }}" data-lanc-tipo="{{ l.tipo }}" data-lanc-forma="{{ l.forma_pagamento|e }}" data-lanc-valor="{{ l.valor }}">
                             <td class="px-6 py-3">
