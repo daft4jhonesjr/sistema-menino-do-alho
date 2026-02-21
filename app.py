@@ -1664,7 +1664,10 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=30)
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 app.config['REMEMBER_COOKIE_HTTPONLY'] = True
-app.config['REMEMBER_COOKIE_SECURE'] = True  # Segurança extra (HTTPS)
+app.config['REMEMBER_COOKIE_SECURE'] = True
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SECURE'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
 # Configurações para manter a conexão com o banco sempre viva (Blindagem contra EOF Error)
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
@@ -2248,6 +2251,18 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             db.session.commit()
         except (OperationalError, Exception):
             db.session.rollback()
+        # Migração: índices para campos filtráveis (performance em 10k+ registros)
+        for idx_sql in [
+            'CREATE INDEX IF NOT EXISTS ix_clientes_cnpj ON clientes(cnpj)',
+            'CREATE INDEX IF NOT EXISTS ix_vendas_empresa ON vendas(empresa_faturadora)',
+            'CREATE INDEX IF NOT EXISTS ix_vendas_forma_pag ON vendas(forma_pagamento)',
+            'CREATE INDEX IF NOT EXISTS ix_vendas_status_entrega ON vendas(status_entrega)',
+        ]:
+            try:
+                db.session.execute(text(idx_sql))
+                db.session.commit()
+            except (OperationalError, Exception):
+                db.session.rollback()
         # Jhones sempre admin; criar se não existir
         u = Usuario.query.filter_by(username='Jhones').first()
         if not u:

@@ -66,7 +66,7 @@ class Cliente(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     nome_cliente = db.Column(db.String(200), nullable=False, index=True)  # Índice para buscas por nome
     razao_social = db.Column(db.String(200), index=True)  # Índice para buscas por razão social
-    cnpj = db.Column(db.String(18), unique=True)
+    cnpj = db.Column(db.String(18), unique=True, index=True)
     cidade = db.Column(db.String(100))
     endereco = db.Column(db.String(255))
     
@@ -149,11 +149,11 @@ class Venda(db.Model):
     preco_venda = db.Column(db.Numeric(10, 2), nullable=False)
     quantidade_venda = db.Column(db.Integer, nullable=False)
     data_venda = db.Column(db.Date, default=date.today, nullable=False, index=True)  # Índice para filtros e ordenação por data
-    empresa_faturadora = db.Column(db.String(20), nullable=False)
+    empresa_faturadora = db.Column(db.String(20), nullable=False, index=True)
     situacao = db.Column(db.String(20), nullable=False, default='PENDENTE', index=True)
     valor_pago = db.Column(db.Float, default=0.0)  # Valor já pago (para abatimento parcial)
-    status_entrega = db.Column(db.String(50), default='PENDENTE')  # Status logístico (independente do financeiro)
-    forma_pagamento = db.Column(db.String(50), nullable=True)  # Dinheiro, Pix, Boleto, Cheque, etc.
+    status_entrega = db.Column(db.String(50), default='PENDENTE', index=True)
+    forma_pagamento = db.Column(db.String(50), nullable=True, index=True)
     caminho_boleto = db.Column(db.String(500), nullable=True)
     caminho_nf = db.Column(db.String(500), nullable=True)
     data_vencimento = db.Column(db.Date, nullable=True, index=True)  # vencimento do boleto vinculado (extraído do PDF)
