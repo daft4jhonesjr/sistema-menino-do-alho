@@ -30,7 +30,7 @@
     </td>
     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{{ pedido.data_venda.strftime('%d/%m') }}</td>
     <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 dark:text-gray-100">{{ pedido.cliente_nome }}</td>
-    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ pedido.nf }}</td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{% if pedido.nf and pedido.nf != '-' %}<span onclick="copiarParaClipboard('{{ pedido.nf }}', this)" class="cursor-pointer hover:text-emerald-600 dark:hover:text-emerald-400 hover:underline transition-all" title="Clique para copiar a NF">{{ pedido.nf }}</span>{% else %}<span class="text-gray-400 dark:text-gray-500">-</span>{% endif %}</td>
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 text-right">{% if pedido.total_quantidade and pedido.total_quantidade != 0 %}{{ (pedido.total_valor / pedido.total_quantidade)|formato_moeda }}{% else %}<span class="text-gray-400 dark:text-gray-500">---</span>{% endif %}</td>
     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100 text-right">{{ pedido.total_quantidade }}</td>
     <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 dark:text-gray-100 text-right">{{ pedido.total_valor|formato_moeda }}</td>

@@ -470,7 +470,7 @@
                 <div>
                     <span class="text-xs text-gray-500 dark:text-gray-400">{{ pedido.data_venda.strftime('%d/%m/%Y') }}</span>
                     <h3 class="font-bold text-lg text-gray-800 dark:text-white">{{ pedido.cliente_nome }}</h3>
-                    <span class="text-xs text-gray-500 dark:text-gray-400">NF: {{ pedido.nf or '-' }}</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400">NF: {% if pedido.nf and pedido.nf != '-' %}<span onclick="copiarParaClipboard('{{ pedido.nf }}', this)" class="cursor-pointer hover:text-emerald-600 dark:hover:text-emerald-400 hover:underline transition-all font-medium" title="Clique para copiar a NF">{{ pedido.nf }}</span>{% else %}-{% endif %}</span>
                 </div>
                 <span class="px-2 py-1 text-xs rounded-full {{ 'bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300' if pedido.situacao == 'PENDENTE' else 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300' }}">
                     {{ pedido.situacao }}

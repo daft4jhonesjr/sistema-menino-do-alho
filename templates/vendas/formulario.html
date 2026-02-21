@@ -37,11 +37,13 @@
                         class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
                     <option value="">Selecione o produto...</option>
                     {% for produto in produtos %}
+                    {% set nome_lower = produto.nome_produto|lower %}
+                    {% if 'alho' in nome_lower %}{% set emoji = '🧄' %}{% elif 'cafe' in nome_lower or 'café' in nome_lower %}{% set emoji = '☕' %}{% elif 'sacola' in nome_lower %}{% set emoji = '🛍️' %}{% else %}{% set emoji = '📦' %}{% endif %}
                     <option value="{{ produto.id }}" 
                             data-estoque="{{ produto.estoque_atual }}"
                             data-preco="{{ produto.preco_custo }}"
                             {% if venda and venda.produto_id == produto.id %}selected{% endif %}>
-                        {{ produto.nome_produto }} (Estoque: {{ produto.estoque_atual }})
+                        {{ emoji }} {{ produto.nome_produto }} (Estoque: {{ produto.estoque_atual }})
                     </option>
                     {% endfor %}
                 </select>

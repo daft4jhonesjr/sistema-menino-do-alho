@@ -1300,5 +1300,21 @@
         updateOnlineStatus();
     })();
     </script>
+    <script>
+    function copiarParaClipboard(texto, elemento) {
+        if (!texto || texto === '-' || texto === 'None') return;
+        navigator.clipboard.writeText(texto).then(function() {
+            var textoOriginal = elemento.innerText;
+            elemento.innerText = '✅ Copiado!';
+            elemento.classList.add('text-emerald-500', 'font-bold');
+            setTimeout(function() {
+                elemento.innerText = textoOriginal;
+                elemento.classList.remove('text-emerald-500', 'font-bold');
+            }, 1500);
+        }).catch(function(err) {
+            console.error('Erro ao copiar: ', err);
+        });
+    }
+    </script>
 </body>
 </html>
