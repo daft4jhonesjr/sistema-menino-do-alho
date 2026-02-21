@@ -370,12 +370,21 @@
         </h5>
         <div class="flex flex-wrap gap-4 mt-4">
             {% for item in detalhamento_mensal %}
-            <div onclick="abrirDetalhesMes({{ item.ano }}, {{ item.mes_numero }})" class="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3 flex flex-col min-w-[200px] shadow-sm cursor-pointer hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-300 dark:hover:border-emerald-700 transition">
-                <div class="flex justify-between items-center mb-2 border-b border-gray-200 dark:border-gray-700 pb-2">
+            <div onclick="abrirDetalhesMes({{ item.ano }}, {{ item.mes_numero }})" class="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3 flex flex-col min-w-[220px] shadow-sm cursor-pointer hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-300 dark:hover:border-emerald-700 transition">
+                <div class="mb-2 border-b border-gray-200 dark:border-gray-700 pb-2">
                     <span class="font-bold text-gray-800 dark:text-white">{{ item.mes_ano|default(item.mes) }}</span>
-                    <span class="font-semibold text-emerald-600 dark:text-emerald-400">{{ item.faturamento|formato_moeda }}</span>
                 </div>
-                <div class="flex justify-between text-xs text-gray-500 dark:text-gray-400 space-x-2">
+                <div class="flex flex-col gap-1 mb-3">
+                    <div class="flex justify-between items-center text-sm">
+                        <span class="text-gray-500 dark:text-gray-400">Faturamento:</span>
+                        <span class="font-semibold text-gray-700 dark:text-gray-200">{{ item.faturamento|formato_moeda }}</span>
+                    </div>
+                    <div class="flex justify-between items-center text-sm">
+                        <span class="text-gray-500 dark:text-gray-400">Lucro Líquido:</span>
+                        <span class="font-bold text-emerald-600 dark:text-emerald-400">{{ item.lucro|formato_moeda }}</span>
+                    </div>
+                </div>
+                <div class="flex justify-between text-xs text-gray-500 dark:text-gray-400 space-x-2 border-t border-gray-200 dark:border-gray-700 pt-2 mt-auto">
                     <div class="flex items-center gap-1" title="Caixas de Alho">
                         <span>🧄</span> <span class="font-medium">{{ item.qtd_alho|default(0) }} cx</span>
                     </div>
