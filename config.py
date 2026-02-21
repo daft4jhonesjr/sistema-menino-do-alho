@@ -1,5 +1,4 @@
 import os
-import secrets
 
 class Config:
     # Secret key forte gerada com secrets.token_urlsafe

@@ -29,7 +29,6 @@ import pandas as pd
 import os
 import re
 import urllib.parse
-import tempfile
 import json
 import csv
 import io
