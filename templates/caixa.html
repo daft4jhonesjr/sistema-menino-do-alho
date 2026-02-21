@@ -528,5 +528,17 @@ function confirmarExclusaoMassa() {
         document.getElementById('form-excluir-massa').submit();
     }
 }
+
+(function() {
+    var params = new URLSearchParams(window.location.search);
+    if (params.get('abrir_modal') === 'true') {
+        window.history.replaceState({}, document.title, window.location.pathname);
+        setTimeout(function() {
+            if (typeof abrirModalNovo === 'function') {
+                abrirModalNovo();
+            }
+        }, 300);
+    }
+})();
 </script>
 {% endblock %}
