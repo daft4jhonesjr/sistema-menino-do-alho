@@ -5560,6 +5560,29 @@ def editar_venda(id):
     return render_template('vendas/formulario.html', venda=venda, clientes=clientes, produtos=produtos)
 
 
+@app.route('/venda/excluir_item/<int:id>', methods=['POST'])
+@login_required
+def excluir_item_venda(id):
+    """Exclui um item individual de venda (uma linha), devolvendo estoque."""
+    venda = Venda.query.get_or_404(id)
+    try:
+        produto = venda.produto
+        if produto:
+            produto.estoque_atual += venda.quantidade_venda
+        db.session.delete(venda)
+        db.session.commit()
+        limpar_cache_dashboard()
+        if _is_ajax():
+            return jsonify(ok=True, mensagem='Item removido com sucesso.')
+        flash('Item removido com sucesso.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        if _is_ajax():
+            return jsonify(ok=False, mensagem=str(e)), 500
+        flash('Erro ao remover item.', 'error')
+    return redirect(url_for('listar_vendas'))
+
+
 @app.route('/vendas/excluir/<int:id>', methods=['POST'])
 @login_required
 def excluir_venda(id):

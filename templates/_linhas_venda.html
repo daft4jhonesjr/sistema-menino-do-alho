@@ -123,19 +123,24 @@
                         <td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100 text-right whitespace-nowrap valor-financeiro">{{ venda.calcular_total()|formato_moeda }}</td>
                         <td class="px-4 py-3 text-sm font-medium text-right whitespace-nowrap valor-financeiro {% if venda.calcular_lucro() >= 0 %}text-emerald-600 dark:text-emerald-400{% else %}text-red-600 dark:text-red-400{% endif %}">{{ venda.calcular_lucro()|formato_moeda }}</td>
                         <td class="px-4 py-3 text-sm font-medium">
-                            <button type="button" class="btn-editar-venda text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 inline-flex bg-transparent border-none p-0 cursor-pointer" title="Editar"
-                                data-id="{{ venda.id }}"
-                                data-cliente-id="{{ venda.cliente_id }}"
-                                data-produto-id="{{ venda.produto_id }}"
-                                data-qtd="{{ venda.quantidade_venda }}"
-                                data-preco="{{ venda.preco_venda }}"
-                                data-nf="{{ venda.nf or '' }}"
-                                data-data="{{ venda.data_venda.strftime('%Y-%m-%d') }}"
-                                data-empresa="{{ venda.empresa_faturadora or '' }}"
-                                data-situacao="{{ venda.situacao or 'PENDENTE' }}"
-                                data-forma-pagamento="{{ venda.forma_pagamento or '' }}">
-                            <i data-lucide="pencil" class="w-4 h-4"></i>
-                        </button>
+                            <div class="flex items-center gap-1.5">
+                                <button type="button" class="btn-editar-venda p-1 text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded transition-colors inline-flex bg-transparent border-none cursor-pointer" title="Editar"
+                                    data-id="{{ venda.id }}"
+                                    data-cliente-id="{{ venda.cliente_id }}"
+                                    data-produto-id="{{ venda.produto_id }}"
+                                    data-qtd="{{ venda.quantidade_venda }}"
+                                    data-preco="{{ venda.preco_venda }}"
+                                    data-nf="{{ venda.nf or '' }}"
+                                    data-data="{{ venda.data_venda.strftime('%Y-%m-%d') }}"
+                                    data-empresa="{{ venda.empresa_faturadora or '' }}"
+                                    data-situacao="{{ venda.situacao or 'PENDENTE' }}"
+                                    data-forma-pagamento="{{ venda.forma_pagamento or '' }}">
+                                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                                </button>
+                                <button type="button" class="btn-excluir-item-venda p-1 text-red-400 hover:text-red-600 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors inline-flex bg-transparent border-none cursor-pointer" title="Remover este produto do pedido" data-venda-id="{{ venda.id }}" data-produto-nome="{{ venda.produto.nome_produto if venda.produto else 'item' }}">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                </button>
+                            </div>
                         </td>
                     </tr>
                     {% endfor %}

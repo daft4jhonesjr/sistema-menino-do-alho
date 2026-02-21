@@ -688,11 +688,7 @@
                         </select>
                     </div>
                 </div>
-                <div class="flex flex-wrap gap-3 mt-6">
-                    <button type="button" onclick="prepararNovoProdutoRelacionado()" class="mr-auto px-4 py-2.5 bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-800/40 rounded-xl text-sm font-medium transition-colors flex items-center gap-1.5 border border-blue-200 dark:border-blue-800">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                        Novo Produto p/ este Pedido
-                    </button>
+                <div class="flex gap-4 mt-6">
                     <button type="submit" class="bg-emerald-700 text-white px-6 py-2.5 rounded-xl hover:bg-emerald-600 transition flex items-center font-medium" id="btn-salvar-editar-venda">
                         <i data-lucide="check" class="w-4 h-4 mr-2"></i>Salvar
                     </button>
@@ -996,7 +992,6 @@
         wrap.classList.add('hidden');
         document.body.style.overflow = '';
     }
-    window.fecharModalEditarVenda = fecharModalEditarVenda;
 
     document.querySelectorAll('.btn-editar-venda').forEach(function(btn) {
         btn.addEventListener('click', function() { abrirModalEditarVenda(btn); });
@@ -2095,70 +2090,6 @@ document.addEventListener('DOMContentLoaded', function() {
 {% endblock %}
 
 {% block scripts %}
-<script>
-function prepararNovoProdutoRelacionado() {
-    var clienteId = document.getElementById('edit_cliente_id').value;
-    var nf = document.getElementById('edit_nf').value;
-    var dataVenda = document.getElementById('edit_data_venda').value;
-    var empresa = document.getElementById('edit_empresa_faturadora').value;
-    var situacao = document.getElementById('edit_situacao').value;
-    var formaPag = document.getElementById('edit_forma_pagamento');
-    var formaPagVal = formaPag ? formaPag.value : '';
-
-    if (typeof window.fecharModalEditarVenda === 'function') {
-        window.fecharModalEditarVenda();
-    }
-
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-
-    setTimeout(function() {
-        var selectCliente = document.getElementById('inline-cliente_id');
-        if (selectCliente) {
-            if (selectCliente.tomselect) {
-                selectCliente.tomselect.setValue(clienteId, true);
-            } else {
-                selectCliente.value = clienteId;
-            }
-        }
-
-        var inlineNf = document.getElementById('inline-nf');
-        if (inlineNf) inlineNf.value = nf;
-
-        var inlineData = document.getElementById('inline-data_venda');
-        if (inlineData) inlineData.value = dataVenda;
-
-        var inlineEmpresa = document.getElementById('inline-empresa_faturadora');
-        if (inlineEmpresa) inlineEmpresa.value = empresa;
-
-        var inlineSituacao = document.getElementById('inline-situacao');
-        if (inlineSituacao) inlineSituacao.value = situacao;
-
-        var inlinePagto = document.getElementById('inline-forma_pagamento');
-        if (inlinePagto) inlinePagto.value = formaPagVal;
-
-        var inlineQtd = document.getElementById('inline-quantidade_venda');
-        if (inlineQtd) inlineQtd.value = '1';
-
-        var inlinePreco = document.getElementById('preco');
-        if (inlinePreco) inlinePreco.value = '';
-
-        var inlineProduto = document.getElementById('inline-produto_id');
-        if (inlineProduto) {
-            inlineProduto.value = '';
-            inlineProduto.focus();
-        }
-
-        var formArea = document.getElementById('form-nova-venda-inline');
-        if (formArea) {
-            formArea.classList.add('ring-2', 'ring-blue-400', 'ring-offset-2', 'dark:ring-offset-gray-900');
-            setTimeout(function() {
-                formArea.classList.remove('ring-2', 'ring-blue-400', 'ring-offset-2', 'dark:ring-offset-gray-900');
-            }, 2000);
-        }
-    }, 400);
-}
-</script>
-
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
 // Gráficos Doughnut (Situação, Forma de Pagamento, Empresa Faturadora)
@@ -2230,6 +2161,54 @@ function prepararNovoProdutoRelacionado() {
     criarGrafico('chartSituacao', dados.situacao);
     criarGrafico('chartPagamento', dados.pagamento);
     criarGrafico('chartEmpresa', dados.empresa);
+})();
+
+// Excluir item individual da gaveta de detalhes
+(function() {
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest('.btn-excluir-item-venda');
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+
+        var vendaId = btn.getAttribute('data-venda-id');
+        var nomeProduto = btn.getAttribute('data-produto-nome') || 'este item';
+        if (!vendaId) return;
+
+        if (!confirm('Remover "' + nomeProduto + '" deste pedido?\nO estoque será devolvido.')) return;
+
+        var tr = btn.closest('tr');
+        if (tr) tr.style.opacity = '0.4';
+        btn.disabled = true;
+
+        var headers = Object.assign(
+            { 'X-Requested-With': 'XMLHttpRequest' },
+            window.getCsrfHeaders ? window.getCsrfHeaders() : {}
+        );
+
+        fetch('/venda/excluir_item/' + vendaId, { method: 'POST', headers: headers })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.ok) {
+                    if (tr) {
+                        tr.style.transition = 'opacity 0.3s, max-height 0.3s';
+                        tr.style.opacity = '0';
+                        tr.style.maxHeight = '0';
+                        tr.style.overflow = 'hidden';
+                    }
+                    setTimeout(function() { window.location.reload(); }, 600);
+                } else {
+                    alert(data.mensagem || 'Erro ao remover item.');
+                    if (tr) tr.style.opacity = '1';
+                    btn.disabled = false;
+                }
+            })
+            .catch(function() {
+                alert('Erro na comunicação com o servidor.');
+                if (tr) tr.style.opacity = '1';
+                btn.disabled = false;
+            });
+    });
 })();
 
 // Filtro dinâmico por Empresa (tabela + cards, sem recarregar)
