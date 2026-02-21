@@ -24,19 +24,19 @@
 <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
     <div class="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm">
         <p class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Total de Entradas</p>
-        <h3 class="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{{ total_entradas|formato_moeda }}</h3>
+        <h3 class="text-2xl font-bold text-emerald-600 dark:text-emerald-400 valor-financeiro">{{ total_entradas|formato_moeda }}</h3>
     </div>
     <div class="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm">
         <p class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Saída Pessoal</p>
-        <h3 class="text-2xl font-bold text-red-500 dark:text-red-400">- {{ total_saida_pessoal|formato_moeda }}</h3>
+        <h3 class="text-2xl font-bold text-red-500 dark:text-red-400 valor-financeiro">- {{ total_saida_pessoal|formato_moeda }}</h3>
     </div>
     <div class="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm">
         <p class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Saída Fornecedor</p>
-        <h3 class="text-2xl font-bold text-red-700 dark:text-red-500">- {{ total_saida_fornecedor|formato_moeda }}</h3>
+        <h3 class="text-2xl font-bold text-red-700 dark:text-red-500 valor-financeiro">- {{ total_saida_fornecedor|formato_moeda }}</h3>
     </div>
     <div class="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm {% if saldo_atual < 0 %}border-red-500{% else %}border-emerald-500{% endif %} border-b-4">
         <p class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Saldo Geral</p>
-        <h3 class="text-2xl font-bold {% if saldo_atual < 0 %}text-red-600 dark:text-red-400{% else %}text-gray-900 dark:text-gray-100{% endif %}">{{ saldo_atual|formato_moeda }}</h3>
+        <h3 class="text-2xl font-bold valor-financeiro {% if saldo_atual < 0 %}text-red-600 dark:text-red-400{% else %}text-gray-900 dark:text-gray-100{% endif %}">{{ saldo_atual|formato_moeda }}</h3>
     </div>
 </div>
 
@@ -65,56 +65,56 @@
                 <div class="hidden xl:flex flex-col text-right pr-3 border-r border-gray-200 dark:border-gray-700 group cursor-pointer">
                     <span class="text-[10px] font-bold text-blue-400 dark:text-blue-500 uppercase tracking-wider mb-0.5 group-hover:hidden">Dinheiro</span>
                     <span class="text-[10px] font-bold text-emerald-500 dark:text-emerald-400 uppercase tracking-wider mb-0.5 hidden group-hover:block">Entrou (Mês)</span>
-                    <span class="text-blue-700 dark:text-blue-400 font-semibold text-sm group-hover:hidden">{{ grupo.saldo_dinheiro|formato_moeda }}</span>
-                    <span class="text-emerald-600 dark:text-emerald-400 font-bold text-sm hidden group-hover:block">+ {{ grupo.entradas_dinheiro|formato_moeda }}</span>
+                    <span class="text-blue-700 dark:text-blue-400 font-semibold text-sm group-hover:hidden valor-financeiro">{{ grupo.saldo_dinheiro|formato_moeda }}</span>
+                    <span class="text-emerald-600 dark:text-emerald-400 font-bold text-sm hidden group-hover:block valor-financeiro">+ {{ grupo.entradas_dinheiro|formato_moeda }}</span>
                 </div>
                 <div class="hidden xl:flex flex-col text-right pr-3 border-r border-gray-200 dark:border-gray-700 group cursor-pointer">
                     <span class="text-[10px] font-bold text-blue-400 dark:text-blue-500 uppercase tracking-wider mb-0.5 group-hover:hidden">Cheque</span>
                     <span class="text-[10px] font-bold text-emerald-500 dark:text-emerald-400 uppercase tracking-wider mb-0.5 hidden group-hover:block">Entrou (Mês)</span>
-                    <span class="text-blue-700 dark:text-blue-400 font-semibold text-sm group-hover:hidden">{{ grupo.saldo_cheque|formato_moeda }}</span>
-                    <span class="text-emerald-600 dark:text-emerald-400 font-bold text-sm hidden group-hover:block">+ {{ grupo.entradas_cheque|formato_moeda }}</span>
+                    <span class="text-blue-700 dark:text-blue-400 font-semibold text-sm group-hover:hidden valor-financeiro">{{ grupo.saldo_cheque|formato_moeda }}</span>
+                    <span class="text-emerald-600 dark:text-emerald-400 font-bold text-sm hidden group-hover:block valor-financeiro">+ {{ grupo.entradas_cheque|formato_moeda }}</span>
                 </div>
                 <div class="hidden xl:flex flex-col text-right pr-3 border-r border-gray-200 dark:border-gray-700 group cursor-pointer">
                     <span class="text-[10px] font-bold text-blue-400 dark:text-blue-500 uppercase tracking-wider mb-0.5 group-hover:hidden">Pix</span>
                     <span class="text-[10px] font-bold text-emerald-500 dark:text-emerald-400 uppercase tracking-wider mb-0.5 hidden group-hover:block">Entrou (Mês)</span>
-                    <span class="text-blue-700 dark:text-blue-400 font-semibold text-sm group-hover:hidden">{{ grupo.saldo_pix|formato_moeda }}</span>
-                    <span class="text-emerald-600 dark:text-emerald-400 font-bold text-sm hidden group-hover:block">+ {{ grupo.entradas_pix|formato_moeda }}</span>
+                    <span class="text-blue-700 dark:text-blue-400 font-semibold text-sm group-hover:hidden valor-financeiro">{{ grupo.saldo_pix|formato_moeda }}</span>
+                    <span class="text-emerald-600 dark:text-emerald-400 font-bold text-sm hidden group-hover:block valor-financeiro">+ {{ grupo.entradas_pix|formato_moeda }}</span>
                 </div>
                 <div class="hidden xl:flex flex-col text-right pr-3 border-r border-gray-200 dark:border-gray-700 group cursor-pointer mr-2">
                     <span class="text-[10px] font-bold text-blue-400 dark:text-blue-500 uppercase tracking-wider mb-0.5 group-hover:hidden">Boleto</span>
                     <span class="text-[10px] font-bold text-emerald-500 dark:text-emerald-400 uppercase tracking-wider mb-0.5 hidden group-hover:block">Entrou (Mês)</span>
-                    <span class="text-blue-700 dark:text-blue-400 font-semibold text-sm group-hover:hidden">{{ grupo.saldo_boleto|formato_moeda }}</span>
-                    <span class="text-emerald-600 dark:text-emerald-400 font-bold text-sm hidden group-hover:block">+ {{ grupo.entradas_boleto|formato_moeda }}</span>
+                    <span class="text-blue-700 dark:text-blue-400 font-semibold text-sm group-hover:hidden valor-financeiro">{{ grupo.saldo_boleto|formato_moeda }}</span>
+                    <span class="text-emerald-600 dark:text-emerald-400 font-bold text-sm hidden group-hover:block valor-financeiro">+ {{ grupo.entradas_boleto|formato_moeda }}</span>
                 </div>
                 <div class="flex flex-col text-right">
                     <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Entrada Total</span>
-                    <span class="text-emerald-600 dark:text-emerald-400 font-bold text-sm">{{ grupo.entradas_mes|formato_moeda }}</span>
+                    <span class="text-emerald-600 dark:text-emerald-400 font-bold text-sm valor-financeiro">{{ grupo.entradas_mes|formato_moeda }}</span>
                 </div>
                 <div class="flex flex-col text-right pl-3 border-l border-gray-200 dark:border-gray-700">
                     <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Saída Total</span>
-                    <span class="text-red-500 dark:text-red-400 font-bold text-sm">- {{ grupo.saidas_mes|formato_moeda }}</span>
+                    <span class="text-red-500 dark:text-red-400 font-bold text-sm valor-financeiro">- {{ grupo.saidas_mes|formato_moeda }}</span>
                 </div>
                 <div class="hidden sm:flex flex-col text-right pl-3 border-l border-gray-200 dark:border-gray-700">
                     <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Fornecedor</span>
-                    <span class="text-red-700 dark:text-red-500 font-semibold text-sm">- {{ grupo.saidas_fornecedor_mes|formato_moeda }}</span>
+                    <span class="text-red-700 dark:text-red-500 font-semibold text-sm valor-financeiro">- {{ grupo.saidas_fornecedor_mes|formato_moeda }}</span>
                 </div>
                 <div class="hidden sm:flex flex-col text-right pl-3 border-l border-gray-200 dark:border-gray-700">
                     <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Pessoal</span>
-                    <span class="text-red-400 dark:text-red-300 font-semibold text-sm">- {{ grupo.saidas_pessoal_mes|formato_moeda }}</span>
+                    <span class="text-red-400 dark:text-red-300 font-semibold text-sm valor-financeiro">- {{ grupo.saidas_pessoal_mes|formato_moeda }}</span>
                 </div>
                 <div class="hidden lg:flex flex-col text-right pl-3 border-l border-gray-200 dark:border-gray-700">
                     <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Mês Anterior</span>
-                    <span class="text-gray-500 dark:text-gray-400 font-semibold text-sm">{{ grupo.saldo_anterior|formato_moeda }}</span>
+                    <span class="text-gray-500 dark:text-gray-400 font-semibold text-sm valor-financeiro">{{ grupo.saldo_anterior|formato_moeda }}</span>
                 </div>
                 <div class="hidden xl:flex flex-col text-right pl-3 border-l border-gray-200 dark:border-gray-700">
                     <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Resultado</span>
-                    <span class="font-semibold text-sm {% if grupo.saldo_mes < 0 %}text-red-500 dark:text-red-400{% else %}text-emerald-500 dark:text-emerald-400{% endif %}">
+                    <span class="font-semibold text-sm valor-financeiro {% if grupo.saldo_mes < 0 %}text-red-500 dark:text-red-400{% else %}text-emerald-500 dark:text-emerald-400{% endif %}">
                         {% if grupo.saldo_mes > 0 %}+{% endif %}{{ grupo.saldo_mes|formato_moeda }}
                     </span>
                 </div>
                 <div class="flex flex-col text-right pl-3 md:pl-4 border-l-2 border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1 rounded-r-lg">
                     <span class="text-[10px] font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider mb-0.5">Saldo Final</span>
-                    <span class="font-black text-sm {% if grupo.saldo_final < 0 %}text-red-600 dark:text-red-400{% else %}text-emerald-700 dark:text-emerald-400{% endif %}">
+                    <span class="font-black text-sm valor-financeiro {% if grupo.saldo_final < 0 %}text-red-600 dark:text-red-400{% else %}text-emerald-700 dark:text-emerald-400{% endif %}">
                         {{ grupo.saldo_final|formato_moeda }}
                     </span>
                 </div>
@@ -153,7 +153,7 @@
                             <td class="px-6 py-3 font-medium text-gray-900 dark:text-gray-100">{{ l.descricao }}</td>
                             <td class="px-6 py-3 text-gray-500 dark:text-gray-400"><span class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-xs">{{ l.categoria }}</span></td>
                             <td class="px-6 py-3"><span class="bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-2 py-1 rounded text-xs font-bold">{{ l.forma_pagamento }}</span></td>
-                            <td class="px-6 py-3 text-right font-bold {% if l.tipo == 'ENTRADA' %}text-emerald-600 dark:text-emerald-400{% else %}text-red-600 dark:text-red-400{% endif %}">
+                            <td class="px-6 py-3 text-right font-bold valor-financeiro {% if l.tipo == 'ENTRADA' %}text-emerald-600 dark:text-emerald-400{% else %}text-red-600 dark:text-red-400{% endif %}">
                                 {% if l.tipo == 'ENTRADA' %}+ {% else %}- {% endif %}{{ l.valor|formato_moeda }}
                             </td>
                             <td class="px-6 py-3 text-center">

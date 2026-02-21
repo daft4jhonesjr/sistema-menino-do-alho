@@ -242,6 +242,15 @@
         }
     </style>
     <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+    <style>
+        body.modo-privacidade .valor-financeiro {
+            filter: blur(7px);
+            opacity: 0.5;
+            user-select: none;
+            pointer-events: none;
+            transition: filter 0.3s ease, opacity 0.3s ease;
+        }
+    </style>
     {% block head_extras %}{% endblock %}
 </head>
 <body class="bg-emerald-50 text-gray-800 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-500 min-h-screen flex flex-col">
@@ -301,6 +310,10 @@
                 </div>
                 
                 {% if current_user.is_authenticated %}
+                <button id="btn-privacidade" type="button" class="p-2 text-emerald-200 hover:text-white hover:bg-emerald-600 transition-colors rounded-full focus:outline-none focus:ring-2 focus:ring-emerald-400 mr-1" title="Alternar Modo Privacidade">
+                    <svg id="icon-olho-aberto" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                    <svg id="icon-olho-fechado" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"></path></svg>
+                </button>
                 <div class="relative inline-block text-left ml-2" id="user-menu-container">
                     <button type="button" onclick="toggleUserMenu()" class="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-emerald-50 hover:bg-emerald-600 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400" id="user-menu-button">
                         {% if current_user.profile_image_url %}
@@ -417,7 +430,7 @@
                         <div class="flex items-center justify-between">
                             <div>
                                 <p class="text-blue-600 text-sm font-medium">Total Comprado</p>
-                                <p id="modal-total-vendido" class="text-2xl font-bold text-blue-700 mt-1">R$ 0,00</p>
+                                <p id="modal-total-vendido" class="text-2xl font-bold text-blue-700 mt-1 valor-financeiro">R$ 0,00</p>
                             </div>
                             <i data-lucide="shopping-cart" class="w-10 h-10 text-blue-500"></i>
                         </div>
@@ -426,7 +439,7 @@
                         <div class="flex items-center justify-between">
                             <div>
                                 <p class="text-emerald-600 text-sm font-medium">Lucro Gerado</p>
-                                <p id="modal-total-lucro" class="text-2xl font-bold text-emerald-700 mt-1">R$ 0,00</p>
+                                <p id="modal-total-lucro" class="text-2xl font-bold text-emerald-700 mt-1 valor-financeiro">R$ 0,00</p>
                             </div>
                             <i data-lucide="trending-up" class="w-10 h-10 text-emerald-500"></i>
                         </div>
@@ -469,12 +482,12 @@
                     <div class="hidden md:block w-px h-10 bg-emerald-200 dark:bg-emerald-800"></div>
                     <div class="text-center">
                         <span class="block text-xs font-bold text-emerald-800 dark:text-emerald-400 uppercase tracking-wider mb-1">Faturamento Bruto</span>
-                        <span id="modal-produto-total-valor" class="text-xl font-black text-gray-900 dark:text-gray-100">R$ 0,00</span>
+                        <span id="modal-produto-total-valor" class="text-xl font-black text-gray-900 dark:text-gray-100 valor-financeiro">R$ 0,00</span>
                     </div>
                     <div class="hidden md:block w-px h-10 bg-emerald-200 dark:bg-emerald-800"></div>
                     <div class="text-center md:text-right">
                         <span class="block text-xs font-bold text-emerald-800 dark:text-emerald-400 uppercase tracking-wider mb-1">Lucro Realizado</span>
-                        <span id="modal-produto-total-lucro" class="text-xl font-black text-emerald-600 dark:text-emerald-400">R$ 0,00</span>
+                        <span id="modal-produto-total-lucro" class="text-xl font-black text-emerald-600 dark:text-emerald-400 valor-financeiro">R$ 0,00</span>
                     </div>
                 </div>
                 
@@ -708,9 +721,9 @@
                         '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">' + (v.nf || '-') + '</td>' +
                         '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">' + (v.produto || '-') + '</td>' +
                         '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 text-right whitespace-nowrap">' + (v.quantidade || 0) + '</td>' +
-                        '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 text-right whitespace-nowrap">' + precoUnitStr + '</td>' +
-                        '<td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100 text-right whitespace-nowrap">' + valorStr + '</td>' +
-                        '<td class="px-4 py-3 text-sm font-medium text-right whitespace-nowrap ' + lucroClass + '">' + lucroStr + '</td>' +
+                        '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 text-right whitespace-nowrap valor-financeiro">' + precoUnitStr + '</td>' +
+                        '<td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100 text-right whitespace-nowrap valor-financeiro">' + valorStr + '</td>' +
+                        '<td class="px-4 py-3 text-sm font-medium text-right whitespace-nowrap valor-financeiro ' + lucroClass + '">' + lucroStr + '</td>' +
                         '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">' + (v.empresa || '-') + '</td>' +
                         '<td class="px-4 py-3 whitespace-nowrap"><span class="px-3 py-1 text-xs font-semibold rounded-full ' + sitClass + '">' + (v.situacao || 'PENDENTE') + '</span></td>' +
                         '<td class="px-4 py-3 whitespace-nowrap"><span class="px-2 py-1 text-xs font-medium rounded ' + formaPagClass + '">' + (v.forma_pagamento || '-') + '</span></td>';
@@ -1315,6 +1328,35 @@
             console.error('Erro ao copiar: ', err);
         });
     }
+    </script>
+    <script>
+    (function() {
+        var btn = document.getElementById('btn-privacidade');
+        var iconAberto = document.getElementById('icon-olho-aberto');
+        var iconFechado = document.getElementById('icon-olho-fechado');
+
+        function aplicar(ativo) {
+            if (ativo) {
+                document.body.classList.add('modo-privacidade');
+                if (iconAberto) iconAberto.classList.add('hidden');
+                if (iconFechado) iconFechado.classList.remove('hidden');
+            } else {
+                document.body.classList.remove('modo-privacidade');
+                if (iconAberto) iconAberto.classList.remove('hidden');
+                if (iconFechado) iconFechado.classList.add('hidden');
+            }
+        }
+
+        aplicar(localStorage.getItem('modoPrivacidade') === 'true');
+
+        if (btn) {
+            btn.addEventListener('click', function() {
+                var novoEstado = !document.body.classList.contains('modo-privacidade');
+                localStorage.setItem('modoPrivacidade', novoEstado);
+                aplicar(novoEstado);
+            });
+        }
+    })();
     </script>
 </body>
 </html>

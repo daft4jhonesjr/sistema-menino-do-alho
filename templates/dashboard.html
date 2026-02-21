@@ -33,7 +33,7 @@
         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
                 <p class="text-slate-300 text-sm font-medium uppercase tracking-wide">Faturamento Total</p>
-                <p class="text-4xl md:text-5xl font-bold text-white mt-2">{{ faturamento_total|formato_moeda }}</p>
+                <p class="text-4xl md:text-5xl font-bold text-white mt-2 valor-financeiro">{{ faturamento_total|formato_moeda }}</p>
             </div>
             <i data-lucide="banknote" class="w-14 h-14 text-emerald-400 flex-shrink-0"></i>
         </div>
@@ -46,7 +46,7 @@
         <div class="flex items-center justify-between">
             <div>
                 <p class="text-gray-600 dark:text-gray-400 text-sm font-medium">Financeiro - Pendente</p>
-                <p class="text-3xl font-bold text-amber-600 mt-2">{{ total_pendente|formato_moeda }}</p>
+                <p class="text-3xl font-bold text-amber-600 mt-2 valor-financeiro">{{ total_pendente|formato_moeda }}</p>
             </div>
             <i data-lucide="clock" class="w-10 h-10 text-amber-500"></i>
         </div>
@@ -56,7 +56,7 @@
         <div class="flex items-center justify-between">
             <div>
                 <p class="text-gray-600 dark:text-gray-400 text-sm font-medium">Financeiro - Pago</p>
-                <p class="text-3xl font-bold text-emerald-600 mt-2">{{ total_pago|formato_moeda }}</p>
+                <p class="text-3xl font-bold text-emerald-600 mt-2 valor-financeiro">{{ total_pago|formato_moeda }}</p>
             </div>
             <i data-lucide="check-circle" class="w-10 h-10 text-emerald-500"></i>
         </div>
@@ -66,7 +66,7 @@
         <div class="flex items-center justify-between">
             <div>
                 <p class="text-gray-600 dark:text-gray-400 text-sm font-medium">Lucro Total do Período</p>
-                <p class="text-3xl font-bold mt-2 {% if total_lucro >= 0 %}text-emerald-600{% else %}text-red-600{% endif %}">{{ total_lucro|formato_moeda }}</p>
+                <p class="text-3xl font-bold mt-2 valor-financeiro {% if total_lucro >= 0 %}text-emerald-600{% else %}text-red-600{% endif %}">{{ total_lucro|formato_moeda }}</p>
             </div>
             <i data-lucide="trending-up" class="w-10 h-10 {% if total_lucro >= 0 %}text-emerald-500{% else %}text-red-500{% endif %}"></i>
         </div>
@@ -76,7 +76,7 @@
         <div class="flex justify-between items-start mb-4">
             <div>
                 <p class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Prejuízo (Perdas)</p>
-                <h3 class="text-2xl font-bold text-red-600 dark:text-red-400">
+                <h3 class="text-2xl font-bold text-red-600 dark:text-red-400 valor-financeiro">
                     - {{ total_prejuizo|formato_moeda }}
                 </h3>
             </div>
@@ -97,18 +97,18 @@
         <div class="flex items-center justify-between">
             <div>
                 <p class="text-gray-600 dark:text-gray-400 text-sm font-medium">Faturamento PATY</p>
-                <p class="text-2xl font-bold text-blue-600 mt-1">{{ total_paty|formato_moeda }}</p>
+                <p class="text-2xl font-bold text-blue-600 mt-1 valor-financeiro">{{ total_paty|formato_moeda }}</p>
                 {% if faturamento_total and faturamento_total > 0 %}
                 <small class="text-gray-500 dark:text-gray-400 font-medium" style="font-size: 0.8rem;">({{ "%.1f"|format((total_paty / faturamento_total) * 100) }}%)</small>
                 {% endif %}
                 <div class="mt-3 grid grid-cols-2 gap-2 border-t border-gray-100 dark:border-gray-700 pt-3">
                     <div>
                         <p class="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-wider mb-0.5">Pago</p>
-                        <p class="text-xs font-bold text-emerald-600 dark:text-emerald-400">{{ paty_pago|formato_moeda }}</p>
+                        <p class="text-xs font-bold text-emerald-600 dark:text-emerald-400 valor-financeiro">{{ paty_pago|formato_moeda }}</p>
                     </div>
                     <div class="text-right border-l border-gray-100 dark:border-gray-700">
                         <p class="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-wider mb-0.5">Pendente</p>
-                        <p class="text-xs font-bold text-amber-500 dark:text-amber-400">{{ paty_pendente|formato_moeda }}</p>
+                        <p class="text-xs font-bold text-amber-500 dark:text-amber-400 valor-financeiro">{{ paty_pendente|formato_moeda }}</p>
                     </div>
                 </div>
             </div>
@@ -120,18 +120,18 @@
         <div class="flex items-center justify-between">
             <div>
                 <p class="text-gray-600 dark:text-gray-400 text-sm font-medium">Faturamento DESTAK</p>
-                <p class="text-2xl font-bold text-emerald-600 mt-1">{{ total_destak|formato_moeda }}</p>
+                <p class="text-2xl font-bold text-emerald-600 mt-1 valor-financeiro">{{ total_destak|formato_moeda }}</p>
                 {% if faturamento_total and faturamento_total > 0 %}
                 <small class="text-gray-500 dark:text-gray-400 font-medium" style="font-size: 0.8rem;">({{ "%.1f"|format((total_destak / faturamento_total) * 100) }}%)</small>
                 {% endif %}
                 <div class="mt-3 grid grid-cols-2 gap-2 border-t border-gray-100 dark:border-gray-700 pt-3">
                     <div>
                         <p class="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-wider mb-0.5">Pago</p>
-                        <p class="text-xs font-bold text-emerald-600 dark:text-emerald-400">{{ destak_pago|formato_moeda }}</p>
+                        <p class="text-xs font-bold text-emerald-600 dark:text-emerald-400 valor-financeiro">{{ destak_pago|formato_moeda }}</p>
                     </div>
                     <div class="text-right border-l border-gray-100 dark:border-gray-700">
                         <p class="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-wider mb-0.5">Pendente</p>
-                        <p class="text-xs font-bold text-amber-500 dark:text-amber-400">{{ destak_pendente|formato_moeda }}</p>
+                        <p class="text-xs font-bold text-amber-500 dark:text-amber-400 valor-financeiro">{{ destak_pendente|formato_moeda }}</p>
                     </div>
                 </div>
             </div>
@@ -143,7 +143,7 @@
         <div class="flex items-center justify-between">
             <div>
                 <p class="text-gray-600 dark:text-gray-400 text-sm font-medium">Vendas Avulsas</p>
-                <p class="text-2xl font-bold text-gray-600 dark:text-gray-100 mt-1">{{ total_nenhum|formato_moeda }}</p>
+                <p class="text-2xl font-bold text-gray-600 dark:text-gray-100 mt-1 valor-financeiro">{{ total_nenhum|formato_moeda }}</p>
                 {% if faturamento_total and faturamento_total > 0 %}
                 <small class="text-gray-500 dark:text-gray-400 font-medium" style="font-size: 0.8rem;">({{ "%.1f"|format((total_nenhum / faturamento_total) * 100) }}%)</small>
                 {% endif %}
@@ -166,7 +166,7 @@
         <div class="flex items-center justify-between">
             <div>
                 <p class="text-gray-600 dark:text-gray-400 text-sm font-medium">Ticket Médio</p>
-                <p class="text-2xl font-bold text-cyan-600 mt-1">{{ ticket_medio|formato_moeda }}</p>
+                <p class="text-2xl font-bold text-cyan-600 mt-1 valor-financeiro">{{ ticket_medio|formato_moeda }}</p>
             </div>
             <i data-lucide="shopping-cart" class="w-8 h-8 text-cyan-500"></i>
         </div>
@@ -377,11 +377,11 @@
                 <div class="flex flex-col gap-1 mb-3">
                     <div class="flex justify-between items-center text-sm">
                         <span class="text-gray-500 dark:text-gray-400">Faturamento:</span>
-                        <span class="font-semibold text-gray-700 dark:text-gray-200">{{ item.faturamento|formato_moeda }}</span>
+                        <span class="font-semibold text-gray-700 dark:text-gray-200 valor-financeiro">{{ item.faturamento|formato_moeda }}</span>
                     </div>
                     <div class="flex justify-between items-center text-sm">
                         <span class="text-gray-500 dark:text-gray-400">Lucro Líquido:</span>
-                        <span class="font-bold text-emerald-600 dark:text-emerald-400">{{ item.lucro|formato_moeda }}</span>
+                        <span class="font-bold text-emerald-600 dark:text-emerald-400 valor-financeiro">{{ item.lucro|formato_moeda }}</span>
                     </div>
                 </div>
                 <div class="flex justify-between text-xs text-gray-500 dark:text-gray-400 space-x-2 border-t border-gray-200 dark:border-gray-700 pt-2 mt-auto">
@@ -437,8 +437,8 @@
                     {% for cliente, total_vendido, lucro_total in vendas_por_cliente %}
                     <tr class="hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition">
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{{ cliente }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 text-right">{{ total_vendido|formato_moeda }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-emerald-600 text-right">{{ lucro_total|formato_moeda }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 text-right valor-financeiro">{{ total_vendido|formato_moeda }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-emerald-600 text-right valor-financeiro">{{ lucro_total|formato_moeda }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -470,8 +470,8 @@
                     <tr class="hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition">
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{{ produto }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 text-right">{{ quantidade }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 text-right">{{ total_vendido|formato_moeda }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-emerald-600 text-right">{{ lucro_total|formato_moeda }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 text-right valor-financeiro">{{ total_vendido|formato_moeda }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-emerald-600 text-right valor-financeiro">{{ lucro_total|formato_moeda }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -513,7 +513,7 @@
                     <div class="flex items-center justify-between">
                         <div>
                             <p class="text-emerald-600 text-sm font-medium">Lucro Líquido</p>
-                            <p id="modal-mes-total-lucro" class="text-3xl font-bold text-emerald-700 mt-1">R$ 0,00</p>
+                            <p id="modal-mes-total-lucro" class="text-3xl font-bold text-emerald-700 mt-1 valor-financeiro">R$ 0,00</p>
                         </div>
                         <i data-lucide="trending-up" class="w-12 h-12 text-emerald-500"></i>
                     </div>
@@ -522,7 +522,7 @@
                     <div class="flex items-center justify-between">
                         <div>
                             <p class="text-blue-600 text-sm font-medium">Faturamento Total</p>
-                            <p id="modal-mes-total-vendido" class="text-3xl font-bold text-blue-700 mt-1">R$ 0,00</p>
+                            <p id="modal-mes-total-vendido" class="text-3xl font-bold text-blue-700 mt-1 valor-financeiro">R$ 0,00</p>
                         </div>
                         <i data-lucide="banknote" class="w-12 h-12 text-blue-500"></i>
                     </div>
@@ -656,7 +656,7 @@
                         <td class="px-6 py-4 font-bold text-gray-800 dark:text-gray-200">{{ p.cliente }}</td>
                         <td class="px-6 py-4 text-gray-600 dark:text-gray-300">{{ p.produto }}</td>
                         <td class="px-6 py-4 text-center font-bold text-red-600 dark:text-red-400">{{ p.qtd }}</td>
-                        <td class="px-6 py-4 text-right font-black text-red-600 dark:text-red-400">
+                        <td class="px-6 py-4 text-right font-black text-red-600 dark:text-red-400 valor-financeiro">
                             - {{ p.prejuizo_valor|formato_moeda }}
                         </td>
                     </tr>
@@ -989,7 +989,7 @@ function abrirDetalhesMes(ano, mes) {
                     tr.innerHTML =
                         '<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">' + cliente.nome + '</td>' +
                         '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 text-center">' + cliente.qtd_compras + '</td>' +
-                        '<td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 dark:text-gray-100 text-right">' + formatoMoeda(cliente.total_gasto) + '</td>';
+                        '<td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 dark:text-gray-100 text-right valor-financeiro">' + formatoMoeda(cliente.total_gasto) + '</td>';
                     tbodyClientes.appendChild(tr);
                 });
             } else {
@@ -1017,8 +1017,8 @@ function abrirDetalhesMes(ano, mes) {
                         '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">' + venda.cliente + '</td>' +
                         '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">' + venda.produto + '</td>' +
                         '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 text-right">' + venda.quantidade + '</td>' +
-                        '<td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100 text-right">' + formatoMoeda(venda.valor_total) + '</td>' +
-                        '<td class="px-4 py-3 text-sm font-medium text-right ' + lucroClass + '">' + formatoMoeda(venda.lucro) + '</td>' +
+                        '<td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100 text-right valor-financeiro">' + formatoMoeda(venda.valor_total) + '</td>' +
+                        '<td class="px-4 py-3 text-sm font-medium text-right valor-financeiro ' + lucroClass + '">' + formatoMoeda(venda.lucro) + '</td>' +
                         '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">' + venda.nf + '</td>' +
                         '<td class="px-4 py-3"><span class="px-3 py-1 text-xs font-semibold rounded-full ' + sitClass + '">' + venda.situacao + '</span></td>';
                     tbodyVendas.appendChild(tr);
@@ -1090,7 +1090,7 @@ function abrirModalDashboard(filtro, titulo) {
                         '<td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">' + (venda.cliente || '-') + '</td>' +
                         '<td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">' + (venda.descricao || '-') + '</td>' +
                         '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">' + (venda.data || '-') + '</td>' +
-                        '<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100 text-right">' + formatoMoeda(venda.valor) + '</td>' +
+                        '<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100 text-right valor-financeiro">' + formatoMoeda(venda.valor) + '</td>' +
                         '<td class="px-6 py-4 whitespace-nowrap"><span class="px-3 py-1 text-xs font-semibold rounded-full ' + sitClass + '">' + (venda.status || '-') + '</span></td>';
                     tbody.appendChild(tr);
                 });

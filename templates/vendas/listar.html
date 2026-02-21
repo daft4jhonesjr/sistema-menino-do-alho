@@ -478,7 +478,7 @@
             </div>
             <div class="text-sm text-gray-600 dark:text-gray-300 mb-3">
                 <p class="text-gray-500 dark:text-gray-400">📦 {{ pedido.total_quantidade }} itens</p>
-                <p class="font-bold text-emerald-600 dark:text-emerald-400 text-lg mt-1">{{ pedido.total_valor|formato_moeda }}</p>
+                <p class="font-bold text-emerald-600 dark:text-emerald-400 text-lg mt-1 valor-financeiro">{{ pedido.total_valor|formato_moeda }}</p>
                 <p class="text-xs mt-1">📅 Venc.: {% if pedido.data_vencimento %}{{ pedido.data_vencimento.strftime('%d/%m/%Y') }}{% else %}---{% endif %}</p>
             </div>
             <div class="flex justify-end gap-2 pt-3 border-t border-gray-100 dark:border-gray-700 flex-wrap">
