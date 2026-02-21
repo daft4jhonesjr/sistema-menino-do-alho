@@ -195,14 +195,14 @@
         <form id="formLancamentoCaixa" action="{{ url_for('adicionar_caixa') }}" method="POST" class="p-5 space-y-4">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <input type="hidden" name="tipo" id="tipo_lancamento_hidden" value="ENTRADA">
-            <div class="grid grid-cols-2 gap-4">
-                <div>
+            <div class="flex flex-col md:flex-row gap-4">
+                <div class="flex-1 min-w-0">
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Data</label>
-                    <input type="date" name="data" value="{{ data_hoje }}" required class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
+                    <input type="date" name="data" value="{{ data_hoje }}" required class="w-full min-w-0 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
                 </div>
-                <div>
+                <div class="flex-1 min-w-0">
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Categoria</label>
-                    <select name="categoria" id="categoria_lancamento" required class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
+                    <select name="categoria" id="categoria_lancamento" required class="w-full min-w-0 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
                         <option value="Entrada Cliente">Entrada Cliente</option>
                         <option value="Saída Pessoal">Saída Pessoal</option>
                         <option value="Saída Fornecedor">Saída Fornecedor</option>
@@ -215,8 +215,8 @@
                 <input type="text" name="descricao" required autocapitalize="words" autocomplete="off" spellcheck="false" class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500" placeholder="Ex: Pagamento Cliente X, Saída Uber">
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
-                <div id="container-forma-simples" class="col-span-2 md:col-span-1">
+            <div class="flex flex-col md:flex-row gap-4">
+                <div id="container-forma-simples" class="flex-1 min-w-0">
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Forma / Conta</label>
                     <select name="forma_pagamento" id="forma_pagamento" required class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
                         <option value="Dinheiro">💵 Dinheiro (Espécie)</option>
@@ -244,14 +244,14 @@
                     <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Pagamento dividido</span>
                     <span id="btn-voltar-split" class="text-sm text-amber-600 dark:text-amber-400 cursor-pointer hover:underline font-bold flex items-center gap-1">↩️ Voltar para pagamento único</span>
                 </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
+                <div class="flex flex-col md:flex-row gap-4">
+                    <div class="flex-1 min-w-0">
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Valor 1 (R$)</label>
-                        <input type="text" id="valor1" name="valor1" placeholder="0,00" inputmode="decimal" class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500 font-bold">
+                        <input type="text" id="valor1" name="valor1" placeholder="0,00" inputmode="decimal" class="w-full min-w-0 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500 font-bold">
                     </div>
-                    <div>
+                    <div class="flex-1 min-w-0">
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Forma 1</label>
-                        <select name="forma1" id="forma1" class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
+                        <select name="forma1" id="forma1" class="w-full min-w-0 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
                             <option value="Dinheiro">Dinheiro (Espécie)</option>
                             <option value="Pix">Pix / Transferência</option>
                             <option value="Cheque">Cheque</option>
@@ -259,14 +259,14 @@
                         </select>
                     </div>
                 </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
+                <div class="flex flex-col md:flex-row gap-4">
+                    <div class="flex-1 min-w-0">
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Valor 2 (R$)</label>
-                        <input type="text" id="valor2" name="valor2" placeholder="0,00" inputmode="decimal" class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500 font-bold">
+                        <input type="text" id="valor2" name="valor2" placeholder="0,00" inputmode="decimal" class="w-full min-w-0 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500 font-bold">
                     </div>
-                    <div>
+                    <div class="flex-1 min-w-0">
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Forma 2</label>
-                        <select name="forma2" id="forma2" class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
+                        <select name="forma2" id="forma2" class="w-full min-w-0 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
                             <option value="Dinheiro">Dinheiro (Espécie)</option>
                             <option value="Pix">Pix / Transferência</option>
                             <option value="Cheque">Cheque</option>
