@@ -106,22 +106,22 @@
             <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead class="bg-gray-100 dark:bg-gray-900/50">
                     <tr>
-                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Produto</th>
-                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Qtd</th>
-                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Preço Unit.</th>
-                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Total</th>
-                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Lucro</th>
-                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase w-24">Ações</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Produto</th>
+                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Qtd</th>
+                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Preço Unit.</th>
+                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Total</th>
+                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Lucro</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap w-24">Ações</th>
                     </tr>
                 </thead>
                 <tbody class="{{ zebra_bg_class }} divide-y divide-gray-200 dark:divide-gray-700">
                     {% for venda in pedido.vendas %}
                     <tr class="hover:bg-emerald-100/50 dark:hover:bg-emerald-900/30 transition">
-                        <td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{{ venda.produto.nome_produto if venda.produto else 'Produto Excluído' }}</td>
-                        <td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 text-right">{{ venda.quantidade_venda }}</td>
-                        <td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 text-right valor-financeiro">{{ venda.preco_venda|formato_moeda }}</td>
-                        <td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100 text-right valor-financeiro">{{ venda.calcular_total()|formato_moeda }}</td>
-                        <td class="px-4 py-3 text-sm font-medium text-right valor-financeiro {% if venda.calcular_lucro() >= 0 %}text-emerald-600 dark:text-emerald-400{% else %}text-red-600 dark:text-red-400{% endif %}">{{ venda.calcular_lucro()|formato_moeda }}</td>
+                        <td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">{{ venda.produto.nome_produto if venda.produto else 'Produto Excluído' }}</td>
+                        <td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 text-right whitespace-nowrap">{{ venda.quantidade_venda }}</td>
+                        <td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 text-right whitespace-nowrap valor-financeiro">{{ venda.preco_venda|formato_moeda }}</td>
+                        <td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100 text-right whitespace-nowrap valor-financeiro">{{ venda.calcular_total()|formato_moeda }}</td>
+                        <td class="px-4 py-3 text-sm font-medium text-right whitespace-nowrap valor-financeiro {% if venda.calcular_lucro() >= 0 %}text-emerald-600 dark:text-emerald-400{% else %}text-red-600 dark:text-red-400{% endif %}">{{ venda.calcular_lucro()|formato_moeda }}</td>
                         <td class="px-4 py-3 text-sm font-medium">
                             <button type="button" class="btn-editar-venda text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 inline-flex bg-transparent border-none p-0 cursor-pointer" title="Editar"
                                 data-id="{{ venda.id }}"

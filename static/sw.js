@@ -1,6 +1,6 @@
 // Service Worker PWA - Menino do Alho
 // Cache local de estáticos para carregamento instantâneo
-const CACHE_NAME = 'menino-alho-v1';
+const CACHE_NAME = 'menino-alho-v2';
 const ASSETS_TO_CACHE = [
     '/static/images/logo_menino_do_alho_amarelo1.jpeg',
     '/static/manifest.json',
@@ -38,6 +38,19 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
     if (event.request.method !== 'GET') return;
 
+    const url = new URL(event.request.url);
+
+    // Rotas que fazem redirect externo (WhatsApp, etc.) — não interceptar
+    if (url.pathname.includes('/whatsapp')) return;
+
+    // Requisições de navegação (HTML) — sempre ir à rede, sem fallback de cache
+    if (event.request.mode === 'navigate') {
+        event.respondWith(
+            fetch(event.request).catch(() => caches.match(event.request) || caches.match('/'))
+        );
+        return;
+    }
+
     // Estratégia: Stale-While-Revalidate para ESTÁTICOS
     if (event.request.destination === 'image' ||
         event.request.destination === 'style' ||
@@ -60,11 +73,9 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // Estratégia: Network First para DADOS (HTML/API)
+    // Estratégia: Network First para DADOS (API/JSON)
     event.respondWith(
-        fetch(event.request).catch(() => {
-            return caches.match(event.request);
-        })
+        fetch(event.request).catch(() => caches.match(event.request))
     );
 });
 
