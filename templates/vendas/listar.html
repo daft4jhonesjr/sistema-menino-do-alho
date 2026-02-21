@@ -508,12 +508,16 @@
         {% endif %}
     </div>
 
-    <!-- Botão Carregar Mais (visível em Lista e Grade) -->
+    <!-- Sentinela Scroll Infinito (visível em Lista e Grade) -->
     {% if pagination and pagination.has_next %}
-    <div id="wrap-carregar-mais" class="mt-6 flex justify-center pb-6">
-        <button id="btn-carregar-mais" class="bg-emerald-700 text-white px-8 py-3 rounded-xl hover:bg-emerald-600 transition font-semibold flex items-center shadow-sm">
-            <i data-lucide="chevron-down" class="w-5 h-5 mr-2"></i>Carregar Mais Vendas
-        </button>
+    <div id="sentinela-scroll" class="w-full text-center py-6">
+        <div class="inline-flex items-center gap-2 text-gray-500 dark:text-gray-400">
+            <svg class="animate-spin h-5 w-5 text-emerald-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span class="text-sm font-medium">Buscando mais vendas...</span>
+        </div>
     </div>
     {% endif %}
 </div>
@@ -1785,31 +1789,31 @@ document.addEventListener('DOMContentLoaded', function() {
 })();
 </script>
 
-<!-- Script de Paginação "Carregar Mais" -->
+<!-- Script de Paginação Scroll Infinito -->
 <script>
 (function() {
-    var btnCarregarMais = document.getElementById('btn-carregar-mais');
+    var sentinela = document.getElementById('sentinela-scroll');
     var tbody = document.getElementById('vendas-tbody');
     var paginaAtual = {{ pagination.page if pagination else 1 }};
     var carregando = false;
+    var fimDaLista = false;
     
-    if (!btnCarregarMais || !tbody) return;
+    if (!sentinela || !tbody) return;
     
     var viewGrade = document.getElementById('view-grade');
+    var observer = null;
 
-    btnCarregarMais.addEventListener('click', function() {
-        if (carregando) return;
+    function carregarMaisVendas() {
+        if (carregando || fimDaLista) return Promise.resolve();
         
         carregando = true;
-        btnCarregarMais.disabled = true;
-        btnCarregarMais.innerHTML = '<i data-lucide="loader-2" class="w-5 h-5 mr-2 animate-spin"></i>Carregando...';
         
         var urlParams = new URLSearchParams(window.location.search);
         urlParams.set('page', paginaAtual + 1);
         urlParams.set('ajax', '1');
         var url = '{{ url_for("listar_vendas") }}?' + urlParams.toString();
         
-        fetch(url, {
+        return fetch(url, {
             method: 'GET',
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         })
@@ -1821,8 +1825,7 @@ document.addEventListener('DOMContentLoaded', function() {
             var rowsHtml = (data && data.rows) ? data.rows.trim() : '';
             var cardsHtml = (data && data.cards) ? data.cards.trim() : '';
             if (!rowsHtml && !cardsHtml) {
-                if (btnCarregarMais.parentElement) btnCarregarMais.parentElement.style.display = 'none';
-                carregando = false;
+                pararScroll();
                 return;
             }
             
@@ -1842,26 +1845,18 @@ document.addEventListener('DOMContentLoaded', function() {
             var pedidosCarregados = linhasDepois - linhasAntes;
             
             if (pedidosCarregados === 0) {
-                // Não há mais vendas, esconder botão
-                btnCarregarMais.parentElement.style.display = 'none';
-                carregando = false;
+                pararScroll();
                 return;
             }
             
-            // Incrementar página atual
             paginaAtual++;
             
-            // Re-inicializar ícones Lucide para as novas linhas
             if (typeof lucide !== 'undefined') {
                 lucide.createIcons();
             }
             
-            // Re-inicializar accordion para as novas linhas
-            // Os IDs já são únicos (baseados no ID da venda), então não precisa ajustar
             initAccordion();
             
-            // Re-inicializar eventos de edição de venda para as novas linhas
-            // Selecionar apenas as novas linhas (que não têm o atributo ainda)
             var todasLinhas = tbody.querySelectorAll('tr.pedido-resumo');
             Array.from(todasLinhas).slice(linhasAntes).forEach(function(linhaResumo) {
                 var linhaDetalhes = tbody.querySelector('tr.pedido-detalhes[data-pedido-id="' + linhaResumo.getAttribute('data-pedido-id') + '"]');
@@ -1878,32 +1873,34 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
             
-            // Verificar se ainda há mais páginas
-            // Se carregamos menos de 20 pedidos, não há mais páginas
             if (pedidosCarregados < 20) {
-                // Não há mais vendas, esconder botão
-                btnCarregarMais.parentElement.style.display = 'none';
-            } else {
-                btnCarregarMais.disabled = false;
-                btnCarregarMais.innerHTML = '<i data-lucide="chevron-down" class="w-5 h-5 mr-2"></i>Carregar Mais Vendas';
-                if (typeof lucide !== 'undefined') {
-                    lucide.createIcons();
-                }
+                pararScroll();
             }
             
             carregando = false;
         })
         .catch(function(error) {
             console.error('Erro ao carregar mais vendas:', error);
-            alert('Erro ao carregar mais vendas. Tente novamente.');
-            btnCarregarMais.disabled = false;
-            btnCarregarMais.innerHTML = '<i data-lucide="chevron-down" class="w-5 h-5 mr-2"></i>Carregar Mais Vendas';
-            if (typeof lucide !== 'undefined') {
-                lucide.createIcons();
-            }
             carregando = false;
         });
+    }
+
+    function pararScroll() {
+        fimDaLista = true;
+        carregando = false;
+        if (observer) observer.disconnect();
+        if (sentinela) sentinela.remove();
+    }
+
+    observer = new IntersectionObserver(function(entries) {
+        if (entries[0].isIntersecting && !carregando && !fimDaLista) {
+            carregarMaisVendas();
+        }
+    }, {
+        rootMargin: '300px',
+        threshold: 0.1
     });
+    observer.observe(sentinela);
     
     // Função para inicializar accordion (reutilizar a função existente)
     function initAccordion() {
