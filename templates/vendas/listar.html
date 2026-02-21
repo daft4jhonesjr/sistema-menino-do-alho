@@ -108,6 +108,9 @@
     .pedido-detalhes { transition: opacity 0.2s ease-in-out; }
     .pedido-resumo { user-select: none; }
     .filtro-empresa-oculto { display: none !important; }
+    #vendas-tbody { counter-reset: contador-vendas; }
+    tr.pedido-resumo:not(.filtro-empresa-oculto) { counter-increment: contador-vendas; }
+    .celula-numero::before { content: counter(contador-vendas); }
     .badge-situacao-toggle:hover { opacity: 0.9; }
     .badge-status-transition {
         animation: badge-status-pulse 0.4s ease-out;
@@ -405,6 +408,7 @@
             <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 resizable" data-bulk-module="vendas" data-table-id="vendas" id="tabela-vendas">
                 <thead class="bg-gray-50 dark:bg-gray-900/50">
                     <tr>
+                        <th class="px-2 py-3 text-center text-xs font-bold text-gray-400 dark:text-gray-500 w-8">#</th>
                         <th class="px-3 py-3 text-center w-12">
                             <input type="checkbox" id="bulk-master" class="rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" title="Selecionar todos" aria-label="Selecionar todos">
                         </th>

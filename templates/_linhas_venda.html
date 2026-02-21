@@ -22,6 +22,7 @@
 {% set zebra_bg_class = 'bg-white dark:bg-gray-800' if loop.index % 2 == 0 else 'bg-emerald-50/30 dark:bg-emerald-900/30' %}
 <!-- Linha de Resumo do Pedido (Expansível) -->
 <tr class="pedido-resumo cursor-pointer transition {{ row_bg_class }} {{ row_hover_class }} border-b border-gray-200 dark:border-gray-700" data-pedido-id="{{ pedido_unique_id }}" data-venda-ids="{{ pedido.vendas|map(attribute='id')|list|tojson }}" data-lucro-total="{{ pedido.total_lucro }}" data-empresa="{{ (pedido.empresa_faturadora or 'NENHUM') | upper }}">
+    <td class="px-2 py-4 text-center text-xs text-gray-400 dark:text-gray-500 font-bold celula-numero"></td>
     <td class="px-3 py-4 text-center" onclick="event.stopPropagation();">
         <input type="checkbox" class="bulk-row-check rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" data-venda-ids="{{ pedido.vendas|map(attribute='id')|list|tojson }}" data-lucro-total="{{ pedido.total_lucro }}">
     </td>
@@ -101,7 +102,7 @@
 </tr>
 <!-- Linha de Detalhes (Oculta por padrão) -->
 <tr class="pedido-detalhes hidden {{ zebra_class }}" data-pedido-id="{{ pedido_unique_id }}">
-    <td colspan="14" class="px-0 py-0">
+    <td colspan="15" class="px-0 py-0">
         <div class="{{ zebra_bg_class }} border-l-4 border-emerald-300 dark:border-emerald-600 px-6 py-4">
             <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead class="bg-gray-100 dark:bg-gray-900/50">
