@@ -4584,6 +4584,25 @@ def api_dashboard_detalhes(filtro):
         return jsonify({'erro': str(e)}), 500
 
 
+@app.route('/api/cliente/ultimo_pagamento', methods=['GET'])
+@login_required
+def ultimo_pagamento_cliente():
+    """Retorna a forma de pagamento da última venda do cliente para auto-preenchimento."""
+    cliente_id = request.args.get('cliente_id')
+    cliente_nome = request.args.get('cliente_nome')
+    query = Venda.query
+    if cliente_id and str(cliente_id).isdigit():
+        query = query.filter_by(cliente_id=int(cliente_id))
+    elif cliente_nome and str(cliente_nome).strip():
+        query = query.join(Cliente).filter(Cliente.nome_cliente.ilike(f"%{cliente_nome.strip()}%"))
+    else:
+        return jsonify({'error': 'Cliente não informado'}), 400
+    ultima_venda = query.order_by(Venda.data_venda.desc(), Venda.id.desc()).first()
+    if ultima_venda and ultima_venda.forma_pagamento:
+        return jsonify({'forma_pagamento': ultima_venda.forma_pagamento})
+    return jsonify({'forma_pagamento': None})
+
+
 @app.route('/api/cobrancas_pendentes')
 @login_required
 def api_cobrancas_pendentes():

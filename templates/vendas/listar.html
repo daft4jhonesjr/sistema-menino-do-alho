@@ -1563,10 +1563,34 @@ document.addEventListener('DOMContentLoaded', function() {
                     return '<div class="no-results">Cliente não encontrado</div>';
                 }
             },
-            onItemAdd: function() {
+            onItemAdd: function(value) {
                 var wrap = document.querySelector('#cliente-select-wrap .ts-wrapper');
                 if (wrap) wrap.classList.add('campo-preenchido');
                 if (produtoSelectEl) setTimeout(function() { produtoSelectEl.focus(); }, 80);
+                // Auto-preenchimento da Forma de Pagamento com base na última compra do cliente
+                if (value) {
+                    fetch('/api/cliente/ultimo_pagamento?cliente_id=' + encodeURIComponent(value))
+                        .then(function(r) { return r.json(); })
+                        .then(function(data) {
+                            if (data.forma_pagamento) {
+                                var selectPag = document.getElementById('inline-forma_pagamento');
+                                if (selectPag) {
+                                    var norm = function(s) { return (s || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim(); };
+                                    var fpNorm = norm(data.forma_pagamento);
+                                    for (var i = 0; i < selectPag.options.length; i++) {
+                                        var opt = selectPag.options[i];
+                                        if (opt.value && norm(opt.value) === fpNorm) {
+                                            selectPag.value = opt.value;
+                                            selectPag.classList.add('ring-2', 'ring-emerald-500', 'transition-all');
+                                            setTimeout(function() { selectPag.classList.remove('ring-2', 'ring-emerald-500'); }, 1000);
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        })
+                        .catch(function(err) { console.error('Erro ao buscar pagamento padrão:', err); });
+                }
             },
             onClear: function() {
                 var wrap = document.querySelector('#cliente-select-wrap .ts-wrapper');
