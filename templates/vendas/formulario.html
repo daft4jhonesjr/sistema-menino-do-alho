@@ -105,8 +105,8 @@
                 </label>
                 <select id="situacao" name="situacao" required
                         class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
-                    <option value="PENDENTE" {% if venda and venda.situacao == 'PENDENTE' %}selected{% endif %}>PENDENTE</option>
-                    <option value="PAGO" {% if venda and venda.situacao == 'PAGO' %}selected{% endif %}>PAGO</option>
+                    <option value="PENDENTE" {% if venda and venda.situacao == 'PENDENTE' %}selected{% endif %}>⏳ Pendente</option>
+                    <option value="PAGO" {% if venda and venda.situacao == 'PAGO' %}selected{% endif %}>✅ Pago</option>
                 </select>
             </div>
         </div>
