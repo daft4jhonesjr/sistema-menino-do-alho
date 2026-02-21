@@ -68,6 +68,7 @@ class Cliente(db.Model):
     razao_social = db.Column(db.String(200), index=True)  # Índice para buscas por razão social
     cnpj = db.Column(db.String(18), unique=True, index=True)
     cidade = db.Column(db.String(100))
+    telefone = db.Column(db.String(20), nullable=True)
     endereco = db.Column(db.String(255))
     
     # Relacionamento com vendas

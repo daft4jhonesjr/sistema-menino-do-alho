@@ -2251,6 +2251,12 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             db.session.commit()
         except (OperationalError, Exception):
             db.session.rollback()
+        # Migração: telefone em clientes (WhatsApp / contato)
+        try:
+            db.session.execute(text('ALTER TABLE clientes ADD COLUMN telefone VARCHAR(20)'))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
         # Migração: índices para campos filtráveis (performance em 10k+ registros)
         for idx_sql in [
             'CREATE INDEX IF NOT EXISTS ix_clientes_cnpj ON clientes(cnpj)',
@@ -3387,6 +3393,7 @@ def novo_cliente():
                 return render_template('clientes/formulario.html', cliente=None)
             cliente = Cliente(
                 nome_cliente=nome_cliente,
+                telefone=(request.form.get('telefone', '') or '').strip() or None,
                 razao_social=request.form.get('razao_social', ''),
                 cnpj=cnpj,
                 cidade=request.form.get('cidade', ''),
@@ -3426,6 +3433,7 @@ def editar_cliente(id):
                     return render_template('clientes/formulario.html', cliente=cliente)
 
             cliente.nome_cliente = request.form.get('nome_cliente') or cliente.nome_cliente
+            cliente.telefone = (request.form.get('telefone', '') or '').strip() or None
             cliente.razao_social = request.form.get('razao_social', '')
             cliente.cnpj = cnpj
             cliente.cidade = request.form.get('cidade', '')
@@ -3512,12 +3520,15 @@ def _processar_linhas_clientes_upsert(linhas, erros_detalhados, sucesso_ref, err
                 erros_ref[0] += 1
                 continue
             endereco = (row.get('endereco') or '').strip() or None
+            telefone_tsv = (row.get('telefone') or row.get('whatsapp') or '').strip() or None
             cliente = Cliente.query.filter(func.lower(Cliente.nome_cliente) == nome.lower()).first()
             if cliente:
                 cliente.razao_social = razao_social or None
                 cliente.cnpj = cnpj
                 cliente.cidade = cidade or None
                 cliente.endereco = endereco
+                if telefone_tsv:
+                    cliente.telefone = telefone_tsv
                 db.session.commit()
                 sucesso_ref[0] += 1
             else:
@@ -3527,6 +3538,7 @@ def _processar_linhas_clientes_upsert(linhas, erros_detalhados, sucesso_ref, err
                     continue
                 cliente = Cliente(
                     nome_cliente=nome,
+                    telefone=telefone_tsv,
                     razao_social=razao_social or None,
                     cnpj=cnpj,
                     cidade=cidade or None,
@@ -3615,16 +3627,20 @@ def importar_clientes():
                                 continue
                             endereco = _strip_quotes(row.get('endereco', '')) or None
                             cliente = Cliente.query.filter(func.lower(Cliente.nome_cliente) == nome.lower()).first()
+                            telefone_imp = _strip_quotes(row.get('telefone', row.get('whatsapp', ''))) or None
                             if cliente:
                                 cliente.razao_social = _strip_quotes(row.get('razao_social', row.get('razao', ''))) or nome
                                 cliente.cnpj = cnpj
                                 cliente.cidade = _strip_quotes(row.get('cidade', '')) or None
                                 cliente.endereco = endereco
+                                if telefone_imp:
+                                    cliente.telefone = telefone_imp
                                 db.session.commit()
                                 sucesso += 1
                             else:
                                 cliente = Cliente(
                                     nome_cliente=nome,
+                                    telefone=telefone_imp,
                                     razao_social=_strip_quotes(row.get('razao_social', row.get('razao', ''))) or None,
                                     cnpj=cnpj,
                                     cidade=_strip_quotes(row.get('cidade', '')) or None,
