@@ -85,17 +85,20 @@
             </div>
         </form>
 
-        <div class="mb-6 flex items-center justify-between bg-gray-50 dark:bg-gray-800/50 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-            <div>
-                <h4 class="font-bold text-gray-800 dark:text-white flex items-center gap-2">
-                    <span>📲</span> Notificações no Dispositivo
-                </h4>
-                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Receba alertas na tela do celular ou computador quando houver cobranças vencendo hoje.</p>
+        <div id="notif-container" class="mb-6 p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 transition-colors">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h4 class="font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                        <span>📲</span> Notificações no Dispositivo
+                    </h4>
+                    <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Receba alertas na tela do celular ou computador quando houver cobranças vencendo hoje.</p>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer flex-shrink-0 ml-4">
+                    <input type="checkbox" id="toggleNotificacoes" class="sr-only peer">
+                    <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer dark:bg-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-emerald-500"></div>
+                </label>
             </div>
-            <label class="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" id="toggleNotificacoes" class="sr-only peer">
-                <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer dark:bg-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-emerald-500"></div>
-            </label>
+            <div id="notif-status" class="mt-3 text-xs font-medium rounded-md px-3 py-2 hidden"></div>
         </div>
 
         {% if current_user.is_admin() %}
@@ -149,36 +152,105 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Lógica das Notificações de Dispositivo
     var toggleNotif = document.getElementById('toggleNotificacoes');
-    if (toggleNotif) {
-        if (localStorage.getItem('menino_alho_device_notif') === 'true' && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-            toggleNotif.checked = true;
+    var notifContainer = document.getElementById('notif-container');
+    var notifStatus = document.getElementById('notif-status');
+
+    function mostrarStatus(tipo, msg) {
+        if (!notifStatus) return;
+        notifStatus.classList.remove('hidden',
+            'bg-emerald-50', 'text-emerald-700', 'dark:bg-emerald-900/30', 'dark:text-emerald-400',
+            'bg-red-50', 'text-red-700', 'dark:bg-red-900/30', 'dark:text-red-400',
+            'bg-amber-50', 'text-amber-700', 'dark:bg-amber-900/30', 'dark:text-amber-400',
+            'bg-gray-100', 'text-gray-600', 'dark:bg-gray-700', 'dark:text-gray-400');
+        if (tipo === 'ativo') {
+            notifStatus.classList.add('bg-emerald-50', 'text-emerald-700', 'dark:bg-emerald-900/30', 'dark:text-emerald-400');
+            notifContainer.classList.remove('border-gray-200', 'dark:border-gray-700');
+            notifContainer.classList.add('border-emerald-300', 'dark:border-emerald-700');
+        } else if (tipo === 'bloqueado') {
+            notifStatus.classList.add('bg-red-50', 'text-red-700', 'dark:bg-red-900/30', 'dark:text-red-400');
+            notifContainer.classList.remove('border-gray-200', 'dark:border-gray-700', 'border-emerald-300', 'dark:border-emerald-700');
+            notifContainer.classList.add('border-red-300', 'dark:border-red-700');
+        } else if (tipo === 'aviso') {
+            notifStatus.classList.add('bg-amber-50', 'text-amber-700', 'dark:bg-amber-900/30', 'dark:text-amber-400');
+        } else {
+            notifStatus.classList.add('bg-gray-100', 'text-gray-600', 'dark:bg-gray-700', 'dark:text-gray-400');
         }
+        notifStatus.textContent = msg;
+    }
+
+    function atualizarEstadoNotificacoes() {
+        if (!toggleNotif) return;
+        var suportado = ('Notification' in window);
+        var preferencia = localStorage.getItem('menino_alho_device_notif') === 'true';
+
+        if (!suportado) {
+            toggleNotif.checked = false;
+            toggleNotif.disabled = true;
+            mostrarStatus('aviso', '⚠️ Seu navegador não suporta notificações.');
+            return;
+        }
+
+        var permissao = Notification.permission;
+
+        if (preferencia && permissao === 'granted') {
+            toggleNotif.checked = true;
+            mostrarStatus('ativo', '✅ Notificações ativas neste dispositivo.');
+        } else if (preferencia && permissao === 'denied') {
+            toggleNotif.checked = false;
+            localStorage.setItem('menino_alho_device_notif', 'false');
+            mostrarStatus('bloqueado', '🚫 Permissão bloqueada pelo navegador. Toque no cadeado 🔒 na barra de endereço e reative as notificações.');
+        } else if (preferencia && permissao === 'default') {
+            toggleNotif.checked = false;
+            mostrarStatus('aviso', '⏳ Permissão pendente — ative o botão para solicitar novamente.');
+        } else {
+            toggleNotif.checked = false;
+            notifContainer.classList.remove('border-emerald-300', 'dark:border-emerald-700', 'border-red-300', 'dark:border-red-700');
+            notifContainer.classList.add('border-gray-200', 'dark:border-gray-700');
+            if (notifStatus) notifStatus.classList.add('hidden');
+        }
+    }
+
+    atualizarEstadoNotificacoes();
+
+    if (toggleNotif) {
         toggleNotif.addEventListener('change', async function(e) {
             if (e.target.checked) {
-                if (!("Notification" in window)) {
-                    alert("Seu navegador não suporta notificações de sistema.");
+                if (!('Notification' in window)) {
                     e.target.checked = false;
+                    mostrarStatus('aviso', '⚠️ Seu navegador não suporta notificações.');
+                    return;
+                }
+                if (Notification.permission === 'denied') {
+                    e.target.checked = false;
+                    localStorage.setItem('menino_alho_device_notif', 'false');
+                    mostrarStatus('bloqueado', '🚫 Permissão bloqueada pelo navegador. Toque no cadeado 🔒 na barra de endereço > Permissões do site > Notificações > Permitir.');
                     return;
                 }
                 try {
                     var permission = await Notification.requestPermission();
-                    if (permission === "granted") {
+                    if (permission === 'granted') {
                         localStorage.setItem('menino_alho_device_notif', 'true');
-                        new Notification("Menino do Alho", {
-                            body: "Notificações ativadas com sucesso! Você será avisado sobre cobranças.",
-                            icon: "{{ url_for('static', filename='images/logo_menino_do_alho_amarelo1.jpeg') }}"
+                        mostrarStatus('ativo', '✅ Notificações ativas neste dispositivo.');
+                        new Notification('Menino do Alho', {
+                            body: 'Notificações ativadas com sucesso! Você será avisado sobre cobranças.',
+                            icon: '{{ url_for("static", filename="images/logo_menino_do_alho_amarelo1.jpeg") }}'
                         });
-                    } else {
+                    } else if (permission === 'denied') {
                         e.target.checked = false;
                         localStorage.setItem('menino_alho_device_notif', 'false');
-                        alert("Você precisa permitir as notificações nas configurações do seu navegador/celular para usar este recurso.");
+                        mostrarStatus('bloqueado', '🚫 Permissão negada. Para reativar, toque no cadeado 🔒 na barra de endereço e permita notificações.');
+                    } else {
+                        e.target.checked = false;
+                        mostrarStatus('aviso', '⏳ Permissão não concedida. Tente novamente.');
                     }
                 } catch (err) {
                     e.target.checked = false;
                     localStorage.setItem('menino_alho_device_notif', 'false');
+                    mostrarStatus('aviso', '⚠️ Erro ao solicitar permissão: ' + (err.message || 'desconhecido'));
                 }
             } else {
                 localStorage.setItem('menino_alho_device_notif', 'false');
+                atualizarEstadoNotificacoes();
             }
         });
     }

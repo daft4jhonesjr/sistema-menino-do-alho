@@ -869,23 +869,19 @@
     <script>
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function() {
-            navigator.serviceWorker.register('{{ url_for("service_worker") }}')
+            navigator.serviceWorker.register('{{ url_for("service_worker") }}', { updateViaCache: 'none' })
                 .then(function(registration) {
                     console.log('[SW] Service Worker registrado com sucesso:', registration.scope);
-                    
-                    // Verificar atualizações periodicamente
+
+                    registration.update().catch(function() {});
+
                     setInterval(function() {
-                        registration.update();
-                    }, 60000); // Verificar a cada minuto
+                        registration.update().catch(function() {});
+                    }, 300000);
                 })
                 .catch(function(error) {
                     console.log('[SW] Erro ao registrar Service Worker:', error);
                 });
-            
-            // Escutar mensagens do Service Worker
-            navigator.serviceWorker.addEventListener('message', function(event) {
-                console.log('[SW] Mensagem recebida:', event.data);
-            });
         });
     }
     </script>
@@ -1164,6 +1160,10 @@
         document.addEventListener('DOMContentLoaded', function() {
             if (typeof Notification === 'undefined') return;
             if (localStorage.getItem('menino_alho_device_notif') !== 'true') return;
+            if (Notification.permission === 'denied') {
+                localStorage.setItem('menino_alho_device_notif', 'false');
+                return;
+            }
             if (Notification.permission !== 'granted') return;
             var hoje = new Date().toDateString();
             if (localStorage.getItem('menino_alho_notif_ultima_data') === hoje) return;
