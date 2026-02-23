@@ -929,140 +929,133 @@ function abrirModalCorrigirCategoria() {
 })();
 </script>
 
-<!-- Script de Paginação "Carregar Mais" -->
+<!-- Script de Paginação "Carregar Mais" com Scroll Infinito -->
 <script>
 (function() {
     var btnCarregarMais = document.getElementById('btn-carregar-mais');
     var paginaAtual = {{ pagination.page if pagination else 1 }};
     var carregando = false;
-    
+    var fimDasEntradas = false;
+
     if (!btnCarregarMais) return;
-    
-    btnCarregarMais.addEventListener('click', function() {
-        if (carregando) return;
-        
+
+    function carregarMaisEntradas() {
+        if (carregando || fimDasEntradas) return;
+
         carregando = true;
         btnCarregarMais.disabled = true;
         btnCarregarMais.innerHTML = '<i data-lucide="loader-2" class="w-5 h-5 mr-2 animate-spin"></i>Carregando...';
-        
-        // Construir URL com parâmetros da página atual
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+
         var urlParams = new URLSearchParams(window.location.search);
         urlParams.set('page', paginaAtual + 1);
         urlParams.set('ajax', '1');
-        
-        // Manter filtros e ordenação
+
         var url = '{{ url_for("listar_produtos") }}?' + urlParams.toString();
-        
+
         fetch(url, {
             method: 'GET',
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest'
-            }
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
         })
         .then(function(response) {
-            if (!response.ok) {
-                throw new Error('Erro ao carregar produtos');
-            }
+            if (!response.ok) throw new Error('Erro ao carregar produtos');
             return response.text();
         })
         .then(function(html) {
             if (!html || html.trim() === '') {
-                // Não há mais produtos, esconder botão
-                btnCarregarMais.parentElement.style.display = 'none';
-                carregando = false;
+                esconderBotao();
                 return;
             }
-            
-            // Criar um tbody temporário para preservar a estrutura das linhas <tr>
+
             var tempTable = document.createElement('table');
             var tempTbody = document.createElement('tbody');
             tempTable.appendChild(tempTbody);
             tempTbody.innerHTML = html.trim();
-            
-            // Encontrar todas as linhas <tr> no HTML retornado
+
             var novasLinhas = tempTbody.querySelectorAll('tr');
-            
+
             if (novasLinhas.length === 0) {
-                // Não há mais produtos, esconder botão
-                btnCarregarMais.parentElement.style.display = 'none';
-                carregando = false;
+                esconderBotao();
                 return;
             }
-            
+
             var produtosCarregados = 0;
-            
-            // Inserir cada linha na tabela correta do tipo correspondente
+
             Array.from(novasLinhas).forEach(function(linha) {
                 var tipo = linha.getAttribute('data-tipo');
                 if (!tipo) return;
-                
-                // Encontrar o tbody da tabela deste tipo
+
                 var tbodyTipo = document.querySelector('tbody[data-tipo-tbody="' + tipo + '"]');
-                
+
                 if (tbodyTipo) {
-                    // Tabela já existe, adicionar linha ao final
                     tbodyTipo.appendChild(linha);
                     produtosCarregados++;
                 } else {
-                    // Tabela não existe, criar nova seção de tipo
-                    // Isso não deveria acontecer normalmente, mas vamos tratar
                     console.warn('Tipo não encontrado:', tipo);
                 }
             });
-            
+
             if (produtosCarregados === 0) {
-                // Não há mais produtos, esconder botão
-                btnCarregarMais.parentElement.style.display = 'none';
-                carregando = false;
+                esconderBotao();
                 return;
             }
-            
-            // Incrementar página atual
+
             paginaAtual++;
-            
-            // Re-inicializar ícones Lucide para as novas linhas
-            if (typeof lucide !== 'undefined') {
-                lucide.createIcons();
-            }
-            
-            // Re-inicializar eventos de edição de produto para as novas linhas
+
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+
             document.querySelectorAll('.btn-editar-produto').forEach(function(btn) {
                 if (!btn.hasAttribute('data-pagination-initialized')) {
                     btn.setAttribute('data-pagination-initialized', 'true');
                     btn.addEventListener('click', function() {
-                        // A função abrirModalEditarProduto deve estar definida em outro lugar
                         if (typeof abrirModalEditarProduto === 'function') {
                             abrirModalEditarProduto(btn);
                         }
                     });
                 }
             });
-            
-            // Verificar se ainda há mais páginas
+
             if (produtosCarregados < 20) {
-                // Não há mais produtos, esconder botão
-                btnCarregarMais.parentElement.style.display = 'none';
+                esconderBotao();
             } else {
                 btnCarregarMais.disabled = false;
                 btnCarregarMais.innerHTML = '<i data-lucide="chevron-down" class="w-5 h-5 mr-2"></i>Carregar Mais Entradas';
-                if (typeof lucide !== 'undefined') {
-                    lucide.createIcons();
-                }
+                if (typeof lucide !== 'undefined') lucide.createIcons();
             }
-            
+
             carregando = false;
         })
         .catch(function(error) {
             console.error('Erro ao carregar mais produtos:', error);
-            alert('Erro ao carregar mais produtos. Tente novamente.');
             btnCarregarMais.disabled = false;
             btnCarregarMais.innerHTML = '<i data-lucide="chevron-down" class="w-5 h-5 mr-2"></i>Carregar Mais Entradas';
-            if (typeof lucide !== 'undefined') {
-                lucide.createIcons();
-            }
+            if (typeof lucide !== 'undefined') lucide.createIcons();
             carregando = false;
         });
-    });
+    }
+
+    function esconderBotao() {
+        fimDasEntradas = true;
+        carregando = false;
+        if (observador) observador.disconnect();
+        btnCarregarMais.parentElement.style.display = 'none';
+    }
+
+    btnCarregarMais.addEventListener('click', carregarMaisEntradas);
+
+    // Scroll Infinito via IntersectionObserver
+    var observador = null;
+    if ('IntersectionObserver' in window) {
+        observador = new IntersectionObserver(function(entries) {
+            if (entries[0].isIntersecting && !carregando && !fimDasEntradas) {
+                carregarMaisEntradas();
+            }
+        }, {
+            rootMargin: '200px',
+            threshold: 0.1
+        });
+        observador.observe(btnCarregarMais);
+    }
 })();
 </script>
 {% endblock %}
