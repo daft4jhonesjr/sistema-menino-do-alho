@@ -682,14 +682,31 @@ function confirmarExclusaoMassa() {
 
     function parseMoedaBR(valor) {
         if (valor === null || valor === undefined) return 0;
-        var txt = String(valor).trim();
+        var txt = String(valor).trim().replace(/[R$\s]/g, '');
         if (!txt) return 0;
-        // Suporta tanto "5.000,00" quanto "5000.00"
-        var normalizado = txt.replace(/\./g, '').replace(',', '.');
-        var n = parseFloat(normalizado);
-        if (isNaN(n)) {
-            n = parseFloat(String(valor).replace(',', '.'));
+
+        var temVirgula = txt.indexOf(',') >= 0;
+        var temPonto = txt.indexOf('.') >= 0;
+
+        // Suporta com segurança:
+        // - BR: 1.234,56
+        // - EN: 1234.56
+        // - Inteiro: 1234
+        if (temVirgula && temPonto) {
+            var ultimaVirgula = txt.lastIndexOf(',');
+            var ultimoPonto = txt.lastIndexOf('.');
+            if (ultimaVirgula > ultimoPonto) {
+                // Formato BR com separador de milhar em ponto
+                txt = txt.replace(/\./g, '').replace(',', '.');
+            } else {
+                // Formato EN com separador de milhar em vírgula
+                txt = txt.replace(/,/g, '');
+            }
+        } else if (temVirgula) {
+            txt = txt.replace(',', '.');
         }
+
+        var n = parseFloat(txt);
         return isNaN(n) ? 0 : n;
     }
 
@@ -732,9 +749,29 @@ function confirmarExclusaoMassa() {
         return t;
     }
 
+    function calcularSoma(seletorInputs) {
+        var total = 0;
+        var inputs = document.querySelectorAll(seletorInputs);
+        inputs.forEach(function(input) {
+            var valorTexto = input.value;
+            if (!valorTexto) return;
+            var valorLimpo = valorTexto.replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
+            total += parseFloat(valorLimpo) || 0;
+        });
+        return total;
+    }
+
+    function atualizarTotalGaveta() {
+        return calcularSoma('#lista-valores-dinheiro input[name="valor_gaveta[]"], #lista-valores-dinheiro .input-valor-dinheiro');
+    }
+
+    function atualizarTotalCheques() {
+        return calcularSoma('#lista-valores-cheque input[name="valor_cheque[]"], #lista-valores-cheque .input-valor-cheque');
+    }
+
     function atualizarRodape() {
         var cfg = abas[abaAtiva];
-        var total = calcTotal(abaAtiva);
+        var total = abaAtiva === 'dinheiro' ? atualizarTotalGaveta() : atualizarTotalCheques();
         var elTotal = document.getElementById('total-contagem-dinheiro');
         var elLabel = document.getElementById('label-total-contagem');
         if (elTotal) {
