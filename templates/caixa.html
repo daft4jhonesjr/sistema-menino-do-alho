@@ -136,6 +136,7 @@
                             <th class="px-6 py-3">Descrição</th>
                             <th class="px-6 py-3">Categoria</th>
                             <th class="px-6 py-3">Conta/Pagamento</th>
+                            <th class="px-6 py-3 text-center">Status Cheque</th>
                             <th class="px-6 py-3 text-right">Valor</th>
                             <th class="px-6 py-3 text-center">Ações</th>
                         </tr>
@@ -157,10 +158,29 @@
                             <td class="px-6 py-3 font-medium text-gray-900 dark:text-gray-100">{{ l.descricao }}</td>
                             <td class="px-6 py-3 text-gray-500 dark:text-gray-400"><span class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-xs">{{ l.categoria }}</span></td>
                             <td class="px-6 py-3"><span class="bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-2 py-1 rounded text-xs font-bold">{{ l.forma_pagamento }}</span></td>
+                            <td class="px-6 py-3 text-center">
+                                {% if (l.forma_pagamento or '')|lower == 'cheque' %}
+                                    {% if (l.status_envio or 'Não Enviado') == 'Enviado' %}
+                                    <span class="inline-flex items-center bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-2 py-1 rounded text-xs font-bold">Enviado</span>
+                                    {% else %}
+                                    <span class="inline-flex items-center bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 px-2 py-1 rounded text-xs font-bold">Não Enviado</span>
+                                    {% endif %}
+                                {% else %}
+                                <span class="text-gray-400 dark:text-gray-500 text-xs">—</span>
+                                {% endif %}
+                            </td>
                             <td class="px-6 py-3 text-right font-bold valor-financeiro {% if l.tipo == 'ENTRADA' %}text-emerald-600 dark:text-emerald-400{% else %}text-red-600 dark:text-red-400{% endif %}">
                                 {% if l.tipo == 'ENTRADA' %}+ {% else %}- {% endif %}{{ l.valor|formato_moeda }}
                             </td>
                             <td class="px-6 py-3 text-center">
+                                {% if (l.forma_pagamento or '')|lower == 'cheque' %}
+                                <form method="post" action="{{ url_for('alternar_status_envio_cheque', id=l.id) }}" class="inline mr-1">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                    <button type="submit" class="text-sky-500 hover:text-sky-600 dark:hover:text-sky-400 transition-colors p-1" title="Alternar envio do cheque">
+                                        📤
+                                    </button>
+                                </form>
+                                {% endif %}
                                 <button type="button" onclick="abrirModalEditar(this.closest('tr'))" class="text-amber-500 hover:text-amber-600 dark:hover:text-amber-400 transition-colors p-1 mr-1" title="Editar Lançamento">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
                                 </button>

@@ -199,6 +199,7 @@ class LancamentoCaixa(db.Model):
     tipo = db.Column(db.String(20), nullable=False, index=True)  # 'ENTRADA' ou 'SAIDA'
     categoria = db.Column(db.String(50), nullable=False, index=True)
     forma_pagamento = db.Column(db.String(50), nullable=False)
+    status_envio = db.Column(db.String(20), nullable=True, default='Não Enviado')  # Controle de envio físico de cheques
     valor = db.Column(db.Float, nullable=False)
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)
 

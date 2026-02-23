@@ -2251,6 +2251,17 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             db.session.commit()
         except (OperationalError, Exception):
             db.session.rollback()
+        # Migração: status_envio em lancamentos_caixa (ciclo de vida de cheques)
+        try:
+            db.session.execute(text("ALTER TABLE lancamentos_caixa ADD COLUMN status_envio VARCHAR(20) DEFAULT 'Não Enviado'"))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
+        try:
+            db.session.execute(text("UPDATE lancamentos_caixa SET status_envio = 'Não Enviado' WHERE lower(forma_pagamento) LIKE '%cheque%' AND (status_envio IS NULL OR trim(status_envio) = '')"))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
         # Migração: telefone em clientes (WhatsApp / contato)
         try:
             db.session.execute(text('ALTER TABLE clientes ADD COLUMN telefone VARCHAR(20)'))
@@ -3042,6 +3053,28 @@ def _limpar_valor_moeda(v):
         return 0.0
 
 
+def _status_envio_por_forma_pagamento(forma_pagamento):
+    forma = str(forma_pagamento or '').strip().lower()
+    return 'Não Enviado' if 'cheque' in forma else None
+
+
+@event.listens_for(LancamentoCaixa, 'before_insert')
+def _lancamento_caixa_before_insert_status_envio(mapper, connection, target):
+    forma = str(getattr(target, 'forma_pagamento', '') or '').strip().lower()
+    if 'cheque' in forma:
+        if not (getattr(target, 'status_envio', None) or '').strip():
+            target.status_envio = 'Não Enviado'
+    else:
+        target.status_envio = None
+
+
+@event.listens_for(LancamentoCaixa, 'before_update')
+def _lancamento_caixa_before_update_status_envio(mapper, connection, target):
+    forma = str(getattr(target, 'forma_pagamento', '') or '').strip().lower()
+    if 'cheque' not in forma:
+        target.status_envio = None
+
+
 @app.route('/caixa/adicionar', methods=['POST'])
 @login_required
 def adicionar_caixa():
@@ -3067,6 +3100,7 @@ def adicionar_caixa():
                 tipo=tipo,
                 categoria=categoria,
                 forma_pagamento=forma1,
+                status_envio=_status_envio_por_forma_pagamento(forma1),
                 valor=valor1,
                 usuario_id=current_user.id
             ))
@@ -3077,6 +3111,7 @@ def adicionar_caixa():
                 tipo=tipo,
                 categoria=categoria,
                 forma_pagamento=forma2,
+                status_envio=_status_envio_por_forma_pagamento(forma2),
                 valor=valor2,
                 usuario_id=current_user.id
             ))
@@ -3093,6 +3128,7 @@ def adicionar_caixa():
             tipo=tipo,
             categoria=categoria,
             forma_pagamento=request.form.get('forma_pagamento'),
+            status_envio=_status_envio_por_forma_pagamento(request.form.get('forma_pagamento')),
             valor=novo_valor,
             usuario_id=current_user.id
         )
@@ -3114,12 +3150,38 @@ def editar_lancamento_caixa(id):
         lancamento.tipo = request.form.get('tipo') or lancamento.tipo
         lancamento.categoria = request.form.get('categoria') or lancamento.categoria
         lancamento.forma_pagamento = request.form.get('forma_pagamento') or lancamento.forma_pagamento
+        if _status_envio_por_forma_pagamento(lancamento.forma_pagamento) == 'Não Enviado':
+            if not (lancamento.status_envio or '').strip():
+                lancamento.status_envio = 'Não Enviado'
+        else:
+            lancamento.status_envio = None
         db.session.commit()
         flash('Lançamento atualizado com sucesso!', 'success')
     except Exception as e:
         db.session.rollback()
         flash(f'Erro ao atualizar lançamento: {str(e)}', 'error')
         print(f"Erro no banco (editar_lancamento_caixa): {e}")
+    return redirect(url_for('caixa'))
+
+
+@app.route('/caixa/cheque/<int:id>/alternar_status', methods=['POST'])
+@login_required
+def alternar_status_envio_cheque(id):
+    """Alterna status de envio físico do cheque entre 'Não Enviado' e 'Enviado'."""
+    lancamento = LancamentoCaixa.query.get_or_404(id)
+    forma = (lancamento.forma_pagamento or '').lower()
+    if 'cheque' not in forma:
+        flash('Apenas lançamentos em cheque possuem status de envio.', 'warning')
+        return redirect(url_for('caixa'))
+
+    atual = (lancamento.status_envio or 'Não Enviado').strip()
+    lancamento.status_envio = 'Enviado' if atual != 'Enviado' else 'Não Enviado'
+    try:
+        db.session.commit()
+        flash('Status de envio do cheque atualizado com sucesso!', 'success')
+    except Exception:
+        db.session.rollback()
+        flash('Erro ao atualizar status de envio do cheque.', 'error')
     return redirect(url_for('caixa'))
 
 
