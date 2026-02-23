@@ -207,6 +207,20 @@ class LancamentoCaixa(db.Model):
         return f'<LancamentoCaixa {self.id} - {self.tipo} {self.valor}>'
 
 
+class ContagemGaveta(db.Model):
+    """Estado salvo da contagem de gaveta (dinheiro/cheques) por dia e usuário."""
+    __tablename__ = 'contagens_gaveta'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    data = db.Column(db.Date, nullable=False, index=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True, index=True)
+    estado_json = db.Column(db.Text, nullable=False)  # {"dinheiro":[...], "cheques":[...]}
+    atualizado_em = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    def __repr__(self):
+        return f'<ContagemGaveta {self.id} - {self.data}>'
+
+
 class Documento(db.Model):
     __tablename__ = 'documentos'
     
