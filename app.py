@@ -3953,19 +3953,19 @@ def novo_produto():
         caminhoneiro = request.form.get('caminhoneiro', '').strip()
 
         if not fornecedor:
-            msg = 'Fornecedor é obrigatório!'
+            msg = '❌ Ops! O campo Fornecedor é obrigatório. Preencha e tente novamente.'
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
             flash(msg, 'error')
             return render_template('produtos/formulario.html', produto=None)
         if not preco_custo:
-            msg = 'Preço de custo é obrigatório!'
+            msg = '❌ Ops! O campo Preço de Custo é obrigatório. Preencha e tente novamente.'
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
             flash(msg, 'error')
             return render_template('produtos/formulario.html', produto=None)
         if not caminhoneiro:
-            msg = 'Caminhoneiro é obrigatório!'
+            msg = '❌ Ops! O campo Caminhoneiro é obrigatório. Preencha e tente novamente.'
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
             flash(msg, 'error')
@@ -3982,13 +3982,13 @@ def novo_produto():
         data_chegada_raw = request.form.get('data_chegada')
         data_chegada = date.fromisoformat(data_chegada_raw) if data_chegada_raw else date.today()
         if not tipo:
-            msg = 'Tipo é obrigatório!'
+            msg = '❌ Ops! O campo Tipo do produto é obrigatório. Selecione uma opção.'
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
             flash(msg, 'error')
             return render_template('produtos/formulario.html', produto=None)
         if quantidade_entrada <= 0:
-            msg = 'Quantidade de entrada deve ser maior que zero.'
+            msg = '❌ Ops! A quantidade de entrada deve ser maior que zero.'
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
             flash(msg, 'error')
@@ -4034,10 +4034,11 @@ def novo_produto():
                         print(f"Erro ao fazer upload para o Cloudinary (produto {produto.id}): {e}")
         db.session.commit()
 
-        limpar_cache_dashboard()  # Limpar cache após nova entrada de produto
+        limpar_cache_dashboard()
+        msg_sucesso = f'✅ Que maravilha! A entrada de {nome_produto} ({quantidade_entrada} un.) foi registrada no estoque com sucesso.'
         if _is_ajax():
-            return jsonify(ok=True, mensagem='Produto cadastrado com sucesso!')
-        flash('Produto cadastrado com sucesso!', 'success')
+            return jsonify(ok=True, mensagem=msg_sucesso)
+        flash(msg_sucesso, 'success')
         return redirect(url_for('listar_produtos'))
 
     return render_template('produtos/formulario.html', produto=None)
@@ -4054,13 +4055,13 @@ def editar_produto(id):
         caminhoneiro = request.form.get('caminhoneiro', '').strip()
         
         if not fornecedor:
-            flash('Fornecedor é obrigatório!', 'error')
+            flash('❌ Ops! O campo Fornecedor é obrigatório. Preencha e tente novamente.', 'error')
             return redirect(url_for('listar_produtos'))
         if not preco_custo:
-            flash('Preço de custo é obrigatório!', 'error')
+            flash('❌ Ops! O campo Preço de Custo é obrigatório. Preencha e tente novamente.', 'error')
             return redirect(url_for('listar_produtos'))
         if not caminhoneiro:
-            flash('Caminhoneiro é obrigatório!', 'error')
+            flash('❌ Ops! O campo Caminhoneiro é obrigatório. Preencha e tente novamente.', 'error')
             return redirect(url_for('listar_produtos'))
         
         tipo = (request.form.get('tipo') or '').strip()
@@ -4118,8 +4119,8 @@ def editar_produto(id):
                         print(f"Erro ao fazer upload para o Cloudinary (produto {produto.id}): {e}")
 
         db.session.commit()
-        limpar_cache_dashboard()  # Limpar cache após editar produto
-        flash('Produto atualizado com sucesso!', 'success')
+        limpar_cache_dashboard()
+        flash(f'✅ Produto {nome_produto} atualizado com sucesso!', 'success')
         return redirect(url_for('listar_produtos'))
     
     return render_template('produtos/formulario.html', produto=produto)
@@ -4130,13 +4131,14 @@ def editar_produto(id):
 def excluir_produto(id):
     produto = Produto.query.get_or_404(id)
     try:
+        nome = produto.nome_produto or f'#{produto.id}'
         db.session.delete(produto)
         db.session.commit()
-        limpar_cache_dashboard()  # Limpar cache após excluir produto
-        flash('Produto excluído com sucesso!', 'success')
+        limpar_cache_dashboard()
+        flash(f'🗑️ Produto {nome} excluído com sucesso.', 'success')
     except IntegrityError:
         db.session.rollback()
-        flash('ERRO: Esse produto não pode ser excluído pois já existem vendas registradas nele.', 'error')
+        flash('❌ Ops! Esse produto não pode ser excluído porque já existem vendas registradas nele.', 'error')
     
     return redirect(url_for('listar_produtos'))
 
@@ -4147,7 +4149,7 @@ def bulk_delete_produtos():
     data = request.get_json(silent=True) or {}
     ids = data.get('ids', [])
     if not ids:
-        return jsonify({'ok': False, 'mensagem': 'Nenhum ID informado.'}), 400
+        return jsonify({'ok': False, 'mensagem': '❌ Nenhum produto selecionado para exclusão.'}), 400
     excluidos = 0
     ids_erro = []
     for id_ in ids:
@@ -4162,22 +4164,22 @@ def bulk_delete_produtos():
             db.session.rollback()
             ids_erro.append(id_)
     if excluidos > 0:
-        limpar_cache_dashboard()  # Limpar cache após excluir produtos em massa (se houver exclusões)
+        limpar_cache_dashboard()
     if ids_erro and not excluidos:
         return jsonify({
             'ok': False,
-            'mensagem': f'Nenhum produto excluído. Os IDs {ids_erro} possuem vendas vinculadas e não podem ser removidos.',
+            'mensagem': f'❌ Nenhum produto excluído. Os IDs {ids_erro} possuem vendas vinculadas e não podem ser removidos.',
             'excluidos': 0,
             'ids_erro': ids_erro
         })
     if ids_erro:
         return jsonify({
             'ok': True,
-            'mensagem': f'{excluidos} produto(s) excluído(s). Os IDs {ids_erro} não puderam ser excluídos (vendas vinculadas).',
+            'mensagem': f'⚠️ {excluidos} produto(s) excluído(s), mas os IDs {ids_erro} não puderam ser removidos (vendas vinculadas).',
             'excluidos': excluidos,
             'ids_erro': ids_erro
         })
-    return jsonify({'ok': True, 'mensagem': f'{excluidos} produto(s) excluído(s) com sucesso.', 'excluidos': excluidos})
+    return jsonify({'ok': True, 'mensagem': f'🗑️ {excluidos} produto(s) excluído(s) com sucesso!', 'excluidos': excluidos})
 
 
 @app.route('/produtos/atualizar_tipo_batch', methods=['POST'])
