@@ -680,8 +680,44 @@ function confirmarExclusaoMassa() {
     carregarDados('dinheiro');
     carregarDados('cheque');
 
+    function parseMoedaBR(valor) {
+        if (valor === null || valor === undefined) return 0;
+        var txt = String(valor).trim();
+        if (!txt) return 0;
+        // Suporta tanto "5.000,00" quanto "5000.00"
+        var normalizado = txt.replace(/\./g, '').replace(',', '.');
+        var n = parseFloat(normalizado);
+        if (isNaN(n)) {
+            n = parseFloat(String(valor).replace(',', '.'));
+        }
+        return isNaN(n) ? 0 : n;
+    }
+
+    function formatarMoedaBRDeInput(valorDigitado) {
+        var apenasDigitos = String(valorDigitado || '').replace(/\D/g, '');
+        if (!apenasDigitos) return '';
+        var inteiro = parseInt(apenasDigitos, 10);
+        if (isNaN(inteiro)) return '';
+        var valor = (inteiro / 100).toFixed(2) + '';
+        valor = valor.replace('.', ',');
+        valor = valor.replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1.');
+        return valor;
+    }
+
+    function formatarMoedaBR(valor) {
+        var n = parseMoedaBR(valor);
+        return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
     function salvar(tipo) {
         var cfg = abas[tipo];
+        // Normaliza "5.000,00" -> "5000.00" antes de persistir
+        cfg.valores = cfg.valores.map(function(item) {
+            var copia = Object.assign({}, item);
+            var numero = parseMoedaBR(copia.valor);
+            copia.valor = numero ? numero.toFixed(2) : '';
+            return copia;
+        });
         localStorage.setItem(cfg.key, JSON.stringify(cfg.valores));
     }
 
@@ -692,7 +728,7 @@ function confirmarExclusaoMassa() {
     function calcTotal(tipo) {
         var t = 0;
         var vals = abas[tipo].valores;
-        for (var i = 0; i < vals.length; i++) t += parseFloat(vals[i].valor) || 0;
+        for (var i = 0; i < vals.length; i++) t += parseMoedaBR(vals[i].valor);
         return t;
     }
 
@@ -754,16 +790,12 @@ function confirmarExclusaoMassa() {
             input.inputMode = 'decimal';
             input.placeholder = '0,00';
             var textSize = isCheque ? 'text-sm' : 'text-lg';
-            input.className = 'block w-full pl-10 pr-3 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 ' + corRing + ' ' + textSize + ' font-medium tabular-nums';
+            input.className = 'input-valor-gaveta ' + (isCheque ? 'input-valor-cheque' : 'input-valor-dinheiro') + ' block w-full pl-10 pr-3 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 ' + corRing + ' ' + textSize + ' font-medium tabular-nums';
+            input.setAttribute('data-tipo-gaveta', tipo);
+            input.setAttribute('data-item-id', String(item.id));
             if (item.valor !== '' && item.valor !== undefined) {
-                input.value = String(item.valor).replace('.', ',');
+                input.value = formatarMoedaBR(item.valor);
             }
-            input.addEventListener('input', (function(itemRef, t) {
-                return function(e) {
-                    itemRef.valor = e.target.value.replace(/,/g, '.');
-                    atualizarRodape();
-                };
-            })(item, tipo));
             input.addEventListener('keydown', (function(t) {
                 return function(e) {
                     if (e.key === 'Enter') { e.preventDefault(); addLinha(t); }
@@ -794,6 +826,34 @@ function confirmarExclusaoMassa() {
             var ultimo = valorInputs[valorInputs.length - 1];
             if (!ultimo.value) ultimo.focus();
         }
+    }
+
+    function bindDelegacaoMascara(tipo) {
+        var cfg = abas[tipo];
+        var container = document.getElementById(cfg.containerId);
+        if (!container || container.getAttribute('data-mask-bound') === '1') return;
+        container.setAttribute('data-mask-bound', '1');
+        container.addEventListener('input', function(e) {
+            var alvo = e.target;
+            if (!alvo || !alvo.matches('input.input-valor-gaveta, input.input-valor-dinheiro, input.input-valor-cheque')) return;
+
+            var mascarado = formatarMoedaBRDeInput(alvo.value);
+            alvo.value = mascarado;
+
+            var itemId = alvo.getAttribute('data-item-id');
+            var tipoAlvo = alvo.getAttribute('data-tipo-gaveta') || tipo;
+            if (!itemId || !abas[tipoAlvo]) return;
+
+            var lista = abas[tipoAlvo].valores;
+            for (var i = 0; i < lista.length; i++) {
+                if (String(lista[i].id) === String(itemId)) {
+                    var n = parseMoedaBR(mascarado);
+                    lista[i].valor = n ? n.toFixed(2) : '';
+                    break;
+                }
+            }
+            atualizarRodape();
+        });
     }
 
     function addLinha(tipo) {
@@ -849,6 +909,8 @@ function confirmarExclusaoMassa() {
     document.getElementById('btn-add-dinheiro').addEventListener('click', function() { addLinha('dinheiro'); });
     document.getElementById('btn-add-cheque').addEventListener('click', function() { addLinha('cheque'); });
     document.getElementById('btn-limpar-contagem').addEventListener('click', function() { limpar(abaAtiva); });
+    bindDelegacaoMascara('dinheiro');
+    bindDelegacaoMascara('cheque');
 
     window.abrirModalContagemDinheiro = abrir;
     window.fecharModalContagemDinheiro = fechar;
