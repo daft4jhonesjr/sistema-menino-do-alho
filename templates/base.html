@@ -247,7 +247,7 @@
     </style>
     {% block head_extras %}{% endblock %}
 </head>
-<body class="bg-emerald-50 text-gray-800 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-500 min-h-screen flex flex-col">
+<body class="bg-emerald-50 text-gray-800 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-500 min-h-screen flex flex-col overscroll-y-none">
     <script>
     var _scrollPosAnteModal = 0;
     function travarFundo() {
@@ -1231,16 +1231,29 @@
                     instructionsRefreshing: 'ATUALIZANDO...',
                     iconArrow: '',
                     iconRefreshing: '',
-                    distThreshold: 70,
-                    distMax: 100,
-                    distReload: 60,
+                    distThreshold: 120,
+                    distMax: 180,
+                    distReload: 100,
                     shouldPullToRefresh: function() {
-                        return window.scrollY === 0;
+                        var scrollTop = window.scrollY || document.documentElement.scrollTop || 0;
+                        if (scrollTop > 0) return false;
+                        var nav = document.querySelector('nav');
+                        var header = document.querySelector('header');
+                        if (window._ptrLastTouchTarget) {
+                            if ((nav && nav.contains(window._ptrLastTouchTarget)) ||
+                                (header && header.contains(window._ptrLastTouchTarget))) {
+                                return false;
+                            }
+                        }
+                        return true;
                     },
                     onRefresh: function() {
                         window.location.reload();
                     }
                 });
+                document.addEventListener('touchstart', function(e) {
+                    window._ptrLastTouchTarget = e.target;
+                }, { passive: true });
             }
         });
     </script>
