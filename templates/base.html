@@ -62,11 +62,6 @@
             width: 100%;
             min-height: 100%;
         }
-        @media (min-width: 768px) {
-            html, body {
-                height: 100%;
-            }
-        }
         /* --- KIT DE ACABAMENTO APPLE IOS --- */
         /* 1. Fonte nativa e Safe Area Insets (Respeita o Notch e a Home Bar) */
         body {
@@ -244,6 +239,12 @@
     {% block head_extras %}{% endblock %}
 </head>
 <body class="bg-emerald-50 text-gray-800 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-500 min-h-screen flex flex-col">
+    <div id="ptr-indicador" class="fixed top-0 left-0 w-full flex justify-center items-end pb-3 h-16 bg-transparent text-emerald-600 font-medium text-sm z-50 transform -translate-y-full pointer-events-none transition-transform duration-300">
+        <div class="flex items-center gap-2 bg-white px-4 py-2 rounded-full shadow-md">
+            <span id="ptr-icone" class="transition-transform duration-300">↓</span>
+            <span id="ptr-texto">Puxe para atualizar</span>
+        </div>
+    </div>
     <script>
     var _scrollPosAnteModal = 0;
     function travarFundo() {
@@ -256,6 +257,114 @@
         document.body.style.top = '';
         window.scrollTo(0, _scrollPosAnteModal);
     }
+    </script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            var ptrIndicador = document.getElementById('ptr-indicador');
+            var ptrIcone = document.getElementById('ptr-icone');
+            var ptrTexto = document.getElementById('ptr-texto');
+            if (!ptrIndicador || !ptrIcone || !ptrTexto) return;
+
+            var main = document.querySelector('main');
+            var scrollArea = window;
+            if (main) {
+                var cs = window.getComputedStyle(main);
+                var overflowY = (cs.overflowY || '').toLowerCase();
+                var isScrollable = (overflowY === 'auto' || overflowY === 'scroll') && main.scrollHeight > main.clientHeight;
+                if (isScrollable) scrollArea = main;
+            }
+
+            var startY = 0;
+            var isPulling = false;
+            var triggerRefresh = false;
+            var DEADZONE = 30;
+            var THRESHOLD = 80;
+            var INDICATOR_HEIGHT = 64;
+
+            function getScrollTop() {
+                if (scrollArea === window) {
+                    return window.scrollY || document.documentElement.scrollTop || 0;
+                }
+                return scrollArea.scrollTop || 0;
+            }
+
+            function resetIndicator() {
+                ptrTexto.innerText = 'Puxe para atualizar';
+                ptrIcone.innerText = '↓';
+                ptrIcone.style.transform = 'rotate(0deg)';
+                ptrIndicador.style.transform = 'translateY(-100%)';
+            }
+
+            document.addEventListener('touchstart', function(e) {
+                if (e.touches.length !== 1) return;
+                if (document.body.classList.contains('modal-aberto')) return;
+                if (getScrollTop() > 0) return;
+                var target = e.target;
+                if (!target) return;
+                if (target.closest('header, nav, #user-dropdown, #ano-dropdown')) return;
+
+                startY = e.touches[0].clientY;
+                isPulling = true;
+                triggerRefresh = false;
+                ptrIndicador.style.transition = 'none';
+            }, { passive: true });
+
+            document.addEventListener('touchmove', function(e) {
+                if (!isPulling) return;
+                if (e.touches.length !== 1) {
+                    isPulling = false;
+                    return;
+                }
+
+                var currentY = e.touches[0].clientY;
+                var pullDistance = currentY - startY;
+
+                if (pullDistance <= 0 || getScrollTop() > 0) {
+                    isPulling = false;
+                    return;
+                }
+
+                if (pullDistance < DEADZONE) {
+                    return;
+                }
+
+                var effectiveDistance = pullDistance - DEADZONE;
+                var visualDistance = effectiveDistance * 0.4;
+                if (visualDistance > 0) {
+                    ptrIndicador.style.transform = 'translateY(' + (visualDistance - INDICATOR_HEIGHT) + 'px)';
+                    e.preventDefault();
+                }
+
+                if (visualDistance >= THRESHOLD) {
+                    ptrTexto.innerText = 'Solte para atualizar';
+                    ptrIcone.style.transform = 'rotate(180deg)';
+                    triggerRefresh = true;
+                } else {
+                    ptrTexto.innerText = 'Puxe para atualizar';
+                    ptrIcone.style.transform = 'rotate(0deg)';
+                    triggerRefresh = false;
+                }
+            }, { passive: false });
+
+            document.addEventListener('touchend', function(e) {
+                if (!isPulling) return;
+                isPulling = false;
+                ptrIndicador.style.transition = 'transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+
+                if (triggerRefresh) {
+                    ptrTexto.innerText = 'Atualizando...';
+                    ptrIcone.innerText = '⏳';
+                    ptrIcone.style.transform = 'rotate(0deg)';
+                    ptrIndicador.style.transform = 'translateY(16px)';
+                    setTimeout(function() { window.location.reload(); }, 500);
+                } else {
+                    resetIndicator();
+                }
+
+                triggerRefresh = false;
+                startY = 0;
+            }, { passive: true });
+        });
     </script>
     <!-- Header -->
     <header class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 shadow-sm">
@@ -363,7 +472,7 @@
     </nav>
 
     <!-- Main Content -->
-    <main class="w-full max-w-7xl mx-auto px-4 sm:px-6 md:px-8 py-6 pb-16 flex-1 overflow-x-hidden md:overflow-y-auto">
+    <main class="w-full max-w-7xl mx-auto px-4 sm:px-6 md:px-8 py-6 pb-16 flex-1 overflow-x-hidden">
         {% block content %}{% endblock %}
     </main>
 
