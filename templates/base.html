@@ -58,15 +58,14 @@
         }, 60000);
     </script>
     <style>
-        /* Fixar corpo para evitar rubber banding com Pull to Refresh */
         html, body {
-            overscroll-behavior-y: none;
             width: 100%;
             min-height: 100%;
         }
         @media (min-width: 768px) {
             html, body {
                 height: 100%;
+                overscroll-behavior-y: none;
             }
         }
         /* --- KIT DE ACABAMENTO APPLE IOS --- */
@@ -77,8 +76,6 @@
             padding-bottom: env(safe-area-inset-bottom);
             padding-left: env(safe-area-inset-left);
             padding-right: env(safe-area-inset-right);
-            /* Evita o "bounce" branco no fundo geral, mantendo só nas tabelas */
-            overscroll-behavior-y: none;
         }
         /* 2. Bloqueio de Seleção (Para parecer App e não Site) */
         .btn, button, nav, .menu-item, h1, h2, h3, label {
@@ -247,7 +244,7 @@
     </style>
     {% block head_extras %}{% endblock %}
 </head>
-<body class="bg-emerald-50 text-gray-800 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-500 min-h-screen flex flex-col overscroll-y-none">
+<body class="bg-emerald-50 text-gray-800 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-500 min-h-screen flex flex-col">
     <script>
     var _scrollPosAnteModal = 0;
     function travarFundo() {
@@ -1187,76 +1184,7 @@
                 .catch(function() {});
         });
     </script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pulltorefreshjs/0.1.22/index.umd.min.js"></script>
-    <style>
-        /* Estilo do container minimalista (texto apenas) */
-        .ptr--ptr {
-            box-shadow: none !important;
-            border-bottom: 1px solid #e5e7eb;
-            background: white !important;
-            z-index: 9999 !important;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 60px !important;
-        }
-        .dark .ptr--ptr {
-            background: #1f2937 !important;
-            border-bottom: 1px solid #374151;
-        }
-        /* Estilo do Texto */
-        .ptr--text {
-            font-weight: 600;
-            font-size: 14px;
-            color: #6b7280;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-        .dark .ptr--text {
-            color: #9ca3af;
-        }
-        /* Esconde o container do ícone */
-        .ptr--icon {
-            display: none !important;
-        }
-    </style>
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            if (window.innerWidth < 1024 || 'ontouchstart' in window) {
-                PullToRefresh.init({
-                    mainElement: 'body',
-                    triggerElement: 'body',
-                    instructionsPullToRefresh: 'PUXE PARA ATUALIZAR',
-                    instructionsReleaseToRefresh: 'SOLTE PARA ATUALIZAR',
-                    instructionsRefreshing: 'ATUALIZANDO...',
-                    iconArrow: '',
-                    iconRefreshing: '',
-                    distThreshold: 120,
-                    distMax: 180,
-                    distReload: 100,
-                    shouldPullToRefresh: function() {
-                        var scrollTop = window.scrollY || document.documentElement.scrollTop || 0;
-                        if (scrollTop > 0) return false;
-                        var nav = document.querySelector('nav');
-                        var header = document.querySelector('header');
-                        if (window._ptrLastTouchTarget) {
-                            if ((nav && nav.contains(window._ptrLastTouchTarget)) ||
-                                (header && header.contains(window._ptrLastTouchTarget))) {
-                                return false;
-                            }
-                        }
-                        return true;
-                    },
-                    onRefresh: function() {
-                        window.location.reload();
-                    }
-                });
-                document.addEventListener('touchstart', function(e) {
-                    window._ptrLastTouchTarget = e.target;
-                }, { passive: true });
-            }
-        });
-    </script>
+    <!-- Pull-to-Refresh: usa o comportamento nativo do Chrome/Safari -->
 
     {% if alertas_sistema %}
     <!-- Container de Alertas do Sistema (Boletos, Radar, Logística) -->
