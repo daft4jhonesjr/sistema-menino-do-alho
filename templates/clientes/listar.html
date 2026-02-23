@@ -338,12 +338,22 @@
     var form = document.getElementById('form-novo-cliente');
     var erroDiv = document.getElementById('modal-novo-cliente-erro');
     var btnSalvar = document.getElementById('modal-novo-cliente-salvar');
+    var htmlOriginalBtnSalvar = btnSalvar ? btnSalvar.innerHTML : '';
+
+    function resetBtnSalvar() {
+        if (!btnSalvar) return;
+        btnSalvar.disabled = false;
+        btnSalvar.classList.remove('opacity-50', 'cursor-not-allowed');
+        btnSalvar.innerHTML = htmlOriginalBtnSalvar || '<i data-lucide="check" class="w-4 h-4 mr-2"></i>Salvar';
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
 
     function abrir() {
         if (wrap) {
             wrap.classList.remove('hidden');
             travarFundo();
         }
+        resetBtnSalvar();
         if (typeof lucide !== 'undefined') lucide.createIcons();
     }
     function fechar() {
@@ -353,6 +363,7 @@
         }
         erroDiv.classList.add('hidden');
         erroDiv.textContent = '';
+        resetBtnSalvar();
     }
 
     if (btnAbrir) btnAbrir.addEventListener('click', abrir);
@@ -365,7 +376,14 @@
             e.preventDefault();
             erroDiv.classList.add('hidden');
             erroDiv.textContent = '';
+
+            if (btnSalvar.disabled) {
+                return false;
+            }
+
             btnSalvar.disabled = true;
+            btnSalvar.classList.add('opacity-50', 'cursor-not-allowed');
+            btnSalvar.innerHTML = '<span class="animate-spin inline-block mr-2">⏳</span> Salvando...';
             var fd = new FormData(form);
             fetch(form.action, {
                 method: 'POST',
@@ -381,12 +399,12 @@
                     }
                     erroDiv.textContent = x.json.mensagem || 'Erro ao cadastrar.';
                     erroDiv.classList.remove('hidden');
-                    btnSalvar.disabled = false;
+                    resetBtnSalvar();
                 })
                 .catch(function() {
                     erroDiv.textContent = 'Erro ao cadastrar. Tente novamente.';
                     erroDiv.classList.remove('hidden');
-                    btnSalvar.disabled = false;
+                    resetBtnSalvar();
                 });
         });
     }
