@@ -742,7 +742,7 @@
                 </div>
             </div>
             <div class="flex gap-3 mt-6">
-                <button type="submit" class="flex-1 bg-emerald-700 text-white px-4 py-2.5 rounded-xl hover:bg-emerald-600 transition font-medium flex items-center justify-center gap-2">
+                <button type="submit" id="btn-submit-produto" class="flex-1 bg-emerald-700 text-white px-4 py-2.5 rounded-xl hover:bg-emerald-600 transition font-medium flex items-center justify-center gap-2">
                     <i data-lucide="check" class="w-4 h-4"></i> Adicionar
                 </button>
                 <button type="button" class="modalAddItemExistente-fechar bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-4 py-2.5 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 transition font-medium">
@@ -1024,6 +1024,12 @@ function abrirModalAddItem(idVenda) {
     if (produtoSelect) produtoSelect.value = '';
     if (quantidadeInput) quantidadeInput.value = '1';
     if (precoInput) precoInput.value = '';
+    var btnSubmit = document.getElementById('btn-submit-produto');
+    if (btnSubmit) {
+        btnSubmit.disabled = false;
+        btnSubmit.classList.remove('opacity-50', 'cursor-not-allowed');
+        btnSubmit.innerHTML = btnSubmit.getAttribute('data-original-html') || '<i data-lucide="check" class="w-4 h-4"></i> Adicionar';
+    }
     wrap.classList.remove('hidden');
     travarFundo();
     if (typeof lucide !== 'undefined') lucide.createIcons();
@@ -1034,14 +1040,49 @@ function abrirModalAddItem(idVenda) {
     var overlay = document.getElementById('modalAddItemExistente-overlay');
     var btnsFechar = document.querySelectorAll('.modalAddItemExistente-fechar');
     var precoInput = document.getElementById('add-item-preco');
+    var formAddItem = document.getElementById('form-add-item-existente');
+
+    function resetBtnSubmitAddItem() {
+        var btnSubmit = document.getElementById('btn-submit-produto');
+        if (!btnSubmit) return;
+        btnSubmit.disabled = false;
+        btnSubmit.classList.remove('opacity-50', 'cursor-not-allowed');
+        btnSubmit.innerHTML = btnSubmit.getAttribute('data-original-html') || '<i data-lucide="check" class="w-4 h-4"></i> Adicionar';
+    }
 
     function fecharModalAddItem() {
         if (wrap) wrap.classList.add('hidden');
+        resetBtnSubmitAddItem();
         liberarFundo();
     }
 
     if (overlay) overlay.addEventListener('click', fecharModalAddItem);
     if (btnsFechar.length) btnsFechar.forEach(function(b) { b.addEventListener('click', fecharModalAddItem); });
+
+    if (formAddItem) {
+        var btnSubmit = document.getElementById('btn-submit-produto');
+        if (btnSubmit && !btnSubmit.getAttribute('data-original-html')) {
+            btnSubmit.setAttribute('data-original-html', btnSubmit.innerHTML);
+        }
+
+        formAddItem.addEventListener('submit', function(e) {
+            var submitBtn = this.querySelector('#btn-submit-produto, button[type="submit"]');
+            if (!submitBtn) return;
+
+            if (submitBtn.disabled) {
+                e.preventDefault();
+                return false;
+            }
+
+            if (!submitBtn.getAttribute('data-original-html')) {
+                submitBtn.setAttribute('data-original-html', submitBtn.innerHTML);
+            }
+
+            submitBtn.disabled = true;
+            submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            submitBtn.innerHTML = '<span class="animate-spin inline-block mr-2">⏳</span> Processando...';
+        });
+    }
 
     // Máscara de moeda no input de preço
     if (precoInput) {
