@@ -96,7 +96,18 @@
                         <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700" data-tipo-tbody="{{ tipo }}">
                             {% for item in produtos %}
                             {% set produto = item.produto %}
-                            <tr class="hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition {% if produto.estoque_atual <= 0 %}bg-red-50 dark:bg-red-900/20{% elif produto.estoque_atual < 10 %}bg-amber-50 dark:bg-amber-900/20{% endif %}" data-tipo="{{ tipo }}">
+                            {% if produto.estoque_atual <= 0 %}
+                            <tr class="linha-resumo-esgotado cursor-pointer bg-red-50/70 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/40 transition" data-tipo="{{ tipo }}" data-target-produto="{{ produto.id }}">
+                                <td colspan="100%" class="px-6 py-3">
+                                    <div class="flex items-center gap-3">
+                                        <svg class="icone-seta w-4 h-4 text-red-700 dark:text-red-300 transition-transform duration-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                                        <span class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ produto.nome_produto }}</span>
+                                        <span class="bg-red-100 dark:bg-red-900/60 text-red-800 dark:text-red-300 text-xs font-bold px-2.5 py-0.5 rounded-full ml-auto">Esgotado</span>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endif %}
+                            <tr class="linha-detalhes-produto hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition {% if produto.estoque_atual <= 0 %}bg-red-50 dark:bg-red-900/20{% elif produto.estoque_atual < 10 %}bg-amber-50 dark:bg-amber-900/20{% endif %}" data-tipo="{{ tipo }}" data-produto-id="{{ produto.id }}" data-estoque="{{ produto.estoque_atual }}">
                                 <td class="px-4 py-4">
                                     <input type="checkbox" class="bulk-row rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" value="{{ produto.id }}">
                                 </td>
@@ -962,6 +973,63 @@ function abrirModalCorrigirCategoria() {
 })();
 </script>
 
+<script>
+(function() {
+    function atualizarLinhaResumo(linhaDetalhes) {
+        if (!linhaDetalhes) return;
+        var estoque = parseFloat(linhaDetalhes.getAttribute('data-estoque') || '0');
+        var linhaResumo = linhaDetalhes.previousElementSibling;
+        var idProduto = linhaDetalhes.getAttribute('data-produto-id');
+        if (!linhaResumo || !linhaResumo.classList.contains('linha-resumo-esgotado')) return;
+        if (linhaResumo.getAttribute('data-target-produto') !== idProduto) return;
+
+        if (estoque <= 0) {
+            if (!linhaDetalhes.hasAttribute('data-minimizado-init')) {
+                linhaDetalhes.style.display = 'none';
+                linhaDetalhes.setAttribute('data-minimizado-init', '1');
+            }
+            linhaResumo.style.display = '';
+            var setaFechada = linhaResumo.querySelector('.icone-seta');
+            if (setaFechada && linhaDetalhes.style.display === 'none') {
+                setaFechada.style.transform = 'rotate(0deg)';
+            }
+        } else {
+            linhaResumo.style.display = 'none';
+            linhaDetalhes.style.display = '';
+        }
+    }
+
+    function initResumoEsgotadoProdutos(root) {
+        var escopo = root || document;
+        escopo.querySelectorAll('tr[data-estoque]').forEach(atualizarLinhaResumo);
+    }
+
+    document.addEventListener('click', function(e) {
+        var linhaResumo = e.target.closest('.linha-resumo-esgotado');
+        if (!linhaResumo) return;
+        var linhaDetalhes = linhaResumo.nextElementSibling;
+        if (!linhaDetalhes || !linhaDetalhes.matches('tr[data-estoque]')) return;
+        if (linhaResumo.getAttribute('data-target-produto') !== linhaDetalhes.getAttribute('data-produto-id')) return;
+
+        var isClosed = linhaDetalhes.style.display === 'none';
+        var seta = linhaResumo.querySelector('.icone-seta');
+        if (isClosed) {
+            linhaDetalhes.style.display = '';
+            if (seta) seta.style.transform = 'rotate(90deg)';
+        } else {
+            linhaDetalhes.style.display = 'none';
+            if (seta) seta.style.transform = 'rotate(0deg)';
+        }
+    });
+
+    document.addEventListener('DOMContentLoaded', function() {
+        initResumoEsgotadoProdutos(document);
+    });
+
+    window.initResumoEsgotadoProdutos = initResumoEsgotadoProdutos;
+})();
+</script>
+
 <!-- Script de Paginação "Carregar Mais" com Scroll Infinito -->
 <script>
 (function() {
@@ -1023,6 +1091,9 @@ function abrirModalCorrigirCategoria() {
                 if (tbodyTipo) {
                     tbodyTipo.appendChild(linha);
                     produtosCarregados++;
+                    if (typeof window.initResumoEsgotadoProdutos === 'function') {
+                        window.initResumoEsgotadoProdutos(tbodyTipo);
+                    }
                 } else {
                     console.warn('Tipo não encontrado:', tipo);
                 }
