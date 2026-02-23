@@ -192,7 +192,7 @@
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
             </button>
         </div>
-        <form id="formLancamentoCaixa" action="{{ url_for('adicionar_caixa') }}" method="POST" class="p-5 space-y-4">
+        <form id="form-novo-lancamento-caixa" action="{{ url_for('adicionar_caixa') }}" method="POST" class="p-5 space-y-4">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <input type="hidden" name="tipo" id="tipo_lancamento_hidden" value="ENTRADA">
             <div class="flex flex-col md:flex-row gap-4">
@@ -391,6 +391,28 @@ document.addEventListener('DOMContentLoaded', function() {
     if (catSelect) {
         catSelect.addEventListener('change', function() { atualizarTipoPorCategoria(this, 'tipo_lancamento_hidden'); });
     }
+
+    // Trava anti-duplo clique no submit do modal de lançamento
+    var formCaixa = document.getElementById('form-novo-lancamento-caixa') || document.getElementById('formLancamentoCaixa');
+    if (formCaixa) {
+        formCaixa.addEventListener('submit', function(e) {
+            var btnSubmit = this.querySelector('#btnSalvarLancamento, button[type="submit"]');
+            if (!btnSubmit) return;
+
+            if (btnSubmit.disabled) {
+                e.preventDefault();
+                return false;
+            }
+
+            if (!btnSubmit.getAttribute('data-original-html')) {
+                btnSubmit.setAttribute('data-original-html', btnSubmit.innerHTML);
+            }
+
+            btnSubmit.disabled = true;
+            btnSubmit.classList.add('opacity-50', 'cursor-not-allowed');
+            btnSubmit.innerHTML = '<span class="animate-spin inline-block mr-2">⏳</span> Salvando...';
+        });
+    }
 });
 function atualizarTipoPorCategoria(categoriaSelect, tipoInputId) {
     var tipoInput = document.getElementById(tipoInputId);
@@ -406,10 +428,19 @@ window.CAIXA_ADD_URL = "{{ url_for('adicionar_caixa') }}";
 window.CAIXA_EDIT_URL_BASE = "{{ url_for('editar_lancamento_caixa', id=0) }}".replace('/0', '');
 window.DATA_HOJE = "{{ data_hoje }}";
 
+function resetBotaoSalvarLancamento() {
+    var btn = document.getElementById('btnSalvarLancamento');
+    if (!btn) return;
+    btn.disabled = false;
+    btn.classList.remove('opacity-50', 'cursor-not-allowed');
+    btn.innerHTML = btn.getAttribute('data-original-html') || 'Salvar Lançamento';
+}
+
 function abrirModalNovo() {
-    var form = document.getElementById('formLancamentoCaixa');
+    var form = document.getElementById('form-novo-lancamento-caixa') || document.getElementById('formLancamentoCaixa');
     var modal = document.getElementById('modalNovoLancamento');
     if (!form || !modal) return;
+    resetBotaoSalvarLancamento();
     document.getElementById('modalLancamentoTitulo').textContent = 'Novo Lançamento no Caixa';
     form.action = window.CAIXA_ADD_URL;
     form.querySelector('[name="data"]').value = window.DATA_HOJE;
@@ -427,9 +458,10 @@ function abrirModalNovo() {
 }
 
 function abrirModalEditar(tr) {
-    var form = document.getElementById('formLancamentoCaixa');
+    var form = document.getElementById('form-novo-lancamento-caixa') || document.getElementById('formLancamentoCaixa');
     var modal = document.getElementById('modalNovoLancamento');
     if (!form || !modal) return;
+    resetBotaoSalvarLancamento();
     document.querySelectorAll('.split-only').forEach(function(el) { el.style.display = 'none'; });
     if (typeof window.resetModoSplit === 'function') window.resetModoSplit();
     var id = tr.getAttribute('data-lanc-id');
