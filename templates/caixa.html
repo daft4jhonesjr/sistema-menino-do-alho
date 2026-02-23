@@ -788,6 +788,7 @@ function confirmarExclusaoMassa() {
             var input = document.createElement('input');
             input.type = 'text';
             input.inputMode = 'decimal';
+            input.name = isCheque ? 'valor_cheque[]' : 'valor_gaveta[]';
             input.placeholder = '0,00';
             var textSize = isCheque ? 'text-sm' : 'text-lg';
             input.className = 'input-valor-gaveta ' + (isCheque ? 'input-valor-cheque' : 'input-valor-dinheiro') + ' block w-full pl-10 pr-3 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 ' + corRing + ' ' + textSize + ' font-medium tabular-nums';
@@ -835,7 +836,7 @@ function confirmarExclusaoMassa() {
         container.setAttribute('data-mask-bound', '1');
         container.addEventListener('input', function(e) {
             var alvo = e.target;
-            if (!alvo || !alvo.matches('input.input-valor-gaveta, input.input-valor-dinheiro, input.input-valor-cheque')) return;
+            if (!alvo || !alvo.matches('input[name="valor_gaveta[]"], input.input-valor-dinheiro, input[name="valor_cheque[]"], input.input-valor-cheque, input.input-valor-gaveta')) return;
 
             var mascarado = formatarMoedaBRDeInput(alvo.value);
             alvo.value = mascarado;
