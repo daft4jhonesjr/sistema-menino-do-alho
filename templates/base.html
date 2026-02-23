@@ -278,7 +278,7 @@
             var isPulling = false;
             var triggerRefresh = false;
             var DEADZONE = 30;
-            var THRESHOLD = 80;
+            var THRESHOLD = 40;
             var INDICATOR_HEIGHT = 64;
 
             function getScrollTop() {
@@ -329,7 +329,7 @@
                 }
 
                 var effectiveDistance = pullDistance - DEADZONE;
-                var visualDistance = effectiveDistance * 0.4;
+                var visualDistance = effectiveDistance * 0.65;
                 if (visualDistance > 0) {
                     ptrIndicador.style.transform = 'translateY(' + (visualDistance - INDICATOR_HEIGHT) + 'px)';
                     e.preventDefault();
@@ -356,7 +356,7 @@
                     ptrIcone.innerText = '⏳';
                     ptrIcone.style.transform = 'rotate(0deg)';
                     ptrIndicador.style.transform = 'translateY(16px)';
-                    setTimeout(function() { window.location.reload(); }, 500);
+                    setTimeout(function() { window.location.reload(true); }, 500);
                 } else {
                     resetIndicator();
                 }
