@@ -5112,13 +5112,24 @@ def logistica():
     if filtro_status not in ('PENDENTE', 'ENTREGUE'):
         filtro_status = 'PENDENTE'
 
-    vendas = Venda.query.filter_by(status_entrega=filtro_status).options(
+    page = request.args.get('page', 1, type=int)
+    per_page = 20
+    is_ajax = (
+        request.args.get('ajax') == '1'
+        or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    )
+
+    pagination = Venda.query.filter_by(status_entrega=filtro_status).options(
         joinedload(Venda.cliente),
         joinedload(Venda.produto)
-    ).order_by(Venda.data_venda.desc()).all()
+    ).order_by(Venda.data_venda.desc()).paginate(
+        page=page,
+        per_page=per_page,
+        error_out=False
+    )
 
     entregas = []
-    for v in vendas:
+    for v in pagination.items:
         cliente = v.cliente
         if not cliente:
             continue
@@ -5133,7 +5144,21 @@ def logistica():
             'status_entrega': v.status_entrega or 'PENDENTE'
         })
 
-    return render_template('logistica.html', entregas=entregas, filtro_status=filtro_status)
+    if is_ajax:
+        return jsonify({
+            'success': True,
+            'entregas': entregas,
+            'has_next': pagination.has_next,
+            'page': page,
+            'status': filtro_status
+        })
+
+    return render_template(
+        'logistica.html',
+        entregas=entregas,
+        filtro_status=filtro_status,
+        has_next_logistica=pagination.has_next
+    )
 
 
 @app.route('/logistica/toggle/<int:venda_id>', methods=['POST'])
