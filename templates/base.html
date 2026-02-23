@@ -239,7 +239,7 @@
     {% block head_extras %}{% endblock %}
 </head>
 <body class="bg-emerald-50 text-gray-800 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-500 min-h-screen flex flex-col">
-    <div id="ptr-indicador" class="fixed top-0 left-0 w-full flex justify-center items-end pb-3 h-16 bg-transparent text-emerald-600 font-medium text-sm z-50 transform -translate-y-full pointer-events-none transition-transform duration-300">
+    <div id="ptr-indicador" class="lg:hidden fixed top-0 left-0 w-full flex justify-center items-end pb-3 h-16 bg-transparent text-emerald-600 font-medium text-sm z-50 transform -translate-y-full pointer-events-none transition-transform duration-300">
         <div class="flex items-center gap-2 bg-white px-4 py-2 rounded-full shadow-md">
             <span id="ptr-icone" class="transition-transform duration-300">↓</span>
             <span id="ptr-texto">Puxe para atualizar</span>
@@ -296,6 +296,7 @@
             }
 
             document.addEventListener('touchstart', function(e) {
+                if (window.innerWidth >= 1024) return;
                 if (e.touches.length !== 1) return;
                 if (document.body.classList.contains('modal-aberto')) return;
                 if (getScrollTop() > 0) return;
@@ -310,6 +311,7 @@
             }, { passive: true });
 
             document.addEventListener('touchmove', function(e) {
+                if (window.innerWidth >= 1024) return;
                 if (!isPulling) return;
                 if (e.touches.length !== 1) {
                     isPulling = false;
@@ -347,6 +349,7 @@
             }, { passive: false });
 
             document.addEventListener('touchend', function(e) {
+                if (window.innerWidth >= 1024) return;
                 if (!isPulling) return;
                 isPulling = false;
                 ptrIndicador.style.transition = 'transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
