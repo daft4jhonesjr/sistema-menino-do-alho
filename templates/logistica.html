@@ -58,16 +58,23 @@
                 {% for e in entregas %}
                 <tr class="hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition">
                     <td class="px-4 py-4">
-                        <input type="checkbox" class="check-entrega rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" value="{{ e.venda_id }}" data-endereco="{{ e.endereco }}">
+                        <input type="checkbox" class="check-entrega rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" value="{{ e.ids[0] }}" data-ids="{{ e.ids|join(',') }}" data-endereco="{{ e.endereco }}">
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">{{ e.data }}</td>
                     <td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">{{ e.cliente_nome }}</td>
                     <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{{ e.endereco or '—' }}</td>
-                    <td class="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">{{ e.produto }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
+                        <ul class="space-y-1">
+                            {% for item_produto in e.produtos %}
+                            <li>{{ item_produto }}</li>
+                            {% endfor %}
+                        </ul>
+                    </td>
                     <td class="px-6 py-4 text-sm font-semibold text-emerald-600 dark:text-emerald-400 text-right">{{ e.total | formato_moeda }}</td>
                     <td class="px-6 py-4 text-center">
-                        <form method="post" action="{{ url_for('toggle_entrega', venda_id=e.venda_id, status=filtro_status) }}" class="inline" onsubmit="return confirm('{% if filtro_status == 'PENDENTE' %}Tem certeza que deseja marcar este pedido como ENTREGUE?{% else %}Tem certeza que deseja desfazer e voltar o pedido para PENDENTE?{% endif %}');">
+                        <form method="post" action="{{ url_for('toggle_entrega', venda_id=e.ids[0], status=filtro_status) }}" class="inline" onsubmit="return confirm('{% if filtro_status == 'PENDENTE' %}Tem certeza que deseja marcar este pedido como ENTREGUE?{% else %}Tem certeza que deseja desfazer e voltar o pedido para PENDENTE?{% endif %}');">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                            <input type="hidden" name="ids" value="{{ e.ids|join(',') }}"/>
                             {% if filtro_status == 'PENDENTE' %}
                             <button type="submit" class="text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 text-sm font-medium">Marcar como Entregue</button>
                             {% else %}
@@ -145,16 +152,25 @@
             ? 'Tem certeza que deseja marcar este pedido como ENTREGUE?'
             : 'Tem certeza que deseja desfazer e voltar o pedido para PENDENTE?';
 
+        var idsLista = Array.isArray(e.ids) ? e.ids : [];
+        var idsRaw = idsLista.map(function(v) { return String(v); }).join(',');
+        var vendaRef = idsLista.length ? idsLista[0] : e.venda_id;
+        var produtosLista = Array.isArray(e.produtos) ? e.produtos : (e.produto ? [e.produto] : []);
+        var produtosHtml = '<ul class="space-y-1">' + produtosLista.map(function(p) {
+            return '<li>' + escapeHtml(p) + '</li>';
+        }).join('') + '</ul>';
+
         tr.innerHTML = ''
-            + '<td class="px-4 py-4"><input type="checkbox" class="check-entrega rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" value="' + escapeHtml(e.venda_id) + '" data-endereco="' + escapeHtml(e.endereco || '') + '"></td>'
+            + '<td class="px-4 py-4"><input type="checkbox" class="check-entrega rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" value="' + escapeHtml(vendaRef) + '" data-ids="' + escapeHtml(idsRaw) + '" data-endereco="' + escapeHtml(e.endereco || '') + '"></td>'
             + '<td class="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">' + escapeHtml(e.data) + '</td>'
             + '<td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">' + escapeHtml(e.cliente_nome) + '</td>'
             + '<td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">' + escapeHtml(e.endereco || '—') + '</td>'
-            + '<td class="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">' + escapeHtml(e.produto) + '</td>'
+            + '<td class="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">' + produtosHtml + '</td>'
             + '<td class="px-6 py-4 text-sm font-semibold text-emerald-600 dark:text-emerald-400 text-right">' + formatMoeda(e.total) + '</td>'
             + '<td class="px-6 py-4 text-center">'
-            + '  <form method="post" action="/logistica/toggle/' + encodeURIComponent(e.venda_id) + '?status=' + encodeURIComponent(filtroStatusAtual) + '" class="inline" onsubmit="return confirm(\'' + confirmarMsg + '\');">'
+            + '  <form method="post" action="/logistica/toggle/' + encodeURIComponent(vendaRef) + '?status=' + encodeURIComponent(filtroStatusAtual) + '" class="inline" onsubmit="return confirm(\'' + confirmarMsg + '\');">'
             + '    <input type="hidden" name="csrf_token" value="' + escapeHtml(csrfToken) + '"/>'
+            + '    <input type="hidden" name="ids" value="' + escapeHtml(idsRaw) + '"/>'
             + '    <button type="submit" class="' + acaoClasse + ' text-sm font-medium">' + acaoTexto + '</button>'
             + '  </form>'
             + '</td>';
@@ -265,7 +281,15 @@ function gerarRotaMaps() {
 
 function atualizarStatusMassa(novoStatus) {
     const selecionados = document.querySelectorAll('.check-entrega:checked');
-    const ids = Array.from(selecionados).map(cb => cb.value);
+    const idsSet = new Set();
+    selecionados.forEach(function(cb) {
+        var raw = cb.getAttribute('data-ids') || cb.value || '';
+        raw.split(',').forEach(function(idTxt) {
+            var id = parseInt((idTxt || '').trim(), 10);
+            if (!isNaN(id)) idsSet.add(id);
+        });
+    });
+    const ids = Array.from(idsSet);
 
     if (ids.length === 0) {
         alert('Selecione pelo menos um pedido!');

@@ -5119,36 +5119,59 @@ def logistica():
         or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
     )
 
-    pagination = Venda.query.filter_by(status_entrega=filtro_status).options(
+    vendas = Venda.query.filter_by(status_entrega=filtro_status).options(
         joinedload(Venda.cliente),
         joinedload(Venda.produto)
-    ).order_by(Venda.data_venda.desc()).paginate(
-        page=page,
-        per_page=per_page,
-        error_out=False
-    )
+    ).order_by(Venda.data_venda.desc()).all()
 
-    entregas = []
-    for v in pagination.items:
+    pedidos_dict = {}
+    pedidos_ordenados_keys = []
+
+    for v in vendas:
         cliente = v.cliente
         if not cliente:
             continue
+
+        cnpj_cliente = (cliente.cnpj or '').strip()
+        is_consumidor_final = cnpj_cliente in ('0', '00000000000000', '')
+        data_venda_normalizada = v.data_venda.date() if hasattr(v.data_venda, 'date') else v.data_venda
+        if is_consumidor_final:
+            pedido_key = (v.cliente_id, data_venda_normalizada)
+        else:
+            nf_normalizada = str(v.nf).strip() if v.nf else ''
+            pedido_key = (v.cliente_id, nf_normalizada, data_venda_normalizada)
+
+        if pedido_key not in pedidos_dict:
+            pedidos_dict[pedido_key] = {
+                'pedido_key': str(pedido_key),
+                'ids': [],
+                'venda_id': v.id,
+                'data': v.data_venda.strftime('%d/%m/%Y'),
+                'cliente_nome': cliente.nome_cliente or 'Sem Nome',
+                'endereco': cliente.endereco or '',
+                'produtos': [],
+                'total': 0.0,
+                'status_entrega': v.status_entrega or 'PENDENTE'
+            }
+            pedidos_ordenados_keys.append(pedido_key)
+
         produto_nome = v.produto.nome_produto if v.produto else 'Item'
-        entregas.append({
-            'venda_id': v.id,
-            'data': v.data_venda.strftime('%d/%m/%Y'),
-            'cliente_nome': cliente.nome_cliente or 'Sem Nome',
-            'endereco': cliente.endereco or '',
-            'produto': f"{v.quantidade_venda}x {produto_nome}",
-            'total': float(v.calcular_total()),
-            'status_entrega': v.status_entrega or 'PENDENTE'
-        })
+        pedidos_dict[pedido_key]['ids'].append(v.id)
+        pedidos_dict[pedido_key]['produtos'].append(f"{v.quantidade_venda}x {produto_nome}")
+        pedidos_dict[pedido_key]['total'] += float(v.calcular_total())
+
+    pedidos_agrupados = [pedidos_dict[k] for k in pedidos_ordenados_keys]
+    total_pedidos = len(pedidos_agrupados)
+    start_idx = (page - 1) * per_page
+    end_idx = start_idx + per_page
+    entregas = pedidos_agrupados[start_idx:end_idx]
+    has_next = end_idx < total_pedidos
 
     if is_ajax:
         return jsonify({
             'success': True,
             'entregas': entregas,
-            'has_next': pagination.has_next,
+            'has_next': has_next,
             'page': page,
             'status': filtro_status
         })
@@ -5157,7 +5180,7 @@ def logistica():
         'logistica.html',
         entregas=entregas,
         filtro_status=filtro_status,
-        has_next_logistica=pagination.has_next
+        has_next_logistica=has_next
     )
 
 
@@ -5165,10 +5188,25 @@ def logistica():
 @login_required
 def toggle_entrega(venda_id):
     """Alterna o status de entrega entre PENDENTE e ENTREGUE."""
-    venda = Venda.query.get_or_404(venda_id)
+    ids_raw = (request.form.get('ids') or '').strip()
+    ids = []
+    if ids_raw:
+        for p in ids_raw.split(','):
+            p = p.strip()
+            if not p:
+                continue
+            try:
+                ids.append(int(p))
+            except ValueError:
+                continue
+    if not ids:
+        ids = [venda_id]
+
+    venda_ref = Venda.query.get_or_404(ids[0])
     status = request.form.get('status', request.args.get('status', 'PENDENTE'))
     try:
-        venda.status_entrega = 'ENTREGUE' if (venda.status_entrega or 'PENDENTE') == 'PENDENTE' else 'PENDENTE'
+        novo_status = 'ENTREGUE' if (venda_ref.status_entrega or 'PENDENTE') == 'PENDENTE' else 'PENDENTE'
+        Venda.query.filter(Venda.id.in_(ids)).update({'status_entrega': novo_status}, synchronize_session=False)
         db.session.commit()
         flash('Status de entrega atualizado com sucesso!', 'success')
     except Exception as e:
