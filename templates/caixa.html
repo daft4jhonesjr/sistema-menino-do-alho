@@ -133,7 +133,7 @@
             </div>
         </button>
         <div id="{{ grupo.id_html }}" class="transition-all duration-300 {% if chave != mes_atual_str %}hidden{% endif %}">
-            <div class="w-full overflow-x-auto pb-2">
+            <div id="container-tabela-{{ grupo.id_html }}" class="container-tabela-caixa overflow-x-auto w-full pb-2">
                 <table class="caixa-tabela w-full min-w-max text-left whitespace-nowrap">
                     <thead class="bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-xs uppercase font-bold border-b border-gray-100 dark:border-gray-700">
                         <tr>
@@ -189,7 +189,7 @@
                                     </button>
                                 </form>
                                 {% endif %}
-                                <button type="button" onclick="abrirModalEditar(this.closest('tr'))" class="text-amber-500 hover:text-amber-600 dark:hover:text-amber-400 transition-colors p-1 mr-1" title="Editar Lançamento">
+                                <button type="button" onclick="abrirModalEditar(this.closest('[data-lanc-id]'))" class="text-amber-500 hover:text-amber-600 dark:hover:text-amber-400 transition-colors p-1 mr-1" title="Editar Lançamento">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
                                 </button>
                                 <button type="button" onclick="confirmarExclusaoUnica({{ l.id }})" class="text-red-400 hover:text-red-600 dark:hover:text-red-300 transition-colors p-1" title="Apagar Lançamento">
@@ -200,6 +200,57 @@
                         {% endfor %}
                     </tbody>
                 </table>
+            </div>
+            <div id="container-cards-{{ grupo.id_html }}" class="container-cards-caixa hidden grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 p-4 pt-3">
+                {% for l in grupo.itens %}
+                <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-4 flex flex-col relative"
+                     data-lanc-id="{{ l.id }}"
+                     data-lanc-data="{{ l.data.strftime('%Y-%m-%d') }}"
+                     data-lanc-desc="{{ l.descricao|e }}"
+                     data-lanc-categoria="{{ l.categoria|e }}"
+                     data-lanc-tipo="{{ l.tipo }}"
+                     data-lanc-forma="{{ l.forma_pagamento|e }}"
+                     data-lanc-valor="{{ l.valor }}">
+                    <div class="flex justify-between items-start mb-2 gap-2">
+                        <span class="text-xs text-slate-500 dark:text-slate-400 font-medium">{{ l.data.strftime('%d/%m/%Y') }}</span>
+                        <span class="text-[10px] font-bold px-2 py-1 rounded bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                            {{ l.forma_pagamento }}
+                        </span>
+                    </div>
+
+                    <h3 class="text-base font-bold text-slate-800 dark:text-white mb-1 leading-tight truncate" title="{{ l.descricao }}">
+                        {{ l.descricao }}
+                    </h3>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mb-2 flex items-center gap-1">
+                        🏷️ {{ l.categoria }}
+                    </p>
+
+                    <div class="mb-3">
+                        {% if (l.forma_pagamento or '')|lower == 'cheque' %}
+                            {% if (l.status_envio or 'Não Enviado') == 'Enviado' %}
+                            <span class="inline-flex items-center bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-2 py-1 rounded text-xs font-bold">Enviado</span>
+                            {% else %}
+                            <span class="inline-flex items-center bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 px-2 py-1 rounded text-xs font-bold">Não Enviado</span>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+
+                    <div class="text-xl font-bold mb-4 valor-financeiro {% if l.tipo == 'ENTRADA' %}text-emerald-500{% else %}text-red-500{% endif %}">
+                        {% if l.tipo == 'ENTRADA' %}+ {% else %}- {% endif %}{{ l.valor|formato_moeda }}
+                    </div>
+
+                    <div class="mt-auto flex justify-end gap-3 border-t border-slate-100 dark:border-slate-700 pt-3">
+                        {% if (l.forma_pagamento or '')|lower == 'cheque' %}
+                        <form method="post" action="{{ url_for('alternar_status_envio_cheque', id=l.id) }}" class="inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                            <button type="submit" class="text-sky-500 hover:text-sky-600 dark:hover:text-sky-400 transition-colors p-1" title="Alternar envio do cheque">📤</button>
+                        </form>
+                        {% endif %}
+                        <button type="button" onclick="abrirModalEditar(this.closest('[data-lanc-id]'))" class="text-amber-500 hover:text-amber-700 transition-colors p-1" title="Editar">✏️</button>
+                        <button type="button" onclick="confirmarExclusaoUnica({{ l.id }})" class="text-red-500 hover:text-red-700 transition-colors p-1" title="Excluir">🗑️</button>
+                    </div>
+                </div>
+                {% endfor %}
             </div>
         </div>
     </div>
@@ -692,61 +743,6 @@ function confirmarExclusaoMassa() {
 
 <style>
     #conteudo-cheque summary::-webkit-details-marker { display: none; }
-
-    #container-listagem-caixa.modo-grade .caixa-tabela thead {
-        display: none;
-    }
-    #container-listagem-caixa.modo-grade .caixa-tabela,
-    #container-listagem-caixa.modo-grade .caixa-tabela tbody,
-    #container-listagem-caixa.modo-grade .caixa-tabela tr,
-    #container-listagem-caixa.modo-grade .caixa-tabela td {
-        display: block;
-        width: 100%;
-        white-space: normal;
-    }
-    #container-listagem-caixa.modo-grade .caixa-tabela tr {
-        margin-bottom: 1rem;
-        padding: 0.75rem;
-        border: 1px solid rgba(148, 163, 184, 0.35);
-        border-radius: 0.75rem;
-        background: rgba(255, 255, 255, 0.98);
-        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
-    }
-    .dark #container-listagem-caixa.modo-grade .caixa-tabela tr {
-        background: rgba(30, 41, 59, 0.92);
-        border-color: rgba(71, 85, 105, 0.6);
-        box-shadow: none;
-    }
-    #container-listagem-caixa.modo-grade .caixa-tabela td {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 0.75rem;
-        padding: 0.45rem 0.35rem;
-        border-bottom: 1px solid rgba(148, 163, 184, 0.3);
-    }
-    .dark #container-listagem-caixa.modo-grade .caixa-tabela td {
-        border-bottom-color: rgba(71, 85, 105, 0.45);
-    }
-    #container-listagem-caixa.modo-grade .caixa-tabela td:last-child {
-        border-bottom: 0;
-        padding-bottom: 0.15rem;
-    }
-    #container-listagem-caixa.modo-grade .caixa-tabela td::before {
-        content: attr(data-label);
-        font-size: 0.75rem;
-        font-weight: 700;
-        color: rgb(100, 116, 139);
-        text-transform: uppercase;
-        letter-spacing: 0.02em;
-        flex: 0 0 40%;
-    }
-    .dark #container-listagem-caixa.modo-grade .caixa-tabela td::before {
-        color: rgb(148, 163, 184);
-    }
-    #container-listagem-caixa.modo-grade .caixa-tabela td[data-label="Selecionar"]::before {
-        content: "Seleção";
-    }
 </style>
 
 <script>
@@ -1576,23 +1572,31 @@ function confirmarExclusaoMassa() {
 </script>
 <script>
 (function() {
-    var container = document.getElementById('container-listagem-caixa');
+    var containerTabela = document.querySelectorAll('.container-tabela-caixa');
+    var containerCards = document.querySelectorAll('.container-cards-caixa');
     var btnLista = document.getElementById('btn-modo-lista');
     var btnGrade = document.getElementById('btn-modo-grade');
-    if (!container || !btnLista || !btnGrade) return;
+    if (!containerTabela.length || !containerCards.length || !btnLista || !btnGrade) return;
 
     function setModoVisualizacao(modo) {
-        var isGrade = (modo === 'grade');
-        if (isGrade) {
-            container.classList.add('modo-grade');
+        if (modo === 'grade') {
+            containerTabela.forEach(function(el) { el.classList.add('hidden'); });
+            containerCards.forEach(function(el) {
+                el.classList.remove('hidden');
+                el.classList.add('grid');
+            });
             btnGrade.classList.add('bg-slate-700', 'text-emerald-500');
             btnLista.classList.remove('bg-slate-700', 'text-emerald-500');
         } else {
-            container.classList.remove('modo-grade');
+            containerCards.forEach(function(el) {
+                el.classList.add('hidden');
+                el.classList.remove('grid');
+            });
+            containerTabela.forEach(function(el) { el.classList.remove('hidden'); });
             btnLista.classList.add('bg-slate-700', 'text-emerald-500');
             btnGrade.classList.remove('bg-slate-700', 'text-emerald-500');
         }
-        localStorage.setItem('preferencia_visualizacao_caixa', isGrade ? 'grade' : 'lista');
+        localStorage.setItem('preferencia_visualizacao_caixa', modo);
     }
 
     var prefs = localStorage.getItem('preferencia_visualizacao_caixa');
