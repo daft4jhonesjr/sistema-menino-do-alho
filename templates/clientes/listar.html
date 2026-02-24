@@ -158,7 +158,7 @@
                 </div>
                 <div class="mb-5">
                     <label for="modal-telefone" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">📱 Telefone / WhatsApp</label>
-                    <input type="tel" id="modal-telefone" name="telefone" placeholder="(99) 99999-9999" inputmode="tel" autocomplete="tel" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
+                    <input type="tel" id="modal-telefone" name="telefone" maxlength="15" placeholder="87 9 9999-9999" inputmode="tel" autocomplete="tel" class="input-telefone w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                 </div>
                 <div class="mb-5">
                     <label for="modal-razao_social" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Razão Social</label>
@@ -247,7 +247,7 @@
                 </div>
                 <div class="mb-5">
                     <label for="edit_telefone" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">📱 Telefone / WhatsApp</label>
-                    <input type="tel" id="edit_telefone" name="telefone" placeholder="(99) 99999-9999" inputmode="tel" autocomplete="tel" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
+                    <input type="tel" id="edit_telefone" name="telefone" maxlength="15" placeholder="87 9 9999-9999" inputmode="tel" autocomplete="tel" class="input-telefone w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                 </div>
                 <div class="mb-5">
                     <label for="edit_razao" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Razão Social</label>
@@ -597,6 +597,25 @@
     
     // Inicializa ícone de busca
     if (typeof lucide !== 'undefined') lucide.createIcons();
+})();
+
+// Máscara progressiva de Telefone/WhatsApp: "XX X XXXX-XXXX"
+(function() {
+    function formatarTelefoneWhatsapp(valor) {
+        var v = (valor || '').replace(/\D/g, '').substring(0, 11);
+        var formatado = '';
+        if (v.length > 0) formatado = v.substring(0, 2);
+        if (v.length > 2) formatado += ' ' + v.substring(2, 3);
+        if (v.length > 3) formatado += ' ' + v.substring(3, 7);
+        if (v.length > 7) formatado += '-' + v.substring(7, 11);
+        return formatado;
+    }
+
+    document.addEventListener('input', function(e) {
+        if (e.target.matches('input[name="telefone"], .input-telefone')) {
+            e.target.value = formatarTelefoneWhatsapp(e.target.value);
+        }
+    });
 })();
 </script>
 {% endblock %}
