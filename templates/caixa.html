@@ -662,8 +662,13 @@ function confirmarExclusaoMassa() {
         <!-- Rodapé com Total -->
         <div class="px-5 py-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex justify-between items-center gap-3">
             <div class="flex flex-col">
+                <div id="resumo-subtotais-cheques" class="hidden text-xs text-slate-400 font-semibold mb-1 flex items-center gap-3">
+                    <span>Pendentes: <span id="display-total-pendentes" class="text-yellow-500">R$ 0,00</span></span>
+                    <span>|</span>
+                    <span>Enviados: <span id="display-total-enviados" class="text-emerald-500">R$ 0,00</span></span>
+                </div>
                 <span id="label-total-contagem" class="text-xs text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider">Total Dinheiro</span>
-                <span id="total-contagem-dinheiro" class="text-2xl font-black text-emerald-600 dark:text-emerald-400">R$ 0,00</span>
+                <span id="total-contagem-dinheiro" class="text-2xl font-black text-emerald-600 dark:text-emerald-400 total-cheques-display">R$ 0,00</span>
             </div>
             <div class="flex items-center gap-2">
                 <button type="button" id="btn-limpar-contagem" class="text-sm text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 font-medium px-3 py-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors">
@@ -956,7 +961,17 @@ function confirmarExclusaoMassa() {
     }
 
     function atualizarTotalCheques() {
-        return calcularSoma('#lista-cheques-pendentes input[name="valor_cheque[]"], #lista-cheques-pendentes .input-valor-cheque, #lista-cheques-enviados input[name="valor_cheque[]"], #lista-cheques-enviados .input-valor-cheque');
+        var totalPendentes = calcularSoma('#lista-cheques-pendentes input[name="valor_cheque[]"], #lista-cheques-pendentes .input-valor-cheque');
+        var totalEnviados = calcularSoma('#lista-cheques-enviados input[name="valor_cheque[]"], #lista-cheques-enviados .input-valor-cheque');
+        var totalGeral = totalPendentes + totalEnviados;
+
+        var displayPendentes = document.getElementById('display-total-pendentes');
+        if (displayPendentes) displayPendentes.innerText = fmt(totalPendentes);
+
+        var displayEnviados = document.getElementById('display-total-enviados');
+        if (displayEnviados) displayEnviados.innerText = fmt(totalEnviados);
+
+        return totalGeral;
     }
 
     function atualizarRodape() {
@@ -964,11 +979,16 @@ function confirmarExclusaoMassa() {
         var total = abaAtiva === 'dinheiro' ? atualizarTotalGaveta() : atualizarTotalCheques();
         var elTotal = document.getElementById('total-contagem-dinheiro');
         var elLabel = document.getElementById('label-total-contagem');
+        var resumoCheques = document.getElementById('resumo-subtotais-cheques');
         if (elTotal) {
             elTotal.textContent = fmt(total);
-            elTotal.className = 'text-2xl font-black ' + (abaAtiva === 'dinheiro' ? 'text-emerald-600 dark:text-emerald-400' : 'text-blue-600 dark:text-blue-400');
+            elTotal.className = 'text-2xl font-black total-cheques-display ' + (abaAtiva === 'dinheiro' ? 'text-emerald-600 dark:text-emerald-400' : 'text-blue-600 dark:text-blue-400');
         }
-        if (elLabel) elLabel.textContent = cfg.label;
+        if (elLabel) elLabel.textContent = (abaAtiva === 'cheque' ? 'Total Geral' : cfg.label);
+        if (resumoCheques) {
+            if (abaAtiva === 'cheque') resumoCheques.classList.remove('hidden');
+            else resumoCheques.classList.add('hidden');
+        }
         salvar(abaAtiva);
     }
 
@@ -1385,7 +1405,7 @@ function confirmarExclusaoMassa() {
                 }
             }
         }
-        salvar('cheque');
+        atualizarRodape();
     }, true);
     bindDelegacaoMascara('dinheiro');
     bindDelegacaoMascara('cheque');
