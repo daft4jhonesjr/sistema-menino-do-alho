@@ -5,7 +5,7 @@ from flask_compress import Compress
 from flask_caching import Cache
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from models import db, Cliente, Produto, ProdutoFoto, Venda, Usuario, Configuracao, Documento, LancamentoCaixa
+from models import db, Cliente, Produto, ProdutoFoto, Venda, Usuario, Configuracao, Documento, LancamentoCaixa, ContagemGaveta
 from config import Config
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -3051,6 +3051,69 @@ def _limpar_valor_moeda(v):
         return float(s)
     except (ValueError, AttributeError):
         return 0.0
+
+
+def _normalizar_itens_contagem(itens, incluir_nome=False):
+    itens_norm = []
+    if not isinstance(itens, list):
+        return itens_norm
+    for item in itens:
+        if not isinstance(item, dict):
+            continue
+        valor = float(_limpar_valor_moeda(item.get('valor')))
+        if incluir_nome:
+            nome = (item.get('nome') or '').strip()
+            if valor <= 0 and not nome:
+                continue
+            itens_norm.append({'nome': nome, 'valor': round(valor, 2)})
+        else:
+            if valor <= 0:
+                continue
+            itens_norm.append({'valor': round(valor, 2)})
+    return itens_norm
+
+
+@app.route('/caixa/gaveta/salvar', methods=['POST'])
+@login_required
+def salvar_contagem_gaveta():
+    payload = request.get_json(silent=True) or {}
+    dinheiro = _normalizar_itens_contagem(payload.get('dinheiro', []), incluir_nome=False)
+    cheques = _normalizar_itens_contagem(payload.get('cheques', []), incluir_nome=True)
+
+    estado = {'dinheiro': dinheiro, 'cheques': cheques}
+    hoje = get_hoje_brasil()
+
+    try:
+        ContagemGaveta.query.filter_by(data=hoje, usuario_id=current_user.id).delete()
+        novo = ContagemGaveta(
+            data=hoje,
+            usuario_id=current_user.id,
+            estado_json=json.dumps(estado, ensure_ascii=False)
+        )
+        db.session.add(novo)
+        db.session.commit()
+        return jsonify(ok=True, mensagem='Contagem de gaveta salva com sucesso.')
+    except Exception:
+        db.session.rollback()
+        return jsonify(ok=False, mensagem='Erro ao salvar contagem de gaveta.'), 500
+
+
+@app.route('/caixa/gaveta/carregar', methods=['GET'])
+@login_required
+def carregar_contagem_gaveta():
+    hoje = get_hoje_brasil()
+    registro = ContagemGaveta.query.filter_by(data=hoje, usuario_id=current_user.id).order_by(ContagemGaveta.id.desc()).first()
+    if not registro:
+        return jsonify(ok=True, estado={'dinheiro': [], 'cheques': []})
+    try:
+        estado = json.loads(registro.estado_json or '{}')
+    except Exception:
+        estado = {}
+    if not isinstance(estado, dict):
+        estado = {}
+    estado.setdefault('dinheiro', [])
+    estado.setdefault('cheques', [])
+    return jsonify(ok=True, estado=estado)
 
 
 def _status_envio_por_forma_pagamento(forma_pagamento):
