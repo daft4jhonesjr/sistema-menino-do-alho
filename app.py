@@ -4058,14 +4058,16 @@ def listar_produtos():
             reverse=reverse_order
         )
 
-    # Tipos em ordem preferencial
+    # Tipos em ordem preferencial (sempre exibe prateleiras padrão, mesmo vazias)
     preferidos = ['ALHO', 'SACOLA', 'CAFE', 'BACALHAU', 'OUTROS']
     restantes = sorted(k for k in produtos_por_tipo if k not in preferidos)
-    tipos_ordenados = [t for t in preferidos if t in produtos_por_tipo and produtos_por_tipo[t]] + restantes
+    tipos_ordenados = preferidos + restantes
 
     produtos_agrupados = {}
     for tipo in tipos_ordenados:
-        produtos_agrupados[tipo] = produtos_por_tipo[tipo]
+        produtos_agrupados[tipo] = produtos_por_tipo.get(tipo, [])
+
+    bacalhaus = [it['produto'] for it in produtos_agrupados.get('BACALHAU', [])]
 
     outros_itens = produtos_agrupados.get('OUTROS', [])
     produtos_outros = [{'id': it['produto'].id, 'nome_produto': it['produto'].nome_produto} for it in outros_itens]
@@ -4096,6 +4098,7 @@ def listar_produtos():
     return render_template(
         'produtos/listar.html',
         produtos_agrupados=produtos_agrupados,
+        bacalhaus=bacalhaus,
         produtos_com_entrada=produtos_com_entrada_real,
         produtos=produtos_paginados,
         produtos_outros=produtos_outros,
@@ -4181,9 +4184,9 @@ def novo_produto():
         if tipo_upper == 'BACALHAU':
             nome_produto = f"{tipo_upper} {(marca or 'NORGY').strip().upper()} {tamanho}".strip()
         else:
-            nome_produto = gerar_nome_produto(tipo, nacionalidade, marca, data_chegada, tamanho)
+            nome_produto = gerar_nome_produto(tipo_upper, nacionalidade, marca, data_chegada, tamanho)
         produto = Produto(
-            tipo=tipo,
+            tipo=tipo_upper,
             nacionalidade=nacionalidade,
             marca=marca,
             tamanho=tamanho,
@@ -4282,13 +4285,13 @@ def editar_produto(id):
         if tipo_upper == 'BACALHAU':
             nome_produto = f"{tipo_upper} {(marca or 'NORGY').strip().upper()} {tamanho}".strip()
         else:
-            nome_produto = gerar_nome_produto(tipo, nacionalidade, marca, data_chegada, tamanho)
+            nome_produto = gerar_nome_produto(tipo_upper, nacionalidade, marca, data_chegada, tamanho)
         
         # Se houver nova entrada, somar ao estoque atual
         if quantidade_entrada > 0 and tipo_upper != 'BACALHAU':
             produto.estoque_atual += quantidade_entrada
 
-        produto.tipo = tipo
+        produto.tipo = tipo_upper
         produto.nacionalidade = nacionalidade
         produto.marca = marca
         produto.tamanho = tamanho
