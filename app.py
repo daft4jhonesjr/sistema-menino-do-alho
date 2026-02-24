@@ -3068,14 +3068,32 @@ def _normalizar_itens_contagem(itens, incluir_nome=False):
                 status = 'ENVIADO'
             else:
                 status = 'NÃO ENVIADO'
+            url_foto = (item.get('url_foto') or '').strip()
             if valor <= 0 and not nome:
                 continue
-            itens_norm.append({'nome': nome, 'valor': round(valor, 2), 'status': status})
+            itens_norm.append({'nome': nome, 'valor': round(valor, 2), 'status': status, 'url_foto': url_foto})
         else:
             if valor <= 0:
                 continue
             itens_norm.append({'valor': round(valor, 2)})
     return itens_norm
+
+
+@app.route('/upload_imagem_cheque', methods=['POST'])
+@login_required
+def upload_imagem_cheque():
+    if 'file' not in request.files:
+        return jsonify({'error': 'Nenhum arquivo enviado'}), 400
+
+    file = request.files['file']
+    if not file or not getattr(file, 'filename', None):
+        return jsonify({'error': 'Arquivo inválido'}), 400
+
+    try:
+        upload_result = cloudinary.uploader.upload(file, folder='cheques_gaveta')
+        return jsonify({'url': upload_result.get('secure_url')}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/caixa/gaveta/salvar', methods=['POST'])

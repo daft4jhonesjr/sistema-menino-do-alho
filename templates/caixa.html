@@ -715,6 +715,7 @@ function confirmarExclusaoMassa() {
     };
     var rotaSalvarContagem = '{{ url_for("salvar_contagem_gaveta") }}';
     var rotaCarregarContagem = '{{ url_for("carregar_contagem_gaveta") }}';
+    var rotaUploadImagemCheque = '{{ url_for("upload_imagem_cheque") }}';
     var STATUS_CHEQUE_ENVIADO = 'ENVIADO';
     var STATUS_CHEQUE_NAO_ENVIADO = 'NÃO ENVIADO';
 
@@ -732,6 +733,28 @@ function confirmarExclusaoMassa() {
         return STATUS_CHEQUE_NAO_ENVIADO;
     }
 
+    function normalizarUrlFoto(url) {
+        return String(url || '').trim();
+    }
+
+    function aplicarVisualFotoCheque(label, url) {
+        if (!label) return;
+        var icone = label.querySelector('.icone-camera');
+        if (!icone) return;
+        var urlNormalizada = normalizarUrlFoto(url);
+        if (urlNormalizada) {
+            label.classList.remove('text-gray-400');
+            label.classList.add('text-emerald-500', 'font-bold');
+            label.setAttribute('data-url-foto', urlNormalizada);
+            icone.innerHTML = '👁️ ✓';
+        } else {
+            label.classList.remove('text-emerald-500', 'font-bold', 'animate-pulse');
+            label.classList.add('text-gray-400');
+            label.removeAttribute('data-url-foto');
+            icone.innerHTML = '📷';
+        }
+    }
+
     function aplicarEstadoServidor(estado) {
         var dinheiro = (estado && Array.isArray(estado.dinheiro)) ? estado.dinheiro : [];
         var cheques = (estado && Array.isArray(estado.cheques)) ? estado.cheques : [];
@@ -747,12 +770,13 @@ function confirmarExclusaoMassa() {
                 id: Date.now() + 1000 + idx,
                 nome: (item && item.nome ? String(item.nome) : ''),
                 valor: valor ? valor.toFixed(2) : '',
-                status: statusCheque
+                status: statusCheque,
+                url_foto: normalizarUrlFoto(item && item.url_foto)
             };
         });
 
         if (!abas.dinheiro.valores.length) abas.dinheiro.valores = [{ id: Date.now(), valor: '' }];
-        if (!abas.cheque.valores.length) abas.cheque.valores = [{ id: Date.now() + 1, nome: '', valor: '', status: STATUS_CHEQUE_NAO_ENVIADO }];
+        if (!abas.cheque.valores.length) abas.cheque.valores = [{ id: Date.now() + 1, nome: '', valor: '', status: STATUS_CHEQUE_NAO_ENVIADO, url_foto: '' }];
     }
 
     function coletarEstadoAtual() {
@@ -767,8 +791,9 @@ function confirmarExclusaoMassa() {
             var nome = (item.nome || '').trim();
             var valor = parseMoedaBR(item.valor);
             var status = normalizarStatusCheque(item.status);
+            var urlFoto = normalizarUrlFoto(item.url_foto);
             if (nome || valor > 0) {
-                cheques.push({ nome: nome, valor: valor.toFixed(2), status: status });
+                cheques.push({ nome: nome, valor: valor.toFixed(2), status: status, url_foto: urlFoto });
             }
         });
 
@@ -847,6 +872,7 @@ function confirmarExclusaoMassa() {
                 var copia = Object.assign({}, item || {});
                 copia.nome = copia.nome || '';
                 copia.status = normalizarStatusCheque(copia.status);
+                copia.url_foto = normalizarUrlFoto(copia.url_foto);
                 return copia;
             });
         }
@@ -1084,7 +1110,16 @@ function confirmarExclusaoMassa() {
                 iconeCamera.className = 'icone-camera text-sm';
                 iconeCamera.textContent = '📷';
                 labelFoto.appendChild(iconeCamera);
+                aplicarVisualFotoCheque(labelFoto, item.url_foto);
                 acoesWrap.appendChild(labelFoto);
+
+                var inputUrlFoto = document.createElement('input');
+                inputUrlFoto.type = 'hidden';
+                inputUrlFoto.name = 'url_foto_cheque[]';
+                inputUrlFoto.className = 'input-url-foto';
+                inputUrlFoto.value = normalizarUrlFoto(item.url_foto);
+                inputUrlFoto.setAttribute('data-item-id', String(item.id));
+                acoesWrap.appendChild(inputUrlFoto);
 
                 var inputStatus = document.createElement('input');
                 inputStatus.type = 'hidden';
@@ -1155,13 +1190,18 @@ function confirmarExclusaoMassa() {
         if (isCheque) {
             var statusCheque = normalizarStatusCheque(item.status);
             var classeStatus = statusCheque === STATUS_CHEQUE_ENVIADO ? 'bg-emerald-100 text-emerald-800' : 'bg-yellow-100 text-yellow-800';
+            var urlFotoCheque = normalizarUrlFoto(item.url_foto);
+            var classeFoto = urlFotoCheque ? 'text-emerald-500 font-bold' : 'text-gray-400';
+            var iconeFoto = urlFotoCheque ? '👁️ ✓' : '📷';
+            var dataUrlFotoAttr = urlFotoCheque ? ' data-url-foto="' + String(urlFotoCheque).replace(/"/g, '&quot;') + '"' : '';
             nomeHtml = '<input type="text" class="input-nome-cheque flex-1 px-3 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm" placeholder="Nome do cliente" value="">';
             anexoChequeHtml = ''
                 + '<div class="flex items-center justify-end gap-1.5 sm:gap-2">'
-                + '<label class="cursor-pointer text-gray-400 hover:text-emerald-500 flex items-center justify-center transition-colors label-escanear-cheque shrink-0" title="Escanear Cheque">'
+                + '<label class="cursor-pointer ' + classeFoto + ' hover:text-emerald-500 flex items-center justify-center transition-colors label-escanear-cheque shrink-0" title="Escanear Cheque"' + dataUrlFotoAttr + '>'
                 + '  <input type="file" name="foto_cheque[]" accept="image/*" capture="environment" class="hidden input-foto-cheque">'
-                + '  <span class="icone-camera text-sm">📷</span>'
+                + '  <span class="icone-camera text-sm">' + iconeFoto + '</span>'
                 + '</label>'
+                + '<input type="hidden" name="url_foto_cheque[]" value="' + String(urlFotoCheque).replace(/"/g, '&quot;') + '" class="input-url-foto" data-item-id="' + String(item.id) + '">'
                 + '<input type="hidden" name="status_cheque[]" value="' + statusCheque + '" class="input-status-cheque" data-item-id="' + String(item.id) + '">'
                 + '<button type="button" class="btn-status-cheque px-1.5 py-0.5 text-[9px] leading-tight font-bold uppercase rounded transition-colors whitespace-nowrap shrink-0 ' + classeStatus + '" title="Clique para mudar o status" data-item-id="' + String(item.id) + '">' + statusCheque + '</button>'
                 + '<button type="button" class="btn-remover-linha p-1.5 text-red-400 hover:text-red-600 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors shrink-0" title="Remover">'
@@ -1215,6 +1255,10 @@ function confirmarExclusaoMassa() {
         if (inputStatus) inputStatus.value = normalizarStatusCheque(item.status);
         var btnStatus = linhaEl.querySelector('.btn-status-cheque');
         if (btnStatus) aplicarVisualStatusCheque(btnStatus, item.status);
+        var inputUrlFoto = linhaEl.querySelector('.input-url-foto');
+        if (inputUrlFoto) inputUrlFoto.value = normalizarUrlFoto(item.url_foto);
+        var labelFoto = linhaEl.querySelector('.label-escanear-cheque');
+        if (labelFoto) aplicarVisualFotoCheque(labelFoto, item.url_foto);
     }
 
     function bindDelegacaoMascara(tipo) {
@@ -1258,6 +1302,7 @@ function confirmarExclusaoMassa() {
         if (tipo === 'cheque') {
             novoItem.nome = '';
             novoItem.status = STATUS_CHEQUE_NAO_ENVIADO;
+            novoItem.url_foto = '';
         }
         var cfg = abas[tipo];
         cfg.valores.push(novoItem);
@@ -1336,22 +1381,73 @@ function confirmarExclusaoMassa() {
             }
         });
     }
-    document.addEventListener('change', function(e) {
+    document.addEventListener('change', async function(e) {
         if (!e.target.matches('.input-foto-cheque')) return;
+
+        var file = e.target.files && e.target.files[0];
+        if (!file) return;
+
         var label = e.target.closest('.label-escanear-cheque');
         if (!label) return;
+        var linha = label.closest('.linha-cheque') || (label.parentElement && label.parentElement.parentElement);
+        var inputUrl = linha ? linha.querySelector('.input-url-foto') : null;
         var icone = label.querySelector('.icone-camera');
         if (!icone) return;
-        if (e.target.files && e.target.files.length > 0) {
-            label.classList.remove('text-gray-400');
-            label.classList.add('text-emerald-500', 'font-bold');
-            icone.innerHTML = '📷 ✓';
-        } else {
-            label.classList.add('text-gray-400');
-            label.classList.remove('text-emerald-500', 'font-bold');
-            icone.innerHTML = '📷';
+
+        icone.innerHTML = '⏳';
+        label.classList.add('animate-pulse');
+
+        var formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            var headersUpload = {};
+            if (typeof getCsrfHeaders === 'function') {
+                headersUpload = getCsrfHeaders();
+            }
+            var response = await fetch(rotaUploadImagemCheque, {
+                method: 'POST',
+                headers: headersUpload,
+                body: formData
+            });
+            var data = await response.json();
+
+            label.classList.remove('animate-pulse');
+
+            if (data && data.url) {
+                var urlFoto = normalizarUrlFoto(data.url);
+                if (inputUrl) inputUrl.value = urlFoto;
+                aplicarVisualFotoCheque(label, urlFoto);
+
+                var itemId = (inputUrl && inputUrl.getAttribute('data-item-id')) || (linha && linha.getAttribute('data-item-id'));
+                if (itemId) {
+                    var listaCheque = abas.cheque && abas.cheque.valores ? abas.cheque.valores : [];
+                    for (var i = 0; i < listaCheque.length; i++) {
+                        if (String(listaCheque[i].id) === String(itemId)) {
+                            listaCheque[i].url_foto = urlFoto;
+                            break;
+                        }
+                    }
+                }
+                salvar('cheque');
+            } else {
+                throw new Error('Sem URL');
+            }
+        } catch (error) {
+            label.classList.remove('animate-pulse');
+            icone.innerHTML = '📷 ❌';
+            alert('Erro ao enviar imagem do cheque. Tente novamente.');
         }
     });
+
+    document.addEventListener('click', function(e) {
+        var labelFoto = e.target.closest('.label-escanear-cheque');
+        if (!labelFoto) return;
+        var urlFoto = normalizarUrlFoto(labelFoto.getAttribute('data-url-foto'));
+        if (!urlFoto) return;
+        e.preventDefault();
+        window.open(urlFoto, '_blank');
+    }, true);
     document.addEventListener('click', function(e) {
         var btn = e.target.closest('.btn-status-cheque');
         if (!btn) return;
