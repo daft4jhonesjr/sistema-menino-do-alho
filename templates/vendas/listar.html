@@ -336,6 +336,9 @@
 <div class="mb-4 flex flex-wrap items-center gap-3">
     <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Ordenar por data de venda:</span>
     {% set url_params = {} %}
+    {% if request.args.get('filtro') %}
+        {% set _ = url_params.update({'filtro': request.args.get('filtro')}) %}
+    {% endif %}
     {% if request.args.get('produto_id') %}
         {% set _ = url_params.update({'produto_id': request.args.get('produto_id')}) %}
     {% endif %}
@@ -369,6 +372,7 @@
     <span class="text-gray-300 dark:text-gray-600">|</span>
     {% if filtro_vencidos %}
         {% set url_sem_vencidos = {} %}
+        {% if request.args.get('filtro') %}{% set _ = url_sem_vencidos.update({'filtro': request.args.get('filtro')}) %}{% endif %}
         {% if request.args.get('produto_id') %}{% set _ = url_sem_vencidos.update({'produto_id': request.args.get('produto_id')}) %}{% endif %}
         {% if request.args.get('cliente_id') %}{% set _ = url_sem_vencidos.update({'cliente_id': request.args.get('cliente_id')}) %}{% endif %}
         {% set _ = url_sem_vencidos.update({'ordem_data': ordem_data}) %}
@@ -383,6 +387,18 @@
             <i data-lucide="clipboard-list" class="w-4 h-4 inline-block mr-1.5 align-middle"></i>Ver Vencidos (Enviar para Fornecedor)
         </a>
     {% endif %}
+    <div class="flex items-center gap-2 ml-1 md:ml-4 border-l pl-3 md:pl-4 border-slate-300 dark:border-slate-700">
+        {% set url_filtro_geral = url_params.copy() %}
+        {% set _ = url_filtro_geral.update({'filtro': 'geral', 'ordem_data': ordem_data}) %}
+        {% set url_filtro_bacalhau = url_params.copy() %}
+        {% set _ = url_filtro_bacalhau.update({'filtro': 'bacalhau', 'ordem_data': ordem_data}) %}
+        <a href="{{ url_for('listar_vendas', **url_filtro_geral) }}" class="px-3 py-1.5 rounded-md text-sm font-semibold transition-colors {{ 'bg-emerald-600 text-white' if (request.args.get('filtro', 'geral') == 'geral') else 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700' }}">
+            🧄 Geral (Alho/Outros)
+        </a>
+        <a href="{{ url_for('listar_vendas', **url_filtro_bacalhau) }}" class="px-3 py-1.5 rounded-md text-sm font-semibold transition-colors {{ 'bg-blue-600 text-white' if (request.args.get('filtro') == 'bacalhau') else 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700' }}">
+            🐟 Bacalhau
+        </a>
+    </div>
     <span class="text-gray-300 dark:text-gray-600">|</span>
     <div class="flex items-center bg-gray-200 dark:bg-gray-700 rounded-lg p-1" title="Alternar visualização">
         <button type="button" onclick="mudarVisualizacao('lista')" id="btn-lista" class="p-2 rounded-md text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-600 shadow-sm transition-all" title="Visualização em lista">
@@ -430,6 +446,7 @@
                             </select>
                         </th>
                         {% set url_th_situacao = {} %}
+                        {% if request.args.get('filtro') %}{% set _ = url_th_situacao.update({'filtro': request.args.get('filtro')}) %}{% endif %}
                         {% if request.args.get('produto_id') %}{% set _ = url_th_situacao.update({'produto_id': request.args.get('produto_id')}) %}{% endif %}
                         {% if request.args.get('cliente_id') %}{% set _ = url_th_situacao.update({'cliente_id': request.args.get('cliente_id')}) %}{% endif %}
                         {% if filtro_vencidos %}{% set _ = url_th_situacao.update({'filtro_vencidos': 1}) %}{% endif %}
@@ -442,6 +459,7 @@
                             </a>
                         </th>
                         {% set url_th_forma = {} %}
+                        {% if request.args.get('filtro') %}{% set _ = url_th_forma.update({'filtro': request.args.get('filtro')}) %}{% endif %}
                         {% if request.args.get('produto_id') %}{% set _ = url_th_forma.update({'produto_id': request.args.get('produto_id')}) %}{% endif %}
                         {% if request.args.get('cliente_id') %}{% set _ = url_th_forma.update({'cliente_id': request.args.get('cliente_id')}) %}{% endif %}
                         {% if filtro_vencidos %}{% set _ = url_th_forma.update({'filtro_vencidos': 1}) %}{% endif %}

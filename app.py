@@ -4917,6 +4917,9 @@ def listar_vendas():
     produto_id = request.args.get('produto_id', type=int)
     cliente_id = request.args.get('cliente_id', type=int)
     filtro_vencidos = request.args.get('filtro_vencidos', type=int) == 1
+    filtro = (request.args.get('filtro') or 'geral').strip().lower()
+    if filtro not in ('geral', 'bacalhau'):
+        filtro = 'geral'
 
     # Ordenação por data, vencimento ou colunas clicáveis (situacao, forma_pagamento)
     ordenar_por = request.args.get('ordenar_por')
@@ -4932,6 +4935,15 @@ def listar_vendas():
     subq_ids = db.session.query(Venda.id).filter(
         extract('year', Venda.data_venda) == ano_ativo
     )
+    filtro_bacalhau_expr = or_(
+        Produto.nome_produto.ilike('%bacalhau%'),
+        Produto.tipo.ilike('%bacalhau%')
+    )
+    subq_ids = subq_ids.join(Produto, Venda.produto_id == Produto.id)
+    if filtro == 'bacalhau':
+        subq_ids = subq_ids.filter(filtro_bacalhau_expr)
+    else:
+        subq_ids = subq_ids.filter(~filtro_bacalhau_expr)
     if produto_id:
         subq_ids = subq_ids.filter(Venda.produto_id == produto_id)
     if cliente_id:
@@ -5215,27 +5227,28 @@ def listar_vendas():
     todos_clientes = Cliente.query.order_by(Cliente.nome_cliente).limit(500).all()
     todos_produtos = Produto.query.order_by(Produto.nome_produto).limit(500).all()
     
-    # Agregações para os Gráficos (Situação, Forma de Pagamento, Empresa Faturadora)
-    # Volume financeiro: soma de preco_venda * quantidade_venda por categoria
-    try:
-        filtro_ano_venda = extract('year', Venda.data_venda) == ano_ativo
-        soma_total = func.sum(Venda.preco_venda * Venda.quantidade_venda)
-        dist_situacao = db.session.query(Venda.situacao, func.count(Venda.id), soma_total).filter(
-            Venda.situacao != None, filtro_ano_venda
-        ).group_by(Venda.situacao).all()
-        dist_pagamento = db.session.query(Venda.forma_pagamento, func.count(Venda.id), soma_total).filter(
-            Venda.forma_pagamento != None, filtro_ano_venda
-        ).group_by(Venda.forma_pagamento).all()
-        dist_empresa = db.session.query(Venda.empresa_faturadora, func.count(Venda.id), soma_total).filter(
-            Venda.empresa_faturadora != None, filtro_ano_venda
-        ).group_by(Venda.empresa_faturadora).all()
-        graficos_data = {
-            'situacao': {str(k): {'count': c, 'total': float(t or 0)} for k, c, t in dist_situacao if k},
-            'pagamento': {str(k): {'count': c, 'total': float(t or 0)} for k, c, t in dist_pagamento if k},
-            'empresa': {str(k): {'count': c, 'total': float(t or 0)} for k, c, t in dist_empresa if k}
-        }
-    except Exception:
-        graficos_data = {'situacao': {}, 'pagamento': {}, 'empresa': {}}
+    # Agregações para os gráficos com base no MESMO conjunto filtrado da listagem
+    graficos_data = {'situacao': {}, 'pagamento': {}, 'empresa': {}}
+    for v in vendas_raw:
+        total_venda = float(v.calcular_total() or 0)
+
+        situacao = str(v.situacao or '').strip()
+        if situacao:
+            bucket = graficos_data['situacao'].setdefault(situacao, {'count': 0, 'total': 0.0})
+            bucket['count'] += 1
+            bucket['total'] += total_venda
+
+        forma_pag = str(v.forma_pagamento or '').strip()
+        if forma_pag:
+            bucket = graficos_data['pagamento'].setdefault(forma_pag, {'count': 0, 'total': 0.0})
+            bucket['count'] += 1
+            bucket['total'] += total_venda
+
+        empresa = str(v.empresa_faturadora or '').strip()
+        if empresa:
+            bucket = graficos_data['empresa'].setdefault(empresa, {'count': 0, 'total': 0.0})
+            bucket['count'] += 1
+            bucket['total'] += total_venda
     
     return render_template('vendas/listar.html', 
                          pedidos=pedidos_paginados,
@@ -5248,6 +5261,7 @@ def listar_vendas():
                          todos_produtos=todos_produtos,
                          ordem_data=ordem_data,
                          ordenar_por=ordenar_por,
+                         filtro=filtro,
                          filtro_vencidos=filtro_vencidos,
                          graficos_data=graficos_data)
 
