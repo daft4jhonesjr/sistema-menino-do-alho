@@ -1289,17 +1289,25 @@ function confirmarExclusaoMassa() {
     document.addEventListener('click', function(e) {
         var btn = e.target.closest('.btn-status-cheque');
         if (!btn) return;
-        var linha = btn.closest('.linha-cheque');
-        if (!linha) return;
-        var inputStatus = linha.querySelector('.input-status-cheque');
-        if (!inputStatus) return;
 
-        var statusAtual = normalizarStatusCheque(inputStatus.value || btn.textContent);
-        var novoStatus = statusAtual === STATUS_CHEQUE_ENVIADO ? STATUS_CHEQUE_NAO_ENVIADO : STATUS_CHEQUE_ENVIADO;
-        inputStatus.value = novoStatus;
-        aplicarVisualStatusCheque(btn, novoStatus);
+        e.preventDefault();
 
-        var itemId = inputStatus.getAttribute('data-item-id') || linha.getAttribute('data-item-id');
+        var linha = btn.closest('.linha-cheque') || (btn.parentElement && btn.parentElement.parentElement);
+        var inputStatus = linha ? (linha.querySelector('input[name="status_cheque[]"]') || linha.querySelector('.input-status-cheque')) : null;
+
+        var textoAtual = String(btn.innerText || btn.textContent || '').trim().toUpperCase();
+        var novoStatus = (textoAtual === STATUS_CHEQUE_NAO_ENVIADO) ? STATUS_CHEQUE_ENVIADO : STATUS_CHEQUE_NAO_ENVIADO;
+
+        btn.innerText = novoStatus;
+        btn.classList.remove('bg-yellow-100', 'text-yellow-800', 'bg-red-100', 'text-red-800', 'bg-emerald-100', 'text-emerald-800');
+        if (novoStatus === STATUS_CHEQUE_ENVIADO) {
+            btn.classList.add('bg-emerald-100', 'text-emerald-800');
+        } else {
+            btn.classList.add('bg-yellow-100', 'text-yellow-800');
+        }
+        if (inputStatus) inputStatus.value = novoStatus;
+
+        var itemId = (inputStatus && inputStatus.getAttribute('data-item-id')) || (linha && linha.getAttribute('data-item-id'));
         if (itemId) {
             var lista = abas.cheque && abas.cheque.valores ? abas.cheque.valores : [];
             for (var i = 0; i < lista.length; i++) {
