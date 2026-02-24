@@ -9,6 +9,14 @@
         <p class="text-gray-500 dark:text-gray-400">Controle de entradas, saídas e contas bancárias.</p>
     </div>
     <div class="flex flex-col md:flex-row gap-3 w-full md:w-auto mt-4 md:mt-0">
+        <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1">
+            <button type="button" id="btn-modo-lista" class="px-3 py-2 rounded-md text-sm font-semibold text-slate-600 dark:text-slate-300 transition-colors">
+                ☰ Lista
+            </button>
+            <button type="button" id="btn-modo-grade" class="px-3 py-2 rounded-md text-sm font-semibold text-slate-600 dark:text-slate-300 transition-colors">
+                ⊞ Grade
+            </button>
+        </div>
         <button onclick="document.getElementById('modalImportarCaixa').classList.remove('hidden');travarFundo();" class="w-full md:w-auto bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 px-5 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center justify-center gap-2 transition-colors">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
             Importar Planilha
@@ -56,7 +64,7 @@
             Apagar Selecionados
         </button>
     </div>
-    <div class="space-y-4">
+    <div id="container-listagem-caixa" class="space-y-4">
     {% for chave, grupo in lancamentos_agrupados.items() %}
     <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
         <button type="button" onclick="toggleMesCaixa('{{ grupo.id_html }}', 'icon-{{ grupo.id_html }}')" class="w-full flex flex-col md:flex-row justify-between items-start md:items-center p-4 bg-gray-50 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors border-b border-gray-100 dark:border-gray-700">
@@ -126,7 +134,7 @@
         </button>
         <div id="{{ grupo.id_html }}" class="transition-all duration-300 {% if chave != mes_atual_str %}hidden{% endif %}">
             <div class="w-full overflow-x-auto pb-2">
-                <table class="w-full min-w-max text-left whitespace-nowrap">
+                <table class="caixa-tabela w-full min-w-max text-left whitespace-nowrap">
                     <thead class="bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-xs uppercase font-bold border-b border-gray-100 dark:border-gray-700">
                         <tr>
                             <th class="w-12 px-6 py-3">
@@ -151,14 +159,14 @@
                         {% set row_class = "border-l-4 border-l-transparent hover:bg-gray-100 dark:hover:bg-gray-700" ~ (" bg-white dark:bg-gray-800" if loop.index is odd else " bg-gray-50/60 dark:bg-gray-800/50") %}
                         {% endif %}
                         <tr class="{{ row_class }} transition-colors duration-200 text-gray-700 dark:text-gray-300 border-b border-gray-100 dark:border-gray-800" data-lanc-id="{{ l.id }}" data-lanc-data="{{ l.data.strftime('%Y-%m-%d') }}" data-lanc-desc="{{ l.descricao|e }}" data-lanc-categoria="{{ l.categoria|e }}" data-lanc-tipo="{{ l.tipo }}" data-lanc-forma="{{ l.forma_pagamento|e }}" data-lanc-valor="{{ l.valor }}">
-                            <td class="px-6 py-3">
+                            <td class="px-6 py-3" data-label="Selecionar">
                                 <input type="checkbox" name="lancamento_ids" value="{{ l.id }}" onchange="atualizarBarraMassa()" class="check-item-caixa item-grupo-{{ grupo.id_html }} w-4 h-4 text-emerald-600 bg-gray-100 border-gray-300 rounded focus:ring-emerald-500 dark:bg-gray-700 dark:border-gray-600">
                             </td>
-                            <td class="px-6 py-3 text-gray-500 dark:text-gray-400">{{ l.data.strftime('%d/%m/%Y') }}</td>
-                            <td class="px-6 py-3 font-medium text-gray-900 dark:text-gray-100">{{ l.descricao }}</td>
-                            <td class="px-6 py-3 text-gray-500 dark:text-gray-400"><span class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-xs">{{ l.categoria }}</span></td>
-                            <td class="px-6 py-3"><span class="bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-2 py-1 rounded text-xs font-bold">{{ l.forma_pagamento }}</span></td>
-                            <td class="px-6 py-3 text-center">
+                            <td class="px-6 py-3 text-gray-500 dark:text-gray-400" data-label="Data">{{ l.data.strftime('%d/%m/%Y') }}</td>
+                            <td class="px-6 py-3 font-medium text-gray-900 dark:text-gray-100" data-label="Descrição">{{ l.descricao }}</td>
+                            <td class="px-6 py-3 text-gray-500 dark:text-gray-400" data-label="Categoria"><span class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-xs">{{ l.categoria }}</span></td>
+                            <td class="px-6 py-3" data-label="Conta/Pagamento"><span class="bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-2 py-1 rounded text-xs font-bold">{{ l.forma_pagamento }}</span></td>
+                            <td class="px-6 py-3 text-center" data-label="Status Cheque">
                                 {% if (l.forma_pagamento or '')|lower == 'cheque' %}
                                     {% if (l.status_envio or 'Não Enviado') == 'Enviado' %}
                                     <span class="inline-flex items-center bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-2 py-1 rounded text-xs font-bold">Enviado</span>
@@ -169,10 +177,10 @@
                                 <span class="text-gray-400 dark:text-gray-500 text-xs">—</span>
                                 {% endif %}
                             </td>
-                            <td class="px-6 py-3 text-right font-bold valor-financeiro {% if l.tipo == 'ENTRADA' %}text-emerald-600 dark:text-emerald-400{% else %}text-red-600 dark:text-red-400{% endif %}">
+                            <td class="px-6 py-3 text-right font-bold valor-financeiro {% if l.tipo == 'ENTRADA' %}text-emerald-600 dark:text-emerald-400{% else %}text-red-600 dark:text-red-400{% endif %}" data-label="Valor">
                                 {% if l.tipo == 'ENTRADA' %}+ {% else %}- {% endif %}{{ l.valor|formato_moeda }}
                             </td>
-                            <td class="px-6 py-3 text-center">
+                            <td class="px-6 py-3 text-center" data-label="Ações">
                                 {% if (l.forma_pagamento or '')|lower == 'cheque' %}
                                 <form method="post" action="{{ url_for('alternar_status_envio_cheque', id=l.id) }}" class="inline mr-1">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
@@ -684,6 +692,61 @@ function confirmarExclusaoMassa() {
 
 <style>
     #conteudo-cheque summary::-webkit-details-marker { display: none; }
+
+    #container-listagem-caixa.modo-grade .caixa-tabela thead {
+        display: none;
+    }
+    #container-listagem-caixa.modo-grade .caixa-tabela,
+    #container-listagem-caixa.modo-grade .caixa-tabela tbody,
+    #container-listagem-caixa.modo-grade .caixa-tabela tr,
+    #container-listagem-caixa.modo-grade .caixa-tabela td {
+        display: block;
+        width: 100%;
+        white-space: normal;
+    }
+    #container-listagem-caixa.modo-grade .caixa-tabela tr {
+        margin-bottom: 1rem;
+        padding: 0.75rem;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        border-radius: 0.75rem;
+        background: rgba(255, 255, 255, 0.98);
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+    }
+    .dark #container-listagem-caixa.modo-grade .caixa-tabela tr {
+        background: rgba(30, 41, 59, 0.92);
+        border-color: rgba(71, 85, 105, 0.6);
+        box-shadow: none;
+    }
+    #container-listagem-caixa.modo-grade .caixa-tabela td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.45rem 0.35rem;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+    }
+    .dark #container-listagem-caixa.modo-grade .caixa-tabela td {
+        border-bottom-color: rgba(71, 85, 105, 0.45);
+    }
+    #container-listagem-caixa.modo-grade .caixa-tabela td:last-child {
+        border-bottom: 0;
+        padding-bottom: 0.15rem;
+    }
+    #container-listagem-caixa.modo-grade .caixa-tabela td::before {
+        content: attr(data-label);
+        font-size: 0.75rem;
+        font-weight: 700;
+        color: rgb(100, 116, 139);
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+        flex: 0 0 40%;
+    }
+    .dark #container-listagem-caixa.modo-grade .caixa-tabela td::before {
+        color: rgb(148, 163, 184);
+    }
+    #container-listagem-caixa.modo-grade .caixa-tabela td[data-label="Selecionar"]::before {
+        content: "Seleção";
+    }
 </style>
 
 <script>
@@ -1509,6 +1572,40 @@ function confirmarExclusaoMassa() {
     window.abrirModalContagemDinheiro = abrir;
     window.fecharModalContagemDinheiro = fechar;
     window.mudarAbaContagem = mudarAba;
+})();
+</script>
+<script>
+(function() {
+    var container = document.getElementById('container-listagem-caixa');
+    var btnLista = document.getElementById('btn-modo-lista');
+    var btnGrade = document.getElementById('btn-modo-grade');
+    if (!container || !btnLista || !btnGrade) return;
+
+    function setModoVisualizacao(modo) {
+        var isGrade = (modo === 'grade');
+        if (isGrade) {
+            container.classList.add('modo-grade');
+            btnGrade.classList.add('bg-slate-700', 'text-emerald-500');
+            btnLista.classList.remove('bg-slate-700', 'text-emerald-500');
+        } else {
+            container.classList.remove('modo-grade');
+            btnLista.classList.add('bg-slate-700', 'text-emerald-500');
+            btnGrade.classList.remove('bg-slate-700', 'text-emerald-500');
+        }
+        localStorage.setItem('preferencia_visualizacao_caixa', isGrade ? 'grade' : 'lista');
+    }
+
+    var prefs = localStorage.getItem('preferencia_visualizacao_caixa');
+    if (prefs) {
+        setModoVisualizacao(prefs);
+    } else if (window.innerWidth < 1024) {
+        setModoVisualizacao('grade');
+    } else {
+        setModoVisualizacao('lista');
+    }
+
+    btnLista.addEventListener('click', function() { setModoVisualizacao('lista'); });
+    btnGrade.addEventListener('click', function() { setModoVisualizacao('grade'); });
 })();
 </script>
 {% endblock %}
