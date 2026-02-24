@@ -1299,11 +1299,19 @@ function confirmarExclusaoMassa() {
         var novoStatus = (textoAtual === STATUS_CHEQUE_NAO_ENVIADO) ? STATUS_CHEQUE_ENVIADO : STATUS_CHEQUE_NAO_ENVIADO;
 
         btn.innerText = novoStatus;
-        btn.classList.remove('bg-yellow-100', 'text-yellow-800', 'bg-red-100', 'text-red-800', 'bg-emerald-100', 'text-emerald-800');
+        btn.className = btn.className
+            .replace('bg-yellow-100', 'bg-emerald-100')
+            .replace('text-yellow-800', 'text-emerald-800')
+            .replace('bg-emerald-100', 'bg-yellow-100')
+            .replace('text-emerald-800', 'text-yellow-800');
         if (novoStatus === STATUS_CHEQUE_ENVIADO) {
-            btn.classList.add('bg-emerald-100', 'text-emerald-800');
+            btn.className = btn.className
+                .replace('bg-yellow-100', 'bg-emerald-100')
+                .replace('text-yellow-800', 'text-emerald-800');
         } else {
-            btn.classList.add('bg-yellow-100', 'text-yellow-800');
+            btn.className = btn.className
+                .replace('bg-emerald-100', 'bg-yellow-100')
+                .replace('text-emerald-800', 'text-yellow-800');
         }
         if (inputStatus) inputStatus.value = novoStatus;
 
@@ -1318,7 +1326,7 @@ function confirmarExclusaoMassa() {
             }
         }
         salvar('cheque');
-    });
+    }, true);
     bindDelegacaoMascara('dinheiro');
     bindDelegacaoMascara('cheque');
 
