@@ -661,6 +661,7 @@
     var marcaAsterisco = document.getElementById('marca-asterisco');
     var OPCOES_NUMERICAS = ['4', '5', '6', '7', '8', '9', '10'];
     var OPCOES_SACOLA = ['P', 'M', 'G', 'S/N'];
+    var OPCOES_BACALHAU = ['7/9', '10/12', '13/15', '16/20', 'DESFIADO'];
 
     function resetBtnSalvar() {
         if (!btnSalvar) return;
@@ -706,6 +707,11 @@
             if (containerTam) containerTam.style.display = 'block';
             if (nacionalidadeSelect) { nacionalidadeSelect.required = true; nacionalidadeSelect.setAttribute('name', 'nacionalidade'); if (nacionalidadeHidden) nacionalidadeHidden.removeAttribute('name'); if (nacionalidadeSelect.value === 'NA' || nacionalidadeSelect.value === 'N/A') nacionalidadeSelect.value = ''; }
             if (tamanhoSelect) { tamanhoSelect.required = true; if (tamanhoSelect.value === 'NA' || tamanhoSelect.value === 'N/A') tamanhoSelect.value = ''; }
+        } else if (isBacalhau()) {
+            if (containerNac) containerNac.style.display = 'none';
+            if (containerTam) containerTam.style.display = 'block';
+            if (nacionalidadeSelect) { nacionalidadeSelect.required = false; nacionalidadeSelect.removeAttribute('name'); if (nacionalidadeHidden) { nacionalidadeHidden.setAttribute('name', 'nacionalidade'); nacionalidadeHidden.value = 'NA'; } }
+            if (tamanhoSelect) { tamanhoSelect.required = true; if (tamanhoSelect.value === 'NA' || tamanhoSelect.value === 'N/A') tamanhoSelect.value = ''; }
         } else if (isSacola()) {
             if (containerNac) containerNac.style.display = 'none';
             if (containerTam) containerTam.style.display = 'block';
@@ -732,8 +738,13 @@
             if (nacionalidadeSelect.value === 'N/A' || nacionalidadeSelect.value === 'NA') {
                 nacionalidadeSelect.value = '';
             }
-            opts = OPCOES_NUMERICAS;
-            keepVal = OPCOES_NUMERICAS.indexOf(initialTamanho) >= 0 ? initialTamanho : '';
+            if (isBacalhau()) {
+                opts = OPCOES_BACALHAU;
+                keepVal = OPCOES_BACALHAU.indexOf(initialTamanho) >= 0 ? initialTamanho : '';
+            } else {
+                opts = OPCOES_NUMERICAS;
+                keepVal = OPCOES_NUMERICAS.indexOf(initialTamanho) >= 0 ? initialTamanho : '';
+            }
             marcaInput.disabled = false;
             marcaHidden.removeAttribute('name');
             marcaInput.setAttribute('name', 'marca');
@@ -763,7 +774,7 @@
         var tamanhoHTML = '<option value="">Selecione...</option>';
         
         // Regra de negócio: ALHO não permite N/A no tamanho
-        if (!isSacola() && !isAlho()) {
+        if (!isSacola() && !isAlho() && !isBacalhau()) {
             tamanhoHTML += '<option value="NA"' + (keepVal === 'NA' ? ' selected' : '') + '>N/A (Não se aplica)</option>';
         }
         

@@ -4109,6 +4109,7 @@ def listar_produtos():
 @login_required
 def novo_produto():
     if request.method == 'POST':
+        tamanhos_bacalhau_validos = {'7/9', '10/12', '13/15', '16/20', 'DESFIADO'}
         fornecedor = request.form.get('fornecedor', '').strip()
         preco_custo = request.form.get('preco_custo', '').strip()
         caminhoneiro = request.form.get('caminhoneiro', '').strip()
@@ -4137,6 +4138,7 @@ def novo_produto():
         nacionalidade = request.form.get('nacionalidade', '').strip()
         marca = request.form.get('marca', '').strip()
         tamanho = request.form.get('tamanho', '').strip()
+        tamanho_bacalhau = (request.form.get('tamanho', '') or '').strip().upper()
         try:
             quantidade_entrada = int(request.form.get('quantidade_entrada', 0))
         except (ValueError, TypeError):
@@ -4161,6 +4163,13 @@ def novo_produto():
                 marca = 'NORGY'
             if not fornecedor:
                 fornecedor = 'ARMAZEM LACERDA'
+            if tamanho_bacalhau not in tamanhos_bacalhau_validos:
+                msg = '❌ Ops! Selecione um tamanho válido para BACALHAU (7/9, 10/12, 13/15, 16/20 ou DESFIADO).'
+                if _is_ajax():
+                    return jsonify(ok=False, mensagem=msg), 400
+                flash(msg, 'error')
+                return render_template('produtos/formulario.html', produto=None)
+            tamanho = tamanho_bacalhau
         try:
             nacionalidade, marca, tamanho = _validar_sacola(tipo, nacionalidade, marca, tamanho)
         except ValueError as e:
@@ -4169,7 +4178,10 @@ def novo_produto():
             flash(str(e), 'error')
             return render_template('produtos/formulario.html', produto=None)
 
-        nome_produto = gerar_nome_produto(tipo, nacionalidade, marca, data_chegada, tamanho)
+        if tipo_upper == 'BACALHAU':
+            nome_produto = f"{tipo_upper} {(marca or 'NORGY').strip().upper()} {tamanho}".strip()
+        else:
+            nome_produto = gerar_nome_produto(tipo, nacionalidade, marca, data_chegada, tamanho)
         produto = Produto(
             tipo=tipo,
             nacionalidade=nacionalidade,
@@ -4217,6 +4229,7 @@ def novo_produto():
 def editar_produto(id):
     produto = Produto.query.get_or_404(id)
     if request.method == 'POST':
+        tamanhos_bacalhau_validos = {'7/9', '10/12', '13/15', '16/20', 'DESFIADO'}
         # Validação de campos obrigatórios
         fornecedor = request.form.get('fornecedor', '').strip()
         preco_custo = request.form.get('preco_custo', '').strip()
@@ -4237,6 +4250,7 @@ def editar_produto(id):
         nacionalidade = request.form.get('nacionalidade', '').strip()
         marca = request.form.get('marca', '').strip()
         tamanho = request.form.get('tamanho', '').strip()
+        tamanho_bacalhau = (request.form.get('tamanho', '') or '').strip().upper()
         try:
             quantidade_entrada = int(request.form.get('quantidade_entrada', 0))
         except (ValueError, TypeError):
@@ -4252,6 +4266,10 @@ def editar_produto(id):
                 marca = 'NORGY'
             if not fornecedor:
                 fornecedor = 'ARMAZEM LACERDA'
+            if tamanho_bacalhau not in tamanhos_bacalhau_validos:
+                flash('Selecione um tamanho válido para BACALHAU (7/9, 10/12, 13/15, 16/20 ou DESFIADO).', 'error')
+                return redirect(url_for('listar_produtos'))
+            tamanho = tamanho_bacalhau
         
         # Atualizar data de chegada se fornecida, senão manter a atual
         data_chegada_raw = request.form.get('data_chegada')
@@ -4261,7 +4279,10 @@ def editar_produto(id):
             data_chegada = produto.data_chegada
         
         # EDIÇÃO MANUAL: Sempre gerar nome_produto automaticamente via concatenação
-        nome_produto = gerar_nome_produto(tipo, nacionalidade, marca, data_chegada, tamanho)
+        if tipo_upper == 'BACALHAU':
+            nome_produto = f"{tipo_upper} {(marca or 'NORGY').strip().upper()} {tamanho}".strip()
+        else:
+            nome_produto = gerar_nome_produto(tipo, nacionalidade, marca, data_chegada, tamanho)
         
         # Se houver nova entrada, somar ao estoque atual
         if quantidade_entrada > 0 and tipo_upper != 'BACALHAU':
