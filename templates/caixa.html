@@ -645,7 +645,14 @@ function confirmarExclusaoMassa() {
                 <span class="w-32 sm:w-40 text-center">Valor (R$)</span>
                 <span class="w-10 text-center">Ação</span>
             </div>
-            <div id="lista-valores-cheque" class="space-y-2"></div>
+            <div id="lista-cheques-pendentes" class="space-y-2"></div>
+            <details class="mt-4 group rounded-md border border-slate-700 bg-slate-800/50">
+                <summary class="cursor-pointer p-3 font-semibold text-slate-300 flex justify-between items-center list-none">
+                    <span>📁 Cheques Enviados</span>
+                    <span class="transition group-open:rotate-180">▼</span>
+                </summary>
+                <div id="lista-cheques-enviados" class="p-2 space-y-2 border-t border-slate-700"></div>
+            </details>
             <button type="button" id="btn-add-cheque" class="mt-4 w-full py-2.5 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-400 dark:hover:border-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all font-medium flex justify-center items-center gap-2">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
                 Adicionar Cheque
@@ -670,6 +677,10 @@ function confirmarExclusaoMassa() {
     </div>
 </div>
 
+<style>
+    #conteudo-cheque summary::-webkit-details-marker { display: none; }
+</style>
+
 <script>
 (function() {
     var abaAtiva = 'dinheiro';
@@ -687,7 +698,8 @@ function confirmarExclusaoMassa() {
         },
         cheque: {
             key: 'contagemChequeApp',
-            containerId: 'lista-valores-cheque',
+            containerId: 'lista-cheques-pendentes',
+            containerEnviadosId: 'lista-cheques-enviados',
             conteudoId: 'conteudo-cheque',
             tabId: 'tab-cheque',
             btnAddId: 'btn-add-cheque',
@@ -884,6 +896,14 @@ function confirmarExclusaoMassa() {
         return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
+    function getContainerChequePorStatus(status) {
+        var statusNorm = normalizarStatusCheque(status);
+        if (statusNorm === STATUS_CHEQUE_ENVIADO) {
+            return document.getElementById('lista-cheques-enviados');
+        }
+        return document.getElementById('lista-cheques-pendentes');
+    }
+
     function aplicarVisualStatusCheque(btn, status) {
         if (!btn) return;
         var statusNormalizado = normalizarStatusCheque(status);
@@ -936,7 +956,7 @@ function confirmarExclusaoMassa() {
     }
 
     function atualizarTotalCheques() {
-        return calcularSoma('#lista-valores-cheque input[name="valor_cheque[]"], #lista-valores-cheque .input-valor-cheque');
+        return calcularSoma('#lista-cheques-pendentes input[name="valor_cheque[]"], #lista-cheques-pendentes .input-valor-cheque, #lista-cheques-enviados input[name="valor_cheque[]"], #lista-cheques-enviados .input-valor-cheque');
     }
 
     function atualizarRodape() {
@@ -955,8 +975,16 @@ function confirmarExclusaoMassa() {
     function renderizar(tipo) {
         var cfg = abas[tipo];
         var container = document.getElementById(cfg.containerId);
-        if (!container) return;
-        container.innerHTML = '';
+        var containerEnviados = null;
+        if (tipo === 'cheque') {
+            containerEnviados = document.getElementById(cfg.containerEnviadosId);
+            if (!container || !containerEnviados) return;
+            container.innerHTML = '';
+            containerEnviados.innerHTML = '';
+        } else {
+            if (!container) return;
+            container.innerHTML = '';
+        }
         var corRing = cfg.cor === 'emerald' ? 'focus:ring-emerald-500 focus:border-emerald-500' : 'focus:ring-blue-500 focus:border-blue-500';
         var isCheque = (tipo === 'cheque');
 
@@ -1077,12 +1105,22 @@ function confirmarExclusaoMassa() {
                 div.appendChild(btnRem);
             }
 
-            container.appendChild(div);
+            if (isCheque) {
+                var alvoCheque = getContainerChequePorStatus(item.status);
+                if (alvoCheque) {
+                    alvoCheque.appendChild(div);
+                } else {
+                    container.appendChild(div);
+                }
+            } else {
+                container.appendChild(div);
+            }
         }
 
         atualizarRodape();
 
-        var valorInputs = container.querySelectorAll('input[inputmode="decimal"]');
+        var focoContainer = (isCheque ? document.getElementById('lista-cheques-pendentes') : container);
+        var valorInputs = focoContainer ? focoContainer.querySelectorAll('input[inputmode="decimal"]') : [];
         if (valorInputs.length > 0) {
             var ultimo = valorInputs[valorInputs.length - 1];
             if (!ultimo.value) ultimo.focus();
@@ -1161,29 +1199,37 @@ function confirmarExclusaoMassa() {
 
     function bindDelegacaoMascara(tipo) {
         var cfg = abas[tipo];
+        var containers = [];
         var container = document.getElementById(cfg.containerId);
-        if (!container || container.getAttribute('data-mask-bound') === '1') return;
-        container.setAttribute('data-mask-bound', '1');
-        container.addEventListener('input', function(e) {
-            var alvo = e.target;
-            if (!alvo || !alvo.matches('input[name="valor_gaveta[]"], input.input-valor-dinheiro, input[name="valor_cheque[]"], input.input-valor-cheque, input.input-valor-gaveta')) return;
+        if (container) containers.push(container);
+        if (tipo === 'cheque') {
+            var enviados = document.getElementById(cfg.containerEnviadosId);
+            if (enviados) containers.push(enviados);
+        }
+        containers.forEach(function(c) {
+            if (!c || c.getAttribute('data-mask-bound') === '1') return;
+            c.setAttribute('data-mask-bound', '1');
+            c.addEventListener('input', function(e) {
+                var alvo = e.target;
+                if (!alvo || !alvo.matches('input[name="valor_gaveta[]"], input.input-valor-dinheiro, input[name="valor_cheque[]"], input.input-valor-cheque, input.input-valor-gaveta')) return;
 
-            var mascarado = formatarMoedaBRDeInput(alvo.value);
-            alvo.value = mascarado;
+                var mascarado = formatarMoedaBRDeInput(alvo.value);
+                alvo.value = mascarado;
 
-            var itemId = alvo.getAttribute('data-item-id');
-            var tipoAlvo = alvo.getAttribute('data-tipo-gaveta') || tipo;
-            if (!itemId || !abas[tipoAlvo]) return;
+                var itemId = alvo.getAttribute('data-item-id');
+                var tipoAlvo = alvo.getAttribute('data-tipo-gaveta') || tipo;
+                if (!itemId || !abas[tipoAlvo]) return;
 
-            var lista = abas[tipoAlvo].valores;
-            for (var i = 0; i < lista.length; i++) {
-                if (String(lista[i].id) === String(itemId)) {
-                    var n = parseMoedaBR(mascarado);
-                    lista[i].valor = n ? n.toFixed(2) : '';
-                    break;
+                var lista = abas[tipoAlvo].valores;
+                for (var i = 0; i < lista.length; i++) {
+                    if (String(lista[i].id) === String(itemId)) {
+                        var n = parseMoedaBR(mascarado);
+                        lista[i].valor = n ? n.toFixed(2) : '';
+                        break;
+                    }
                 }
-            }
-            atualizarRodape();
+                atualizarRodape();
+            });
         });
     }
 
@@ -1196,7 +1242,7 @@ function confirmarExclusaoMassa() {
         var cfg = abas[tipo];
         cfg.valores.push(novoItem);
 
-        var container = document.getElementById(cfg.containerId);
+        var container = (tipo === 'cheque') ? document.getElementById('lista-cheques-pendentes') : document.getElementById(cfg.containerId);
         if (!container) {
             renderizar(tipo);
             return;
@@ -1294,9 +1340,15 @@ function confirmarExclusaoMassa() {
 
         var linha = btn.closest('.linha-cheque') || (btn.parentElement && btn.parentElement.parentElement);
         var inputStatus = linha ? (linha.querySelector('input[name="status_cheque[]"]') || linha.querySelector('.input-status-cheque')) : null;
+        var listaPendentes = document.getElementById('lista-cheques-pendentes');
+        var listaEnviados = document.getElementById('lista-cheques-enviados');
 
         var textoAtual = String(btn.innerText || btn.textContent || '').trim().toUpperCase();
         var novoStatus = (textoAtual === STATUS_CHEQUE_NAO_ENVIADO) ? STATUS_CHEQUE_ENVIADO : STATUS_CHEQUE_NAO_ENVIADO;
+        if (novoStatus === STATUS_CHEQUE_ENVIADO) {
+            var confirmacao = confirm('Você tem certeza que deseja marcar este cheque como ENVIADO?');
+            if (!confirmacao) return;
+        }
 
         btn.innerText = novoStatus;
         btn.className = btn.className
@@ -1314,6 +1366,14 @@ function confirmarExclusaoMassa() {
                 .replace('text-emerald-800', 'text-yellow-800');
         }
         if (inputStatus) inputStatus.value = novoStatus;
+
+        if (linha && listaPendentes && listaEnviados) {
+            if (novoStatus === STATUS_CHEQUE_ENVIADO) {
+                listaEnviados.appendChild(linha);
+            } else {
+                listaPendentes.appendChild(linha);
+            }
+        }
 
         var itemId = (inputStatus && inputStatus.getAttribute('data-item-id')) || (linha && linha.getAttribute('data-item-id'));
         if (itemId) {
