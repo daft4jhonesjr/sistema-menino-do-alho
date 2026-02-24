@@ -3063,9 +3063,11 @@ def _normalizar_itens_contagem(itens, incluir_nome=False):
         valor = float(_limpar_valor_moeda(item.get('valor')))
         if incluir_nome:
             nome = (item.get('nome') or '').strip()
-            status = (item.get('status') or 'Não Enviado').strip()
-            if status not in ('Enviado', 'Não Enviado'):
-                status = 'Não Enviado'
+            status_raw = str(item.get('status') or '').strip().upper()
+            if status_raw in ('ENVIADO',):
+                status = 'ENVIADO'
+            else:
+                status = 'NÃO ENVIADO'
             if valor <= 0 and not nome:
                 continue
             itens_norm.append({'nome': nome, 'valor': round(valor, 2), 'status': status})

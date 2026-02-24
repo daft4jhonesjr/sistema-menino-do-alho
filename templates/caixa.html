@@ -698,6 +698,8 @@ function confirmarExclusaoMassa() {
     };
     var rotaSalvarContagem = '{{ url_for("salvar_contagem_gaveta") }}';
     var rotaCarregarContagem = '{{ url_for("carregar_contagem_gaveta") }}';
+    var STATUS_CHEQUE_ENVIADO = 'ENVIADO';
+    var STATUS_CHEQUE_NAO_ENVIADO = 'NÃO ENVIADO';
 
     function mostrarToast(msg, tipo) {
         if (typeof showToast === 'function') {
@@ -705,6 +707,12 @@ function confirmarExclusaoMassa() {
             return;
         }
         alert(msg);
+    }
+
+    function normalizarStatusCheque(status) {
+        var s = String(status || '').trim().toUpperCase();
+        if (s === STATUS_CHEQUE_ENVIADO || s === 'ENVIADO') return STATUS_CHEQUE_ENVIADO;
+        return STATUS_CHEQUE_NAO_ENVIADO;
     }
 
     function aplicarEstadoServidor(estado) {
@@ -717,7 +725,7 @@ function confirmarExclusaoMassa() {
         });
         abas.cheque.valores = cheques.map(function(item, idx) {
             var valor = parseMoedaBR(item && item.valor);
-            var statusCheque = (item && item.status === 'Enviado') ? 'Enviado' : 'Não Enviado';
+            var statusCheque = normalizarStatusCheque(item && item.status);
             return {
                 id: Date.now() + 1000 + idx,
                 nome: (item && item.nome ? String(item.nome) : ''),
@@ -727,7 +735,7 @@ function confirmarExclusaoMassa() {
         });
 
         if (!abas.dinheiro.valores.length) abas.dinheiro.valores = [{ id: Date.now(), valor: '' }];
-        if (!abas.cheque.valores.length) abas.cheque.valores = [{ id: Date.now() + 1, nome: '', valor: '', status: 'Não Enviado' }];
+        if (!abas.cheque.valores.length) abas.cheque.valores = [{ id: Date.now() + 1, nome: '', valor: '', status: STATUS_CHEQUE_NAO_ENVIADO }];
     }
 
     function coletarEstadoAtual() {
@@ -741,7 +749,7 @@ function confirmarExclusaoMassa() {
         abas.cheque.valores.forEach(function(item) {
             var nome = (item.nome || '').trim();
             var valor = parseMoedaBR(item.valor);
-            var status = item.status === 'Enviado' ? 'Enviado' : 'Não Enviado';
+            var status = normalizarStatusCheque(item.status);
             if (nome || valor > 0) {
                 cheques.push({ nome: nome, valor: valor.toFixed(2), status: status });
             }
@@ -821,7 +829,7 @@ function confirmarExclusaoMassa() {
             cfg.valores = cfg.valores.map(function(item) {
                 var copia = Object.assign({}, item || {});
                 copia.nome = copia.nome || '';
-                copia.status = copia.status === 'Enviado' ? 'Enviado' : 'Não Enviado';
+                copia.status = normalizarStatusCheque(copia.status);
                 return copia;
             });
         }
@@ -878,10 +886,10 @@ function confirmarExclusaoMassa() {
 
     function aplicarVisualStatusCheque(btn, status) {
         if (!btn) return;
-        var statusNormalizado = status === 'Enviado' ? 'Enviado' : 'Não Enviado';
+        var statusNormalizado = normalizarStatusCheque(status);
         btn.textContent = statusNormalizado;
         btn.classList.remove('bg-yellow-100', 'text-yellow-800', 'bg-emerald-100', 'text-emerald-800');
-        if (statusNormalizado === 'Enviado') {
+        if (statusNormalizado === STATUS_CHEQUE_ENVIADO) {
             btn.classList.add('bg-emerald-100', 'text-emerald-800');
         } else {
             btn.classList.add('bg-yellow-100', 'text-yellow-800');
@@ -965,7 +973,7 @@ function confirmarExclusaoMassa() {
             div.appendChild(numSpan);
 
             if (isCheque) {
-                item.status = item.status === 'Enviado' ? 'Enviado' : 'Não Enviado';
+                item.status = normalizarStatusCheque(item.status);
                 var nomeInput = document.createElement('input');
                 nomeInput.type = 'text';
                 nomeInput.placeholder = 'Nome do cliente';
@@ -1072,8 +1080,8 @@ function confirmarExclusaoMassa() {
         var nomeHtml = '';
         var anexoChequeHtml = '';
         if (isCheque) {
-            var statusCheque = item.status === 'Enviado' ? 'Enviado' : 'Não Enviado';
-            var classeStatus = statusCheque === 'Enviado' ? 'bg-emerald-100 text-emerald-800' : 'bg-yellow-100 text-yellow-800';
+            var statusCheque = normalizarStatusCheque(item.status);
+            var classeStatus = statusCheque === STATUS_CHEQUE_ENVIADO ? 'bg-emerald-100 text-emerald-800' : 'bg-yellow-100 text-yellow-800';
             nomeHtml = '<input type="text" class="input-nome-cheque flex-1 px-3 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm" placeholder="Nome do cliente" value="">';
             anexoChequeHtml = ''
                 + '<label class="cursor-pointer text-gray-400 hover:text-emerald-500 mx-2 flex items-center justify-center transition-colors label-escanear-cheque" title="Escanear Cheque">'
@@ -1123,7 +1131,7 @@ function confirmarExclusaoMassa() {
             btnRem.addEventListener('click', function() { remLinha(tipo, item.id); });
         }
         var inputStatus = linhaEl.querySelector('.input-status-cheque');
-        if (inputStatus) inputStatus.value = item.status === 'Enviado' ? 'Enviado' : 'Não Enviado';
+        if (inputStatus) inputStatus.value = normalizarStatusCheque(item.status);
         var btnStatus = linhaEl.querySelector('.btn-status-cheque');
         if (btnStatus) aplicarVisualStatusCheque(btnStatus, item.status);
     }
@@ -1160,7 +1168,7 @@ function confirmarExclusaoMassa() {
         var novoItem = { id: Date.now(), valor: '' };
         if (tipo === 'cheque') {
             novoItem.nome = '';
-            novoItem.status = 'Não Enviado';
+            novoItem.status = STATUS_CHEQUE_NAO_ENVIADO;
         }
         var cfg = abas[tipo];
         cfg.valores.push(novoItem);
@@ -1263,7 +1271,8 @@ function confirmarExclusaoMassa() {
         var inputStatus = linha.querySelector('.input-status-cheque');
         if (!inputStatus) return;
 
-        var novoStatus = inputStatus.value === 'Enviado' ? 'Não Enviado' : 'Enviado';
+        var statusAtual = normalizarStatusCheque(inputStatus.value || btn.textContent);
+        var novoStatus = statusAtual === STATUS_CHEQUE_ENVIADO ? STATUS_CHEQUE_NAO_ENVIADO : STATUS_CHEQUE_ENVIADO;
         inputStatus.value = novoStatus;
         aplicarVisualStatusCheque(btn, novoStatus);
 
