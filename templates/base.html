@@ -285,8 +285,17 @@
                 isPulling = false;
             };
 
+            var toqueDentroDeModal = function(target) {
+                if (!target || !target.closest) return false;
+                return !!target.closest('.fixed.z-50, [role="dialog"], .modal-container, .bg-black\\/50, .bg-black\\/60, #modal-contagem-dinheiro');
+            };
+
             // Início do toque
             document.addEventListener('touchstart', function(e) {
+                if (toqueDentroDeModal(e.target) || document.body.classList.contains('modal-aberto')) {
+                    isPulling = false;
+                    return;
+                }
                 if (getScrollTop() <= 0) {
                     startY = e.touches[0].clientY;
                     currentY = startY;
@@ -297,6 +306,10 @@
 
             // Movimento (PRECISA DE PASSIVE: FALSE para o preventDefault funcionar)
             document.addEventListener('touchmove', function(e) {
+                if (toqueDentroDeModal(e.target) || document.body.classList.contains('modal-aberto')) {
+                    isPulling = false;
+                    return;
+                }
                 if (!isPulling) return;
 
                 currentY = e.touches[0].clientY;
