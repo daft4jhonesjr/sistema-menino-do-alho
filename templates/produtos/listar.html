@@ -250,6 +250,7 @@
                             <option value="ALHO">ALHO</option>
                             <option value="SACOLA">SACOLA</option>
                             <option value="CAFE">CAFE</option>
+                            <option value="BACALHAU">BACALHAU</option>
                         </select>
                     </div>
                     <div class="mb-4">
@@ -259,6 +260,7 @@
                             <option value="DESTAK">DESTAK</option>
                             <option value="PATY">PATY</option>
                             <option value="SERVE BEM">SERVE BEM</option>
+                            <option value="ARMAZEM LACERDA">ARMAZEM LACERDA</option>
                         </select>
                     </div>
                     <div class="mb-4" id="container_nacionalidade">
@@ -343,6 +345,7 @@
                                     <option value="ALHO">ALHO</option>
                                     <option value="SACOLA">SACOLA</option>
                                     <option value="CAFE">CAFE</option>
+                                    <option value="BACALHAU">BACALHAU</option>
                                 </select>
                             </td>
                         </tr>
@@ -400,6 +403,7 @@
                             <option value="ALHO">ALHO</option>
                             <option value="SACOLA">SACOLA</option>
                             <option value="CAFE">CAFE</option>
+                            <option value="BACALHAU">BACALHAU</option>
                         </select>
                     </div>
                     <div class="mb-4">
@@ -408,6 +412,8 @@
                             <option value="">Selecione...</option>
                             <option value="DESTAK">DESTAK</option>
                             <option value="PATY">PATY</option>
+                            <option value="SERVE BEM">SERVE BEM</option>
+                            <option value="ARMAZEM LACERDA">ARMAZEM LACERDA</option>
                         </select>
                     </div>
                     <div class="mb-4">
@@ -649,6 +655,8 @@
     var tamanhoSelect = document.getElementById('tamanho');
     var marcaInput = document.getElementById('marca');
     var precoCustoInput = document.getElementById('preco_custo');
+    var quantidadeEntradaInput = document.getElementById('quantidade_entrada');
+    var fornecedorSelect = document.getElementById('fornecedor');
     var marcaHidden = document.getElementById('marca_hidden');
     var marcaAsterisco = document.getElementById('marca-asterisco');
     var OPCOES_NUMERICAS = ['4', '5', '6', '7', '8', '9', '10'];
@@ -673,6 +681,7 @@
         }
         aplicarModoSacola();
         aplicarModoCafe();
+        aplicarModoBacalhau();
         aplicarVisibilidadeNacTam();
         if (typeof lucide !== 'undefined') lucide.createIcons();
     }
@@ -688,6 +697,7 @@
 
     function isSacola() { return tipoSelect && tipoSelect.value === 'SACOLA'; }
     function isAlho() { return tipoSelect && tipoSelect.value.toUpperCase().includes('ALHO'); }
+    function isBacalhau() { return tipoSelect && tipoSelect.value.toUpperCase().includes('BACALHAU'); }
 
     function aplicarVisibilidadeNacTam() {
         var tipo = (tipoSelect && tipoSelect.value) ? tipoSelect.value.toUpperCase() : '';
@@ -769,7 +779,6 @@
 
     // Função para aplicar automação de CAFÉ
     function aplicarModoCafe() {
-        var fornecedorSelect = document.getElementById('fornecedor');
         if (tipoSelect && tipoSelect.value && tipoSelect.value.toUpperCase().includes('CAFE')) {
             // Define Fornecedor Fixo
             if (fornecedorSelect) {
@@ -797,6 +806,39 @@
         }
     }
 
+    function aplicarModoBacalhau() {
+        if (!tipoSelect) return;
+        if (isBacalhau()) {
+            if (quantidadeEntradaInput) {
+                quantidadeEntradaInput.value = 0;
+                quantidadeEntradaInput.readOnly = true;
+                quantidadeEntradaInput.classList.add('bg-slate-100', 'dark:bg-slate-700', 'cursor-not-allowed');
+            }
+            if (marcaInput && marcaInput.getAttribute('name') === 'marca') {
+                marcaInput.value = 'NORGY';
+            }
+            if (fornecedorSelect) {
+                var alvo = 'ARMAZEM LACERDA';
+                var hasOpt = Array.prototype.some.call(fornecedorSelect.options, function(opt) {
+                    return String(opt.value || '').toUpperCase() === alvo;
+                });
+                if (!hasOpt) {
+                    var opt = document.createElement('option');
+                    opt.value = alvo;
+                    opt.textContent = alvo;
+                    fornecedorSelect.appendChild(opt);
+                }
+                fornecedorSelect.value = alvo;
+            }
+        } else if (quantidadeEntradaInput) {
+            quantidadeEntradaInput.readOnly = false;
+            quantidadeEntradaInput.classList.remove('bg-slate-100', 'dark:bg-slate-700', 'cursor-not-allowed');
+            if (String(quantidadeEntradaInput.value || '') === '0') {
+                quantidadeEntradaInput.value = 1;
+            }
+        }
+    }
+
     if (btnAbrir) btnAbrir.addEventListener('click', abrir);
     if (overlay) overlay.addEventListener('click', fechar);
     if (btnFechar) btnFechar.addEventListener('click', fechar);
@@ -805,12 +847,14 @@
     if (tipoSelect) {
         aplicarModoSacola();
         aplicarModoCafe();
+        aplicarModoBacalhau();
         aplicarVisibilidadeNacTam();
         tipoSelect.addEventListener('change', function() {
             tamanhoSelect.setAttribute('data-initial', tamanhoSelect.value || '');
             if (tipoSelect.value === 'SACOLA' && marcaInput.getAttribute('name') === 'marca') marcaInput.setAttribute('data-initial', marcaInput.value || '');
             aplicarModoSacola();
             aplicarModoCafe();
+            aplicarModoBacalhau();
             aplicarVisibilidadeNacTam();
         });
     }
