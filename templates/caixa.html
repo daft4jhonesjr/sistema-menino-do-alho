@@ -717,15 +717,17 @@ function confirmarExclusaoMassa() {
         });
         abas.cheque.valores = cheques.map(function(item, idx) {
             var valor = parseMoedaBR(item && item.valor);
+            var statusCheque = (item && item.status === 'Enviado') ? 'Enviado' : 'Não Enviado';
             return {
                 id: Date.now() + 1000 + idx,
                 nome: (item && item.nome ? String(item.nome) : ''),
-                valor: valor ? valor.toFixed(2) : ''
+                valor: valor ? valor.toFixed(2) : '',
+                status: statusCheque
             };
         });
 
         if (!abas.dinheiro.valores.length) abas.dinheiro.valores = [{ id: Date.now(), valor: '' }];
-        if (!abas.cheque.valores.length) abas.cheque.valores = [{ id: Date.now() + 1, nome: '', valor: '' }];
+        if (!abas.cheque.valores.length) abas.cheque.valores = [{ id: Date.now() + 1, nome: '', valor: '', status: 'Não Enviado' }];
     }
 
     function coletarEstadoAtual() {
@@ -739,8 +741,9 @@ function confirmarExclusaoMassa() {
         abas.cheque.valores.forEach(function(item) {
             var nome = (item.nome || '').trim();
             var valor = parseMoedaBR(item.valor);
+            var status = item.status === 'Enviado' ? 'Enviado' : 'Não Enviado';
             if (nome || valor > 0) {
-                cheques.push({ nome: nome, valor: valor.toFixed(2) });
+                cheques.push({ nome: nome, valor: valor.toFixed(2), status: status });
             }
         });
 
@@ -814,6 +817,14 @@ function confirmarExclusaoMassa() {
     function carregarDados(tipo) {
         var cfg = abas[tipo];
         try { cfg.valores = JSON.parse(localStorage.getItem(cfg.key)) || []; } catch(_) { cfg.valores = []; }
+        if (tipo === 'cheque') {
+            cfg.valores = cfg.valores.map(function(item) {
+                var copia = Object.assign({}, item || {});
+                copia.nome = copia.nome || '';
+                copia.status = copia.status === 'Enviado' ? 'Enviado' : 'Não Enviado';
+                return copia;
+            });
+        }
         if (!cfg.valores.length) cfg.valores = [{ id: Date.now(), valor: '' }];
     }
     carregarDados('dinheiro');
@@ -863,6 +874,18 @@ function confirmarExclusaoMassa() {
     function formatarMoedaBR(valor) {
         var n = parseMoedaBR(valor);
         return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function aplicarVisualStatusCheque(btn, status) {
+        if (!btn) return;
+        var statusNormalizado = status === 'Enviado' ? 'Enviado' : 'Não Enviado';
+        btn.textContent = statusNormalizado;
+        btn.classList.remove('bg-yellow-100', 'text-yellow-800', 'bg-emerald-100', 'text-emerald-800');
+        if (statusNormalizado === 'Enviado') {
+            btn.classList.add('bg-emerald-100', 'text-emerald-800');
+        } else {
+            btn.classList.add('bg-yellow-100', 'text-yellow-800');
+        }
     }
 
     function salvar(tipo) {
@@ -933,6 +956,8 @@ function confirmarExclusaoMassa() {
             var item = cfg.valores[i];
             var div = document.createElement('div');
             div.className = 'flex items-center gap-2 bg-white dark:bg-gray-800 p-2 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700' + (isCheque ? ' linha-cheque' : '');
+            div.setAttribute('data-item-id', String(item.id));
+            div.setAttribute('data-tipo', tipo);
 
             var numSpan = document.createElement('span');
             numSpan.className = 'text-gray-400 dark:text-gray-500 font-bold text-sm w-6 text-center flex-shrink-0';
@@ -940,6 +965,7 @@ function confirmarExclusaoMassa() {
             div.appendChild(numSpan);
 
             if (isCheque) {
+                item.status = item.status === 'Enviado' ? 'Enviado' : 'Não Enviado';
                 var nomeInput = document.createElement('input');
                 nomeInput.type = 'text';
                 nomeInput.placeholder = 'Nome do cliente';
@@ -1001,6 +1027,22 @@ function confirmarExclusaoMassa() {
                 labelFoto.appendChild(iconeCamera);
 
                 div.appendChild(labelFoto);
+
+                var inputStatus = document.createElement('input');
+                inputStatus.type = 'hidden';
+                inputStatus.name = 'status_cheque[]';
+                inputStatus.className = 'input-status-cheque';
+                inputStatus.value = item.status;
+                inputStatus.setAttribute('data-item-id', String(item.id));
+                div.appendChild(inputStatus);
+
+                var btnStatus = document.createElement('button');
+                btnStatus.type = 'button';
+                btnStatus.className = 'btn-status-cheque ml-2 px-2 py-1 text-[10px] font-bold uppercase rounded transition-colors';
+                btnStatus.title = 'Clique para mudar o status';
+                btnStatus.setAttribute('data-item-id', String(item.id));
+                aplicarVisualStatusCheque(btnStatus, item.status);
+                div.appendChild(btnStatus);
             }
 
             var btnRem = document.createElement('button');
@@ -1030,12 +1072,16 @@ function confirmarExclusaoMassa() {
         var nomeHtml = '';
         var anexoChequeHtml = '';
         if (isCheque) {
+            var statusCheque = item.status === 'Enviado' ? 'Enviado' : 'Não Enviado';
+            var classeStatus = statusCheque === 'Enviado' ? 'bg-emerald-100 text-emerald-800' : 'bg-yellow-100 text-yellow-800';
             nomeHtml = '<input type="text" class="input-nome-cheque flex-1 px-3 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm" placeholder="Nome do cliente" value="">';
             anexoChequeHtml = ''
                 + '<label class="cursor-pointer text-gray-400 hover:text-emerald-500 mx-2 flex items-center justify-center transition-colors label-escanear-cheque" title="Escanear Cheque">'
                 + '  <input type="file" name="foto_cheque[]" accept="image/*" capture="environment" class="hidden input-foto-cheque">'
                 + '  <span class="icone-camera text-lg">📷</span>'
-                + '</label>';
+                + '</label>'
+                + '<input type="hidden" name="status_cheque[]" value="' + statusCheque + '" class="input-status-cheque" data-item-id="' + String(item.id) + '">'
+                + '<button type="button" class="btn-status-cheque ml-2 px-2 py-1 text-[10px] font-bold uppercase rounded transition-colors ' + classeStatus + '" title="Clique para mudar o status" data-item-id="' + String(item.id) + '">' + statusCheque + '</button>';
         }
         return ''
             + '<div class="flex items-center gap-2 bg-white dark:bg-gray-800 p-2 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 ' + (isCheque ? 'linha-cheque' : '') + '" data-item-id="' + String(item.id) + '" data-tipo="' + tipo + '">'
@@ -1076,6 +1122,10 @@ function confirmarExclusaoMassa() {
         if (btnRem) {
             btnRem.addEventListener('click', function() { remLinha(tipo, item.id); });
         }
+        var inputStatus = linhaEl.querySelector('.input-status-cheque');
+        if (inputStatus) inputStatus.value = item.status === 'Enviado' ? 'Enviado' : 'Não Enviado';
+        var btnStatus = linhaEl.querySelector('.btn-status-cheque');
+        if (btnStatus) aplicarVisualStatusCheque(btnStatus, item.status);
     }
 
     function bindDelegacaoMascara(tipo) {
@@ -1108,7 +1158,10 @@ function confirmarExclusaoMassa() {
 
     function addLinha(tipo) {
         var novoItem = { id: Date.now(), valor: '' };
-        if (tipo === 'cheque') novoItem.nome = '';
+        if (tipo === 'cheque') {
+            novoItem.nome = '';
+            novoItem.status = 'Não Enviado';
+        }
         var cfg = abas[tipo];
         cfg.valores.push(novoItem);
 
@@ -1201,6 +1254,30 @@ function confirmarExclusaoMassa() {
             label.classList.remove('text-emerald-500', 'font-bold');
             icone.innerHTML = '📷';
         }
+    });
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest('.btn-status-cheque');
+        if (!btn) return;
+        var linha = btn.closest('.linha-cheque');
+        if (!linha) return;
+        var inputStatus = linha.querySelector('.input-status-cheque');
+        if (!inputStatus) return;
+
+        var novoStatus = inputStatus.value === 'Enviado' ? 'Não Enviado' : 'Enviado';
+        inputStatus.value = novoStatus;
+        aplicarVisualStatusCheque(btn, novoStatus);
+
+        var itemId = inputStatus.getAttribute('data-item-id') || linha.getAttribute('data-item-id');
+        if (itemId) {
+            var lista = abas.cheque && abas.cheque.valores ? abas.cheque.valores : [];
+            for (var i = 0; i < lista.length; i++) {
+                if (String(lista[i].id) === String(itemId)) {
+                    lista[i].status = novoStatus;
+                    break;
+                }
+            }
+        }
+        salvar('cheque');
     });
     bindDelegacaoMascara('dinheiro');
     bindDelegacaoMascara('cheque');
