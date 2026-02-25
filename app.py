@@ -2251,6 +2251,12 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             db.session.commit()
         except (OperationalError, Exception):
             db.session.rollback()
+        # Migração: setor em lancamentos_caixa (GERAL/BACALHAU)
+        try:
+            db.session.execute(text("ALTER TABLE lancamentos_caixa ADD COLUMN setor VARCHAR(50) NOT NULL DEFAULT 'GERAL'"))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
         # Migração: cliente_avulso em vendas (identificação quando cliente é "Desconhecido")
         try:
             db.session.execute(text('ALTER TABLE vendas ADD COLUMN cliente_avulso VARCHAR(100)'))
@@ -2943,23 +2949,31 @@ def dashboard():
 @app.route('/caixa')
 @login_required
 def caixa():
+    setor_atual = (request.args.get('setor', 'GERAL') or 'GERAL').strip().upper()
+    if setor_atual not in ('GERAL', 'BACALHAU'):
+        setor_atual = 'GERAL'
+
     # Totais via agregados (rápido, sem carregar todas as linhas)
     total_entradas = db.session.query(func.coalesce(func.sum(LancamentoCaixa.valor), 0)).filter(
-        LancamentoCaixa.tipo == 'ENTRADA'
+        LancamentoCaixa.tipo == 'ENTRADA',
+        LancamentoCaixa.setor == setor_atual
     ).scalar() or 0.0
     total_saida_pessoal = db.session.query(func.coalesce(func.sum(LancamentoCaixa.valor), 0)).filter(
-        LancamentoCaixa.tipo == 'SAIDA', LancamentoCaixa.categoria.like('%Pessoal%')
+        LancamentoCaixa.tipo == 'SAIDA', LancamentoCaixa.categoria.like('%Pessoal%'),
+        LancamentoCaixa.setor == setor_atual
     ).scalar() or 0.0
     total_saida_fornecedor = db.session.query(func.coalesce(func.sum(LancamentoCaixa.valor), 0)).filter(
-        LancamentoCaixa.tipo == 'SAIDA', LancamentoCaixa.categoria.like('%Fornecedor%')
+        LancamentoCaixa.tipo == 'SAIDA', LancamentoCaixa.categoria.like('%Fornecedor%'),
+        LancamentoCaixa.setor == setor_atual
     ).scalar() or 0.0
     total_saidas = db.session.query(func.coalesce(func.sum(LancamentoCaixa.valor), 0)).filter(
-        LancamentoCaixa.tipo == 'SAIDA'
+        LancamentoCaixa.tipo == 'SAIDA',
+        LancamentoCaixa.setor == setor_atual
     ).scalar() or 0.0
     saldo_atual = float(total_entradas) - float(total_saidas)
 
     # Limitar a 500 lançamentos mais recentes para exibição (índices em data/tipo/categoria)
-    lancamentos = LancamentoCaixa.query.order_by(
+    lancamentos = LancamentoCaixa.query.filter_by(setor=setor_atual).order_by(
         LancamentoCaixa.data.desc(), LancamentoCaixa.id.desc()
     ).limit(500).all()
     meses_pt = {1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril', 5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto', 9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'}
@@ -3032,6 +3046,7 @@ def caixa():
 
     return render_template('caixa.html',
                          lancamentos_agrupados=lancamentos_agrupados,
+                         setor_atual=setor_atual,
                          mes_atual_str=mes_atual_str,
                          total_entradas=total_entradas,
                          total_saida_pessoal=total_saida_pessoal,
@@ -3176,6 +3191,9 @@ def adicionar_caixa():
     descricao_base = (request.form.get('descricao') or '').strip()
     tipo = request.form.get('tipo')
     categoria = request.form.get('categoria')
+    setor = (request.form.get('setor', 'GERAL') or 'GERAL').strip().upper()
+    if setor not in ('GERAL', 'BACALHAU'):
+        setor = 'GERAL'
 
     if request.form.get('is_split') == 'true':
         # Modo dividido: dois lançamentos com formas de pagamento diferentes
@@ -3185,7 +3203,7 @@ def adicionar_caixa():
         forma2 = request.form.get('forma2') or 'Dinheiro'
         if valor1 <= 0 and valor2 <= 0:
             flash('Informe pelo menos um valor nos pagamentos divididos.', 'error')
-            return redirect(url_for('caixa'))
+            return redirect(url_for('caixa', setor=setor))
         lancamentos = []
         if valor1 > 0:
             lancamentos.append(LancamentoCaixa(
@@ -3196,6 +3214,7 @@ def adicionar_caixa():
                 forma_pagamento=forma1,
                 status_envio=_status_envio_por_forma_pagamento(forma1),
                 valor=valor1,
+                setor=setor,
                 usuario_id=current_user.id
             ))
         if valor2 > 0:
@@ -3207,6 +3226,7 @@ def adicionar_caixa():
                 forma_pagamento=forma2,
                 status_envio=_status_envio_por_forma_pagamento(forma2),
                 valor=valor2,
+                setor=setor,
                 usuario_id=current_user.id
             ))
         for lanc in lancamentos:
@@ -3224,12 +3244,13 @@ def adicionar_caixa():
             forma_pagamento=request.form.get('forma_pagamento'),
             status_envio=_status_envio_por_forma_pagamento(request.form.get('forma_pagamento')),
             valor=novo_valor,
+            setor=setor,
             usuario_id=current_user.id
         )
         db.session.add(novo_lancamento)
         db.session.commit()
         flash(f'Lançamento adicionado com sucesso!|UNDO_CAIXA_{novo_lancamento.id}', 'success')
-    return redirect(url_for('caixa'))
+    return redirect(url_for('caixa', setor=setor))
 
 
 @app.route('/caixa/editar/<int:id>', methods=['POST'])
