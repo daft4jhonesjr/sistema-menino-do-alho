@@ -47,7 +47,7 @@ class Tamanho(Enum):
     TAMANHO_9 = "9"
     TAMANHO_10 = "10"
 
-class Fornecedor(Enum):
+class FornecedorEnum(Enum):
     DESTAK = "DESTAK"
     PATY = "PATY"
 
@@ -126,6 +126,19 @@ class Produto(db.Model):
 
     def __repr__(self):
         return f'<Produto {self.nome_produto}>'
+
+
+class Fornecedor(db.Model):
+    __tablename__ = 'fornecedores'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    nome = db.Column(db.String(100), nullable=False, unique=True, index=True)
+    razao_social = db.Column(db.String(150), nullable=True)
+    cnpj = db.Column(db.String(20), nullable=True)
+    endereco = db.Column(db.String(255), nullable=True)
+
+    def __repr__(self):
+        return f'<Fornecedor {self.nome}>'
 
 
 class ProdutoFoto(db.Model):

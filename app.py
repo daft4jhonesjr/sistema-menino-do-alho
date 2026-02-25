@@ -5,7 +5,7 @@ from flask_compress import Compress
 from flask_caching import Cache
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from models import db, Cliente, Produto, ProdutoFoto, Venda, Usuario, Configuracao, Documento, LancamentoCaixa, ContagemGaveta
+from models import db, Cliente, Produto, ProdutoFoto, Venda, Usuario, Configuracao, Documento, LancamentoCaixa, ContagemGaveta, Fornecedor
 from config import Config
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -2048,10 +2048,28 @@ def admin_required(f):
     return wrapped
 
 
+def popular_fornecedores_iniciais():
+    fornecedores_padrao = ['ARMAZEM LACERDA', 'PATY', 'DESTAK', 'SERVE BEM']
+    houve_insercao = False
+    for nome in fornecedores_padrao:
+        nome_norm = str(nome or '').strip().upper()
+        if not nome_norm:
+            continue
+        if not Fornecedor.query.filter(func.upper(Fornecedor.nome) == nome_norm).first():
+            db.session.add(Fornecedor(nome=nome_norm))
+            houve_insercao = True
+    if houve_insercao:
+        db.session.commit()
+
+
 # Bootstrap do banco: NÃO executa na importação se SKIP_DB_BOOTSTRAP=1 (usado pelo migrate_recreate_db.py)
 if not os.environ.get('SKIP_DB_BOOTSTRAP'):
     with app.app_context():
         db.create_all()
+        try:
+            popular_fornecedores_iniciais()
+        except Exception:
+            db.session.rollback()
         try:
             db.session.execute(text('ALTER TABLE produtos ADD COLUMN preco_venda_alvo NUMERIC(10,2)'))
             db.session.commit()
@@ -4163,6 +4181,32 @@ def listar_produtos():
         totais_por_tipo=totais_por_tipo,
         pagination=pagination,
     )
+
+
+@app.route('/fornecedores/novo', methods=['POST'])
+@login_required
+def novo_fornecedor():
+    nome = str(request.form.get('nome') or '').strip().upper()
+    razao_social = str(request.form.get('razao_social') or '').strip().upper() or None
+    cnpj = str(request.form.get('cnpj') or '').strip() or None
+    endereco = str(request.form.get('endereco') or '').strip() or None
+
+    if not nome:
+        flash('Nome do fornecedor é obrigatório.', 'error')
+        return redirect(url_for('listar_produtos'))
+
+    if Fornecedor.query.filter(func.upper(Fornecedor.nome) == nome).first():
+        flash('Fornecedor já cadastrado.', 'warning')
+        return redirect(url_for('listar_produtos'))
+
+    try:
+        db.session.add(Fornecedor(nome=nome, razao_social=razao_social, cnpj=cnpj, endereco=endereco))
+        db.session.commit()
+        flash('Fornecedor cadastrado com sucesso!', 'success')
+    except Exception:
+        db.session.rollback()
+        flash('Erro ao cadastrar fornecedor.', 'error')
+    return redirect(url_for('listar_produtos'))
 
 
 @app.route('/produtos/novo', methods=['GET', 'POST'])
