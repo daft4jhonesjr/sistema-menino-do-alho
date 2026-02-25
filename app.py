@@ -6532,39 +6532,41 @@ def upload_massa_arquivos():
         return jsonify({'success': False, 'error': 'Selecione no máximo 20 arquivos por envio.'}), 400
 
     arquivos_salvos = 0
+    arquivos_processados = 0
+    erros_processamento = []
     try:
         for arquivo in arquivos:
             if not arquivo or not arquivo.filename:
                 continue
 
             nome_seguro = secure_filename(arquivo.filename)
-            nome_upper = nome_seguro.upper()
-            tipo_doc = 'NOTA_FISCAL' if ('NFE' in nome_upper or 'NF' in nome_upper or 'NOTA' in nome_upper) else 'BOLETO'
+            if not nome_seguro:
+                continue
 
-            upload_result = cloudinary.uploader.upload(
-                arquivo,
-                resource_type='raw',
-                folder='menino_do_alho/arquivos_banco'
-            )
+            pasta_upload = app.config['UPLOAD_FOLDER']
+            os.makedirs(pasta_upload, exist_ok=True)
+            caminho_temporario = os.path.join(pasta_upload, nome_seguro)
+            arquivo.save(caminho_temporario)
 
-            documento = Documento(
-                url_arquivo=upload_result.get('secure_url'),
-                public_id=upload_result.get('public_id'),
-                caminho_arquivo=nome_seguro,
-                tipo=tipo_doc,
-                usuario_id=current_user.id
-            )
-            db.session.add(documento)
+            # Usa a mesma esteira de upload individual: organizar + extração (NF/CNPJ/Vencimento)
+            try:
+                _processar_documento(caminho_temporario, user_id_forcado=current_user.id)
+                arquivos_processados += 1
+            except Exception as e:
+                erros_processamento.append(f'{nome_seguro}: {str(e)}')
             arquivos_salvos += 1
 
         if arquivos_salvos == 0:
-            db.session.rollback()
             return jsonify({'success': False, 'error': 'Nenhum arquivo válido foi enviado.'}), 400
 
-        db.session.commit()
-        return jsonify({'success': True, 'mensagem': f'{arquivos_salvos} arquivo(s) importado(s) com sucesso!'})
+        if arquivos_processados == 0 and erros_processamento:
+            return jsonify({'success': False, 'error': 'Nenhum arquivo pôde ser processado. Verifique o formato dos documentos.'}), 500
+
+        msg = f'{arquivos_processados} arquivo(s) importado(s) e enviado(s) para extração automática.'
+        if erros_processamento:
+            msg += f' {len(erros_processamento)} arquivo(s) com falha foram ignorados.'
+        return jsonify({'success': True, 'mensagem': msg, 'erros': erros_processamento})
     except Exception as e:
-        db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
