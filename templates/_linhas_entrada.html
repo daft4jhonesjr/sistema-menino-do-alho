@@ -14,8 +14,8 @@
 </tr>
 {% endif %}
 <tr class="linha-detalhes-produto hover:bg-emerald-50 transition {% if produto.estoque_atual <= 0 %}bg-red-50{% elif produto.estoque_atual < 10 %}bg-amber-50{% endif %}" data-tipo="{{ tipo }}" data-produto-id="{{ produto.id }}" data-estoque="{{ produto.estoque_atual }}">
-    <td class="px-4 py-4">
-        <input type="checkbox" class="bulk-row rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" value="{{ produto.id }}">
+    <td class="w-12 min-w-[3rem] px-4 py-4 text-center">
+        <input type="checkbox" class="bulk-row mx-auto rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" value="{{ produto.id }}">
     </td>
     <td class="px-6 py-4 text-sm font-medium text-gray-900">
         <button type="button" onclick="abrirModalVendas('produto', {{ produto.id }})"

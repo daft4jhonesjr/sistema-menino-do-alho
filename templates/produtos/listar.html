@@ -70,12 +70,12 @@
             
             <!-- Tabela da Categoria -->
             <div class="categoria-content {% if not is_open %}hidden{% endif %}" data-tipo="{{ tipo }}">
-                <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700" data-bulk-module="produtos">
+                <div class="w-full overflow-x-auto">
+                    <table class="w-full min-w-[1400px] table-auto divide-y divide-gray-200 dark:divide-gray-700" data-bulk-module="produtos">
                         <thead class="bg-slate-800/90">
                             <tr>
-                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-200 uppercase tracking-wider">
-                                    <input type="checkbox" class="bulk-select-all rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" title="Selecionar todos" data-tipo="{{ tipo }}">
+                                <th class="w-12 min-w-[3rem] px-4 py-3 text-center text-xs font-semibold text-gray-200 uppercase tracking-wider">
+                                    <input type="checkbox" class="bulk-select-all mx-auto rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" title="Selecionar todos" data-tipo="{{ tipo }}">
                                 </th>
                                 <th class="px-6 py-3 text-left text-xs font-semibold text-gray-200 uppercase tracking-wider">Produto</th>
                                 <th class="px-6 py-3 text-right text-xs font-semibold text-gray-200 uppercase tracking-wider">PREÇO</th>
@@ -108,8 +108,8 @@
                             </tr>
                             {% endif %}
                             <tr class="linha-detalhes-produto hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition {% if produto.estoque_atual <= 0 %}bg-red-50 dark:bg-red-900/20{% elif produto.estoque_atual < 10 %}bg-amber-50 dark:bg-amber-900/20{% endif %}" data-tipo="{{ tipo }}" data-produto-id="{{ produto.id }}" data-estoque="{{ produto.estoque_atual }}">
-                                <td class="px-4 py-4">
-                                    <input type="checkbox" class="bulk-row rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" value="{{ produto.id }}">
+                                <td class="w-12 min-w-[3rem] px-4 py-4 text-center">
+                                    <input type="checkbox" class="bulk-row mx-auto rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" value="{{ produto.id }}">
                                 </td>
                                 <td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">
                                 <button type="button" onclick="abrirModalVendas('produto', {{ produto.id }})"
