@@ -4247,6 +4247,35 @@ def editar_fornecedor(id):
     return redirect(url_for('listar_produtos'))
 
 
+@app.route('/fornecedores/<int:id>/editar_ajax', methods=['POST'])
+@login_required
+def editar_fornecedor_ajax(id):
+    fornecedor = Fornecedor.query.get_or_404(id)
+    try:
+        novo_nome = str(request.form.get('nome') or '').strip().upper()
+        nova_razao = str(request.form.get('razao_social') or '').strip().upper() or None
+        novo_cnpj = str(request.form.get('cnpj') or '').strip() or None
+
+        if not novo_nome:
+            return jsonify({'success': False, 'error': 'O Nome Fantasia é obrigatório.'}), 400
+
+        ja_existe = Fornecedor.query.filter(
+            func.upper(Fornecedor.nome) == novo_nome,
+            Fornecedor.id != fornecedor.id
+        ).first()
+        if ja_existe:
+            return jsonify({'success': False, 'error': 'Já existe outro fornecedor com este nome.'}), 400
+
+        fornecedor.nome = novo_nome
+        fornecedor.razao_social = nova_razao
+        fornecedor.cnpj = novo_cnpj
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': 'Erro no banco de dados. Verifique se o nome já existe.'}), 500
+
+
 @app.route('/fornecedores/<int:id>/excluir', methods=['POST'])
 @login_required
 def excluir_fornecedor(id):
