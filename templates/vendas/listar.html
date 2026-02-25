@@ -247,6 +247,7 @@
                         <option value="">--</option>
                         <option value="DESTAK">DESTAK</option>
                         <option value="PATY">PATY</option>
+                        <option value="ARMAZEM LACERDA">ARMAZEM LACERDA</option>
                         <option value="NENHUM">NENHUM</option>
                     </select>
                 </div>
@@ -1311,6 +1312,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var btnAdicionar = document.getElementById('btn-adicionar-carrinho');
     var produtoSelect = document.getElementById('inline-produto_id');
     var clienteSelect = document.getElementById('inline-cliente_id');
+    var empresaSelect = document.getElementById('inline-empresa_faturadora');
     var clienteAvulsoContainer = document.getElementById('container-cliente-avulso');
     var clienteAvulsoInput = document.getElementById('input-cliente-avulso');
     var precoInput = document.getElementById('preco');
@@ -1338,6 +1340,30 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!erroDiv) return;
         erroDiv.textContent = msg;
         erroDiv.classList.remove('hidden');
+    }
+
+    function aplicarEmpresaPorProduto() {
+        if (!produtoSelect || !empresaSelect) return;
+        var opt = produtoSelect.options[produtoSelect.selectedIndex];
+        var produtoTexto = String(opt ? (opt.text || '') : '').toUpperCase();
+        var isBacalhau = produtoTexto.indexOf('BACALHAU') !== -1;
+        if (isBacalhau) {
+            var alvo = 'ARMAZEM LACERDA';
+            var existe = Array.prototype.some.call(empresaSelect.options, function(o) {
+                return String(o.value || '').toUpperCase() === alvo;
+            });
+            if (!existe) {
+                var novaOpcao = new Option('ARMAZEM LACERDA', 'ARMAZEM LACERDA');
+                empresaSelect.add(novaOpcao);
+            }
+            empresaSelect.value = 'ARMAZEM LACERDA';
+            empresaSelect.classList.add('bg-blue-50', 'border-blue-400', 'dark:bg-blue-900/30', 'dark:border-blue-700');
+        } else {
+            empresaSelect.classList.remove('bg-blue-50', 'border-blue-400', 'dark:bg-blue-900/30', 'dark:border-blue-700');
+            if (empresaSelect.value === 'ARMAZEM LACERDA') {
+                empresaSelect.value = '';
+            }
+        }
     }
 
     function atualizarCampoClienteAvulso() {
@@ -1551,6 +1577,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             var estoque = opt.getAttribute('data-estoque');
             var preco = opt.getAttribute('data-preco');
+            aplicarEmpresaPorProduto();
             if (estoque != null) {
                 estoqueInfo.textContent = 'Est.: ' + estoque;
                 estoqueInfo.className = 'mt-0.5 text-xs ' + (parseInt(estoque, 10) > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400');
@@ -1573,6 +1600,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+    aplicarEmpresaPorProduto();
 
     if (precoInput) {
         precoInput.addEventListener('input', function() {

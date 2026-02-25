@@ -5703,7 +5703,7 @@ def processar_carrinho():
 
             if quantidade_venda < 1:
                 return jsonify(ok=False, mensagem='Quantidade deve ser maior que zero.'), 400
-            if not empresa_faturadora or empresa_faturadora not in ('DESTAK', 'PATY', 'NENHUM'):
+            if not empresa_faturadora or empresa_faturadora not in ('DESTAK', 'PATY', 'NENHUM', 'ARMAZEM LACERDA'):
                 return jsonify(ok=False, mensagem='Empresa faturadora inválida.'), 400
 
             produto = Produto.query.get(produto_id)
