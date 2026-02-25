@@ -5882,6 +5882,7 @@ def excluir_item_venda(id):
     """Exclui um item individual de venda (uma linha), devolvendo estoque."""
     venda = Venda.query.get_or_404(id)
     try:
+        _apagar_lancamentos_caixa_por_vendas([venda])
         produto = venda.produto
         if produto:
             produto.estoque_atual += venda.quantidade_venda
@@ -5945,6 +5946,8 @@ def excluir_venda(id):
     vendas_do_pedido = query.all()
     
     try:
+        lancamentos_removidos = _apagar_lancamentos_caixa_por_vendas(vendas_do_pedido)
+
         # Restaurar estoque de todos os produtos do pedido
         logs = []
         for v in vendas_do_pedido:
@@ -5962,8 +5965,10 @@ def excluir_venda(id):
         print(f"Pedido excluído (Cliente: {nome_cliente}, NF: {nf_pedido or 'N/A'}, Data: {data_pedido.strftime('%d/%m/%Y')}):")
         for log in logs:
             print(f"  - {log}")
+        if lancamentos_removidos:
+            print(f"  - {lancamentos_removidos} lançamento(s) de caixa removido(s).")
 
-        flash(f'Pedido completo excluído com sucesso! {len(vendas_do_pedido)} item(ns) removido(s).', 'success')
+        flash(f'Pedido completo excluído com sucesso! {len(vendas_do_pedido)} item(ns) removido(s) e {lancamentos_removidos} lançamento(s) de caixa removido(s).', 'success')
     except Exception as e:
         db.session.rollback()  # OBRIGATÓRIO para destravar o sistema em caso de erro
         print(f"Erro ao deletar venda: {e}")
@@ -5994,6 +5999,18 @@ def _vendas_do_pedido(venda):
         else:
             query = query.filter((Venda.nf == None) | (Venda.nf == ''))
     return query.all()
+
+
+def _apagar_lancamentos_caixa_por_vendas(vendas):
+    """Remove lançamentos do caixa vinculados por descrição às vendas informadas."""
+    venda_ids = sorted({int(v.id) for v in (vendas or []) if getattr(v, 'id', None) is not None})
+    if not venda_ids:
+        return 0
+    filtros = [LancamentoCaixa.descricao.like(f"Venda #{vid} -%") for vid in venda_ids]
+    lancamentos = LancamentoCaixa.query.filter(or_(*filtros)).all()
+    for lanc in lancamentos:
+        db.session.delete(lanc)
+    return len(lancamentos)
 
 
 @app.route('/venda/atualizar_status/<int:id_venda>', methods=['POST'])
@@ -6588,6 +6605,7 @@ def vendas_deletar_massa():
     if len(vendas) != len(ids):
         return jsonify({'ok': False, 'mensagem': 'Alguns IDs não existem. Nenhuma exclusão realizada.'}), 400
     logs = []
+    lancamentos_removidos = _apagar_lancamentos_caixa_por_vendas(vendas)
     for v in vendas:
         produto = v.produto
         qty = v.quantidade_venda
@@ -6599,7 +6617,7 @@ def vendas_deletar_massa():
     limpar_cache_dashboard()  # Limpar cache após exclusão em massa de vendas
     for msg in logs:
         print(msg)
-    return jsonify({'ok': True, 'mensagem': f'{len(vendas)} registro(s) excluído(s). Estoque restaurado.', 'excluidos': len(vendas)})
+    return jsonify({'ok': True, 'mensagem': f'{len(vendas)} registro(s) excluído(s). Estoque restaurado e {lancamentos_removidos} lançamento(s) de caixa removido(s).', 'excluidos': len(vendas)})
 
 
 @app.route('/bulk_delete_vendas', methods=['POST'])
@@ -6611,19 +6629,22 @@ def bulk_delete_vendas():
         return jsonify({'ok': False, 'mensagem': 'Nenhum ID informado.'}), 400
     try:
         logs = []
+        vendas_para_remocao = []
         for id_ in ids:
             venda = Venda.query.get(id_)
             if venda:
+                vendas_para_remocao.append(venda)
                 produto = venda.produto
                 quantidade_venda = venda.quantidade_venda
                 produto.estoque_atual += quantidade_venda
                 logs.append(f"Venda deletada: {quantidade_venda} unidades devolvidas ao produto [{produto.nome_produto}].")
                 db.session.delete(venda)
+        lancamentos_removidos = _apagar_lancamentos_caixa_por_vendas(vendas_para_remocao)
         db.session.commit()
         limpar_cache_dashboard()  # Limpar cache após exclusão em massa de vendas
         for msg in logs:
             print(msg)
-        return jsonify({'ok': True, 'mensagem': f'{len(ids)} venda(s) excluída(s) com sucesso. Estoque restaurado.', 'excluidos': len(ids)})
+        return jsonify({'ok': True, 'mensagem': f'{len(ids)} venda(s) excluída(s) com sucesso. Estoque restaurado e {lancamentos_removidos} lançamento(s) de caixa removido(s).', 'excluidos': len(ids)})
     except Exception as e:
         db.session.rollback()
         return jsonify({'ok': False, 'mensagem': str(e)}), 500
