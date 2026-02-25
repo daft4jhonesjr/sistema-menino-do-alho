@@ -2605,12 +2605,17 @@ def get_radar_recompra():
 
     vendas_all = Venda.query.options(
         joinedload(Venda.cliente), joinedload(Venda.produto)
+    ).join(Produto, Venda.produto_id == Produto.id).filter(
+        ~Produto.tipo.ilike('%BACALHAU%'),
+        ~Produto.nome_produto.ilike('%BACALHAU%')
     ).order_by(Venda.cliente_id, Venda.data_venda.asc()).all()
 
     grupos = {}
     for v in vendas_all:
         nome_prod = v.produto.nome_produto if v.produto else 'Desconhecido'
         cat = _categoria_produto(nome_prod)
+        if cat == 'BACALHAU':
+            continue
         key = (v.cliente_id, cat)
         if key not in grupos:
             grupos[key] = {'cliente_nome': v.cliente.nome_cliente, 'categoria': cat, 'vendas': []}
@@ -2677,6 +2682,9 @@ def dashboard():
     
     # Filtro base para vendas do ano ativo
     filtro_ano_venda = extract('year', Venda.data_venda) == ano_ativo
+    # Excluir BACALHAU de todos os KPIs do dashboard
+    filtro_sem_bacalhau_tipo = ~Produto.tipo.ilike('%BACALHAU%')
+    filtro_sem_bacalhau_nome = ~Produto.nome_produto.ilike('%BACALHAU%')
     
     # Lista documentos sem vínculo (venda_id=None), filtrados pelo usuário atual
     documentos_recem_chegados, resultado_processamento = _listar_documentos_recem_chegados(user_id=current_user.id)
@@ -2708,7 +2716,7 @@ def dashboard():
         func.sum((Venda.preco_venda - Produto.preco_custo) * Venda.quantidade_venda).label('lucro_total')
     ).join(Venda, Cliente.id == Venda.cliente_id)\
      .join(Produto, Venda.produto_id == Produto.id)\
-     .filter(filtro_ano_venda)\
+     .filter(filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome)\
      .group_by(Cliente.id, Cliente.nome_cliente)\
      .order_by(desc('lucro_total'))\
      .limit(10).all()
@@ -2720,7 +2728,7 @@ def dashboard():
         func.sum(Venda.preco_venda * Venda.quantidade_venda).label('total_vendido'),
         func.sum((Venda.preco_venda - Produto.preco_custo) * Venda.quantidade_venda).label('lucro_total')
     ).join(Venda, Produto.id == Venda.produto_id)\
-     .filter(filtro_ano_venda)\
+     .filter(filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome)\
      .group_by(Produto.id, Produto.nome_produto)\
      .order_by(desc('lucro_total'))\
      .limit(10).all()
@@ -2728,35 +2736,37 @@ def dashboard():
     # KPI 3: Financeiro - Pendente - FILTRADO POR ANO
     total_pendente = db.session.query(
         func.sum(Venda.preco_venda * Venda.quantidade_venda)
-    ).filter(Venda.situacao == 'PENDENTE', filtro_ano_venda).scalar() or 0
+    ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
+     .filter(Venda.situacao == 'PENDENTE', filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
     
     # KPI 4: Financeiro - Pago - FILTRADO POR ANO
     total_pago = db.session.query(
         func.sum(Venda.preco_venda * Venda.quantidade_venda)
-    ).filter(Venda.situacao == 'PAGO', filtro_ano_venda).scalar() or 0
+    ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
+     .filter(Venda.situacao == 'PAGO', filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
     
     # KPI 5: Lucro total do período - FILTRADO POR ANO
     total_lucro = db.session.query(
         func.sum((Venda.preco_venda - Produto.preco_custo) * Venda.quantidade_venda)
     ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
-     .filter(filtro_ano_venda).scalar() or 0
+     .filter(filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
     
     # KPI 5b: Prejuízo/Perdas - vendas com lucro negativo - FILTRADO POR ANO
     prejuizo_expr = (Venda.preco_venda - Produto.preco_custo) * Venda.quantidade_venda
     total_prejuizo = db.session.query(
         func.sum(func.abs(prejuizo_expr))
     ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
-     .filter(prejuizo_expr < 0, filtro_ano_venda).scalar() or 0
+     .filter(prejuizo_expr < 0, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
     qtd_caixas_prejuizo = db.session.query(
         func.sum(Venda.quantidade_venda)
     ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
-     .filter(prejuizo_expr < 0, filtro_ano_venda).scalar() or 0
+     .filter(prejuizo_expr < 0, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
 
     # Detalhes para o modal de prejuízos (vendas com lucro negativo, ordenadas da mais recente)
     vendas_com_prejuizo = Venda.query.options(
         joinedload(Venda.cliente), joinedload(Venda.produto)
     ).join(Produto, Venda.produto_id == Produto.id)\
-     .filter(prejuizo_expr < 0, filtro_ano_venda)\
+     .filter(prejuizo_expr < 0, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome)\
      .order_by(Venda.data_venda.desc()).all()
     detalhes_prejuizo = []
     for v in vendas_com_prejuizo:
@@ -2773,38 +2783,47 @@ def dashboard():
     # KPI 6: Faturamento por Empresa - FILTRADO POR ANO
     total_paty = db.session.query(
         func.sum(Venda.preco_venda * Venda.quantidade_venda)
-    ).filter(Venda.empresa_faturadora == 'PATY', filtro_ano_venda).scalar() or 0
+    ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
+     .filter(Venda.empresa_faturadora == 'PATY', filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
     
     total_destak = db.session.query(
         func.sum(Venda.preco_venda * Venda.quantidade_venda)
-    ).filter(Venda.empresa_faturadora == 'DESTAK', filtro_ano_venda).scalar() or 0
+    ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
+     .filter(Venda.empresa_faturadora == 'DESTAK', filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
     
     # Separação PATY e DESTAK por situação (Pago vs Pendente)
     paty_pago = db.session.query(
         func.sum(Venda.preco_venda * Venda.quantidade_venda)
-    ).filter(Venda.empresa_faturadora == 'PATY', Venda.situacao == 'PAGO', filtro_ano_venda).scalar() or 0
+    ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
+     .filter(Venda.empresa_faturadora == 'PATY', Venda.situacao == 'PAGO', filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
     paty_pendente = db.session.query(
         func.sum(Venda.preco_venda * Venda.quantidade_venda)
-    ).filter(Venda.empresa_faturadora == 'PATY', Venda.situacao == 'PENDENTE', filtro_ano_venda).scalar() or 0
+    ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
+     .filter(Venda.empresa_faturadora == 'PATY', Venda.situacao == 'PENDENTE', filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
     destak_pago = db.session.query(
         func.sum(Venda.preco_venda * Venda.quantidade_venda)
-    ).filter(Venda.empresa_faturadora == 'DESTAK', Venda.situacao == 'PAGO', filtro_ano_venda).scalar() or 0
+    ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
+     .filter(Venda.empresa_faturadora == 'DESTAK', Venda.situacao == 'PAGO', filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
     destak_pendente = db.session.query(
         func.sum(Venda.preco_venda * Venda.quantidade_venda)
-    ).filter(Venda.empresa_faturadora == 'DESTAK', Venda.situacao == 'PENDENTE', filtro_ano_venda).scalar() or 0
+    ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
+     .filter(Venda.empresa_faturadora == 'DESTAK', Venda.situacao == 'PENDENTE', filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
     
     # Vendas sem empresa (NENHUM ou string vazia) - FILTRADO POR ANO
     total_nenhum = db.session.query(
         func.sum(Venda.preco_venda * Venda.quantidade_venda)
-    ).filter(
+    ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id).filter(
         ~Venda.empresa_faturadora.in_(['PATY', 'DESTAK']),
-        filtro_ano_venda
+        filtro_ano_venda,
+        filtro_sem_bacalhau_tipo,
+        filtro_sem_bacalhau_nome
     ).scalar() or 0
     
     # KPI 7: Total de Vendas - FILTRADO POR ANO
     total_vendas = db.session.query(
         func.sum(Venda.preco_venda * Venda.quantidade_venda)
-    ).filter(filtro_ano_venda).scalar() or 0
+    ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
+     .filter(filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
     
     # KPI 8: Margem de Lucro (%) = (total_lucro / total_vendas) * 100
     # Proteção contra divisão por zero: total_vendas 0 ou negativo → margem = 0
@@ -2815,7 +2834,8 @@ def dashboard():
         func.count(func.distinct(
             func.concat(Venda.cliente_id, '-', Venda.nf, '-', func.date(Venda.data_venda))
         ))
-    ).filter(filtro_ano_venda).scalar() or 0
+    ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
+     .filter(filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
     
     # KPI 10: Ticket Médio = total_vendas / total_pedidos
     # Proteção contra divisão por zero
@@ -2843,7 +2863,7 @@ def dashboard():
         qtd_cafe.label('qtd_cafe'),
         qtd_sacola.label('qtd_sacola')
     ).join(Produto, Venda.produto_id == Produto.id)\
-     .filter(filtro_ano_venda)\
+     .filter(filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome)\
      .group_by(coluna_mes)\
      .order_by(coluna_mes).all()
     
