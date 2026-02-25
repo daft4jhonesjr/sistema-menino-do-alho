@@ -177,11 +177,13 @@
                             <td class="px-6 py-3" data-label="Conta/Pagamento"><span class="bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-2 py-1 rounded text-xs font-bold">{{ l.forma_pagamento }}</span></td>
                             <td class="px-6 py-3 text-center" data-label="Status Cheque">
                                 {% if (l.forma_pagamento or '')|lower == 'cheque' %}
-                                    {% if (l.status_envio or 'Não Enviado') == 'Enviado' %}
-                                    <span class="inline-flex items-center bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-2 py-1 rounded text-xs font-bold">Enviado</span>
-                                    {% else %}
-                                    <span class="inline-flex items-center bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 px-2 py-1 rounded text-xs font-bold">Não Enviado</span>
-                                    {% endif %}
+                                <button type="button"
+                                        class="btn-toggle-status-cheque inline-flex items-center px-2 py-1 rounded text-xs font-bold uppercase border transition-colors {% if (l.status_envio or 'Não Enviado') == 'Enviado' %}bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800{% else %}bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800{% endif %}"
+                                        data-id="{{ l.id }}"
+                                        data-status="{{ l.status_envio or 'Não Enviado' }}"
+                                        title="Clique para alterar o status">
+                                    {{ l.status_envio or 'Não Enviado' }}
+                                </button>
                                 {% else %}
                                 <span class="text-gray-400 dark:text-gray-500 text-xs">—</span>
                                 {% endif %}
@@ -190,14 +192,6 @@
                                 {% if l.tipo == 'ENTRADA' %}+ {% else %}- {% endif %}{{ l.valor|formato_moeda }}
                             </td>
                             <td class="px-6 py-3 text-center" data-label="Ações">
-                                {% if (l.forma_pagamento or '')|lower == 'cheque' %}
-                                <form method="post" action="{{ url_for('alternar_status_envio_cheque', id=l.id) }}" class="inline mr-1">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                    <button type="submit" class="text-sky-500 hover:text-sky-600 dark:hover:text-sky-400 transition-colors p-1" title="Alternar envio do cheque">
-                                        📤
-                                    </button>
-                                </form>
-                                {% endif %}
                                 <button type="button" onclick="abrirModalEditar(this.closest('[data-lanc-id]'))" class="text-amber-500 hover:text-amber-600 dark:hover:text-amber-400 transition-colors p-1 mr-1" title="Editar Lançamento">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
                                 </button>
@@ -236,11 +230,13 @@
 
                     <div class="mb-3">
                         {% if (l.forma_pagamento or '')|lower == 'cheque' %}
-                            {% if (l.status_envio or 'Não Enviado') == 'Enviado' %}
-                            <span class="inline-flex items-center bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-2 py-1 rounded text-xs font-bold">Enviado</span>
-                            {% else %}
-                            <span class="inline-flex items-center bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 px-2 py-1 rounded text-xs font-bold">Não Enviado</span>
-                            {% endif %}
+                        <button type="button"
+                                class="btn-toggle-status-cheque inline-flex items-center px-2 py-1 rounded text-xs font-bold uppercase border transition-colors {% if (l.status_envio or 'Não Enviado') == 'Enviado' %}bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800{% else %}bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800{% endif %}"
+                                data-id="{{ l.id }}"
+                                data-status="{{ l.status_envio or 'Não Enviado' }}"
+                                title="Clique para alterar o status">
+                            {{ l.status_envio or 'Não Enviado' }}
+                        </button>
                         {% endif %}
                     </div>
 
@@ -249,12 +245,6 @@
                     </div>
 
                     <div class="mt-auto flex justify-end gap-3 border-t border-slate-100 dark:border-slate-700 pt-3">
-                        {% if (l.forma_pagamento or '')|lower == 'cheque' %}
-                        <form method="post" action="{{ url_for('alternar_status_envio_cheque', id=l.id) }}" class="inline">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                            <button type="submit" class="text-sky-500 hover:text-sky-600 dark:hover:text-sky-400 transition-colors p-1" title="Alternar envio do cheque">📤</button>
-                        </form>
-                        {% endif %}
                         <button type="button" onclick="abrirModalEditar(this.closest('[data-lanc-id]'))" class="text-amber-500 hover:text-amber-700 transition-colors p-1" title="Editar">✏️</button>
                         <button type="button" onclick="confirmarExclusaoUnica({{ l.id }})" class="text-red-500 hover:text-red-700 transition-colors p-1" title="Excluir">🗑️</button>
                     </div>
@@ -1621,5 +1611,74 @@ function confirmarExclusaoMassa() {
     btnLista.addEventListener('click', function() { setModoVisualizacao('lista'); });
     btnGrade.addEventListener('click', function() { setModoVisualizacao('grade'); });
 })();
+</script>
+<script>
+document.addEventListener('click', async function(e) {
+    const btn = e.target.closest('.btn-toggle-status-cheque');
+    if (!btn) return;
+
+    e.preventDefault();
+
+    const statusAtual = String(btn.getAttribute('data-status') || 'Não Enviado').trim();
+    const lancamentoId = btn.getAttribute('data-id');
+    const marcandoEnvio = statusAtual.toUpperCase() === 'NÃO ENVIADO';
+    const acaoDesejada = marcandoEnvio ? 'ENVIAR' : 'DESFAZER O ENVIO';
+
+    if (!confirm('Você tem certeza que deseja ' + acaoDesejada + ' o status deste cheque?')) {
+        return;
+    }
+
+    const textoOriginal = btn.innerText;
+    btn.innerText = '⏳';
+    btn.classList.add('animate-pulse');
+    btn.disabled = true;
+
+    try {
+        const headers = Object.assign(
+            { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            window.getCsrfHeaders ? window.getCsrfHeaders() : {}
+        );
+        const response = await fetch('/caixa/' + encodeURIComponent(lancamentoId) + '/toggle_status_cheque', {
+            method: 'POST',
+            headers: headers,
+            body: '{}'
+        });
+        const data = await response.json();
+        btn.classList.remove('animate-pulse');
+        btn.disabled = false;
+
+        if (response.ok && data.success) {
+            const novoStatus = String(data.novo_status || '').trim() || 'Não Enviado';
+            btn.setAttribute('data-status', novoStatus);
+            btn.innerText = novoStatus;
+            if (novoStatus === 'Enviado') {
+                btn.className = btn.className
+                    .replace('bg-amber-100', 'bg-emerald-100')
+                    .replace('text-amber-700', 'text-emerald-700')
+                    .replace('border-amber-200', 'border-emerald-200')
+                    .replace('dark:bg-amber-900/30', 'dark:bg-emerald-900/30')
+                    .replace('dark:text-amber-300', 'dark:text-emerald-300')
+                    .replace('dark:border-amber-800', 'dark:border-emerald-800');
+            } else {
+                btn.className = btn.className
+                    .replace('bg-emerald-100', 'bg-amber-100')
+                    .replace('text-emerald-700', 'text-amber-700')
+                    .replace('border-emerald-200', 'border-amber-200')
+                    .replace('dark:bg-emerald-900/30', 'dark:bg-amber-900/30')
+                    .replace('dark:text-emerald-300', 'dark:text-amber-300')
+                    .replace('dark:border-emerald-800', 'dark:border-amber-800');
+            }
+        } else {
+            alert((data && data.message) ? data.message : 'Erro ao atualizar o status.');
+            btn.innerText = textoOriginal;
+        }
+    } catch (error) {
+        console.error(error);
+        alert('Erro de conexão. Tente novamente.');
+        btn.classList.remove('animate-pulse');
+        btn.disabled = false;
+        btn.innerText = textoOriginal;
+    }
+});
 </script>
 {% endblock %}

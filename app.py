@@ -3300,6 +3300,25 @@ def alternar_status_envio_cheque(id):
     return redirect(url_for('caixa'))
 
 
+@app.route('/caixa/<int:id>/toggle_status_cheque', methods=['POST'])
+@login_required
+def toggle_status_cheque(id):
+    """Alterna status do cheque via AJAX e retorna JSON."""
+    lancamento = LancamentoCaixa.query.get_or_404(id)
+    forma = str(lancamento.forma_pagamento or '').strip().lower()
+    if 'cheque' not in forma:
+        return jsonify({'success': False, 'message': 'Apenas lançamentos em cheque podem alterar status.'}), 400
+
+    atual = str(lancamento.status_envio or 'Não Enviado').strip()
+    lancamento.status_envio = 'Enviado' if atual != 'Enviado' else 'Não Enviado'
+    try:
+        db.session.commit()
+        return jsonify({'success': True, 'novo_status': lancamento.status_envio})
+    except Exception:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': 'Erro ao atualizar status do cheque.'}), 500
+
+
 @app.route('/desfazer_caixa/<int:id>', methods=['POST'])
 @login_required
 def desfazer_caixa(id):
