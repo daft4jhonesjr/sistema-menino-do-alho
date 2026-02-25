@@ -6518,6 +6518,56 @@ def admin_arquivos():
     return render_template('gerenciar_arquivos.html', documentos=documentos)
 
 
+@app.route('/arquivos/upload_massa', methods=['POST'])
+@login_required
+def upload_massa_arquivos():
+    if not current_user.is_admin():
+        return jsonify({'success': False, 'error': 'Apenas administradores podem importar arquivos.'}), 403
+
+    arquivos = request.files.getlist('arquivos[]')
+    if not arquivos or all((not arq) or (not arq.filename) for arq in arquivos):
+        return jsonify({'success': False, 'error': 'Nenhum arquivo selecionado.'}), 400
+
+    if len(arquivos) > 20:
+        return jsonify({'success': False, 'error': 'Selecione no máximo 20 arquivos por envio.'}), 400
+
+    arquivos_salvos = 0
+    try:
+        for arquivo in arquivos:
+            if not arquivo or not arquivo.filename:
+                continue
+
+            nome_seguro = secure_filename(arquivo.filename)
+            nome_upper = nome_seguro.upper()
+            tipo_doc = 'NOTA_FISCAL' if ('NFE' in nome_upper or 'NF' in nome_upper or 'NOTA' in nome_upper) else 'BOLETO'
+
+            upload_result = cloudinary.uploader.upload(
+                arquivo,
+                resource_type='raw',
+                folder='menino_do_alho/arquivos_banco'
+            )
+
+            documento = Documento(
+                url_arquivo=upload_result.get('secure_url'),
+                public_id=upload_result.get('public_id'),
+                caminho_arquivo=nome_seguro,
+                tipo=tipo_doc,
+                usuario_id=current_user.id
+            )
+            db.session.add(documento)
+            arquivos_salvos += 1
+
+        if arquivos_salvos == 0:
+            db.session.rollback()
+            return jsonify({'success': False, 'error': 'Nenhum arquivo válido foi enviado.'}), 400
+
+        db.session.commit()
+        return jsonify({'success': True, 'mensagem': f'{arquivos_salvos} arquivo(s) importado(s) com sucesso!'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/admin/arquivos/deletar_massa', methods=['POST'])
 @login_required
 def admin_arquivos_deletar_massa():

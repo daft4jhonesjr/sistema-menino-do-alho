@@ -10,6 +10,13 @@
     </div>
 </div>
 
+<div class="flex items-center gap-3 mb-4">
+    <input type="file" id="input-upload-massa" multiple accept=".pdf,image/*" class="hidden">
+    <button type="button" onclick="document.getElementById('input-upload-massa').click()" id="btn-upload-massa" class="bg-emerald-600 text-white px-4 py-2 rounded-md font-semibold text-sm hover:bg-emerald-700 transition-colors shadow-sm flex items-center gap-2">
+        <span>📤 Importar Arquivos</span>
+    </button>
+</div>
+
 <form action="{{ url_for('admin_arquivos_deletar_massa') }}" method="POST" id="form-deletar-massa">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
     <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-hidden">
@@ -133,6 +140,58 @@
     }
 
     atualizarBtnExcluir();
+})();
+
+(function() {
+    var inputUpload = document.getElementById('input-upload-massa');
+    var btnUpload = document.getElementById('btn-upload-massa');
+
+    if (!inputUpload || !btnUpload) return;
+
+    inputUpload.addEventListener('change', async function(e) {
+        var arquivos = e.target.files;
+        if (!arquivos || arquivos.length === 0) return;
+
+        if (arquivos.length > 20) {
+            alert('Por favor, selecione no máximo 20 arquivos por vez para garantir o upload rápido.');
+            inputUpload.value = '';
+            return;
+        }
+
+        var formData = new FormData();
+        for (var i = 0; i < arquivos.length; i++) {
+            formData.append('arquivos[]', arquivos[i]);
+        }
+
+        var textoOriginal = btnUpload.innerHTML;
+        btnUpload.innerHTML = '⏳ Enviando ' + arquivos.length + ' arquivo(s)...';
+        btnUpload.disabled = true;
+        btnUpload.classList.add('opacity-75', 'cursor-not-allowed');
+
+        try {
+            var response = await fetch('/arquivos/upload_massa', {
+                method: 'POST',
+                headers: Object.assign({ 'X-Requested-With': 'XMLHttpRequest' }, window.getCsrfHeaders ? window.getCsrfHeaders() : {}),
+                body: formData
+            });
+            var data = await response.json();
+
+            if (data.success) {
+                alert(data.mensagem || 'Arquivos enviados com sucesso!');
+                window.location.reload();
+            } else {
+                alert(data.error || 'Erro ao enviar os arquivos.');
+            }
+        } catch (error) {
+            console.error(error);
+            alert('Erro de conexão ao tentar enviar os arquivos.');
+        } finally {
+            btnUpload.innerHTML = textoOriginal;
+            btnUpload.disabled = false;
+            btnUpload.classList.remove('opacity-75', 'cursor-not-allowed');
+            inputUpload.value = '';
+        }
+    });
 })();
 </script>
 {% endblock %}
