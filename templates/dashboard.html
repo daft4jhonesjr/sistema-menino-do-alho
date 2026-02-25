@@ -198,7 +198,7 @@
                 <span class="text-red-600">{{ erros }} com erro</span>
                 {% endif %}
             </div>
-            <form action="{{ url_for('organizar_e_vincular') }}" method="post" class="inline">
+            <form action="{{ url_for('organizar_e_vincular') }}" method="post" class="inline" id="form-organizar-vincular">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <button type="submit" id="btn-organizar" class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2.5 text-base font-semibold text-white shadow-md hover:bg-emerald-700 hover:shadow-lg transition focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2">
                     <i data-lucide="refresh-cw" class="w-5 h-5"></i>Organizar e Vincular Tudo
@@ -1192,7 +1192,29 @@ function formatoMoeda(valor) {
 // Barra de progresso e loading do botão "Organizar e Vincular Tudo"
 document.addEventListener('DOMContentLoaded', function() {
     var btnOrganizar = document.getElementById('btn-organizar');
+    var formOrganizar = document.getElementById('form-organizar-vincular');
     var loadingContainer = document.getElementById('loading-container');
+    var tokenMeta = document.querySelector('meta[name="csrf-token"]');
+    var tokenAtual = tokenMeta ? tokenMeta.getAttribute('content') : '';
+    if (formOrganizar && tokenAtual) {
+        var csrfInput = formOrganizar.querySelector('input[name="csrf_token"]');
+        if (!csrfInput) {
+            csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrf_token';
+            formOrganizar.appendChild(csrfInput);
+        }
+        csrfInput.value = tokenAtual;
+    }
+
+    if (formOrganizar) {
+        formOrganizar.addEventListener('submit', function() {
+            var csrfInput = formOrganizar.querySelector('input[name="csrf_token"]');
+            var token = (tokenMeta ? tokenMeta.getAttribute('content') : '') || (csrfInput ? csrfInput.value : '');
+            if (csrfInput && token) csrfInput.value = token;
+        });
+    }
+
     if (btnOrganizar && loadingContainer) {
         btnOrganizar.addEventListener('click', function() {
             loadingContainer.classList.remove('hidden');
