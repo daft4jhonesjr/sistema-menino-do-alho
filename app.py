@@ -1594,25 +1594,13 @@ def _diagnosticar_vinculo_falhou(doc):
         }
     elif len(vendas_validas) == 1:
         v = vendas_validas[0]
-        ja_tem_boleto = (v.caminho_boleto or '').strip()
-        ja_tem_nf = (v.caminho_nf or '').strip()
-        if ja_tem_boleto or ja_tem_nf:
-            return {
-                'cenario': 'A',
-                'mensagem': f"NF {doc_nf} encontrada e já vinculada à venda do cliente {v.cliente.nome_cliente}.",
-                'cliente_id': v.cliente.id,
-                'cliente_nome': v.cliente.nome_cliente,
-                'nf_tentada': nf_limpa,
-                'nf_lida': doc_nf,
-                'venda_id': v.id,
-                'nf_venda': v.nf or ''
-            }
-        # Se chegou aqui, a venda já tem documento do mesmo tipo vinculado
-        # Mas ainda pode vincular manualmente se necessário
-        tipo_doc_atual = 'boleto' if (v.caminho_boleto or '').strip() else 'nota fiscal'
+        # Não bloquear pela existência de NF/boletos na venda.
+        # Regra: o bloqueio só deve ocorrer se ESTE documento já estiver vinculado (doc.venda_id != None),
+        # o que já é tratado no início desta função.
+        tipo_doc_lido = 'boleto' if (doc.tipo or '').upper() == 'BOLETO' else 'nota fiscal'
         return {
             'cenario': 'A',
-            'mensagem': f"NF {doc_nf} encontrada no sistema (Cliente: {v.cliente.nome_cliente}). Esta venda já possui {tipo_doc_atual} vinculado(a).",
+            'mensagem': f"NF {doc_nf} encontrada no sistema (Cliente: {v.cliente.nome_cliente}). O {tipo_doc_lido} pode ser vinculado normalmente a esta venda.",
             'cliente_id': v.cliente.id,
             'cliente_nome': v.cliente.nome_cliente,
             'nf_tentada': nf_limpa,
@@ -5290,6 +5278,14 @@ def listar_vendas():
     # #region agent log
     _debug_log("app.py:listar-pedidos-built", "Pedidos built", {"total_pedidos": len(pedidos_agrupados)}, "H3")
     # #endregion
+    # Pré-carregar documentos por venda para indicar anexos mesmo quando caminho_nf/caminho_boleto não estiverem preenchidos.
+    docs_por_venda = {}
+    all_venda_ids = [vv.id for pedido in pedidos_agrupados for vv in pedido.get('vendas', [])]
+    if all_venda_ids:
+        docs_vinculados = Documento.query.filter(Documento.venda_id.in_(all_venda_ids)).order_by(desc(Documento.id)).all()
+        for doc in docs_vinculados:
+            docs_por_venda.setdefault(doc.venda_id, []).append(doc)
+
     listar_pedido_sample = 0
     for pedido in pedidos_agrupados:
         cb, cn = None, None
@@ -5327,6 +5323,11 @@ def listar_vendas():
         pedido['caminho_nf'] = cn
         pedido['doc_boleto'] = doc_boleto  # None se não existir
         pedido['doc_nf'] = doc_nf  # None se não existir
+        docs_do_pedido = []
+        for vv in pedido.get('vendas', []):
+            docs_do_pedido.extend(docs_por_venda.get(vv.id, []))
+        pedido['tem_documentos'] = bool(docs_do_pedido or doc_boleto or doc_nf or cb or cn)
+        pedido['primeiro_documento_id'] = docs_do_pedido[0].id if docs_do_pedido else (doc_nf.id if doc_nf else (doc_boleto.id if doc_boleto else None))
         # Situação: pior entre as vendas (PENDENTE > PARCIAL > PAGO)
         situacoes = [str(v.situacao or '').strip().upper() for v in pedido.get('vendas', [])]
         if any(s == 'PENDENTE' for s in situacoes):
@@ -6739,6 +6740,12 @@ def vincular_documento_venda(id):
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return jsonify(ok=False, mensagem='Pedido não encontrado.'), 404
         flash('Pedido não encontrado.', 'error')
+        return redirect(url_for('dashboard'))
+    if documento.venda_id is not None and documento.venda_id != venda_id:
+        msg = f'Este arquivo já está vinculado à venda #{documento.venda_id}.'
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify(ok=False, mensagem=msg), 409
+        flash(msg, 'warning')
         return redirect(url_for('dashboard'))
     documento.venda_id = venda_id
     path = documento.caminho_arquivo
