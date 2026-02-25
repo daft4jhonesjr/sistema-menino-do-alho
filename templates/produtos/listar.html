@@ -820,11 +820,6 @@
     function aplicarModoBacalhau() {
         if (!tipoSelect) return;
         if (isBacalhau()) {
-            if (quantidadeEntradaInput) {
-                quantidadeEntradaInput.value = 0;
-                quantidadeEntradaInput.readOnly = true;
-                quantidadeEntradaInput.classList.add('bg-slate-100', 'dark:bg-slate-700', 'cursor-not-allowed');
-            }
             if (marcaInput && marcaInput.getAttribute('name') === 'marca') {
                 marcaInput.value = 'NORGY';
             }
@@ -840,12 +835,6 @@
                     fornecedorSelect.appendChild(opt);
                 }
                 fornecedorSelect.value = alvo;
-            }
-        } else if (quantidadeEntradaInput) {
-            quantidadeEntradaInput.readOnly = false;
-            quantidadeEntradaInput.classList.remove('bg-slate-100', 'dark:bg-slate-700', 'cursor-not-allowed');
-            if (String(quantidadeEntradaInput.value || '') === '0') {
-                quantidadeEntradaInput.value = 1;
             }
         }
     }

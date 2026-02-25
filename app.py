@@ -3055,15 +3055,6 @@ def _limpar_valor_moeda(v):
         return 0.0
 
 
-def _produto_sem_controle_estoque(produto):
-    """BACALHAU opera como dropshipping/comissionamento (sem estoque)."""
-    if not produto:
-        return False
-    tipo = str(getattr(produto, 'tipo', '') or '').strip().upper()
-    nome = str(getattr(produto, 'nome_produto', '') or '').strip().upper()
-    return ('BACALHAU' in tipo) or ('BACALHAU' in nome)
-
-
 def _normalizar_itens_contagem(itens, incluir_nome=False):
     itens_norm = []
     if not isinstance(itens, list):
@@ -4154,14 +4145,13 @@ def novo_produto():
                 return jsonify(ok=False, mensagem=msg), 400
             flash(msg, 'error')
             return render_template('produtos/formulario.html', produto=None)
-        if tipo_upper != 'BACALHAU' and quantidade_entrada <= 0:
+        if quantidade_entrada <= 0:
             msg = '❌ Ops! A quantidade de entrada deve ser maior que zero.'
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
             flash(msg, 'error')
             return render_template('produtos/formulario.html', produto=None)
         if tipo_upper == 'BACALHAU':
-            quantidade_entrada = 0
             if not marca:
                 marca = 'NORGY'
             if not fornecedor:
@@ -4195,7 +4185,7 @@ def novo_produto():
             preco_custo=Decimal(str(_limpar_valor_moeda(preco_custo))),
             preco_venda_alvo=None,
             quantidade_entrada=quantidade_entrada,  # Quantidade original que entrou
-            estoque_atual=0 if tipo_upper == 'BACALHAU' else quantidade_entrada,  # BACALHAU não controla estoque
+            estoque_atual=quantidade_entrada,
             data_chegada=data_chegada,
             nome_produto=nome_produto
         )
@@ -4264,7 +4254,6 @@ def editar_produto(id):
             flash(str(e), 'error')
             return redirect(url_for('listar_produtos'))
         if tipo_upper == 'BACALHAU':
-            quantidade_entrada = 0
             if not marca:
                 marca = 'NORGY'
             if not fornecedor:
@@ -4288,7 +4277,7 @@ def editar_produto(id):
             nome_produto = gerar_nome_produto(tipo_upper, nacionalidade, marca, data_chegada, tamanho)
         
         # Se houver nova entrada, somar ao estoque atual
-        if quantidade_entrada > 0 and tipo_upper != 'BACALHAU':
+        if quantidade_entrada > 0:
             produto.estoque_atual += quantidade_entrada
 
         produto.tipo = tipo_upper
@@ -4300,9 +4289,6 @@ def editar_produto(id):
         produto.preco_custo = Decimal(str(_limpar_valor_moeda(preco_custo)))
         produto.data_chegada = data_chegada
         produto.nome_produto = nome_produto
-        if tipo_upper == 'BACALHAU':
-            produto.estoque_atual = 0
-        
         # Upload de fotos adicionais para Cloudinary (até 5 no total)
         fotos_existentes = ProdutoFoto.query.filter_by(produto_id=produto.id).count()
         slots_disponiveis = max(0, 5 - fotos_existentes)
@@ -5276,13 +5262,7 @@ def listar_vendas():
         cliente_filtro = Cliente.query.get(cliente_id)
 
     clientes = Cliente.query.order_by(Cliente.nome_cliente).limit(500).all()
-    produtos = Produto.query.filter(
-        or_(
-            Produto.estoque_atual > 0,
-            Produto.tipo.ilike('%BACALHAU%'),
-            Produto.nome_produto.ilike('%BACALHAU%')
-        )
-    ).order_by(Produto.nome_produto).limit(500).all()
+    produtos = Produto.query.filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
     todos_clientes = Cliente.query.order_by(Cliente.nome_cliente).limit(500).all()
     todos_produtos = Produto.query.order_by(Produto.nome_produto).limit(500).all()
     
@@ -5476,13 +5456,7 @@ def nova_venda():
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
             clientes = Cliente.query.all()
-            produtos = Produto.query.filter(
-                or_(
-                    Produto.estoque_atual > 0,
-                    Produto.tipo.ilike('%BACALHAU%'),
-                    Produto.nome_produto.ilike('%BACALHAU%')
-                )
-            ).all()
+            produtos = Produto.query.filter(Produto.estoque_atual > 0).all()
             return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
 
         # Validação de quantidade (deve ser positiva mesmo para perdas)
@@ -5492,28 +5466,16 @@ def nova_venda():
                 return jsonify(ok=False, mensagem=msg), 400
             flash(msg, 'error')
             clientes = Cliente.query.all()
-            produtos = Produto.query.filter(
-                or_(
-                    Produto.estoque_atual > 0,
-                    Produto.tipo.ilike('%BACALHAU%'),
-                    Produto.nome_produto.ilike('%BACALHAU%')
-                )
-            ).all()
+            produtos = Produto.query.filter(Produto.estoque_atual > 0).all()
             return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
 
         produto = Produto.query.get_or_404(produto_id)
-        if (not _produto_sem_controle_estoque(produto)) and produto.estoque_atual < quantidade_venda:
+        if produto.estoque_atual < quantidade_venda:
             msg = f'Estoque insuficiente! Disponível: {produto.estoque_atual}'
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
             clientes = Cliente.query.all()
-            produtos = Produto.query.filter(
-                or_(
-                    Produto.estoque_atual > 0,
-                    Produto.tipo.ilike('%BACALHAU%'),
-                    Produto.nome_produto.ilike('%BACALHAU%')
-                )
-            ).all()
+            produtos = Produto.query.filter(Produto.estoque_atual > 0).all()
             return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
 
         # ✅ Valores negativos no preço são permitidos (para ajustes, perdas, etc.)
@@ -5532,13 +5494,7 @@ def nova_venda():
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
             clientes = Cliente.query.all()
-            produtos = Produto.query.filter(
-                or_(
-                    Produto.estoque_atual > 0,
-                    Produto.tipo.ilike('%BACALHAU%'),
-                    Produto.nome_produto.ilike('%BACALHAU%')
-                )
-            ).all()
+            produtos = Produto.query.filter(Produto.estoque_atual > 0).all()
             return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
         forma_pagamento = (request.form.get('forma_pagamento') or '').strip() or None
         venda = Venda(
@@ -5553,8 +5509,7 @@ def nova_venda():
             forma_pagamento=forma_pagamento
         )
         db.session.add(venda)
-        if not _produto_sem_controle_estoque(produto):
-            produto.estoque_atual -= quantidade_venda
+        produto.estoque_atual -= quantidade_venda
         db.session.flush()
         # --- INÍCIO DA INTEGRAÇÃO COM CAIXA (PILOTO AUTOMÁTICO V4) ---
         if str(venda.situacao or '').strip().upper() in ('PAGO', 'CONCLUÍDO'):
@@ -5619,13 +5574,7 @@ def nova_venda():
         return redirect(url_for('listar_vendas'))
 
     clientes = Cliente.query.all()
-    produtos = Produto.query.filter(
-        or_(
-            Produto.estoque_atual > 0,
-            Produto.tipo.ilike('%BACALHAU%'),
-            Produto.nome_produto.ilike('%BACALHAU%')
-        )
-    ).all()
+    produtos = Produto.query.filter(Produto.estoque_atual > 0).all()
     return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
 
 
@@ -5673,7 +5622,7 @@ def processar_carrinho():
             produto = Produto.query.get(produto_id)
             if not produto:
                 return jsonify(ok=False, mensagem=f'Produto ID {produto_id} não encontrado.'), 400
-            if (not _produto_sem_controle_estoque(produto)) and produto.estoque_atual < quantidade_venda:
+            if produto.estoque_atual < quantidade_venda:
                 return jsonify(
                     ok=False,
                     mensagem=f'Estoque insuficiente para "{produto.nome_produto}". Disponível: {produto.estoque_atual}.'
@@ -5695,8 +5644,7 @@ def processar_carrinho():
                 forma_pagamento=forma_pagamento,
             )
             db.session.add(venda)
-            if not _produto_sem_controle_estoque(produto):
-                produto.estoque_atual -= quantidade_venda
+            produto.estoque_atual -= quantidade_venda
             processados += 1
 
         db.session.commit()
@@ -5736,7 +5684,7 @@ def venda_adicionar_item():
         flash('Preço unitário inválido.', 'error')
         return redirect(url_for('listar_vendas'))
 
-    if (not _produto_sem_controle_estoque(produto)) and produto.estoque_atual < quantidade_venda:
+    if produto.estoque_atual < quantidade_venda:
         flash(f'Estoque insuficiente! Disponível: {produto.estoque_atual}', 'error')
         return redirect(url_for('listar_vendas'))
 
@@ -5751,8 +5699,7 @@ def venda_adicionar_item():
         situacao=venda_existente.situacao,
     )
     db.session.add(nova_venda)
-    if not _produto_sem_controle_estoque(produto):
-        produto.estoque_atual -= quantidade_venda
+    produto.estoque_atual -= quantidade_venda
     db.session.commit()
     limpar_cache_dashboard()
     flash('Produto adicionado ao pedido com sucesso!', 'success')
@@ -5779,31 +5726,25 @@ def editar_venda(id):
         
         produto = Produto.query.get_or_404(produto_id)
         
-        produto_original_sem_estoque = _produto_sem_controle_estoque(produto_original)
-        produto_novo_sem_estoque = _produto_sem_controle_estoque(produto)
+        # Calcular estoque disponível considerando a devolução da quantidade original
+        if produto.id == produto_original.id:
+            estoque_disponivel = produto.estoque_atual + quantidade_original
+        else:
+            estoque_disponivel = produto.estoque_atual
 
-        # Validar estoque apenas para produtos com controle
-        if not produto_novo_sem_estoque:
-            if produto.id == produto_original.id and not produto_original_sem_estoque:
-                estoque_disponivel = produto.estoque_atual + quantidade_original
-            else:
-                estoque_disponivel = produto.estoque_atual
-            if estoque_disponivel < quantidade_venda:
-                flash(f'Estoque insuficiente! Disponível: {estoque_disponivel}', 'error')
-                return redirect(url_for('listar_vendas'))
+        # Validar estoque
+        if estoque_disponivel < quantidade_venda:
+            flash(f'Estoque insuficiente! Disponível: {estoque_disponivel}', 'error')
+            return redirect(url_for('listar_vendas'))
 
         # Atualizar estoque ANTES de atualizar a venda
         if produto.id == produto_original.id:
-            if not produto_novo_sem_estoque:
-                # Mesmo produto com controle: devolve original e subtrai nova quantidade
-                produto.estoque_atual = produto.estoque_atual + quantidade_original - quantidade_venda
+            # Mesmo produto: devolver quantidade original e subtrair nova quantidade
+            produto.estoque_atual = produto.estoque_atual + quantidade_original - quantidade_venda
         else:
-            # Produto mudou: devolve ao original se ele controla estoque
-            if not produto_original_sem_estoque:
-                produto_original.estoque_atual += quantidade_original
-            # Subtrai do novo se ele controla estoque
-            if not produto_novo_sem_estoque:
-                produto.estoque_atual -= quantidade_venda
+            # Produto diferente: devolver ao original e subtrair do novo
+            produto_original.estoque_atual += quantidade_original
+            produto.estoque_atual -= quantidade_venda
         
         # Atualizar venda
         try:
@@ -6778,7 +6719,7 @@ def importar_vendas():
                         erros_detalhados.append(_msg_linha(linha_num, contexto, f"A quantidade está vazia ou inválida ({qtd_raw}). Use um número inteiro (ex: 5)", True))
                         erros += 1
                         continue
-                    if (not _produto_sem_controle_estoque(produto)) and produto.estoque_atual < quantidade_venda:
+                    if produto.estoque_atual < quantidade_venda:
                         erros_detalhados.append(_msg_linha(linha_num, nome_produto, f"Estoque insuficiente. Disponível: {produto.estoque_atual} unidades, solicitado: {quantidade_venda}. Ajuste a quantidade ou o estoque", True))
                         erros += 1
                         continue
@@ -6865,8 +6806,7 @@ def importar_vendas():
                         forma_pagamento=forma_pagamento_val
                     )
                     db.session.add(venda)
-                    if not _produto_sem_controle_estoque(produto):
-                        produto.estoque_atual -= quantidade_venda
+                    produto.estoque_atual -= quantidade_venda
                     db.session.commit()
                     vendas_novas += 1
                 except Exception as e:
