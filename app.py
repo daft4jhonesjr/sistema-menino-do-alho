@@ -6010,6 +6010,13 @@ def atualizar_status_venda(id_venda):
     lancamentos_existentes = LancamentoCaixa.query.filter(
         LancamentoCaixa.descricao.like(f"Venda #{venda.id} -%")
     ).all()
+    # Se houver qualquer item BACALHAU no pedido, todo o lançamento vai para o caixa BACALHAU.
+    eh_bacalhau = any(
+        (getattr(vv, 'produto', None) is not None) and
+        ('BACALHAU' in str(getattr(vv.produto, 'tipo', '') or '').upper())
+        for vv in vendas_do_pedido
+    )
+    setor_destino = 'BACALHAU' if eh_bacalhau else 'GERAL'
     status_pago = novo and novo.upper() in ('PAGO', 'CONCLUÍDO', 'PARCIAL')
     if status_pago and not lancamentos_existentes:
         cliente = Cliente.query.get(venda.cliente_id)
@@ -6034,6 +6041,7 @@ def atualizar_status_venda(id_venda):
             categoria='Entrada Cliente',
             forma_pagamento=forma_pgto,
             valor=valor_pedido,
+            setor=setor_destino,
             usuario_id=current_user.id
         )
         db.session.add(novo_lancamento)
@@ -6045,6 +6053,7 @@ def atualizar_status_venda(id_venda):
                 categoria='Saída Fornecedor',
                 forma_pagamento=forma_pgto,
                 valor=valor_pedido,
+                setor=setor_destino,
                 usuario_id=current_user.id
             )
             db.session.add(repasse_lanc)
