@@ -4212,6 +4212,54 @@ def novo_fornecedor():
     return redirect(url_for('listar_produtos'))
 
 
+@app.route('/fornecedores/<int:id>/editar', methods=['POST'])
+@login_required
+def editar_fornecedor(id):
+    fornecedor = Fornecedor.query.get_or_404(id)
+    nome = str(request.form.get('nome') or '').strip().upper()
+    razao_social = str(request.form.get('razao_social') or '').strip().upper() or None
+    cnpj = str(request.form.get('cnpj') or '').strip() or None
+    endereco = str(request.form.get('endereco') or '').strip() or None
+
+    if not nome:
+        flash('Nome do fornecedor é obrigatório.', 'error')
+        return redirect(url_for('listar_produtos'))
+
+    ja_existe = Fornecedor.query.filter(
+        func.upper(Fornecedor.nome) == nome,
+        Fornecedor.id != fornecedor.id
+    ).first()
+    if ja_existe:
+        flash('Já existe outro fornecedor com este nome.', 'warning')
+        return redirect(url_for('listar_produtos'))
+
+    try:
+        fornecedor.nome = nome
+        fornecedor.razao_social = razao_social
+        fornecedor.cnpj = cnpj
+        fornecedor.endereco = endereco
+        db.session.commit()
+        flash('Fornecedor atualizado com sucesso!', 'success')
+    except Exception:
+        db.session.rollback()
+        flash('Erro ao atualizar fornecedor.', 'error')
+
+    return redirect(url_for('listar_produtos'))
+
+
+@app.route('/fornecedores/<int:id>/excluir', methods=['POST'])
+@login_required
+def excluir_fornecedor(id):
+    fornecedor = Fornecedor.query.get_or_404(id)
+    try:
+        db.session.delete(fornecedor)
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': 'Erro ao excluir fornecedor.'}), 500
+
+
 @app.route('/produtos/novo', methods=['GET', 'POST'])
 @login_required
 def novo_produto():
