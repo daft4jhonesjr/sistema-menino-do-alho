@@ -4170,6 +4170,8 @@ def listar_produtos():
                              produtos_agrupados=produtos_agrupados,
                              current_page=page)
 
+    fornecedores = Fornecedor.query.order_by(Fornecedor.nome).all()
+
     return render_template(
         'produtos/listar.html',
         produtos_agrupados=produtos_agrupados,
@@ -4177,6 +4179,7 @@ def listar_produtos():
         produtos_com_entrada=produtos_com_entrada_real,
         produtos=produtos_paginados,
         produtos_outros=produtos_outros,
+        fornecedores=fornecedores,
         ordem_data=ordem_data,
         totais_por_tipo=totais_por_tipo,
         pagination=pagination,

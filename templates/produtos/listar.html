@@ -34,6 +34,9 @@
         <button type="button" id="btn-abrir-modal-fornecedor" onclick="document.getElementById('modal-novo-fornecedor').classList.remove('hidden');travarFundo();" class="bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 px-5 py-2.5 rounded-xl shadow-sm dark:shadow-none hover:bg-emerald-50 dark:hover:bg-gray-600 hover:border-emerald-200 dark:hover:border-gray-500 hover:text-emerald-700 dark:hover:text-gray-100 transition flex items-center font-medium">
             🏢 Novo Fornecedor
         </button>
+        <button type="button" id="btn-abrir-modal-lista-fornecedores" onclick="document.getElementById('modal-lista-fornecedores').classList.remove('hidden');travarFundo();" class="bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 px-5 py-2.5 rounded-xl shadow-sm dark:shadow-none hover:bg-emerald-50 dark:hover:bg-gray-600 hover:border-emerald-200 dark:hover:border-gray-500 hover:text-emerald-700 dark:hover:text-gray-100 transition flex items-center font-medium">
+            📋 Fornecedores Cadastrados
+        </button>
         <button type="button" id="btn-abrir-modal-nova-entrada" class="bg-emerald-700 text-white px-5 py-2.5 rounded-xl shadow-sm hover:bg-emerald-600 transition flex items-center font-medium">
             <i data-lucide="plus" class="w-4 h-4 mr-2"></i>Nova Entrada
         </button>
@@ -345,6 +348,46 @@
                 <button type="submit" class="px-4 py-2 bg-emerald-700 text-white rounded-md text-sm font-semibold hover:bg-emerald-800">✓ Salvar</button>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- Modal Lista de Fornecedores -->
+<div id="modal-lista-fornecedores" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onclick="if(event.target===this){this.classList.add('hidden');liberarFundo();}">
+    <div class="bg-white dark:bg-slate-800 rounded-xl shadow-lg w-full max-w-4xl overflow-hidden max-h-[85vh] flex flex-col" onclick="event.stopPropagation()">
+        <div class="flex justify-between items-center px-6 py-4 bg-slate-700 text-white">
+            <h3 class="font-bold text-lg">📋 Fornecedores Cadastrados</h3>
+            <button type="button" onclick="document.getElementById('modal-lista-fornecedores').classList.add('hidden');liberarFundo();" class="hover:text-slate-300 text-xl font-bold">✖</button>
+        </div>
+
+        <div class="p-6 overflow-y-auto">
+            <table class="w-full text-sm text-left border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+                <thead class="text-xs text-slate-500 uppercase bg-slate-100 dark:bg-slate-900 dark:text-slate-400">
+                    <tr>
+                        <th class="px-4 py-3">Nome Fantasia</th>
+                        <th class="px-4 py-3">Razão Social</th>
+                        <th class="px-4 py-3">CNPJ</th>
+                        <th class="px-4 py-3 text-right">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for fornecedor in fornecedores %}
+                    <tr class="border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                        <td class="px-4 py-3 font-bold text-slate-800 dark:text-slate-200">{{ fornecedor.nome }}</td>
+                        <td class="px-4 py-3 text-slate-600 dark:text-slate-400">{{ fornecedor.razao_social or '--' }}</td>
+                        <td class="px-4 py-3 text-slate-600 dark:text-slate-400">{{ fornecedor.cnpj or '--' }}</td>
+                        <td class="px-4 py-3 text-right">
+                            <button type="button" class="text-blue-500 hover:text-blue-700 mr-3" title="Editar Fornecedor">✏️</button>
+                            <button type="button" class="text-red-500 hover:text-red-700" title="Excluir Fornecedor">🗑️</button>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="4" class="px-4 py-8 text-center text-slate-500">Nenhum fornecedor cadastrado no sistema.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 
