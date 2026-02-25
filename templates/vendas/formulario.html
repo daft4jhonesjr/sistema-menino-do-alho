@@ -27,6 +27,12 @@
                     </option>
                     {% endfor %}
                 </select>
+                <div id="container-cliente-avulso" class="hidden mt-2 w-full">
+                    <label for="input-cliente-avulso" class="block text-xs font-semibold text-slate-600 mb-1">Identificação (Opcional)</label>
+                    <input type="text" name="cliente_avulso" id="input-cliente-avulso" value="{{ venda.cliente_avulso if venda and venda.cliente_avulso else '' }}"
+                           class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                           placeholder="Ex: Motorista do caminhão azul...">
+                </div>
             </div>
 
             <div class="mb-4">
@@ -126,11 +132,33 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const clienteSelect = document.getElementById('cliente_id');
+    const containerAvulso = document.getElementById('container-cliente-avulso');
+    const inputAvulso = document.getElementById('input-cliente-avulso');
     const produtoSelect = document.getElementById('produto_id');
     const quantidadeInput = document.getElementById('quantidade_venda');
     const precoInput = document.getElementById('preco_venda');
     const estoqueInfo = document.getElementById('estoque-info');
     
+    function atualizarCampoClienteAvulso() {
+        if (!clienteSelect || !containerAvulso) return;
+        const selectedOption = clienteSelect.options[clienteSelect.selectedIndex];
+        const valor = String(selectedOption ? selectedOption.text : '').toUpperCase();
+        if (valor.includes('DESCONHECIDO')) {
+            containerAvulso.classList.remove('hidden');
+            containerAvulso.classList.add('block');
+        } else {
+            containerAvulso.classList.remove('block');
+            containerAvulso.classList.add('hidden');
+            if (inputAvulso) inputAvulso.value = '';
+        }
+    }
+
+    if (clienteSelect) {
+        clienteSelect.addEventListener('change', atualizarCampoClienteAvulso);
+        atualizarCampoClienteAvulso();
+    }
+
     produtoSelect.addEventListener('change', function() {
         const selectedOption = this.options[this.selectedIndex];
         const estoque = selectedOption.getAttribute('data-estoque');

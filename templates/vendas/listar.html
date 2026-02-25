@@ -200,6 +200,10 @@
                         <option value="{{ c.id }}">{{ c.nome_cliente }}</option>
                         {% endfor %}
                     </select>
+                    <div id="container-cliente-avulso" class="hidden mt-2 w-full">
+                        <label for="input-cliente-avulso" class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Identificação (Opcional)</label>
+                        <input type="text" name="cliente_avulso" id="input-cliente-avulso" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:text-white" placeholder="Ex: Motorista do caminhão azul...">
+                    </div>
                 </div>
                 <div class="md:col-span-2 flex flex-col justify-start" id="produto-select-wrap">
                     <label for="inline-produto_id" class="block text-xs font-medium text-gray-600 dark:text-gray-200 mb-1">Produto</label>
@@ -1307,6 +1311,8 @@ document.addEventListener('DOMContentLoaded', function() {
     var btnAdicionar = document.getElementById('btn-adicionar-carrinho');
     var produtoSelect = document.getElementById('inline-produto_id');
     var clienteSelect = document.getElementById('inline-cliente_id');
+    var clienteAvulsoContainer = document.getElementById('container-cliente-avulso');
+    var clienteAvulsoInput = document.getElementById('input-cliente-avulso');
     var precoInput = document.getElementById('preco');
     var quantidadeInput = document.getElementById('inline-quantidade_venda');
     var estoqueInfo = document.getElementById('inline-estoque-info');
@@ -1334,6 +1340,21 @@ document.addEventListener('DOMContentLoaded', function() {
         erroDiv.classList.remove('hidden');
     }
 
+    function atualizarCampoClienteAvulso() {
+        if (!clienteSelect || !clienteAvulsoContainer) return;
+        var optCliente = clienteSelect.selectedIndex >= 0 ? clienteSelect.options[clienteSelect.selectedIndex] : null;
+        var clienteTexto = String(optCliente ? (optCliente.text || '') : '').toUpperCase();
+        var isDesconhecido = clienteTexto.indexOf('DESCONHECIDO') !== -1;
+        if (isDesconhecido) {
+            clienteAvulsoContainer.classList.remove('hidden');
+            clienteAvulsoContainer.classList.add('block');
+        } else {
+            clienteAvulsoContainer.classList.remove('block');
+            clienteAvulsoContainer.classList.add('hidden');
+            if (clienteAvulsoInput) clienteAvulsoInput.value = '';
+        }
+    }
+
     function resetForm() {
         if (!form) return;
         if (window.vendasClienteSearch && window.vendasClienteSearch.destroy) window.vendasClienteSearch.destroy();
@@ -1344,6 +1365,11 @@ document.addEventListener('DOMContentLoaded', function() {
         if (estoqueInfo) { estoqueInfo.textContent = ''; estoqueInfo.className = 'mt-0.5 text-xs text-gray-500 dark:text-gray-400'; }
         updateValorTotalDisplay();
         if (btnAdicionar) btnAdicionar.disabled = false;
+        if (clienteAvulsoContainer) {
+            clienteAvulsoContainer.classList.remove('block');
+            clienteAvulsoContainer.classList.add('hidden');
+        }
+        if (clienteAvulsoInput) clienteAvulsoInput.value = '';
         hideErro();
         if (window.vendasClienteSearch && window.vendasClienteSearch.init) window.vendasClienteSearch.init();
         if (typeof lucide !== 'undefined') lucide.createIcons();
@@ -1389,6 +1415,12 @@ document.addEventListener('DOMContentLoaded', function() {
         var optCliente = clienteSelect && clienteSelect.selectedIndex >= 0 ? clienteSelect.options[clienteSelect.selectedIndex] : null;
         var optProduto = produtoSelect && produtoSelect.selectedIndex >= 0 ? produtoSelect.options[produtoSelect.selectedIndex] : null;
         var cliente_nome = optCliente ? optCliente.text : '';
+        var cliente_avulso = (clienteAvulsoInput && clienteAvulsoContainer && !clienteAvulsoContainer.classList.contains('hidden'))
+            ? (clienteAvulsoInput.value || '').trim()
+            : '';
+        if (String(cliente_nome || '').toUpperCase().indexOf('DESCONHECIDO') !== -1 && cliente_avulso) {
+            cliente_nome = cliente_nome + ' (' + cliente_avulso + ')';
+        }
         var produto_nome = optProduto ? optProduto.text : '';
         var preco_custo = 0;
         if (optProduto) {
@@ -1411,6 +1443,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return {
             cliente_id: parseInt(cid, 10),
             cliente_nome: cliente_nome,
+            cliente_avulso: cliente_avulso || null,
             produto_id: parseInt(pid, 10),
             produto_nome: produto_nome,
             nf: nf || null,
@@ -1489,6 +1522,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return carrinho.map(function(it) {
             return {
                 cliente_id: it.cliente_id,
+                cliente_avulso: it.cliente_avulso || null,
                 produto_id: it.produto_id,
                 nf: it.nf,
                 quantidade_venda: it.quantidade_venda,
@@ -1502,6 +1536,10 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     if (dataInput && !dataInput.value) dataInput.value = new Date().toISOString().split('T')[0];
+    if (clienteSelect) {
+        clienteSelect.addEventListener('change', atualizarCampoClienteAvulso);
+        atualizarCampoClienteAvulso();
+    }
 
     if (produtoSelect) {
         produtoSelect.addEventListener('change', function() {
@@ -1672,6 +1710,8 @@ document.addEventListener('DOMContentLoaded', function() {
             onItemAdd: function(value) {
                 var wrap = document.querySelector('#cliente-select-wrap .ts-wrapper');
                 if (wrap) wrap.classList.add('campo-preenchido');
+                var ev = new Event('change', { bubbles: true });
+                clienteSelectEl.dispatchEvent(ev);
                 if (produtoSelectEl) setTimeout(function() { produtoSelectEl.focus(); }, 80);
                 // Auto-preenchimento da Forma de Pagamento com base na última compra do cliente
                 if (value) {
@@ -1701,6 +1741,8 @@ document.addEventListener('DOMContentLoaded', function() {
             onClear: function() {
                 var wrap = document.querySelector('#cliente-select-wrap .ts-wrapper');
                 if (wrap) wrap.classList.remove('campo-preenchido');
+                var ev = new Event('change', { bubbles: true });
+                clienteSelectEl.dispatchEvent(ev);
             },
             onDropdownOpen: function(dropdown) {
                 if (dropdown) dropdown.classList.add('vendas-cliente-dropdown');

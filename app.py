@@ -2251,6 +2251,12 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             db.session.commit()
         except (OperationalError, Exception):
             db.session.rollback()
+        # Migração: cliente_avulso em vendas (identificação quando cliente é "Desconhecido")
+        try:
+            db.session.execute(text('ALTER TABLE vendas ADD COLUMN cliente_avulso VARCHAR(100)'))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
         # Migração: status_envio em lancamentos_caixa (ciclo de vida de cheques)
         try:
             db.session.execute(text("ALTER TABLE lancamentos_caixa ADD COLUMN status_envio VARCHAR(20) DEFAULT 'Não Enviado'"))
@@ -5015,6 +5021,13 @@ def listar_vendas():
     # Agrupar vendas por pedido usando dicionário
     pedidos_dict = {}
     
+    def _nome_cliente_exibicao(venda_obj):
+        nome = str(venda_obj.cliente.nome_cliente if venda_obj.cliente else 'Cliente').strip()
+        avulso = str(getattr(venda_obj, 'cliente_avulso', '') or '').strip()
+        if 'DESCONHECIDO' in nome.upper() and avulso:
+            return f'{nome} ({avulso})'
+        return nome
+
     for venda in vendas_raw:
         cnpj_cliente = venda.cliente.cnpj or ''
         is_consumidor_final = cnpj_cliente in ('0', '00000000000000', '')
@@ -5025,7 +5038,8 @@ def listar_vendas():
         # Criar chave do pedido
         if is_consumidor_final:
             # CNPJ == '0': agrupar por (id_cliente, data_venda)
-            pedido_key = (venda.cliente_id, data_venda_normalizada)
+            avulso_norm = str(getattr(venda, 'cliente_avulso', '') or '').strip().upper()
+            pedido_key = (venda.cliente_id, data_venda_normalizada, avulso_norm)
         else:
             # CNPJ != '0': agrupar por (id_cliente, nf, data_venda)
             nf_normalizada = str(venda.nf).strip() if venda.nf else ''
@@ -5036,7 +5050,7 @@ def listar_vendas():
             pedidos_dict[pedido_key] = {
                 'key': pedido_key,
                 'cliente_id': venda.cliente_id,
-                'cliente_nome': venda.cliente.nome_cliente,
+                'cliente_nome': _nome_cliente_exibicao(venda),
                 'cliente_cnpj': cnpj_cliente,
                 'nf': venda.nf or '-',
                 'data_venda': venda.data_venda,
@@ -5069,7 +5083,8 @@ def listar_vendas():
         data_venda_normalizada = venda.data_venda.date() if hasattr(venda.data_venda, 'date') else venda.data_venda
         
         if is_consumidor_final:
-            pedido_key = (venda.cliente_id, data_venda_normalizada)
+            avulso_norm = str(getattr(venda, 'cliente_avulso', '') or '').strip().upper()
+            pedido_key = (venda.cliente_id, data_venda_normalizada, avulso_norm)
         else:
             nf_normalizada = str(venda.nf).strip() if venda.nf else ''
             pedido_key = (venda.cliente_id, nf_normalizada, data_venda_normalizada)
@@ -5489,6 +5504,7 @@ def nova_venda():
             cliente_id = int(cliente_id_raw) if cliente_id_raw else None
         except (ValueError, TypeError):
             cliente_id = None
+        cliente_avulso_raw = (request.form.get('cliente_avulso') or '').strip()
         if not cliente_id:
             msg = 'Cliente é obrigatório.'
             if _is_ajax():
@@ -5496,9 +5512,20 @@ def nova_venda():
             clientes = Cliente.query.all()
             produtos = Produto.query.filter(Produto.estoque_atual > 0).all()
             return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
+        cliente_obj = Cliente.query.get(cliente_id)
+        if not cliente_obj:
+            msg = 'Cliente não encontrado.'
+            if _is_ajax():
+                return jsonify(ok=False, mensagem=msg), 400
+            flash(msg, 'error')
+            clientes = Cliente.query.all()
+            produtos = Produto.query.filter(Produto.estoque_atual > 0).all()
+            return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
+        cliente_avulso = cliente_avulso_raw if 'DESCONHECIDO' in str(cliente_obj.nome_cliente or '').upper() else None
         forma_pagamento = (request.form.get('forma_pagamento') or '').strip() or None
         venda = Venda(
             cliente_id=cliente_id,
+            cliente_avulso=cliente_avulso,
             produto_id=produto_id,
             nf=request.form.get('nf', ''),
             preco_venda=Decimal(str(_limpar_valor_moeda(request.form.get('preco_venda', 0)))),
@@ -5558,7 +5585,7 @@ def nova_venda():
                 mensagem='Venda registrada com sucesso!',
                 venda={
                     'id': venda.id,
-                    'cliente_nome': venda.cliente.nome_cliente,
+                    'cliente_nome': f"{venda.cliente.nome_cliente} ({venda.cliente_avulso})" if (venda.cliente and venda.cliente_avulso and 'DESCONHECIDO' in str(venda.cliente.nome_cliente or '').upper()) else venda.cliente.nome_cliente,
                     'produto_nome': venda.produto.nome_produto,
                     'nf': venda.nf or '-',
                     'quantidade_venda': venda.quantidade_venda,
@@ -5631,9 +5658,12 @@ def processar_carrinho():
             cliente = Cliente.query.get(cliente_id)
             if not cliente:
                 return jsonify(ok=False, mensagem=f'Cliente ID {cliente_id} não encontrado.'), 400
+            cliente_avulso_raw = (obj.get('cliente_avulso') or '').strip()
+            cliente_avulso = cliente_avulso_raw if 'DESCONHECIDO' in str(cliente.nome_cliente or '').upper() else None
 
             venda = Venda(
                 cliente_id=cliente_id,
+                cliente_avulso=cliente_avulso,
                 produto_id=produto_id,
                 nf=nf,
                 preco_venda=preco_venda,
@@ -5690,6 +5720,7 @@ def venda_adicionar_item():
 
     nova_venda = Venda(
         cliente_id=venda_existente.cliente_id,
+        cliente_avulso=venda_existente.cliente_avulso,
         produto_id=produto_id,
         nf=venda_existente.nf or '',
         preco_venda=Decimal(str(preco_venda)),
