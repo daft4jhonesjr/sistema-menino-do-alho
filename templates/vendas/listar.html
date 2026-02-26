@@ -514,7 +514,10 @@
                     <h3 class="font-bold text-lg text-gray-800 dark:text-white">{{ pedido.cliente_nome }}</h3>
                     <span class="text-xs text-gray-500 dark:text-gray-400">NF: {% if pedido.nf and pedido.nf != '-' %}<span onclick="copiarParaClipboard('{{ pedido.nf }}', this)" class="cursor-pointer hover:text-emerald-600 dark:hover:text-emerald-400 hover:underline transition-all font-medium" title="Clique para copiar a NF">{{ pedido.nf }}</span>{% else %}-{% endif %}</span>
                 </div>
-                {% if pedido.situacao == 'PARCIAL' %}
+                {% set pedido_eh_perda = pedido.vendas|selectattr('tipo_operacao', 'equalto', 'PERDA')|list|length > 0 %}
+                {% if pedido_eh_perda %}
+                <span class="inline-block px-2 py-1 text-xs font-semibold rounded-full bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-300">📉 PERDA</span>
+                {% elif pedido.situacao == 'PARCIAL' %}
                 <span class="inline-block px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 dark:bg-orange-900/50 text-orange-800 dark:text-orange-300">{{ pedido.situacao }}</span>
                 {% else %}
                 <button type="button" class="badge-situacao-toggle px-2 py-1 text-xs font-semibold rounded-full cursor-pointer transition focus:outline-none focus:ring-2 {{ 'bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-800 hover:ring-2 hover:ring-amber-400 focus:ring-amber-400' if pedido.situacao == 'PENDENTE' else 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-800 hover:ring-2 hover:ring-emerald-400 focus:ring-emerald-400' }}"
@@ -530,6 +533,9 @@
             <div class="text-sm text-gray-600 dark:text-gray-300 mb-3">
                 <p class="text-gray-500 dark:text-gray-400">📦 {{ pedido.total_quantidade }} itens</p>
                 <p class="font-bold text-emerald-600 dark:text-emerald-400 text-lg mt-1 valor-financeiro">{{ pedido.total_valor|formato_moeda }}</p>
+                {% if pedido_eh_perda %}
+                <p class="mt-1"><span class="px-2 py-1 bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-300 text-xs font-bold rounded-full uppercase">📉 PERDA</span></p>
+                {% endif %}
                 <p class="text-xs mt-1">📅 Venc.: {% if pedido.data_vencimento %}{{ pedido.data_vencimento.strftime('%d/%m/%Y') }}{% else %}---{% endif %}</p>
             </div>
             <div class="flex justify-end gap-2 pt-3 border-t border-gray-100 dark:border-gray-700 flex-wrap">
@@ -1389,11 +1395,15 @@ document.addEventListener('DOMContentLoaded', function() {
             precoInput.value = formatPreco(0);
             precoProgrammatic = false;
             precoInput.readOnly = true;
+            precoInput.removeAttribute('required');
+            precoInput.removeAttribute('min');
             precoInput.classList.add('bg-red-50', 'text-red-600', 'dark:bg-red-900/20', 'dark:text-red-300');
             if (situacaoSelect) situacaoSelect.value = 'PAGO';
             if (formaPagamentoSelect) formaPagamentoSelect.value = '';
         } else {
             precoInput.readOnly = false;
+            precoInput.setAttribute('required', 'required');
+            precoInput.setAttribute('min', '0.01');
             precoInput.classList.remove('bg-red-50', 'text-red-600', 'dark:bg-red-900/20', 'dark:text-red-300');
             if (!precoInput.value || parsePreco(precoInput.value) === 0) {
                 var opt = produtoSelect && produtoSelect.options[produtoSelect.selectedIndex];
