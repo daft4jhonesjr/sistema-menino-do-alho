@@ -1643,6 +1643,65 @@ def _listar_documentos_recem_chegados(user_id=None):
     return documentos, resultado_processamento
 
 
+def _auto_vincular_documentos_pendentes_por_nf(user_id=None):
+    """Vincula documentos já salvos no banco (venda_id=None) usando NF extraída.
+    Não bloqueia por existência de outros documentos na venda."""
+    resultado = {'vinculados': 0, 'erros': 0}
+    query = Documento.query.filter(Documento.venda_id.is_(None))
+    if user_id is not None:
+        query = query.filter(Documento.usuario_id == user_id)
+    docs = query.all()
+
+    vendas_com_nf = [v for v in Venda.query.all() if (v.nf or '').strip()]
+
+    for doc in docs:
+        try:
+            nf_origem = (doc.nf_extraida or doc.numero_nf or '').strip()
+            nf_doc = _normalizar_nf(nf_origem)
+            if not nf_doc or nf_doc in ('S/N', '0'):
+                continue
+
+            venda_match = None
+            for venda in vendas_com_nf:
+                nf_venda = _normalizar_nf(str(venda.nf or '').strip())
+                if _nf_match(nf_doc, nf_venda):
+                    venda_match = venda
+                    break
+
+            if not venda_match:
+                continue
+
+            # Sem bloqueios adicionais: apenas vincula este documento à venda encontrada.
+            doc.venda_id = venda_match.id
+
+            # Mantém compatibilidade com fluxos legados que usam caminho_boleto/caminho_nf.
+            path = (doc.caminho_arquivo or '').strip()
+            if path:
+                vendas_pedido = _vendas_do_pedido(venda_match)
+                is_boleto = (doc.tipo or '').upper() == 'BOLETO'
+                for vv in vendas_pedido:
+                    if is_boleto:
+                        vv.caminho_boleto = path
+                        if doc.data_vencimento:
+                            vv.data_vencimento = doc.data_vencimento
+                    else:
+                        vv.caminho_nf = path
+
+            resultado['vinculados'] += 1
+        except Exception as e:
+            resultado['erros'] += 1
+            print(f"[auto_vinculo_nf] Erro ao vincular documento ID {getattr(doc, 'id', '?')}: {e}")
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[auto_vinculo_nf] Erro no commit: {e}")
+        resultado['erros'] += 1
+
+    return resultado
+
+
 app = Flask(__name__)
 app.config.from_object(Config)
 app.config['UPLOAD_FOLDER'] = 'uploads'
@@ -6707,6 +6766,12 @@ def admin_reprocessar_vencimentos():
 @login_required
 def organizar_e_vincular():
     """Terceiriza o processamento para o robô de background."""
+    resultado_vinculo = _auto_vincular_documentos_pendentes_por_nf(user_id=current_user.id)
+    if resultado_vinculo.get('vinculados', 0) > 0:
+        flash(f"✅ {resultado_vinculo['vinculados']} documento(s) pendente(s) vinculado(s) por NF.", 'success')
+    if resultado_vinculo.get('erros', 0) > 0:
+        flash(f"⚠️ {resultado_vinculo['erros']} documento(s) não puderam ser vinculados automaticamente.", 'warning')
+
     if fila_tarefas:
         fila_tarefas.enqueue(background_organizar_tudo, current_user.id)
         flash("⏳ O robô começou a ler os PDFs nos bastidores! Pode continuar navegando, os links aparecerão em breve.", 'info')
@@ -6741,38 +6806,41 @@ def vincular_documento_venda(id):
             return jsonify(ok=False, mensagem='Pedido não encontrado.'), 404
         flash('Pedido não encontrado.', 'error')
         return redirect(url_for('dashboard'))
-    if documento.venda_id is not None and documento.venda_id != venda_id:
-        msg = f'Este arquivo já está vinculado à venda #{documento.venda_id}.'
+    try:
+        documento.venda_id = venda_id
+        path = documento.caminho_arquivo
+        vendas_pedido = _vendas_do_pedido(venda)
+        is_boleto = (documento.tipo or '').upper() == 'BOLETO'
+        
+        # Se for boleto, extrair/atualizar data de vencimento
+        data_venc_boleto = None
+        if is_boleto and documento.data_vencimento:
+            data_venc_boleto = documento.data_vencimento
+        elif is_boleto:
+            # Re-extrair data do PDF se não tiver no documento
+            path_full = os.path.join(os.path.dirname(os.path.abspath(__file__)), path)
+            if os.path.isfile(path_full):
+                dados_pdf = _processar_pdf(path_full, 'BOLETO')
+                if dados_pdf and dados_pdf.get('data_vencimento'):
+                    data_venc_boleto = dados_pdf['data_vencimento']
+                    documento.data_vencimento = data_venc_boleto  # Atualizar também o documento
+        
+        for vv in vendas_pedido:
+            if is_boleto:
+                vv.caminho_boleto = path
+                if data_venc_boleto:
+                    vv.data_vencimento = data_venc_boleto
+            else:
+                vv.caminho_nf = path
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[vincular_documento_venda] Erro ao vincular documento ID {id} na venda {venda_id}: {e}")
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return jsonify(ok=False, mensagem=msg), 409
-        flash(msg, 'warning')
+            return jsonify(ok=False, mensagem='Erro ao salvar vínculo do documento.'), 500
+        flash('Erro ao salvar vínculo do documento.', 'error')
         return redirect(url_for('dashboard'))
-    documento.venda_id = venda_id
-    path = documento.caminho_arquivo
-    vendas_pedido = _vendas_do_pedido(venda)
-    is_boleto = (documento.tipo or '').upper() == 'BOLETO'
-    
-    # Se for boleto, extrair/atualizar data de vencimento
-    data_venc_boleto = None
-    if is_boleto and documento.data_vencimento:
-        data_venc_boleto = documento.data_vencimento
-    elif is_boleto:
-        # Re-extrair data do PDF se não tiver no documento
-        path_full = os.path.join(os.path.dirname(os.path.abspath(__file__)), path)
-        if os.path.isfile(path_full):
-            dados_pdf = _processar_pdf(path_full, 'BOLETO')
-            if dados_pdf and dados_pdf.get('data_vencimento'):
-                data_venc_boleto = dados_pdf['data_vencimento']
-                documento.data_vencimento = data_venc_boleto  # Atualizar também o documento
-    
-    for vv in vendas_pedido:
-        if is_boleto:
-            vv.caminho_boleto = path
-            if data_venc_boleto:
-                vv.data_vencimento = data_venc_boleto
-        else:
-            vv.caminho_nf = path
-    db.session.commit()
+
     c = venda.cliente
     rs = (c.razao_social or '').strip()
     label_cliente = f"{c.nome_cliente} ({rs})" if rs else c.nome_cliente
