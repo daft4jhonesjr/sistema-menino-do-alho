@@ -1492,6 +1492,10 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function buildItemFromForm() {
+        // Captura segura do tipo de operação no próprio escopo (evita ReferenceError)
+        var selectOp = document.getElementById('tipo_operacao') || document.querySelector('select[name="tipo_operacao"]');
+        var tipoOperacao = (selectOp && selectOp.value) ? String(selectOp.value).toUpperCase() : 'VENDA';
+
         var cid = (clienteSelect && clienteSelect.value) ? clienteSelect.value.trim() : '';
         var pid = (produtoSelect && produtoSelect.value) ? produtoSelect.value.trim() : '';
         var optCliente = clienteSelect && clienteSelect.selectedIndex >= 0 ? clienteSelect.options[clienteSelect.selectedIndex] : null;
@@ -1512,18 +1516,20 @@ document.addEventListener('DOMContentLoaded', function() {
         var nf = (form.querySelector('[name="nf"]') && form.querySelector('[name="nf"]').value) ? form.querySelector('[name="nf"]').value.trim() : '';
         var qtd = parseInt(quantidadeInput && quantidadeInput.value ? quantidadeInput.value : '0', 10);
         var preco = parsePreco(precoInput && precoInput.value ? precoInput.value : '') || 0;
+        if (tipoOperacao === 'PERDA') preco = 0;
         var dataVal = dataInput && dataInput.value ? dataInput.value.trim() : '';
         if (!dataVal) dataVal = new Date().toISOString().split('T')[0];
         var empresa = (form.querySelector('[name="empresa_faturadora"]') && form.querySelector('[name="empresa_faturadora"]').value) || '';
         var situacao = (form.querySelector('[name="situacao"]') && form.querySelector('[name="situacao"]').value) || 'PENDENTE';
-        if (operacao === 'PERDA') situacao = 'PERDA';
+        if (tipoOperacao === 'PERDA') situacao = 'PERDA';
         var formaPagEl = document.getElementById('inline-forma_pagamento');
         var formaPagamento = (formaPagEl && formaPagEl.value) ? String(formaPagEl.value).trim() : '';
-        if (operacao === 'PERDA') formaPagamento = '';
+        if (tipoOperacao === 'PERDA') formaPagamento = '';
         if (!cid || !pid) return null;
-        if (qtd < 1 || (operacao !== 'PERDA' && preco <= 0) || !empresa) return null;
+        if (qtd < 1 || !empresa) return null;
+        if (tipoOperacao === 'VENDA' && (isNaN(preco) || preco <= 0)) return null;
         var total = preco * qtd;
-        var lucro = operacao === 'PERDA' ? -(preco_custo * qtd) : ((preco - preco_custo) * qtd);
+        var lucro = tipoOperacao === 'PERDA' ? -(preco_custo * qtd) : ((preco - preco_custo) * qtd);
         return {
             cliente_id: parseInt(cid, 10),
             cliente_nome: cliente_nome,
@@ -1538,7 +1544,7 @@ document.addEventListener('DOMContentLoaded', function() {
             lucro: lucro,
             data_venda: dataVal,
             empresa_faturadora: empresa,
-            tipo_operacao: operacao,
+            tipo_operacao: tipoOperacao,
             situacao: situacao,
             forma_pagamento: formaPagamento || null
         };
