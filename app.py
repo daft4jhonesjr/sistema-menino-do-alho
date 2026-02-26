@@ -2328,6 +2328,12 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             db.session.commit()
         except (OperationalError, Exception):
             db.session.rollback()
+        # Migração: tipo_operacao em vendas (VENDA/PERDA)
+        try:
+            db.session.execute(text("ALTER TABLE vendas ADD COLUMN tipo_operacao VARCHAR(20) NOT NULL DEFAULT 'VENDA'"))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
         # Migração: status_envio em lancamentos_caixa (ciclo de vida de cheques)
         try:
             db.session.execute(text("ALTER TABLE lancamentos_caixa ADD COLUMN status_envio VARCHAR(20) DEFAULT 'Não Enviado'"))
@@ -5767,23 +5773,32 @@ def nova_venda():
             return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
         cliente_avulso = cliente_avulso_raw if 'DESCONHECIDO' in str(cliente_obj.nome_cliente or '').upper() else None
         forma_pagamento = (request.form.get('forma_pagamento') or '').strip() or None
+        tipo_operacao = (request.form.get('tipo_operacao') or 'VENDA').strip().upper()
+        if tipo_operacao not in ('VENDA', 'PERDA'):
+            tipo_operacao = 'VENDA'
+        preco_venda = Decimal(str(_limpar_valor_moeda(request.form.get('preco_venda', 0))))
+        if tipo_operacao == 'PERDA':
+            preco_venda = Decimal('0')
+            situacao = 'PERDA'
+            forma_pagamento = None
         venda = Venda(
             cliente_id=cliente_id,
             cliente_avulso=cliente_avulso,
             produto_id=produto_id,
             nf=request.form.get('nf', ''),
-            preco_venda=Decimal(str(_limpar_valor_moeda(request.form.get('preco_venda', 0)))),
+            preco_venda=preco_venda,
             quantidade_venda=quantidade_venda,
             data_venda=date.fromisoformat(data_venda_raw) if data_venda_raw else date.today(),
             empresa_faturadora=empresa_faturadora,
             situacao=situacao,
-            forma_pagamento=forma_pagamento
+            forma_pagamento=forma_pagamento,
+            tipo_operacao=tipo_operacao,
         )
         db.session.add(venda)
         produto.estoque_atual -= quantidade_venda
         db.session.flush()
         # --- INÍCIO DA INTEGRAÇÃO COM CAIXA (PILOTO AUTOMÁTICO V4) ---
-        if str(venda.situacao or '').strip().upper() in ('PAGO', 'CONCLUÍDO'):
+        if tipo_operacao != 'PERDA' and str(venda.situacao or '').strip().upper() in ('PAGO', 'CONCLUÍDO'):
             lancamentos_existentes = LancamentoCaixa.query.filter(
                 LancamentoCaixa.descricao.like(f"Venda #{venda.id} -%")
             ).all()
@@ -5839,6 +5854,7 @@ def nova_venda():
                     'data_venda': venda.data_venda.strftime('%d/%m/%Y'),
                     'empresa_faturadora': venda.empresa_faturadora,
                     'situacao': venda.situacao,
+                    'tipo_operacao': venda.tipo_operacao,
                 },
             )
         flash('Venda registrada com sucesso!', 'success')
@@ -5876,6 +5892,7 @@ def processar_carrinho():
                 empresa_faturadora = (obj.get('empresa_faturadora') or '').strip() or None
                 situacao = (obj.get('situacao') or 'PENDENTE').strip()
                 forma_pagamento = (obj.get('forma_pagamento') or '').strip() or None
+                tipo_operacao = (obj.get('tipo_operacao') or 'VENDA').strip().upper()
                 nf = (obj.get('nf') or '').strip() or None
                 data_venda_raw = obj.get('data_venda')
                 if data_venda_raw:
@@ -5887,6 +5904,8 @@ def processar_carrinho():
 
             if quantidade_venda < 1:
                 return jsonify(ok=False, mensagem='Quantidade deve ser maior que zero.'), 400
+            if tipo_operacao not in ('VENDA', 'PERDA'):
+                tipo_operacao = 'VENDA'
             if not empresa_faturadora or empresa_faturadora not in ('DESTAK', 'PATY', 'NENHUM', 'ARMAZEM LACERDA'):
                 return jsonify(ok=False, mensagem='Empresa faturadora inválida.'), 400
 
@@ -5904,6 +5923,10 @@ def processar_carrinho():
                 return jsonify(ok=False, mensagem=f'Cliente ID {cliente_id} não encontrado.'), 400
             cliente_avulso_raw = (obj.get('cliente_avulso') or '').strip()
             cliente_avulso = cliente_avulso_raw if 'DESCONHECIDO' in str(cliente.nome_cliente or '').upper() else None
+            if tipo_operacao == 'PERDA':
+                preco_venda = Decimal('0')
+                situacao = 'PERDA'
+                forma_pagamento = None
 
             venda = Venda(
                 cliente_id=cliente_id,
@@ -5916,6 +5939,7 @@ def processar_carrinho():
                 empresa_faturadora=empresa_faturadora,
                 situacao=situacao,
                 forma_pagamento=forma_pagamento,
+                tipo_operacao=tipo_operacao,
             )
             db.session.add(venda)
             produto.estoque_atual -= quantidade_venda
@@ -5954,9 +5978,14 @@ def venda_adicionar_item():
     produto = Produto.query.get_or_404(produto_id)
 
     preco_venda = _limpar_valor_moeda(preco_venda_raw)
-    if preco_venda <= 0:
+    tipo_operacao = str(getattr(venda_existente, 'tipo_operacao', 'VENDA') or 'VENDA').strip().upper()
+    if tipo_operacao not in ('VENDA', 'PERDA'):
+        tipo_operacao = 'VENDA'
+    if tipo_operacao != 'PERDA' and preco_venda <= 0:
         flash('Preço unitário inválido.', 'error')
         return redirect(url_for('listar_vendas'))
+    if tipo_operacao == 'PERDA':
+        preco_venda = 0
 
     if produto.estoque_atual < quantidade_venda:
         flash(f'Estoque insuficiente! Disponível: {produto.estoque_atual}', 'error')
@@ -5971,7 +6000,9 @@ def venda_adicionar_item():
         quantidade_venda=quantidade_venda,
         data_venda=venda_existente.data_venda,
         empresa_faturadora=venda_existente.empresa_faturadora,
-        situacao=venda_existente.situacao,
+        situacao='PERDA' if tipo_operacao == 'PERDA' else venda_existente.situacao,
+        forma_pagamento=None if tipo_operacao == 'PERDA' else venda_existente.forma_pagamento,
+        tipo_operacao=tipo_operacao,
     )
     db.session.add(nova_venda)
     produto.estoque_atual -= quantidade_venda
@@ -6035,9 +6066,17 @@ def editar_venda(id):
         if data_venda_raw:
             venda.data_venda = date.fromisoformat(data_venda_raw)
         venda.empresa_faturadora = request.form.get('empresa_faturadora', venda.empresa_faturadora or 'PATY')
+        tipo_operacao = (request.form.get('tipo_operacao') or venda.tipo_operacao or 'VENDA').strip().upper()
+        if tipo_operacao not in ('VENDA', 'PERDA'):
+            tipo_operacao = 'VENDA'
+        venda.tipo_operacao = tipo_operacao
         venda.situacao = request.form.get('situacao', venda.situacao or 'PENDENTE')
         fp = request.form.get('forma_pagamento')
         venda.forma_pagamento = (fp or '').strip() or None
+        if tipo_operacao == 'PERDA':
+            venda.preco_venda = Decimal('0')
+            venda.situacao = 'PERDA'
+            venda.forma_pagamento = None
         
         # --- INÍCIO DA INTEGRAÇÃO COM CAIXA (PILOTO AUTOMÁTICO V4) ---
         vendas_do_pedido = _vendas_do_pedido(venda)
@@ -6047,7 +6086,8 @@ def editar_venda(id):
         ).all()
         status_atual = str(venda.situacao).strip().upper() if venda.situacao else ''
         status_pago = status_atual in ('PAGO', 'CONCLUÍDO', 'PARCIAL')
-        if status_pago and not lancamentos_existentes:
+        eh_perda = tipo_operacao == 'PERDA'
+        if status_pago and not eh_perda and not lancamentos_existentes:
             cliente = Cliente.query.get(venda.cliente_id)
             nome_cliente = cliente.nome_cliente if cliente else "Cliente Avulso"
             forma_pgto = request.form.get('forma_pagamento', 'Dinheiro') or 'Dinheiro'
@@ -6242,6 +6282,12 @@ def atualizar_status_venda(id_venda):
     """Alterna o status do pedido: PENDENTE ↔ PAGO. Aplica a todos os itens do grupo."""
     venda = Venda.query.get_or_404(id_venda)
     vendas_do_pedido = _vendas_do_pedido(venda)
+    if any(str(getattr(v, 'tipo_operacao', 'VENDA') or 'VENDA').upper() == 'PERDA' for v in vendas_do_pedido):
+        msg_perda = 'Pedidos de PERDA/QUEBRA não geram cobrança nem movimentação no caixa.'
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.is_json:
+            return jsonify(ok=False, mensagem=msg_perda), 400
+        flash(msg_perda, 'warning')
+        return redirect(url_for('listar_vendas'))
     atual = vendas_do_pedido[0].situacao if vendas_do_pedido else 'PENDENTE'
     novo = 'PAGO' if atual == 'PENDENTE' else 'PENDENTE'
     for v in vendas_do_pedido:

@@ -236,10 +236,17 @@
                     <input type="text" id="inline-valor-total" readonly placeholder="R$ 0,00" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white shadow-sm cursor-default" tabindex="-1" title="Calculado automaticamente (Preço × Quantidade)">
                 </div>
             </div>
-            <div class="grid grid-cols-1 md:grid-cols-5 gap-5 items-end">
+            <div class="grid grid-cols-1 md:grid-cols-6 gap-5 items-end">
                 <div>
                     <label for="inline-data_venda" class="block text-xs font-medium text-gray-600 dark:text-gray-200 mb-1">Data</label>
                     <input type="date" id="inline-data_venda" name="data_venda" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:focus:ring-emerald-500 dark:focus:border-emerald-500 shadow-sm">
+                </div>
+                <div>
+                    <label for="tipo_operacao" class="block text-xs font-medium text-gray-600 dark:text-gray-200 mb-1">Operação</label>
+                    <select id="tipo_operacao" name="tipo_operacao" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:focus:ring-emerald-500 dark:focus:border-emerald-500 shadow-sm font-bold">
+                        <option value="VENDA" selected>💰 VENDA</option>
+                        <option value="PERDA">📉 PERDA / QUEBRA</option>
+                    </select>
                 </div>
                 <div>
                     <label for="inline-empresa_faturadora" class="block text-xs font-medium text-gray-600 dark:text-gray-200 mb-1">Empresa</label>
@@ -1316,6 +1323,9 @@ document.addEventListener('DOMContentLoaded', function() {
     var clienteAvulsoContainer = document.getElementById('container-cliente-avulso');
     var clienteAvulsoInput = document.getElementById('input-cliente-avulso');
     var precoInput = document.getElementById('preco');
+    var operacaoSelect = document.getElementById('tipo_operacao');
+    var situacaoSelect = document.getElementById('inline-situacao');
+    var formaPagamentoSelect = document.getElementById('inline-forma_pagamento');
     var quantidadeInput = document.getElementById('inline-quantidade_venda');
     var estoqueInfo = document.getElementById('inline-estoque-info');
     var dataInput = document.getElementById('inline-data_venda');
@@ -1364,6 +1374,40 @@ document.addEventListener('DOMContentLoaded', function() {
                 empresaSelect.value = '';
             }
         }
+    }
+
+    function isPerdaOperacao() {
+        return String(operacaoSelect && operacaoSelect.value ? operacaoSelect.value : 'VENDA').toUpperCase() === 'PERDA';
+    }
+
+    function aplicarModoOperacao() {
+        var perda = isPerdaOperacao();
+        if (!precoInput) return;
+
+        if (perda) {
+            precoProgrammatic = true;
+            precoInput.value = formatPreco(0);
+            precoProgrammatic = false;
+            precoInput.readOnly = true;
+            precoInput.classList.add('bg-red-50', 'text-red-600', 'dark:bg-red-900/20', 'dark:text-red-300');
+            if (situacaoSelect) situacaoSelect.value = 'PAGO';
+            if (formaPagamentoSelect) formaPagamentoSelect.value = '';
+        } else {
+            precoInput.readOnly = false;
+            precoInput.classList.remove('bg-red-50', 'text-red-600', 'dark:bg-red-900/20', 'dark:text-red-300');
+            if (!precoInput.value || parsePreco(precoInput.value) === 0) {
+                var opt = produtoSelect && produtoSelect.options[produtoSelect.selectedIndex];
+                if (opt) {
+                    var pc = parseFloat(opt.getAttribute('data-preco') || '0');
+                    if (!isNaN(pc) && pc > 0) {
+                        precoProgrammatic = true;
+                        precoInput.value = formatPreco(pc);
+                        precoProgrammatic = false;
+                    }
+                }
+            }
+        }
+        updateValorTotalDisplay();
     }
 
     function atualizarCampoClienteAvulso() {
@@ -1415,7 +1459,9 @@ document.addEventListener('DOMContentLoaded', function() {
         var valorTotalEl = document.getElementById('inline-valor-total');
         if (!valorTotalEl) return;
         var qtd = parseInt(quantidadeInput && quantidadeInput.value ? quantidadeInput.value : '0', 10);
+        var operacao = (operacaoSelect && operacaoSelect.value ? operacaoSelect.value : 'VENDA').toUpperCase();
         var preco = parsePreco(precoInput && precoInput.value ? precoInput.value : '') || 0;
+        if (operacao === 'PERDA') preco = 0;
         var total = (qtd >= 1 && preco > 0) ? preco * qtd : 0;
         valorTotalEl.value = formatPreco(total);
     }
@@ -1460,12 +1506,14 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!dataVal) dataVal = new Date().toISOString().split('T')[0];
         var empresa = (form.querySelector('[name="empresa_faturadora"]') && form.querySelector('[name="empresa_faturadora"]').value) || '';
         var situacao = (form.querySelector('[name="situacao"]') && form.querySelector('[name="situacao"]').value) || 'PENDENTE';
+        if (operacao === 'PERDA') situacao = 'PERDA';
         var formaPagEl = document.getElementById('inline-forma_pagamento');
         var formaPagamento = (formaPagEl && formaPagEl.value) ? String(formaPagEl.value).trim() : '';
+        if (operacao === 'PERDA') formaPagamento = '';
         if (!cid || !pid) return null;
-        if (qtd < 1 || preco <= 0 || !empresa) return null;
+        if (qtd < 1 || (operacao !== 'PERDA' && preco <= 0) || !empresa) return null;
         var total = preco * qtd;
-        var lucro = (preco - preco_custo) * qtd;
+        var lucro = operacao === 'PERDA' ? -(preco_custo * qtd) : ((preco - preco_custo) * qtd);
         return {
             cliente_id: parseInt(cid, 10),
             cliente_nome: cliente_nome,
@@ -1480,6 +1528,7 @@ document.addEventListener('DOMContentLoaded', function() {
             lucro: lucro,
             data_venda: dataVal,
             empresa_faturadora: empresa,
+            tipo_operacao: operacao,
             situacao: situacao,
             forma_pagamento: formaPagamento || null
         };
@@ -1555,6 +1604,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 preco_venda: it.preco_venda,
                 data_venda: it.data_venda,
                 empresa_faturadora: it.empresa_faturadora,
+                tipo_operacao: it.tipo_operacao || 'VENDA',
                 situacao: it.situacao,
                 forma_pagamento: it.forma_pagamento || null
             };
@@ -1585,7 +1635,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     var pc = parseFloat(preco);
                     if (!isNaN(pc)) {
                         var isEmpty = !precoInput.value || parsePreco(precoInput.value) === 0;
-                        if (isEmpty) {
+                        if (isEmpty && !isPerdaOperacao()) {
                             precoProgrammatic = true;
                             precoInput.value = formatPreco(pc);
                             precoInput.classList.add('preco-sugerido');
@@ -1600,7 +1650,11 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+    if (operacaoSelect) {
+        operacaoSelect.addEventListener('change', aplicarModoOperacao);
+    }
     aplicarEmpresaPorProduto();
+    aplicarModoOperacao();
 
     if (precoInput) {
         precoInput.addEventListener('input', function() {

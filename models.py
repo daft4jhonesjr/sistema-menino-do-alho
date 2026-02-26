@@ -168,6 +168,7 @@ class Venda(db.Model):
     valor_pago = db.Column(db.Float, default=0.0)  # Valor já pago (para abatimento parcial)
     status_entrega = db.Column(db.String(50), default='PENDENTE', index=True)
     forma_pagamento = db.Column(db.String(50), nullable=True, index=True)
+    tipo_operacao = db.Column(db.String(20), default='VENDA', nullable=False, server_default='VENDA')
     cliente_avulso = db.Column(db.String(100), nullable=True)
     caminho_boleto = db.Column(db.String(500), nullable=True)
     caminho_nf = db.Column(db.String(500), nullable=True)
@@ -178,12 +179,16 @@ class Venda(db.Model):
     
     def calcular_total(self):
         """Valor total da venda = preco_venda * quantidade_venda."""
+        if str(self.tipo_operacao or 'VENDA').upper() == 'PERDA':
+            return 0.0
         return float(self.preco_venda or 0) * (self.quantidade_venda or 0)
     
     def calcular_lucro(self):
         """Lucro = (Preço de Venda - Preço de Custo) * Quantidade. Usa preco_custo do lote (Produto) vinculado."""
         if not self.produto:
             return 0
+        if str(self.tipo_operacao or 'VENDA').upper() == 'PERDA':
+            return -float(self.produto.preco_custo or 0) * (self.quantidade_venda or 0)
         custo = float(self.produto.preco_custo)
         venda = float(self.preco_venda)
         return (venda - custo) * self.quantidade_venda
