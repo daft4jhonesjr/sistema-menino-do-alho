@@ -864,6 +864,24 @@
     var inputDocId = document.getElementById('input-vincular-doc-id');
     var selectPedido = document.getElementById('select-vincular-pedido');
     var docNomeEl = document.getElementById('modal-vincular-doc-nome');
+    var tokenMeta = document.querySelector('meta[name="csrf-token"]');
+
+    function garantirCsrfNoForm(formEl) {
+        if (!formEl) return;
+        var token = tokenMeta ? tokenMeta.getAttribute('content') : '';
+        if (!token) return;
+        var csrfInput = formEl.querySelector('input[name="csrf_token"]');
+        if (!csrfInput) {
+            csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrf_token';
+            formEl.appendChild(csrfInput);
+        }
+        csrfInput.value = token;
+    }
+
+    // Blindagem: garante CSRF em todos os forms POST da dashboard
+    document.querySelectorAll('form[method="post"], form[method="POST"]').forEach(garantirCsrfNoForm);
 
     function showModal() { modal.classList.remove('hidden'); travarFundo(); }
     function hideModal() { modal.classList.add('hidden'); liberarFundo(); }
@@ -906,6 +924,7 @@
         e.preventDefault();
         var vendaId = selectPedido.value;
         if (!vendaId) return;
+        garantirCsrfNoForm(form);
         form.action = '/documento/' + (inputDocId.value || '') + '/vincular';
         form.submit();
     });
