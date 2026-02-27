@@ -17,7 +17,7 @@
     <td class="w-12 min-w-[3rem] px-4 py-4 text-center">
         <input type="checkbox" class="bulk-row mx-auto rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" value="{{ produto.id }}">
     </td>
-    <td class="px-6 py-4 text-sm font-medium text-gray-900">
+    <td class="px-6 py-4 text-sm font-medium text-gray-900 whitespace-nowrap min-w-[260px]">
         <button type="button" onclick="abrirModalVendas('produto', {{ produto.id }})"
                 class="text-emerald-700 hover:underline font-bold transition text-left cursor-pointer">
             {{ produto.nome_produto }}
@@ -41,7 +41,7 @@
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ produto.tamanho }}</td>
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ produto.marca }}</td>
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ produto.caminhoneiro }}</td>
-    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium w-24">
         <button type="button" class="btn-editar-produto text-emerald-600 hover:text-emerald-800 mr-4 inline-flex items-center cursor-pointer bg-transparent border-none p-0"
                 data-id="{{ produto.id }}"
                 data-preco-custo="{{ produto.preco_custo }}"
