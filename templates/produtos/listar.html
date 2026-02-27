@@ -4,6 +4,14 @@
 
 {% block head_extras %}
 <style>
+    /* Força bruta para impedir colapso de colunas pelo plugin de resize */
+    table th, table td {
+        white-space: nowrap !important;
+        min-width: max-content !important;
+        max-width: none !important;
+        width: auto !important;
+    }
+
     .categoria-chevron {
         transition: transform 0.2s ease-in-out;
     }
@@ -1454,24 +1462,14 @@ async function excluirFornecedor(id, nome) {
 }
 
 function resetarLarguraColunas() {
-    var keysParaRemover = [];
-    for (var i = 0; i < localStorage.length; i++) {
-        var key = localStorage.key(i);
-        if (!key) continue;
-        var k = key.toLowerCase();
-        if (k.indexOf('col') >= 0 || k.indexOf('width') >= 0 || k.indexOf('table') >= 0 || k.indexOf('resize') >= 0) {
-            keysParaRemover.push(key);
-        }
-    }
-    keysParaRemover.forEach(function(key) { localStorage.removeItem(key); });
+    localStorage.clear();
+    sessionStorage.clear();
 
-    document.querySelectorAll('.tabela-produtos th, .tabela-produtos td, .tabela-produtos col').forEach(function(el) {
-        el.style.width = '';
-        el.style.minWidth = '';
-        el.style.maxWidth = '';
+    document.querySelectorAll('th, td, col, table').forEach(function(el) {
+        el.removeAttribute('style');
     });
 
-    alert('Layout das colunas resetado! A página será atualizada para aplicar a largura ideal do monitor.');
+    alert('Memória visual completamente limpa! As colunas vão voltar ao tamanho natural de leitura.');
     window.location.reload();
 }
 </script>
