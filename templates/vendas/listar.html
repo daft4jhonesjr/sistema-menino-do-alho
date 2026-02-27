@@ -186,8 +186,21 @@
 <!-- Alerta de erro (discreto, acima dos campos) -->
 <div id="venda-erro" class="hidden mb-4 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl text-red-800 dark:text-red-300 text-sm shadow-sm"></div>
 
+<div class="md:hidden mb-4">
+    <button
+        type="button"
+        onclick="toggleFormularioVenda()"
+        class="w-full flex justify-between items-center bg-white dark:bg-slate-800 p-4 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold"
+    >
+        <span class="flex items-center gap-2">📝 Preencher Nova Venda</span>
+        <svg id="icone-toggle-venda" class="w-5 h-5 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+        </svg>
+    </button>
+</div>
+
 <!-- Linha de inserção: campos alinhados com a tabela -->
-<div class="mb-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-hidden">
+<div id="container-formulario-venda" class="hidden md:block mb-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-hidden">
         <form id="form-nova-venda-inline" action="{{ url_for('add_venda') }}" method="POST" class="p-4" novalidate>
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         <div class="venda-input-group flex flex-col gap-5 w-full">
@@ -2305,6 +2318,18 @@ document.addEventListener('DOMContentLoaded', function() {
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
+function toggleFormularioVenda() {
+    const container = document.getElementById('container-formulario-venda');
+    const icone = document.getElementById('icone-toggle-venda');
+
+    if (container) {
+        container.classList.toggle('hidden');
+        if (icone) {
+            icone.classList.toggle('rotate-180');
+        }
+    }
+}
+
 // Toggle mobile para a seção "Análise Geral de Vendas"
 (function() {
     document.addEventListener('DOMContentLoaded', function() {
