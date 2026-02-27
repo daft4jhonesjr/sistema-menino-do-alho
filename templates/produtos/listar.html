@@ -4,14 +4,6 @@
 
 {% block head_extras %}
 <style>
-    /* Força bruta para impedir colapso de colunas pelo plugin de resize */
-    table th, table td {
-        white-space: nowrap !important;
-        min-width: max-content !important;
-        max-width: none !important;
-        width: auto !important;
-    }
-
     .categoria-chevron {
         transition: transform 0.2s ease-in-out;
     }
@@ -93,8 +85,8 @@
             
             <!-- Tabela da Categoria -->
             <div class="categoria-content {% if not is_open %}hidden{% endif %}" data-tipo="{{ tipo }}">
-                <div class="w-full overflow-x-auto">
-                    <table class="w-full min-w-max table-auto divide-y divide-gray-200 dark:divide-gray-700 tabela-produtos table-resizable" data-bulk-module="produtos">
+                <div class="overflow-x-auto w-full">
+                    <table class="w-full whitespace-nowrap min-w-max table-auto divide-y divide-gray-200 dark:divide-gray-700 tabela-produtos table-resizable" data-bulk-module="produtos">
                         <thead class="bg-slate-800/90">
                             <tr>
                                 <th class="w-12 min-w-[3rem] px-4 py-3 text-center text-xs font-semibold text-gray-200 uppercase tracking-wider whitespace-nowrap">
@@ -1464,10 +1456,6 @@ async function excluirFornecedor(id, nome) {
 function resetarLarguraColunas() {
     localStorage.clear();
     sessionStorage.clear();
-
-    document.querySelectorAll('th, td, col, table').forEach(function(el) {
-        el.removeAttribute('style');
-    });
 
     alert('Memória visual completamente limpa! As colunas vão voltar ao tamanho natural de leitura.');
     window.location.reload();
