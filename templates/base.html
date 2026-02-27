@@ -992,6 +992,12 @@
             var tables = document.querySelectorAll('table');
 
             tables.forEach(function(table, tableIndex) {
+                var disableResize =
+                    table.classList.contains('no-resize') ||
+                    table.getAttribute('data-disable-resize') === 'true' ||
+                    table.classList.contains('tabela-produtos');
+                if (disableResize) return;
+
                 table.classList.add('resizable');
                 var cols = table.querySelectorAll('th');
 
@@ -1050,6 +1056,12 @@
             var tables = document.querySelectorAll('table');
 
             tables.forEach(function(table, tableIndex) {
+                var disableResize =
+                    table.classList.contains('no-resize') ||
+                    table.getAttribute('data-disable-resize') === 'true' ||
+                    table.classList.contains('tabela-produtos');
+                if (disableResize) return;
+
                 var ths = table.querySelectorAll('th');
                 var tableId = table.getAttribute('data-table-id');
                 var pathKey = tableId ? ('hidden_cols_' + tableId) : ('colunas_ocultas_' + window.location.pathname + '_' + tableIndex);
