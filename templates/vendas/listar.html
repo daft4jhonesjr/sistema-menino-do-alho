@@ -328,8 +328,18 @@
 
 <!-- Análise Geral de Vendas (Gráficos Doughnut) -->
 <div class="mt-8 mb-8">
-    <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-4">Análise Geral de Vendas</h2>
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <button
+        type="button"
+        id="toggle-analise-vendas"
+        class="w-full flex items-center justify-between text-left cursor-pointer md:cursor-default"
+        aria-expanded="false"
+    >
+        <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-4">Análise Geral de Vendas</h2>
+        <svg id="icone-toggle-analise-vendas" class="w-5 h-5 text-gray-500 dark:text-gray-400 mb-4 transition-transform -rotate-90 md:rotate-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+        </svg>
+    </button>
+    <div id="conteudo-analise-vendas" class="hidden md:grid grid-cols-1 md:grid-cols-3 gap-6">
         <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 border border-gray-100 dark:border-gray-700">
             <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-400 text-center mb-4">Por Situação</h3>
             <div class="relative h-48 w-full"><canvas id="chartSituacao"></canvas></div>
@@ -2295,6 +2305,53 @@ document.addEventListener('DOMContentLoaded', function() {
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
+// Toggle mobile para a seção "Análise Geral de Vendas"
+(function() {
+    document.addEventListener('DOMContentLoaded', function() {
+        var btnToggle = document.getElementById('toggle-analise-vendas');
+        var conteudo = document.getElementById('conteudo-analise-vendas');
+        var icone = document.getElementById('icone-toggle-analise-vendas');
+        if (!btnToggle || !conteudo || !icone) return;
+
+        function atualizarEstadoInicial() {
+            var desktop = window.innerWidth >= 768;
+            if (desktop) {
+                conteudo.classList.remove('hidden');
+                conteudo.classList.add('grid');
+                icone.classList.remove('-rotate-90');
+                btnToggle.setAttribute('aria-expanded', 'true');
+            } else {
+                conteudo.classList.add('hidden');
+                conteudo.classList.remove('grid');
+                icone.classList.add('-rotate-90');
+                btnToggle.setAttribute('aria-expanded', 'false');
+            }
+        }
+
+        atualizarEstadoInicial();
+        window.addEventListener('resize', atualizarEstadoInicial);
+
+        btnToggle.addEventListener('click', function() {
+            if (window.innerWidth >= 768) return;
+            var abrir = conteudo.classList.contains('hidden');
+            if (abrir) {
+                conteudo.classList.remove('hidden');
+                conteudo.classList.add('grid');
+                icone.classList.remove('-rotate-90');
+                btnToggle.setAttribute('aria-expanded', 'true');
+                setTimeout(function() {
+                    window.dispatchEvent(new Event('resize'));
+                }, 100);
+            } else {
+                conteudo.classList.add('hidden');
+                conteudo.classList.remove('grid');
+                icone.classList.add('-rotate-90');
+                btnToggle.setAttribute('aria-expanded', 'false');
+            }
+        });
+    });
+})();
+
 // Gráficos Doughnut (Situação, Forma de Pagamento, Empresa Faturadora)
 (function() {
     var dados = {{ (graficos_data or {'situacao': {}, 'pagamento': {}, 'empresa': {}}) | tojson | safe }};

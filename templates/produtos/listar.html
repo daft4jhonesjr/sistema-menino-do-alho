@@ -1454,20 +1454,17 @@ async function excluirFornecedor(id, nome) {
 }
 
 function resetarLarguraColunas() {
-    var path = window.location.pathname || '';
-    var keysParaRemover = [];
-    for (var i = 0; i < localStorage.length; i++) {
-        var key = localStorage.key(i);
-        if (!key) continue;
-        if (
-            key.indexOf('tabela_tamanhos_' + path) === 0 ||
-            key.indexOf('colunas_ocultas_' + path) === 0 ||
-            key.indexOf('hidden_cols_') === 0
-        ) {
-            keysParaRemover.push(key);
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.includes('col') || key.includes('width') || key.includes('table'))) {
+            localStorage.removeItem(key);
         }
     }
-    keysParaRemover.forEach(function(k) { localStorage.removeItem(k); });
+
+    document.querySelectorAll('.tabela-produtos th, .tabela-produtos td, .tabela-produtos col').forEach(function(el) {
+        el.style.width = '';
+        el.style.minWidth = '';
+    });
 
     alert('Memória visual completamente limpa! As colunas vão voltar ao tamanho natural de leitura.');
     window.location.reload();
