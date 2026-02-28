@@ -189,7 +189,7 @@
 <div class="md:hidden mb-4">
     <button
         type="button"
-        onclick="toggleFormularioVenda()"
+        onclick="toggleFormularioVenda(event)"
         class="w-full flex justify-between items-center bg-white dark:bg-slate-800 p-4 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold"
     >
         <span class="flex items-center gap-2">📝 Preencher Nova Venda</span>
@@ -344,11 +344,12 @@
     <button
         type="button"
         id="toggle-analise-vendas"
-        class="w-full flex items-center justify-between text-left cursor-pointer md:cursor-default"
+        onclick="toggleAnaliseVendas(event)"
+        class="w-full flex items-center justify-between text-left cursor-pointer"
         aria-expanded="false"
     >
         <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-4">Análise Geral de Vendas</h2>
-        <svg id="icone-toggle-analise-vendas" class="w-5 h-5 text-gray-500 dark:text-gray-400 mb-4 transition-transform -rotate-90 md:rotate-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg id="icone-toggle-analise-vendas" class="w-5 h-5 text-gray-500 dark:text-gray-400 mb-4 transition-transform -rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
         </svg>
     </button>
@@ -2318,64 +2319,57 @@ document.addEventListener('DOMContentLoaded', function() {
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
-function toggleFormularioVenda() {
+function toggleFormularioVenda(event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+
     const container = document.getElementById('container-formulario-venda');
     const icone = document.getElementById('icone-toggle-venda');
 
     if (container) {
-        container.classList.toggle('hidden');
-        if (icone) {
-            icone.classList.toggle('rotate-180');
+        if (container.classList.contains('!hidden') || container.classList.contains('hidden')) {
+            container.classList.remove('!hidden', 'hidden');
+            if (icone) icone.classList.add('rotate-180');
+        } else {
+            container.classList.add('!hidden', 'hidden');
+            if (icone) icone.classList.remove('rotate-180');
         }
     }
 }
 
-// Toggle mobile para a seção "Análise Geral de Vendas"
-(function() {
-    document.addEventListener('DOMContentLoaded', function() {
-        var btnToggle = document.getElementById('toggle-analise-vendas');
-        var conteudo = document.getElementById('conteudo-analise-vendas');
-        var icone = document.getElementById('icone-toggle-analise-vendas');
-        if (!btnToggle || !conteudo || !icone) return;
+function toggleAnaliseVendas(event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
 
-        function atualizarEstadoInicial() {
-            var desktop = window.innerWidth >= 768;
-            if (desktop) {
-                conteudo.classList.remove('hidden');
-                conteudo.classList.add('grid');
-                icone.classList.remove('-rotate-90');
-                btnToggle.setAttribute('aria-expanded', 'true');
-            } else {
-                conteudo.classList.add('hidden');
-                conteudo.classList.remove('grid');
-                icone.classList.add('-rotate-90');
-                btnToggle.setAttribute('aria-expanded', 'false');
-            }
+    const container = document.getElementById('conteudo-analise-vendas');
+    const icone = document.getElementById('icone-toggle-analise-vendas');
+    const btn = document.getElementById('toggle-analise-vendas');
+
+    if (!container) return;
+
+    if (container.classList.contains('!hidden') || container.classList.contains('hidden')) {
+        container.classList.remove('!hidden', 'hidden');
+        container.classList.add('grid');
+        if (icone) {
+            icone.classList.remove('-rotate-90');
+            icone.classList.add('rotate-0');
         }
-
-        atualizarEstadoInicial();
-        window.addEventListener('resize', atualizarEstadoInicial);
-
-        btnToggle.addEventListener('click', function() {
-            if (window.innerWidth >= 768) return;
-            var abrir = conteudo.classList.contains('hidden');
-            if (abrir) {
-                conteudo.classList.remove('hidden');
-                conteudo.classList.add('grid');
-                icone.classList.remove('-rotate-90');
-                btnToggle.setAttribute('aria-expanded', 'true');
-                setTimeout(function() {
-                    window.dispatchEvent(new Event('resize'));
-                }, 100);
-            } else {
-                conteudo.classList.add('hidden');
-                conteudo.classList.remove('grid');
-                icone.classList.add('-rotate-90');
-                btnToggle.setAttribute('aria-expanded', 'false');
-            }
-        });
-    });
-})();
+        if (btn) btn.setAttribute('aria-expanded', 'true');
+        setTimeout(function() { window.dispatchEvent(new Event('resize')); }, 100);
+    } else {
+        container.classList.add('!hidden', 'hidden');
+        container.classList.remove('grid');
+        if (icone) {
+            icone.classList.add('-rotate-90');
+            icone.classList.remove('rotate-0');
+        }
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+    }
+}
 
 // Gráficos Doughnut (Situação, Forma de Pagamento, Empresa Faturadora)
 (function() {
