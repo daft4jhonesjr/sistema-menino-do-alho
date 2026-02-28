@@ -32,20 +32,31 @@
         <button type="button" id="bulk-delete-btn" class="hidden bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-xl transition duration-200 ease-in-out flex items-center" data-endpoint="{{ url_for('bulk_delete_produtos') }}" data-redirect="{{ url_for('listar_produtos', ordem_data=ordem_data) }}">
             <i data-lucide="trash-2" class="w-4 h-4 mr-2"></i>Excluir Selecionados
         </button>
-        {% if current_user.is_authenticated and current_user.is_admin() %}
-        <a href="{{ url_for('importar_produtos') }}" class="bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 px-5 py-2.5 rounded-xl shadow-sm dark:shadow-none hover:bg-emerald-50 dark:hover:bg-gray-600 hover:border-emerald-200 dark:hover:border-gray-500 hover:text-emerald-700 dark:hover:text-gray-100 transition flex items-center font-medium">
-            <i data-lucide="upload" class="w-4 h-4 mr-2"></i>Importar Lista
-        </a>
-        {% endif %}
-        <button type="button" id="btn-abrir-modal-fornecedor" onclick="document.getElementById('modal-novo-fornecedor').classList.remove('hidden');travarFundo();" class="bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 px-5 py-2.5 rounded-xl shadow-sm dark:shadow-none hover:bg-emerald-50 dark:hover:bg-gray-600 hover:border-emerald-200 dark:hover:border-gray-500 hover:text-emerald-700 dark:hover:text-gray-100 transition flex items-center font-medium">
-            🏢 Novo Fornecedor
-        </button>
-        <button type="button" id="btn-abrir-modal-lista-fornecedores" onclick="document.getElementById('modal-lista-fornecedores').classList.remove('hidden');travarFundo();" class="bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 px-5 py-2.5 rounded-xl shadow-sm dark:shadow-none hover:bg-emerald-50 dark:hover:bg-gray-600 hover:border-emerald-200 dark:hover:border-gray-500 hover:text-emerald-700 dark:hover:text-gray-100 transition flex items-center font-medium">
-            📋 Fornecedores Cadastrados
-        </button>
-        <button type="button" id="btn-abrir-modal-nova-entrada" class="bg-emerald-700 text-white px-5 py-2.5 rounded-xl shadow-sm hover:bg-emerald-600 transition flex items-center font-medium">
-            <i data-lucide="plus" class="w-4 h-4 mr-2"></i>Nova Entrada
-        </button>
+        <div class="relative inline-flex shadow-sm rounded-md" id="grupo-botoes-entrada">
+            <button type="button" id="btn-abrir-modal-nova-entrada" class="bg-emerald-700 text-white px-4 py-2 rounded-l-md font-semibold text-sm hover:bg-emerald-800 transition-colors border-r border-emerald-800/50 flex items-center gap-2">
+                <i data-lucide="plus" class="w-4 h-4"></i>Nova Entrada
+            </button>
+
+            <button type="button" onclick="toggleDropdownEntrada(event)" class="bg-emerald-700 text-white px-2 py-2 rounded-r-md hover:bg-emerald-800 transition-colors flex items-center justify-center" title="Mais ações">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+            </button>
+
+            <div id="dropdown-entrada" class="hidden absolute right-0 top-full mt-2 w-56 bg-white dark:bg-slate-800 rounded-md shadow-lg border border-slate-200 dark:border-slate-700 z-50 overflow-hidden">
+                {% if current_user.is_authenticated and current_user.is_admin() %}
+                <a href="{{ url_for('importar_produtos') }}" class="w-full text-left px-4 py-3 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 border-b border-slate-100 dark:border-slate-700 flex items-center gap-2" onclick="fecharDropdownEntrada()">
+                    <span>📤 Importar Lista</span>
+                </a>
+                {% endif %}
+
+                <button type="button" onclick="fecharDropdownEntrada();document.getElementById('modal-novo-fornecedor').classList.remove('hidden');travarFundo();" class="w-full text-left px-4 py-3 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 border-b border-slate-100 dark:border-slate-700 flex items-center gap-2">
+                    <span>🏢 Novo Fornecedor</span>
+                </button>
+
+                <button type="button" onclick="fecharDropdownEntrada();document.getElementById('modal-lista-fornecedores').classList.remove('hidden');travarFundo();" class="w-full text-left px-4 py-3 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
+                    <span>📋 Fornecedores Cadastrados</span>
+                </button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -1440,6 +1451,35 @@ async function excluirFornecedor(id, nome) {
         alert('Erro de comunicação com o servidor.');
     }
 }
+
+function toggleDropdownEntrada(event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    var dropdown = document.getElementById('dropdown-entrada');
+    if (dropdown) {
+        dropdown.classList.toggle('hidden');
+    }
+}
+
+function fecharDropdownEntrada() {
+    var dropdown = document.getElementById('dropdown-entrada');
+    if (dropdown) {
+        dropdown.classList.add('hidden');
+    }
+}
+
+document.addEventListener('click', function(event) {
+    var dropdown = document.getElementById('dropdown-entrada');
+    var grupo = document.getElementById('grupo-botoes-entrada');
+
+    if (dropdown && !dropdown.classList.contains('hidden')) {
+        if (!grupo || !grupo.contains(event.target)) {
+            dropdown.classList.add('hidden');
+        }
+    }
+});
 
 function resetarLarguraColunas() {
     for (let i = 0; i < localStorage.length; i++) {
