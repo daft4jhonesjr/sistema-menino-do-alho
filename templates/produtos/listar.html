@@ -156,13 +156,14 @@
                                         data-preco-custo="{{ produto.preco_custo }}"
                                         data-quantidade-entrada="0"
                                         data-data-chegada="{{ produto.data_chegada.strftime('%Y-%m-%d') }}"
-                                        data-tipo="{{ produto.tipo }}"
-                                        data-fornecedor="{{ produto.fornecedor }}"
-                                        data-nacionalidade="{{ produto.nacionalidade or '' }}"
-                                        data-tamanho="{{ produto.tamanho }}"
-                                        data-marca="{{ produto.marca }}"
-                                        data-caminhoneiro="{{ produto.caminhoneiro }}"
+                                        data-tipo="{{ (produto.tipo or '')|replace('\n', ' ')|e }}"
+                                        data-fornecedor="{{ (produto.fornecedor or '')|replace('\n', ' ')|e }}"
+                                        data-nacionalidade="{{ (produto.nacionalidade or '')|replace('\n', ' ')|e }}"
+                                        data-tamanho="{{ (produto.tamanho or '')|replace('\n', ' ')|e }}"
+                                        data-marca="{{ (produto.marca or '')|replace('\n', ' ')|e }}"
+                                        data-caminhoneiro="{{ (produto.caminhoneiro or '')|replace('\n', ' ')|e }}"
                                         data-estoque-atual="{{ produto.estoque_atual }}"
+                                        onclick="abrirModalEditarProduto(this)"
                                         title="Editar produto">
                                     <i data-lucide="pencil" class="w-4 h-4"></i>
                                 </button>
@@ -751,15 +752,13 @@
         travarFundo();
         if (typeof lucide !== 'undefined') lucide.createIcons();
     }
+    window.abrirModalEditarProduto = abrirModalEditarProduto;
 
     function fecharModalEditarProduto() {
         wrap.classList.add('hidden');
         liberarFundo();
     }
 
-    document.querySelectorAll('.btn-editar-produto').forEach(function(btn) {
-        btn.addEventListener('click', function() { abrirModalEditarProduto(btn); });
-    });
     if (overlay) overlay.addEventListener('click', fecharModalEditarProduto);
     btnsFechar.forEach(function(b) { b.addEventListener('click', fecharModalEditarProduto); });
 
@@ -1291,17 +1290,6 @@ function abrirModalCorrigirCategoria() {
             paginaAtual++;
 
             if (typeof lucide !== 'undefined') lucide.createIcons();
-
-            document.querySelectorAll('.btn-editar-produto').forEach(function(btn) {
-                if (!btn.hasAttribute('data-pagination-initialized')) {
-                    btn.setAttribute('data-pagination-initialized', 'true');
-                    btn.addEventListener('click', function() {
-                        if (typeof abrirModalEditarProduto === 'function') {
-                            abrirModalEditarProduto(btn);
-                        }
-                    });
-                }
-            });
 
             if (produtosCarregados < 20) {
                 esconderBotao();
