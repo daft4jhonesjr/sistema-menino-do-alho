@@ -143,6 +143,7 @@
                                     data-data="{{ venda.data_venda.strftime('%Y-%m-%d') }}"
                                     data-empresa="{{ venda.empresa_faturadora or '' }}"
                                     data-situacao="{{ venda.situacao or 'PENDENTE' }}"
+                                    data-lucro-perc="{{ venda.lucro_percentual if venda.lucro_percentual is not none else '' }}"
                                     data-forma-pagamento="{{ venda.forma_pagamento or '' }}">
                                     <i data-lucide="pencil" class="w-4 h-4"></i>
                                 </button>

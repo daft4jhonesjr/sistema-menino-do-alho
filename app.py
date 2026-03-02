@@ -6094,6 +6094,15 @@ def editar_venda(id):
         if data_venda_raw:
             venda.data_venda = date.fromisoformat(data_venda_raw)
         venda.empresa_faturadora = request.form.get('empresa_faturadora', venda.empresa_faturadora or 'PATY')
+        lucro_percentual_raw = (request.form.get('lucro_percentual') or '').strip()
+        lucro_percentual = None
+        if lucro_percentual_raw:
+            try:
+                lucro_percentual = Decimal(str(lucro_percentual_raw).replace(',', '.'))
+                if lucro_percentual < 0:
+                    lucro_percentual = Decimal('0')
+            except Exception:
+                lucro_percentual = None
         tipo_operacao = (request.form.get('tipo_operacao') or venda.tipo_operacao or 'VENDA').strip().upper()
         if tipo_operacao not in ('VENDA', 'PERDA'):
             tipo_operacao = 'VENDA'
@@ -6101,10 +6110,12 @@ def editar_venda(id):
         venda.situacao = request.form.get('situacao', venda.situacao or 'PENDENTE')
         fp = request.form.get('forma_pagamento')
         venda.forma_pagamento = (fp or '').strip() or None
+        venda.lucro_percentual = lucro_percentual if (lucro_percentual is not None and lucro_percentual > 0) else None
         if tipo_operacao == 'PERDA':
             venda.preco_venda = Decimal('0')
             venda.situacao = 'PERDA'
             venda.forma_pagamento = None
+            venda.lucro_percentual = None
         
         # --- INÍCIO DA INTEGRAÇÃO COM CAIXA (PILOTO AUTOMÁTICO V4) ---
         vendas_do_pedido = _vendas_do_pedido(venda)
