@@ -2334,6 +2334,12 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             db.session.commit()
         except (OperationalError, Exception):
             db.session.rollback()
+        # Migração: lucro_percentual em vendas (opcional por item)
+        try:
+            db.session.execute(text("ALTER TABLE vendas ADD COLUMN lucro_percentual NUMERIC(6,2)"))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
         # Migração: status_envio em lancamentos_caixa (ciclo de vida de cheques)
         try:
             db.session.execute(text("ALTER TABLE lancamentos_caixa ADD COLUMN status_envio VARCHAR(20) DEFAULT 'Não Enviado'"))
@@ -5776,11 +5782,21 @@ def nova_venda():
         tipo_operacao = (request.form.get('tipo_operacao') or 'VENDA').strip().upper()
         if tipo_operacao not in ('VENDA', 'PERDA'):
             tipo_operacao = 'VENDA'
+        lucro_percentual_raw = (request.form.get('lucro_percentual') or '').strip()
+        lucro_percentual = None
+        if lucro_percentual_raw:
+            try:
+                lucro_percentual = Decimal(str(lucro_percentual_raw).replace(',', '.'))
+                if lucro_percentual < 0:
+                    lucro_percentual = Decimal('0')
+            except Exception:
+                lucro_percentual = None
         preco_venda = Decimal(str(_limpar_valor_moeda(request.form.get('preco_venda', 0))))
         if tipo_operacao == 'PERDA':
             preco_venda = Decimal('0')
             situacao = 'PERDA'
             forma_pagamento = None
+            lucro_percentual = None
         venda = Venda(
             cliente_id=cliente_id,
             cliente_avulso=cliente_avulso,
@@ -5793,6 +5809,7 @@ def nova_venda():
             situacao=situacao,
             forma_pagamento=forma_pagamento,
             tipo_operacao=tipo_operacao,
+            lucro_percentual=lucro_percentual,
         )
         db.session.add(venda)
         produto.estoque_atual -= quantidade_venda
@@ -5893,6 +5910,15 @@ def processar_carrinho():
                 situacao = (obj.get('situacao') or 'PENDENTE').strip()
                 forma_pagamento = (obj.get('forma_pagamento') or '').strip() or None
                 tipo_operacao = (obj.get('tipo_operacao') or 'VENDA').strip().upper()
+                lucro_percentual = None
+                lucro_percentual_raw = obj.get('lucro_percentual')
+                if lucro_percentual_raw not in (None, ''):
+                    try:
+                        lucro_percentual = Decimal(str(lucro_percentual_raw).replace(',', '.'))
+                        if lucro_percentual < 0:
+                            lucro_percentual = Decimal('0')
+                    except Exception:
+                        lucro_percentual = None
                 nf = (obj.get('nf') or '').strip() or None
                 data_venda_raw = obj.get('data_venda')
                 if data_venda_raw:
@@ -5927,6 +5953,7 @@ def processar_carrinho():
                 preco_venda = Decimal('0')
                 situacao = 'PERDA'
                 forma_pagamento = None
+                lucro_percentual = None
 
             venda = Venda(
                 cliente_id=cliente_id,
@@ -5940,6 +5967,7 @@ def processar_carrinho():
                 situacao=situacao,
                 forma_pagamento=forma_pagamento,
                 tipo_operacao=tipo_operacao,
+                lucro_percentual=lucro_percentual,
             )
             db.session.add(venda)
             produto.estoque_atual -= quantidade_venda

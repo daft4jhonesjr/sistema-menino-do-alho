@@ -231,7 +231,7 @@
                     <p id="inline-estoque-info" class="mt-0.5 text-xs text-gray-500 dark:text-gray-400"></p>
                 </div>
             </div>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-5">
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-5">
                 <div>
                     <label for="inline-nf" class="block text-xs font-medium text-gray-600 dark:text-gray-200 mb-1">NF</label>
                     <input type="text" id="inline-nf" name="nf" placeholder="00123" inputmode="numeric" pattern="[0-9]*" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-emerald-500 dark:focus:border-emerald-500 shadow-sm">
@@ -247,6 +247,10 @@
                 <div>
                     <label for="inline-valor-total" class="block text-xs font-medium text-gray-600 dark:text-gray-200 mb-1">Total</label>
                     <input type="text" id="inline-valor-total" readonly placeholder="R$ 0,00" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white shadow-sm cursor-default" tabindex="-1" title="Calculado automaticamente (Preço × Quantidade)">
+                </div>
+                <div class="w-full min-w-0">
+                    <label for="lucro_percentual" class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Lucro (%) Opcional</label>
+                    <input type="number" name="lucro_percentual" id="lucro_percentual" step="0.01" min="0" placeholder="Ex: 5" class="w-full max-w-full box-border rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none font-bold text-slate-700 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
                 </div>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-6 gap-5 items-end">
@@ -1356,6 +1360,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var operacaoSelect = document.getElementById('tipo_operacao');
     var situacaoSelect = document.getElementById('inline-situacao');
     var formaPagamentoSelect = document.getElementById('inline-forma_pagamento');
+    var lucroPercentualInput = document.getElementById('lucro_percentual');
     var quantidadeInput = document.getElementById('inline-quantidade_venda');
     var estoqueInfo = document.getElementById('inline-estoque-info');
     var dataInput = document.getElementById('inline-data_venda');
@@ -1549,11 +1554,24 @@ document.addEventListener('DOMContentLoaded', function() {
         var formaPagEl = document.getElementById('inline-forma_pagamento');
         var formaPagamento = (formaPagEl && formaPagEl.value) ? String(formaPagEl.value).trim() : '';
         if (tipoOperacao === 'PERDA') formaPagamento = '';
+        var lucroPercentual = 0;
+        if (lucroPercentualInput && String(lucroPercentualInput.value || '').trim() !== '') {
+            lucroPercentual = parseFloat(String(lucroPercentualInput.value).replace(',', '.'));
+            if (isNaN(lucroPercentual) || lucroPercentual < 0) lucroPercentual = 0;
+        }
         if (!cid || !pid) return null;
         if (qtd < 1 || !empresa) return null;
         if (tipoOperacao === 'VENDA' && (isNaN(preco) || preco <= 0)) return null;
         var total = preco * qtd;
-        var lucro = tipoOperacao === 'PERDA' ? -(preco_custo * qtd) : ((preco - preco_custo) * qtd);
+        var lucro = 0;
+        if (tipoOperacao === 'PERDA') {
+            lucro = -(preco_custo * qtd);
+            lucroPercentual = 0;
+        } else if (lucroPercentual > 0) {
+            lucro = total * (lucroPercentual / 100);
+        } else {
+            lucro = (preco - preco_custo) * qtd;
+        }
         return {
             cliente_id: parseInt(cid, 10),
             cliente_nome: cliente_nome,
@@ -1569,6 +1587,7 @@ document.addEventListener('DOMContentLoaded', function() {
             data_venda: dataVal,
             empresa_faturadora: empresa,
             tipo_operacao: tipoOperacao,
+            lucro_percentual: lucroPercentual > 0 ? lucroPercentual : null,
             situacao: situacao,
             forma_pagamento: formaPagamento || null
         };
@@ -1645,6 +1664,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 data_venda: it.data_venda,
                 empresa_faturadora: it.empresa_faturadora,
                 tipo_operacao: it.tipo_operacao || 'VENDA',
+                lucro_percentual: (typeof it.lucro_percentual === 'number' && it.lucro_percentual > 0) ? it.lucro_percentual : null,
                 situacao: it.situacao,
                 forma_pagamento: it.forma_pagamento || null
             };

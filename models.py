@@ -169,6 +169,7 @@ class Venda(db.Model):
     status_entrega = db.Column(db.String(50), default='PENDENTE', index=True)
     forma_pagamento = db.Column(db.String(50), nullable=True, index=True)
     tipo_operacao = db.Column(db.String(20), default='VENDA', nullable=False, server_default='VENDA')
+    lucro_percentual = db.Column(db.Numeric(6, 2), nullable=True)
     cliente_avulso = db.Column(db.String(100), nullable=True)
     caminho_boleto = db.Column(db.String(500), nullable=True)
     caminho_nf = db.Column(db.String(500), nullable=True)
@@ -189,6 +190,9 @@ class Venda(db.Model):
             return 0
         if str(self.tipo_operacao or 'VENDA').upper() == 'PERDA':
             return -float(self.produto.preco_custo or 0) * (self.quantidade_venda or 0)
+        percentual = float(self.lucro_percentual or 0)
+        if percentual > 0:
+            return float(self.calcular_total()) * (percentual / 100.0)
         custo = float(self.produto.preco_custo)
         venda = float(self.preco_venda)
         return (venda - custo) * self.quantidade_venda
