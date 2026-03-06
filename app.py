@@ -395,6 +395,23 @@ def _cliente_from_documento(cnpj, razao_social):
 def _extrair_numero_nf(texto):
     """Extrai número da NF apenas se colado a 'Núm. do documento', 'NF' ou 'Numero Documento'.
     Ignora últimos 25%% da página (feito em _processar_pdf). 4–6 dígitos; blacklist de telefones."""
+    # DANFE: priorizar blocos explícitos de NF-e (aceita zeros à esquerda e número mais longo)
+    padroes_danfe = [
+        r'NFe?\s*N[º°]\s*(\d{3,12})',
+        r'N[º°]\s*0*(\d{3,12})',
+        r'NFe?\s*N[º°]\s*S[ée]rie[\s\S]{0,40}?(\d{3,12})',
+    ]
+    for p in padroes_danfe:
+        m = re.search(p, texto, re.IGNORECASE)
+        if not m:
+            continue
+        n = (m.group(1) or '').strip()
+        if not n:
+            continue
+        if n in BLACKLIST_NF:
+            continue
+        return n
+
     padroes = [
         (r'N[úu]m\.?\s*do\s*documento\s*[:\s]*(?:NF[-]?)?\s*(\d+)', False),
         (r'N[úu]mero\s*do\s*documento\s*[:\s]*(?:NF[-]?)?\s*(\d+)', False),
@@ -413,7 +430,7 @@ def _extrair_numero_nf(texto):
             continue
         if len(n) == 8 and not exige_nf:
             continue
-        if len(n) < 4 or len(n) > 6:
+        if len(n) < 3 or len(n) > 12:
             continue
         return n
     return None
@@ -494,6 +511,30 @@ def _limpar_razao_ate_cnpj_ou_data(linha):
 
 def _extrair_razao_social(texto):
     """Extrai razão social do PAGADOR (boletos) ou DESTINATÁRIO (NF-e)."""
+    # DANFE: priorizar bloco do destinatário para evitar capturar "Transportador / Volumes Transportados"
+    bloco_dest = re.search(
+        r'Destinat[áa]rio\s*/\s*Remetente([\s\S]{0,1200}?)(?:Endere[cç]o|CNPJ\s*/\s*CPF)',
+        texto,
+        re.IGNORECASE,
+    )
+    if bloco_dest:
+        trecho = bloco_dest.group(1)
+        linhas = [re.sub(r'\s+', ' ', l).strip() for l in re.split(r'[\r\n]+', trecho) if l and l.strip()]
+        # Se houver cabeçalho "Nome/Razão Social", capturar a linha imediatamente abaixo
+        for i, linha in enumerate(linhas):
+            if re.search(r'Nome\s*/\s*Raz[ãa]o\s+Social', linha, re.IGNORECASE):
+                if i + 1 < len(linhas):
+                    cand = _limpar_razao_ate_cnpj_ou_data(linhas[i + 1])
+                    if cand and len(cand) > 3 and not _eh_linha_cabecalho_pagador(cand):
+                        return cand[:200]
+        # Fallback no mesmo bloco: primeira linha textual plausível que não seja cabeçalho
+        for linha in linhas:
+            if re.search(r'Nome\s*/\s*Raz[ãa]o\s+Social|CNPJ|CPF|Insc', linha, re.IGNORECASE):
+                continue
+            cand = _limpar_razao_ate_cnpj_ou_data(linha)
+            if cand and len(cand) > 3 and not _eh_linha_cabecalho_pagador(cand):
+                return cand[:200]
+
     # Itaú/DESTAK: "Pagador: CAPIM FRIOS EIRELI" (mesma linha ou próxima)
     m = re.search(r'Pagador\s*:\s*([A-ZÁÉÍÓÚÇa-z0-9][A-ZÁÉÍÓÚÇa-z0-9\s&\.\-(),]+?)(?:\s*[\r\n]|CNPJ|CPF|$)', texto, re.IGNORECASE)
     if m:
@@ -628,7 +669,23 @@ def _parse_valor_monetario(s):
 
 
 def _extrair_valor_boleto(texto):
-    """Extrai valor principal do boleto (ex.: R$ 2.400,00). Procura padrões próximos a Valor/Total."""
+    """Extrai valor principal do boleto (ex.: R$ 2.400,00) e, para DANFE, o Valor Total da Nota."""
+    # DANFE: ancorar no rótulo "Valor Total da Nota" para não capturar zeros de impostos
+    bloco_total_nota = re.search(
+        r'Valor\s+Total\s+da\s+Nota([\s\S]{0,220})',
+        texto,
+        re.IGNORECASE
+    )
+    if bloco_total_nota:
+        trecho = bloco_total_nota.group(1)
+        candidatos = re.findall(r'(\d{1,3}(?:\.\d{3})*,\d{2})', trecho)
+        if candidatos:
+            # Usa o último valor não-zero do bloco (normalmente o total final da nota)
+            for raw in reversed(candidatos):
+                v = _parse_valor_monetario(raw)
+                if v is not None and v > 0:
+                    return v
+
     padroes = [
         r'Valor\s*(?:do\s*Documento)?\s*[:\s]*R\$\s*([\d\.]+,\d{2})',
         r'Valor\s*[:\s]*R\$\s*([\d\.]+,\d{2})',
