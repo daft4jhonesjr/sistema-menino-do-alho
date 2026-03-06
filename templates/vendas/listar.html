@@ -1034,17 +1034,21 @@
     if (!actionBase) actionBase = '';
 
     function abrirModalEditarVenda(btn) {
+        function limparValor(v) {
+            var s = String(v == null ? '' : v).trim();
+            return (s && s !== 'None' && s.toLowerCase() !== 'null' && s.toLowerCase() !== 'undefined') ? s : '';
+        }
         var id = btn.getAttribute('data-id');
-        var clienteId = btn.getAttribute('data-cliente-id') || '';
-        var produtoId = btn.getAttribute('data-produto-id') || '';
-        var qtd = btn.getAttribute('data-qtd') || '1';
-        var preco = btn.getAttribute('data-preco') || '';
-        var nf = btn.getAttribute('data-nf') || '';
-        var data = btn.getAttribute('data-data') || '';
-        var empresa = btn.getAttribute('data-empresa') || '';
-        var situacao = btn.getAttribute('data-situacao') || 'PENDENTE';
-        var formaPagamento = btn.getAttribute('data-forma-pagamento') || '';
-        var lucroPerc = btn.getAttribute('data-lucro-perc') || '';
+        var clienteId = limparValor(btn.getAttribute('data-cliente-id'));
+        var produtoId = limparValor(btn.getAttribute('data-produto-id'));
+        var qtd = limparValor(btn.getAttribute('data-qtd')) || '1';
+        var preco = limparValor(btn.getAttribute('data-preco'));
+        var nf = limparValor(btn.getAttribute('data-nf'));
+        var data = limparValor(btn.getAttribute('data-data'));
+        var empresa = limparValor(btn.getAttribute('data-empresa'));
+        var situacao = limparValor(btn.getAttribute('data-situacao')) || 'PENDENTE';
+        var formaPagamento = limparValor(btn.getAttribute('data-forma-pagamento'));
+        var lucroPerc = limparValor(btn.getAttribute('data-lucro-perc'));
 
         form.action = actionBase.replace(/\/0$/, '/') + id;
         document.getElementById('edit_cliente_id').value = clienteId;
@@ -2311,22 +2315,26 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Função para abrir modal de editar venda (reutilizar a função existente)
     function abrirModalEditarVenda(btn) {
+        function limparValor(v) {
+            var s = String(v == null ? '' : v).trim();
+            return (s && s !== 'None' && s.toLowerCase() !== 'null' && s.toLowerCase() !== 'undefined') ? s : '';
+        }
         var wrap = document.getElementById('modal-editar-venda-wrap');
         var form = document.getElementById('form-editar-venda');
         if (!wrap || !form) return;
         
         var actionBase = form.getAttribute('data-action-base') || '';
         var id = btn.getAttribute('data-id');
-        var clienteId = btn.getAttribute('data-cliente-id') || '';
-        var produtoId = btn.getAttribute('data-produto-id') || '';
-        var qtd = btn.getAttribute('data-qtd') || '1';
-        var preco = btn.getAttribute('data-preco') || '';
-        var nf = btn.getAttribute('data-nf') || '';
-        var data = btn.getAttribute('data-data') || '';
-        var empresa = btn.getAttribute('data-empresa') || '';
-        var situacao = btn.getAttribute('data-situacao') || 'PENDENTE';
-        var formaPagamento = btn.getAttribute('data-forma-pagamento') || '';
-        var lucroPerc = btn.getAttribute('data-lucro-perc') || '';
+        var clienteId = limparValor(btn.getAttribute('data-cliente-id'));
+        var produtoId = limparValor(btn.getAttribute('data-produto-id'));
+        var qtd = limparValor(btn.getAttribute('data-qtd')) || '1';
+        var preco = limparValor(btn.getAttribute('data-preco'));
+        var nf = limparValor(btn.getAttribute('data-nf'));
+        var data = limparValor(btn.getAttribute('data-data'));
+        var empresa = limparValor(btn.getAttribute('data-empresa'));
+        var situacao = limparValor(btn.getAttribute('data-situacao')) || 'PENDENTE';
+        var formaPagamento = limparValor(btn.getAttribute('data-forma-pagamento'));
+        var lucroPerc = limparValor(btn.getAttribute('data-lucro-perc'));
 
         form.action = actionBase.replace(/\/0$/, '/') + id;
         document.getElementById('edit_cliente_id').value = clienteId;

@@ -6051,142 +6051,164 @@ def editar_venda(id):
     vendas_do_pedido_alvo = _vendas_do_pedido(venda)
     
     if request.method == 'POST':
+        def _clean_nullable_text(value):
+            txt = str(value or '').strip()
+            return None if txt == '' or txt.lower() in ('none', 'null', 'undefined') else txt
+
         try:
             produto_id = int(request.form.get('produto_id', 0))
             quantidade_venda = int(request.form.get('quantidade_venda', 0))
         except (ValueError, TypeError):
             flash('Produto e quantidade são obrigatórios.', 'error')
             return redirect(url_for('listar_vendas'))
-        if not produto_id:
-            flash('Produto é obrigatório.', 'error')
-            return redirect(url_for('listar_vendas'))
-        
-        produto = Produto.query.get_or_404(produto_id)
-        
-        # Calcular estoque disponível considerando a devolução da quantidade original
-        if produto.id == produto_original.id:
-            estoque_disponivel = produto.estoque_atual + quantidade_original
-        else:
-            estoque_disponivel = produto.estoque_atual
 
-        # Validar estoque
-        if estoque_disponivel < quantidade_venda:
-            flash(f'Estoque insuficiente! Disponível: {estoque_disponivel}', 'error')
-            return redirect(url_for('listar_vendas'))
-
-        # Atualizar estoque ANTES de atualizar a venda
-        if produto.id == produto_original.id:
-            # Mesmo produto: devolver quantidade original e subtrair nova quantidade
-            produto.estoque_atual = produto.estoque_atual + quantidade_original - quantidade_venda
-        else:
-            # Produto diferente: devolver ao original e subtrair do novo
-            produto_original.estoque_atual += quantidade_original
-            produto.estoque_atual -= quantidade_venda
-        
-        # Atualizar dados gerais do pedido (aplica a todos os itens do mesmo pedido)
         try:
-            cliente_id = int(request.form.get('cliente_id', 0))
-        except (ValueError, TypeError):
-            cliente_id = venda.cliente_id
-        data_venda_raw = request.form.get('data_venda')
-        cliente_id_novo = cliente_id if cliente_id else venda.cliente_id
-        nf_nova = request.form.get('nf', '')
-        empresa_nova = request.form.get('empresa_faturadora', venda.empresa_faturadora or 'PATY')
-        situacao_nova = request.form.get('situacao', venda.situacao or 'PENDENTE')
-        fp = request.form.get('forma_pagamento')
-        forma_pagamento_nova = (fp or '').strip() or None
-        data_venda_nova = None
-        if data_venda_raw:
-            data_venda_nova = date.fromisoformat(data_venda_raw)
+            if not produto_id:
+                flash('Produto é obrigatório.', 'error')
+                return redirect(url_for('listar_vendas'))
 
-        for v_pedido in vendas_do_pedido_alvo:
-            v_pedido.cliente_id = cliente_id_novo
-            v_pedido.nf = nf_nova
-            if data_venda_nova:
-                v_pedido.data_venda = data_venda_nova
-            v_pedido.empresa_faturadora = empresa_nova
-            v_pedido.situacao = situacao_nova
-            v_pedido.forma_pagamento = forma_pagamento_nova
+            produto = Produto.query.get_or_404(produto_id)
 
-        # Atualizar dados do item específico (venda selecionada)
-        venda.produto_id = produto_id
-        venda.preco_venda = Decimal(str(_limpar_valor_moeda(request.form.get('preco_venda', 0))))
-        venda.quantidade_venda = quantidade_venda
-        lucro_percentual_raw = (request.form.get('lucro_percentual') or '').strip()
-        lucro_percentual = None
-        if lucro_percentual_raw:
-            try:
-                lucro_percentual = Decimal(str(lucro_percentual_raw).replace(',', '.'))
-                if lucro_percentual < 0:
-                    lucro_percentual = Decimal('0')
-            except Exception:
-                lucro_percentual = None
-        tipo_operacao = (request.form.get('tipo_operacao') or venda.tipo_operacao or 'VENDA').strip().upper()
-        if tipo_operacao not in ('VENDA', 'PERDA'):
-            tipo_operacao = 'VENDA'
-        venda.tipo_operacao = tipo_operacao
-        venda.lucro_percentual = lucro_percentual if (lucro_percentual is not None and lucro_percentual > 0) else None
-        if tipo_operacao == 'PERDA':
-            venda.preco_venda = Decimal('0')
-            venda.situacao = 'PERDA'
-            venda.forma_pagamento = None
-            venda.lucro_percentual = None
-        
-        # --- INÍCIO DA INTEGRAÇÃO COM CAIXA (PILOTO AUTOMÁTICO V4) ---
-        vendas_do_pedido = vendas_do_pedido_alvo
-        venda_id_busca = vendas_do_pedido[0].id if vendas_do_pedido else venda.id
-        lancamentos_existentes = LancamentoCaixa.query.filter(
-            LancamentoCaixa.descricao.like(f"Venda #{venda_id_busca} -%")
-        ).all()
-        status_atual = str(venda.situacao).strip().upper() if venda.situacao else ''
-        status_pago = status_atual in ('PAGO', 'CONCLUÍDO', 'PARCIAL')
-        eh_perda = tipo_operacao == 'PERDA'
-        if status_pago and not eh_perda and not lancamentos_existentes:
-            cliente = Cliente.query.get(venda.cliente_id)
-            nome_cliente = cliente.nome_cliente if cliente else "Cliente Avulso"
-            forma_pgto = request.form.get('forma_pagamento', 'Dinheiro') or 'Dinheiro'
-            valor_pedido = sum(float(v.calcular_total()) for v in vendas_do_pedido)
-            forma_pgto_upper = str(forma_pgto or '').upper()
-            data_venc = None
-            for v in vendas_do_pedido:
-                dv = getattr(v, 'data_vencimento', None)
-                if dv:
-                    data_venc = dv
-                    break
-            if 'BOLETO' in forma_pgto_upper and data_venc:
-                data_lancamento_caixa = data_venc
+            # Calcular estoque disponível considerando a devolução da quantidade original
+            if produto.id == produto_original.id:
+                estoque_disponivel = produto.estoque_atual + quantidade_original
             else:
-                data_lancamento_caixa = date.today()
-            novo_lanc = LancamentoCaixa(
-                data=data_lancamento_caixa,
-                descricao=f"Venda #{venda_id_busca} - {nome_cliente}",
-                tipo='ENTRADA',
-                categoria='Entrada Cliente',
-                forma_pagamento=forma_pgto,
-                valor=valor_pedido,
-                usuario_id=current_user.id
-            )
-            db.session.add(novo_lanc)
-            if 'boleto' in forma_pgto.lower():
-                repasse_lanc = LancamentoCaixa(
+                estoque_disponivel = produto.estoque_atual
+
+            # Validar estoque
+            if estoque_disponivel < quantidade_venda:
+                flash(f'Estoque insuficiente! Disponível: {estoque_disponivel}', 'error')
+                return redirect(url_for('listar_vendas'))
+
+            # Atualizar estoque ANTES de atualizar a venda
+            if produto.id == produto_original.id:
+                # Mesmo produto: devolver quantidade original e subtrair nova quantidade
+                produto.estoque_atual = produto.estoque_atual + quantidade_original - quantidade_venda
+            else:
+                # Produto diferente: devolver ao original e subtrair do novo
+                produto_original.estoque_atual += quantidade_original
+                produto.estoque_atual -= quantidade_venda
+
+            # Atualizar dados gerais do pedido (aplica a todos os itens do mesmo pedido)
+            try:
+                cliente_id = int(request.form.get('cliente_id', 0))
+            except (ValueError, TypeError):
+                cliente_id = venda.cliente_id
+            data_venda_raw = _clean_nullable_text(request.form.get('data_venda'))
+            cliente_id_novo = cliente_id if cliente_id else venda.cliente_id
+            nf_nova = _clean_nullable_text(request.form.get('nf'))
+            empresa_nova = _clean_nullable_text(request.form.get('empresa_faturadora')) or (venda.empresa_faturadora or 'PATY')
+            situacao_nova = _clean_nullable_text(request.form.get('situacao')) or (venda.situacao or 'PENDENTE')
+            fp = _clean_nullable_text(request.form.get('forma_pagamento'))
+            forma_pagamento_nova = fp
+            data_venda_nova = None
+            if data_venda_raw:
+                try:
+                    data_venda_nova = date.fromisoformat(data_venda_raw)
+                except Exception:
+                    flash('Data da venda inválida.', 'error')
+                    return redirect(url_for('listar_vendas'))
+
+            for v_pedido in vendas_do_pedido_alvo:
+                v_pedido.cliente_id = cliente_id_novo
+                v_pedido.nf = nf_nova
+                if data_venda_nova:
+                    v_pedido.data_venda = data_venda_nova
+                v_pedido.empresa_faturadora = empresa_nova
+                v_pedido.situacao = situacao_nova
+                v_pedido.forma_pagamento = forma_pagamento_nova
+
+            # Atualizar dados do item específico (venda selecionada)
+            venda.produto_id = produto_id
+            venda.preco_venda = Decimal(str(_limpar_valor_moeda(request.form.get('preco_venda') or 0)))
+            venda.quantidade_venda = quantidade_venda
+            lucro_percentual_raw = (_clean_nullable_text(request.form.get('lucro_percentual')) or '')
+            lucro_percentual = None
+            if lucro_percentual_raw:
+                try:
+                    lucro_percentual = Decimal(str(lucro_percentual_raw).replace(',', '.'))
+                    if lucro_percentual < 0:
+                        lucro_percentual = Decimal('0')
+                except Exception:
+                    lucro_percentual = None
+            tipo_operacao = (_clean_nullable_text(request.form.get('tipo_operacao')) or venda.tipo_operacao or 'VENDA').strip().upper()
+            if tipo_operacao not in ('VENDA', 'PERDA'):
+                tipo_operacao = 'VENDA'
+            venda.tipo_operacao = tipo_operacao
+            venda.lucro_percentual = lucro_percentual if (lucro_percentual is not None and lucro_percentual > 0) else None
+            if tipo_operacao == 'PERDA':
+                venda.preco_venda = Decimal('0')
+                venda.situacao = 'PERDA'
+                venda.forma_pagamento = None
+                venda.lucro_percentual = None
+
+            # --- INÍCIO DA INTEGRAÇÃO COM CAIXA (PILOTO AUTOMÁTICO V4) ---
+            vendas_do_pedido = vendas_do_pedido_alvo
+            venda_id_busca = vendas_do_pedido[0].id if vendas_do_pedido else venda.id
+            lancamentos_existentes = LancamentoCaixa.query.filter(
+                LancamentoCaixa.descricao.like(f"Venda #{venda_id_busca} -%")
+            ).all()
+            status_atual = str(venda.situacao).strip().upper() if venda.situacao else ''
+            status_pago = status_atual in ('PAGO', 'CONCLUÍDO', 'PARCIAL')
+            eh_perda = tipo_operacao == 'PERDA'
+            if status_pago and not eh_perda and not lancamentos_existentes:
+                cliente = Cliente.query.get(venda.cliente_id)
+                nome_cliente = cliente.nome_cliente if cliente else "Cliente Avulso"
+                forma_pgto = _clean_nullable_text(request.form.get('forma_pagamento')) or 'Dinheiro'
+                valor_pedido = sum(float(v.calcular_total()) for v in vendas_do_pedido)
+                forma_pgto_upper = str(forma_pgto or '').upper()
+                data_venc = None
+                for v in vendas_do_pedido:
+                    dv = getattr(v, 'data_vencimento', None)
+                    if dv:
+                        data_venc = dv
+                        break
+                if 'BOLETO' in forma_pgto_upper and data_venc:
+                    data_lancamento_caixa = data_venc
+                else:
+                    data_lancamento_caixa = date.today()
+                novo_lanc = LancamentoCaixa(
                     data=data_lancamento_caixa,
-                    descricao=f"Venda #{venda_id_busca} - {nome_cliente} (Repasse Fornecedor)",
-                    tipo='SAIDA',
-                    categoria='Saída Fornecedor',
+                    descricao=f"Venda #{venda_id_busca} - {nome_cliente}",
+                    tipo='ENTRADA',
+                    categoria='Entrada Cliente',
                     forma_pagamento=forma_pgto,
                     valor=valor_pedido,
                     usuario_id=current_user.id
                 )
-                db.session.add(repasse_lanc)
-        elif not status_pago and lancamentos_existentes:
-            for lanc in lancamentos_existentes:
-                db.session.delete(lanc)
-        # --- FIM DA INTEGRAÇÃO ---
-        
-        db.session.commit()
-        limpar_cache_dashboard()  # Limpar cache após editar venda
-        flash('Venda atualizada com sucesso!', 'success')
-        return redirect(url_for('listar_vendas'))
+                db.session.add(novo_lanc)
+                if 'boleto' in forma_pgto.lower():
+                    repasse_lanc = LancamentoCaixa(
+                        data=data_lancamento_caixa,
+                        descricao=f"Venda #{venda_id_busca} - {nome_cliente} (Repasse Fornecedor)",
+                        tipo='SAIDA',
+                        categoria='Saída Fornecedor',
+                        forma_pagamento=forma_pgto,
+                        valor=valor_pedido,
+                        usuario_id=current_user.id
+                    )
+                    db.session.add(repasse_lanc)
+            elif not status_pago and lancamentos_existentes:
+                for lanc in lancamentos_existentes:
+                    db.session.delete(lanc)
+            # --- FIM DA INTEGRAÇÃO ---
+
+            try:
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                app.logger.exception('Erro ao salvar edição da venda')
+                flash('Erro ao salvar edição.', 'error')
+                return redirect(url_for('listar_vendas'))
+
+            limpar_cache_dashboard()  # Limpar cache após editar venda
+            flash('Venda atualizada com sucesso!', 'success')
+            return redirect(url_for('listar_vendas'))
+        except Exception:
+            db.session.rollback()
+            app.logger.exception('Falha inesperada na edição da venda')
+            flash('Erro ao salvar edição.', 'error')
+            return redirect(url_for('listar_vendas'))
     
     clientes = Cliente.query.all()
     produtos = Produto.query.all()
