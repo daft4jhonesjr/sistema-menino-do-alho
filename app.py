@@ -6046,6 +6046,9 @@ def editar_venda(id):
     venda = Venda.query.get_or_404(id)
     produto_original = venda.produto
     quantidade_original = venda.quantidade_venda
+    # Congela o conjunto do pedido ANTES de qualquer alteração de campos gerais
+    # (cliente, NF, data). Assim evitamos "split" de pedido ao editar um item.
+    vendas_do_pedido_alvo = _vendas_do_pedido(venda)
     
     if request.method == 'POST':
         try:
@@ -6080,20 +6083,35 @@ def editar_venda(id):
             produto_original.estoque_atual += quantidade_original
             produto.estoque_atual -= quantidade_venda
         
-        # Atualizar venda
+        # Atualizar dados gerais do pedido (aplica a todos os itens do mesmo pedido)
         try:
             cliente_id = int(request.form.get('cliente_id', 0))
         except (ValueError, TypeError):
             cliente_id = venda.cliente_id
         data_venda_raw = request.form.get('data_venda')
-        venda.cliente_id = cliente_id if cliente_id else venda.cliente_id
+        cliente_id_novo = cliente_id if cliente_id else venda.cliente_id
+        nf_nova = request.form.get('nf', '')
+        empresa_nova = request.form.get('empresa_faturadora', venda.empresa_faturadora or 'PATY')
+        situacao_nova = request.form.get('situacao', venda.situacao or 'PENDENTE')
+        fp = request.form.get('forma_pagamento')
+        forma_pagamento_nova = (fp or '').strip() or None
+        data_venda_nova = None
+        if data_venda_raw:
+            data_venda_nova = date.fromisoformat(data_venda_raw)
+
+        for v_pedido in vendas_do_pedido_alvo:
+            v_pedido.cliente_id = cliente_id_novo
+            v_pedido.nf = nf_nova
+            if data_venda_nova:
+                v_pedido.data_venda = data_venda_nova
+            v_pedido.empresa_faturadora = empresa_nova
+            v_pedido.situacao = situacao_nova
+            v_pedido.forma_pagamento = forma_pagamento_nova
+
+        # Atualizar dados do item específico (venda selecionada)
         venda.produto_id = produto_id
-        venda.nf = request.form.get('nf', '')
         venda.preco_venda = Decimal(str(_limpar_valor_moeda(request.form.get('preco_venda', 0))))
         venda.quantidade_venda = quantidade_venda
-        if data_venda_raw:
-            venda.data_venda = date.fromisoformat(data_venda_raw)
-        venda.empresa_faturadora = request.form.get('empresa_faturadora', venda.empresa_faturadora or 'PATY')
         lucro_percentual_raw = (request.form.get('lucro_percentual') or '').strip()
         lucro_percentual = None
         if lucro_percentual_raw:
@@ -6107,9 +6125,6 @@ def editar_venda(id):
         if tipo_operacao not in ('VENDA', 'PERDA'):
             tipo_operacao = 'VENDA'
         venda.tipo_operacao = tipo_operacao
-        venda.situacao = request.form.get('situacao', venda.situacao or 'PENDENTE')
-        fp = request.form.get('forma_pagamento')
-        venda.forma_pagamento = (fp or '').strip() or None
         venda.lucro_percentual = lucro_percentual if (lucro_percentual is not None and lucro_percentual > 0) else None
         if tipo_operacao == 'PERDA':
             venda.preco_venda = Decimal('0')
@@ -6118,7 +6133,7 @@ def editar_venda(id):
             venda.lucro_percentual = None
         
         # --- INÍCIO DA INTEGRAÇÃO COM CAIXA (PILOTO AUTOMÁTICO V4) ---
-        vendas_do_pedido = _vendas_do_pedido(venda)
+        vendas_do_pedido = vendas_do_pedido_alvo
         venda_id_busca = vendas_do_pedido[0].id if vendas_do_pedido else venda.id
         lancamentos_existentes = LancamentoCaixa.query.filter(
             LancamentoCaixa.descricao.like(f"Venda #{venda_id_busca} -%")
