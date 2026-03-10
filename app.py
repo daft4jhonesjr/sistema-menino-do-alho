@@ -6114,13 +6114,37 @@ def editar_venda(id):
             return None if txt == '' or txt.lower() in ('none', 'null', 'undefined') else txt
 
         try:
-            produto_id = int(request.form.get('produto_id', 0))
-            quantidade_venda = int(request.form.get('quantidade_venda', 0))
-        except (ValueError, TypeError):
-            flash('Produto e quantidade são obrigatórios.', 'error')
-            return redirect(url_for('listar_vendas'))
+            def safe_float(value, default=0.0):
+                if value is None:
+                    return default
+                raw = str(value).strip()
+                if raw == '' or raw.lower() == 'none':
+                    return default
+                try:
+                    if ',' in raw and '.' in raw:
+                        raw = raw.replace('.', '').replace(',', '.')
+                    else:
+                        raw = raw.replace(',', '.')
+                    return float(raw)
+                except (ValueError, TypeError):
+                    return default
 
-        try:
+            def safe_int(value, default=0):
+                try:
+                    return int(float(safe_float(value, default=float(default))))
+                except (ValueError, TypeError):
+                    return default
+
+            produto_id = safe_int(request.form.get('produto_id'), default=0)
+            quantidade_val = safe_float(
+                request.form.get('quantidade_venda', request.form.get('quantidade')),
+                default=1.0
+            )
+            quantidade_venda = safe_int(quantidade_val, default=1)
+
+            if quantidade_venda < 1:
+                quantidade_venda = 1
+
             if not produto_id:
                 flash('Produto é obrigatório.', 'error')
                 return redirect(url_for('listar_vendas'))
@@ -6148,10 +6172,7 @@ def editar_venda(id):
                 produto.estoque_atual -= quantidade_venda
 
             # Atualizar dados gerais do pedido (aplica a todos os itens do mesmo pedido)
-            try:
-                cliente_id = int(request.form.get('cliente_id', 0))
-            except (ValueError, TypeError):
-                cliente_id = venda.cliente_id
+            cliente_id = safe_int(request.form.get('cliente_id'), default=venda.cliente_id or 0)
             data_venda_raw = _clean_nullable_text(request.form.get('data_venda'))
             cliente_id_novo = cliente_id if cliente_id else venda.cliente_id
             nf_nova = _clean_nullable_text(request.form.get('nf'))
@@ -6178,17 +6199,16 @@ def editar_venda(id):
 
             # Atualizar dados do item específico (venda selecionada)
             venda.produto_id = produto_id
-            venda.preco_venda = Decimal(str(_limpar_valor_moeda(request.form.get('preco_venda') or 0)))
+            preco_venda = safe_float(
+                request.form.get('preco_venda', request.form.get('preco_unitario')),
+                default=0.0
+            )
+            venda.preco_venda = Decimal(str(preco_venda))
             venda.quantidade_venda = quantidade_venda
-            lucro_percentual_raw = (_clean_nullable_text(request.form.get('lucro_percentual')) or '')
-            lucro_percentual = None
-            if lucro_percentual_raw:
-                try:
-                    lucro_percentual = Decimal(str(lucro_percentual_raw).replace(',', '.'))
-                    if lucro_percentual < 0:
-                        lucro_percentual = Decimal('0')
-                except Exception:
-                    lucro_percentual = None
+            lucro_percentual_float = safe_float(request.form.get('lucro_percentual'), default=0.0)
+            lucro_percentual = Decimal(str(lucro_percentual_float))
+            if lucro_percentual < 0:
+                lucro_percentual = Decimal('0')
             tipo_operacao = (_clean_nullable_text(request.form.get('tipo_operacao')) or venda.tipo_operacao or 'VENDA').strip().upper()
             if tipo_operacao not in ('VENDA', 'PERDA'):
                 tipo_operacao = 'VENDA'
@@ -6251,26 +6271,22 @@ def editar_venda(id):
                     db.session.delete(lanc)
             # --- FIM DA INTEGRAÇÃO ---
 
-            try:
-                db.session.commit()
-            except Exception:
-                db.session.rollback()
-                app.logger.exception('Erro ao salvar edição da venda')
-                flash('Erro ao salvar edição.', 'error')
-                return redirect(url_for('listar_vendas'))
+            db.session.commit()
 
             limpar_cache_dashboard()  # Limpar cache após editar venda
             flash('Venda atualizada com sucesso!', 'success')
             return redirect(url_for('listar_vendas'))
-        except Exception:
+        except Exception as e:
             db.session.rollback()
+            print(f"ERRO AO EDITAR VENDA: {str(e)}")
             app.logger.exception('Falha inesperada na edição da venda')
-            flash('Erro ao salvar edição.', 'error')
-            return redirect(url_for('listar_vendas'))
+            flash('Erro ao salvar: verifique os dados preenchidos.', 'error')
+            return redirect(request.referrer or url_for('listar_vendas'))
     
     clientes = Cliente.query.all()
     produtos = Produto.query.all()
-    return render_template('vendas/formulario.html', venda=venda, clientes=clientes, produtos=produtos)
+    venda_nf = venda.nf if venda.nf else ''
+    return render_template('vendas/formulario.html', venda=venda, venda_nf=venda_nf, clientes=clientes, produtos=produtos)
 
 
 @app.route('/venda/excluir_item/<int:id>', methods=['POST'])
