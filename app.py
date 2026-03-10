@@ -5028,6 +5028,7 @@ def api_vendas_por_filtro():
             grupo_atual = 2 if grupo_atual == 1 else 1
         
         lista.append({
+            'id': v.id,
             'data': v.data_venda.strftime('%d/%m/%Y'),
             'nf': nf_atual,
             'produto': v.produto.nome_produto if v.produto else '-',
@@ -6487,6 +6488,31 @@ def atualizar_status_venda(id_venda):
         return jsonify(ok=True, novo_status=novo, mensagem=f'Pedido (NF: {nf}) atualizado para {novo}.')
     flash(f'Pedido (NF: {nf}) atualizado para {novo}.', 'success')
     return redirect(url_for('listar_vendas'))
+
+
+@app.route('/vendas/<int:id>/atualizar_situacao_rapida', methods=['POST'])
+@login_required
+def atualizar_situacao_rapida(id):
+    try:
+        data = request.get_json(silent=True) or {}
+        nova_situacao = str(data.get('situacao') or '').strip().upper()
+        if nova_situacao not in ('PENDENTE', 'PAGO', 'PARCIAL', 'PERDA'):
+            return jsonify({'status': 'erro', 'mensagem': 'Situação inválida.'}), 400
+
+        venda = Venda.query.get_or_404(id)
+        venda.situacao = nova_situacao
+        if nova_situacao == 'PERDA':
+            venda.forma_pagamento = None
+            venda.preco_venda = Decimal('0')
+            venda.tipo_operacao = 'PERDA'
+
+        db.session.commit()
+        limpar_cache_dashboard()
+        return jsonify({'status': 'sucesso'}), 200
+    except Exception as e:
+        db.session.rollback()
+        app.logger.exception('Falha ao atualizar situação rápida da venda')
+        return jsonify({'status': 'erro', 'mensagem': str(e)}), 500
 
 
 @app.route('/venda/recibo/<int:id>')

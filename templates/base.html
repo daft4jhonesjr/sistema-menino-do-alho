@@ -818,7 +818,13 @@
                     var lucro = typeof v.lucro === 'number' ? v.lucro : 0;
                     var lucroStr = formatoMoeda(lucro);
                     var lucroClass = lucro >= 0 ? 'text-emerald-600' : 'text-red-600';
-                    var sitClass = v.situacao === 'PAGO' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800';
+                    var sit = (v.situacao || 'PENDENTE').toString().toUpperCase();
+                    var sitClass = sit === 'PAGO'
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : (sit === 'PARCIAL'
+                            ? 'bg-orange-100 text-orange-800'
+                            : (sit === 'PERDA' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'));
+                    var vendaId = parseInt(v.id || 0, 10) || 0;
                     var formaPag = (v.forma_pagamento || '-').toString().toUpperCase();
                     var formaPagClass = formaPag === 'BOLETO' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
                     tr.innerHTML =
@@ -830,7 +836,14 @@
                         '<td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100 text-right whitespace-nowrap valor-financeiro">' + valorStr + '</td>' +
                         '<td class="px-4 py-3 text-sm font-medium text-right whitespace-nowrap valor-financeiro ' + lucroClass + '">' + lucroStr + '</td>' +
                         '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">' + (v.empresa || '-') + '</td>' +
-                        '<td class="px-4 py-3 whitespace-nowrap"><span class="px-3 py-1 text-xs font-semibold rounded-full ' + sitClass + '">' + (v.situacao || 'PENDENTE') + '</span></td>' +
+                        '<td class="px-4 py-3 whitespace-nowrap">' +
+                            '<select onchange="atualizarSituacaoInline(this, ' + vendaId + ')" class="px-3 py-1 text-xs font-bold rounded-full outline-none cursor-pointer appearance-none text-center transition-colors border-0 ' + sitClass + '">' +
+                                '<option value="PENDENTE"' + (sit === 'PENDENTE' ? ' selected' : '') + '>PENDENTE</option>' +
+                                '<option value="PAGO"' + (sit === 'PAGO' ? ' selected' : '') + '>PAGO</option>' +
+                                '<option value="PARCIAL"' + (sit === 'PARCIAL' ? ' selected' : '') + '>PARCIAL</option>' +
+                                '<option value="PERDA"' + (sit === 'PERDA' ? ' selected' : '') + '>PERDA</option>' +
+                            '</select>' +
+                        '</td>' +
                         '<td class="px-4 py-3 whitespace-nowrap"><span class="px-2 py-1 text-xs font-medium rounded ' + formaPagClass + '">' + (v.forma_pagamento || '-') + '</span></td>';
                     tbody.appendChild(tr);
                     
@@ -870,6 +883,34 @@
                 btnCarregarMais.innerHTML = '<i data-lucide="chevron-down" class="w-4 h-4"></i>Carregar Mais Vendas';
                 if (typeof lucide !== 'undefined') lucide.createIcons();
             });
+    }
+
+    async function atualizarSituacaoInline(selectElement, vendaId) {
+        if (!vendaId || isNaN(Number(vendaId))) {
+            alert('Não foi possível identificar a venda para atualização.');
+            window.location.reload();
+            return;
+        }
+        var novaSituacao = String(selectElement && selectElement.value ? selectElement.value : 'PENDENTE').toUpperCase();
+        var baseClasses = ['bg-emerald-100', 'text-emerald-800', 'bg-orange-100', 'text-orange-800', 'bg-red-100', 'text-red-800', 'bg-amber-100', 'text-amber-800'];
+        baseClasses.forEach(function(c) { selectElement.classList.remove(c); });
+        if (novaSituacao === 'PAGO') selectElement.classList.add('bg-emerald-100', 'text-emerald-800');
+        else if (novaSituacao === 'PARCIAL') selectElement.classList.add('bg-orange-100', 'text-orange-800');
+        else if (novaSituacao === 'PERDA') selectElement.classList.add('bg-red-100', 'text-red-800');
+        else selectElement.classList.add('bg-amber-100', 'text-amber-800');
+
+        try {
+            var headers = Object.assign({ 'Content-Type': 'application/json' }, window.getCsrfHeaders ? window.getCsrfHeaders() : {});
+            var response = await fetch('/vendas/' + vendaId + '/atualizar_situacao_rapida', {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify({ situacao: novaSituacao })
+            });
+            if (!response.ok) throw new Error('Falha ao atualizar');
+        } catch (error) {
+            alert('Erro ao atualizar a situação no banco de dados. A página será recarregada.');
+            window.location.reload();
+        }
     }
 
     // Event listener para botão "Carregar Mais"
