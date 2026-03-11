@@ -166,7 +166,7 @@
                                         data-id="{{ produto.id }}"
                                         data-preco-custo="{{ produto.preco_custo }}"
                                         data-quantidade-entrada="0"
-                                        data-data-chegada="{{ produto.data_chegada.strftime('%Y-%m-%d') }}"
+                                        data-data-chegada="{% if produto.data_chegada %}{{ produto.data_chegada.strftime('%Y-%m-%d') }}{% endif %}"
                                         data-tipo="{{ (produto.tipo or '')|replace('\n', ' ')|e }}"
                                         data-fornecedor="{{ (produto.fornecedor or '')|replace('\n', ' ')|e }}"
                                         data-nacionalidade="{{ (produto.nacionalidade or '')|replace('\n', ' ')|e }}"

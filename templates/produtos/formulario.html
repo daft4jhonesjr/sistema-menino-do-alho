@@ -21,7 +21,7 @@
     </div>
     {% endif %}
 
-    <form method="POST" action="{% if produto %}{{ url_for('editar_produto', id=produto.id) }}{% else %}{{ url_for('novo_produto') }}{% endif %}">
+    <form method="POST" action="{% if produto %}{{ url_for('editar_produto', id=produto.id) }}{% else %}{{ url_for('novo_produto') }}{% endif %}" onsubmit="return loadingBotao(this)">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <!-- 1. Produto (Nome gerado) - Exibido acima se editando -->
@@ -57,7 +57,7 @@
                     Data Chegada
                 </label>
                 <input type="date" id="data_chegada" name="data_chegada" 
-                       value="{% if produto %}{{ produto.data_chegada.strftime('%Y-%m-%d') }}{% endif %}"
+                       value="{% if produto and produto.data_chegada %}{{ produto.data_chegada.strftime('%Y-%m-%d') }}{% endif %}"
                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
             </div>
 

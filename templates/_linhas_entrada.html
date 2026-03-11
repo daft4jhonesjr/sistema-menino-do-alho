@@ -34,7 +34,7 @@
     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-right {% if produto.lucro_realizado() > 0 %}text-emerald-600{% elif produto.lucro_realizado() < 0 %}text-red-600{% else %}text-amber-600{% endif %}" title="{% if produto.quantidade_vendida() > 0 %}Lucro de {{ produto.lucro_medio_por_unidade() | formato_moeda }} por unidade{% else %}Nenhuma venda{% endif %}">
         {{ produto.lucro_realizado() | formato_moeda }}
     </td>
-    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ produto.data_chegada.strftime('%d/%m/%Y') }}</td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{% if produto.data_chegada %}{{ produto.data_chegada.strftime('%d/%m/%Y') }}{% endif %}</td>
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ produto.tipo }}</td>
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ produto.fornecedor }}</td>
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ produto.nacionalidade }}</td>
@@ -46,7 +46,7 @@
                 data-id="{{ produto.id }}"
                 data-preco-custo="{{ produto.preco_custo }}"
                 data-quantidade-entrada="0"
-                data-data-chegada="{{ produto.data_chegada.strftime('%Y-%m-%d') }}"
+                data-data-chegada="{% if produto.data_chegada %}{{ produto.data_chegada.strftime('%Y-%m-%d') }}{% endif %}"
                 data-tipo="{{ (produto.tipo or '')|replace('\n', ' ')|e }}"
                 data-fornecedor="{{ (produto.fornecedor or '')|replace('\n', ' ')|e }}"
                 data-nacionalidade="{{ (produto.nacionalidade or '')|replace('\n', ' ')|e }}"

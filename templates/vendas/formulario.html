@@ -11,7 +11,7 @@
 </div>
 
 <div class="bg-white rounded-lg shadow-md p-4 sm:p-6 max-w-3xl overflow-hidden">
-    <form method="POST" action="{% if venda %}{{ url_for('editar_venda', id=venda.id) }}{% else %}{{ url_for('nova_venda') }}{% endif %}">
+    <form method="POST" action="{% if venda %}{{ url_for('editar_venda', id=venda.id) }}{% else %}{{ url_for('nova_venda') }}{% endif %}" onsubmit="return loadingBotao(this)">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="mb-4">

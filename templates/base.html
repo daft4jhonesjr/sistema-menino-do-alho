@@ -4,7 +4,30 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <script>window.getCsrfHeaders=function(){var m=document.querySelector('meta[name="csrf-token"]');return m?{'X-CSRFToken':m.getAttribute('content')}:{};};</script>
+    <script>
+        window.getCsrfHeaders = function() {
+            var m = document.querySelector('meta[name="csrf-token"]');
+            return m ? { 'X-CSRFToken': m.getAttribute('content') } : {};
+        };
+        window.loadingBotao = function(formElement) {
+            if (!formElement || formElement.getAttribute('data-submitting') === '1') {
+                return false;
+            }
+            var btnSalvar = formElement.querySelector('button[type="submit"]');
+            if (!btnSalvar) {
+                formElement.setAttribute('data-submitting', '1');
+                return true;
+            }
+            btnSalvar.disabled = true;
+            btnSalvar.classList.add('opacity-75', 'cursor-not-allowed');
+            if (!btnSalvar.getAttribute('data-original-html')) {
+                btnSalvar.setAttribute('data-original-html', btnSalvar.innerHTML);
+            }
+            btnSalvar.innerHTML = '<svg class="animate-spin -ml-1 mr-2 h-5 w-5 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Salvando...';
+            formElement.setAttribute('data-submitting', '1');
+            return true;
+        };
+    </script>
     <title>{% block title %}Menino do Alho - Gestão de Vendas e Estoque{% endblock %}</title>
     <link rel="icon" type="image/jpeg" href="{{ url_for('static', filename='images/logo_menino_do_alho_amarelo1.jpeg') }}">
     
@@ -720,7 +743,10 @@
                         abasWrap.classList.remove('hidden');
                         mudarAbaModalProduto('vendas');
                         fetch('/api/produtos/' + modalVendasId + '/fotos')
-                            .then(function(r) { return r.json(); })
+                            .then(function(r) {
+                                if (!r.ok) throw new Error('Falha na API');
+                                return r.json();
+                            })
                             .then(function(fotos) {
                                 var grid = document.getElementById('grid-fotos');
                                 var msg = document.getElementById('sem-fotos-msg');
@@ -737,6 +763,9 @@
                                 } else {
                                     msg.classList.remove('hidden');
                                 }
+                            })
+                            .catch(function(error) {
+                                console.error(error);
                             });
                     } else {
                         abasWrap.classList.add('hidden');
