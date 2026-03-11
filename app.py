@@ -8374,25 +8374,8 @@ def debug_vincular():
 
 
 if __name__ == '__main__':
-    def _local_ip():
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(('8.8.8.8', 80))
-            ip = s.getsockname()[0]
-            s.close()
-            return ip
-        except Exception:
-            return '127.0.0.1'
-
-    try:
-        ip = _local_ip()
-        print('\n' + '=' * 50)
-        print('Menino do Alho — Acesso na rede local (mobile):')
-        print('  http://{}:5001'.format(ip))
-        print('=' * 50 + '\n')
-    except Exception:
-        pass
-
-    # Porta 5001 para fugir do bloqueio do Mac (AirPlay Receiver em 5000)
-    # Debug deve ser False em produção para evitar vazamento de informações sensíveis
-    app.run(host='0.0.0.0', port=5001, debug=False)
+    import os
+    # Pega a porta da variável de ambiente do servidor (Render usa a variável PORT) ou usa 5000 como fallback local
+    port = int(os.environ.get("PORT", 5000))
+    # O host '0.0.0.0' é OBRIGATÓRIO para a Render conseguir acessar o app externamente
+    app.run(host='0.0.0.0', port=port, debug=False)
