@@ -204,6 +204,9 @@
                     <i data-lucide="refresh-cw" class="w-5 h-5"></i>Organizar e Vincular Tudo
                 </button>
             </form>
+            <button type="button" id="btnDeletarMassa" onclick="deletarDocumentosSelecionados()" class="hidden bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded shadow transition-all duration-200">
+                Deletar Selecionados (<span id="countMassa">0</span>)
+            </button>
             <div id="loading-container" class="hidden mt-4 w-full basis-full" style="min-width: 280px;">
                 <p class="text-emerald-600 mb-1 font-bold flex items-center gap-2">
                     <i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>
@@ -225,6 +228,7 @@
         {% set nf_nao = item.nf_nao_encontrada %}
         <div class="rounded-xl border shadow-sm dark:shadow-none overflow-hidden flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 {% if ok and not nf_nao %}bg-emerald-50/50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800{% elif nf_nao %}bg-amber-50/50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800{% else %}bg-amber-50/50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800{% endif %}">
             <div class="flex items-center gap-4 p-4 flex-1 min-w-0">
+                <input type="checkbox" class="checkbox-documento w-5 h-5 text-emerald-600 rounded focus:ring-emerald-500 cursor-pointer" value="{{ doc.id }}" onchange="verificarSelecaoMassa()">
                 <div class="flex-shrink-0 w-12 h-12 rounded-lg flex items-center justify-center {% if doc.tipo == 'BOLETO' %}bg-blue-100 text-blue-700{% else %}bg-emerald-100 text-emerald-700{% endif %}">
                     {% if doc.tipo == 'BOLETO' %}
                     <i data-lucide="file-text" class="w-6 h-6" aria-hidden="true"></i>
@@ -1041,21 +1045,88 @@ function confirmarExclusaoArquivo(id) {
         headers: headers
     })
     .then(function(resp) {
-        if (!resp.ok) throw new Error('Falha ao excluir arquivo');
-        return resp.json();
+        return resp.json().catch(function() {
+            return {};
+        }).then(function(data) {
+            if (!resp.ok || !data || !data.ok) {
+                throw new Error((data && data.mensagem) || 'Falha ao excluir arquivo');
+            }
+            return data;
+        });
     })
     .then(function(data) {
-        if (!data || !data.ok) throw new Error((data && data.mensagem) || 'Erro ao excluir arquivo');
         if (typeof showToast === 'function') showToast('Arquivo excluído com sucesso.', 'success');
         window.location.reload();
     })
-    .catch(function() {
+    .catch(function(error) {
+        var msg = (error && error.message) ? error.message : 'Não foi possível excluir o arquivo agora.';
         if (typeof showToast === 'function') {
-            showToast('Não foi possível excluir o arquivo agora.', 'error');
+            showToast(msg, 'error');
         } else {
-            alert('Não foi possível excluir o arquivo agora.');
+            alert(msg);
         }
     });
+}
+
+function verificarSelecaoMassa() {
+    var checkboxes = document.querySelectorAll('.checkbox-documento:checked');
+    var btn = document.getElementById('btnDeletarMassa');
+    var countSpan = document.getElementById('countMassa');
+    if (!btn || !countSpan) return;
+
+    if (checkboxes.length > 0) {
+        btn.classList.remove('hidden');
+        countSpan.textContent = String(checkboxes.length);
+    } else {
+        btn.classList.add('hidden');
+        countSpan.textContent = '0';
+    }
+}
+
+async function deletarDocumentosSelecionados() {
+    var checkboxes = document.querySelectorAll('.checkbox-documento:checked');
+    var ids = Array.from(checkboxes).map(function(cb) { return parseInt(cb.value, 10); }).filter(function(id) { return !isNaN(id); });
+    if (ids.length === 0) return;
+
+    var ok = confirm('Tem certeza que deseja excluir DE VEZ ' + ids.length + ' documento(s)?');
+    if (!ok) return;
+
+    try {
+        var headers = {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        };
+        if (typeof getCsrfHeaders === 'function') {
+            var csrfHeaders = getCsrfHeaders();
+            for (var k in csrfHeaders) headers[k] = csrfHeaders[k];
+        }
+
+        var response = await fetch('/arquivos/deletar_em_massa', {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({ ids: ids })
+        });
+
+        var data = {};
+        try {
+            data = await response.json();
+        } catch (_) {
+            data = {};
+        }
+
+        if (!response.ok || data.ok === false || data.status === 'erro') {
+            throw new Error(data.mensagem || 'Erro ao excluir documentos em massa.');
+        }
+
+        window.location.reload();
+    } catch (error) {
+        var msg = (error && error.message) ? error.message : 'Erro de conexão.';
+        if (typeof showToast === 'function') {
+            showToast(msg, 'error');
+        } else {
+            alert(msg);
+        }
+    }
 }
 
 // Modal de Detalhes Mensais

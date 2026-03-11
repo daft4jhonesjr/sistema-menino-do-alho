@@ -6599,6 +6599,49 @@ def deletar_arquivo_dashboard(id):
         return jsonify(ok=False, mensagem='Erro ao excluir arquivo.'), 500
 
 
+@app.route('/arquivos/deletar_em_massa', methods=['POST'])
+@login_required
+def deletar_arquivos_massa():
+    """Exclui múltiplos documentos (Cloudinary + banco) da seção de documentos recentes."""
+    data = request.get_json(silent=True) or {}
+    ids_para_deletar = data.get('ids', [])
+
+    if not isinstance(ids_para_deletar, list) or not ids_para_deletar:
+        return jsonify(ok=False, status='erro', mensagem='Nenhum ID fornecido.'), 400
+
+    try:
+        ids = list({int(x) for x in ids_para_deletar if x is not None and str(x).strip()})
+    except (TypeError, ValueError):
+        return jsonify(ok=False, status='erro', mensagem='IDs inválidos.'), 400
+
+    is_admin = bool(getattr(current_user, 'is_admin', lambda: False)())
+
+    query = Documento.query.filter(Documento.id.in_(ids))
+    if not is_admin:
+        query = query.filter(Documento.usuario_id == current_user.id)
+
+    documentos = query.all()
+    if not documentos:
+        return jsonify(ok=False, status='erro', mensagem='Nenhum documento encontrado para exclusão.'), 404
+
+    try:
+        for documento in documentos:
+            if documento.public_id and (os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL')):
+                try:
+                    cloudinary.uploader.destroy(documento.public_id, resource_type='raw')
+                except Exception as ex:
+                    print(f"Erro ao excluir do Cloudinary {documento.public_id}: {ex}")
+            db.session.delete(documento)
+
+        db.session.commit()
+        limpar_cache_dashboard()
+        return jsonify(ok=True, status='sucesso', mensagem='Documentos excluídos com sucesso.', total=len(documentos))
+    except Exception as e:
+        db.session.rollback()
+        print(f"Erro ao excluir documentos em massa: {e}")
+        return jsonify(ok=False, status='erro', mensagem='Erro ao excluir documentos em massa.'), 500
+
+
 @app.route('/venda/<int:id>/ver_boleto')
 @login_required
 def ver_boleto_venda(id):
