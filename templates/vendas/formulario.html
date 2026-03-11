@@ -103,6 +103,8 @@
                     <option value="">Selecione...</option>
                     <option value="DESTAK" {% if venda and venda.empresa_faturadora == 'DESTAK' %}selected{% endif %}>DESTAK</option>
                     <option value="PATY" {% if venda and venda.empresa_faturadora == 'PATY' %}selected{% endif %}>PATY</option>
+                    <option value="ARMAZEM LACERDA" {% if venda and venda.empresa_faturadora == 'ARMAZEM LACERDA' %}selected{% endif %}>ARMAZEM LACERDA</option>
+                    <option value="SERVE BEM" {% if venda and venda.empresa_faturadora == 'SERVE BEM' %}selected{% endif %}>SERVE BEM</option>
                     <option value="NENHUM" {% if venda and venda.empresa_faturadora == 'NENHUM' %}selected{% endif %}>NENHUM</option>
                 </select>
             </div>
@@ -136,6 +138,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const containerAvulso = document.getElementById('container-cliente-avulso');
     const inputAvulso = document.getElementById('input-cliente-avulso');
     const produtoSelect = document.getElementById('produto_id');
+    const empresaSelect = document.getElementById('empresa_faturadora');
     const quantidadeInput = document.getElementById('quantidade_venda');
     const precoInput = document.getElementById('preco_venda');
     const estoqueInfo = document.getElementById('estoque-info');
@@ -157,6 +160,45 @@ document.addEventListener('DOMContentLoaded', function() {
     if (clienteSelect) {
         clienteSelect.addEventListener('change', atualizarCampoClienteAvulso);
         atualizarCampoClienteAvulso();
+    }
+
+    function atualizarEmpresasPorProduto() {
+        if (!produtoSelect || !empresaSelect) return;
+
+        const opcaoSelecionada = produtoSelect.options[produtoSelect.selectedIndex];
+        const textoProduto = String(opcaoSelecionada ? opcaoSelecionada.text : '').toUpperCase();
+        const valorAtual = empresaSelect.value;
+
+        empresaSelect.innerHTML = '<option value="">Selecione...</option>';
+
+        let empresasPermitidas = [];
+        if (textoProduto.includes('ALHO')) {
+            empresasPermitidas = ['DESTAK', 'PATY'];
+        } else if (textoProduto.includes('BACALHAU')) {
+            empresasPermitidas = ['ARMAZEM LACERDA'];
+        } else if (textoProduto.includes('CAFÉ') || textoProduto.includes('CAFE')) {
+            empresasPermitidas = ['SERVE BEM'];
+        } else {
+            empresasPermitidas = ['DESTAK', 'PATY', 'ARMAZEM LACERDA', 'SERVE BEM'];
+        }
+
+        empresasPermitidas.push('NENHUM');
+
+        empresasPermitidas.forEach(function(empresa) {
+            const opt = document.createElement('option');
+            opt.value = empresa;
+            opt.textContent = empresa;
+            empresaSelect.appendChild(opt);
+        });
+
+        if (empresasPermitidas.includes(valorAtual)) {
+            empresaSelect.value = valorAtual;
+        }
+    }
+
+    if (produtoSelect && empresaSelect) {
+        produtoSelect.addEventListener('change', atualizarEmpresasPorProduto);
+        atualizarEmpresasPorProduto();
     }
 
     produtoSelect.addEventListener('change', function() {
