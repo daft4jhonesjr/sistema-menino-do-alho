@@ -286,6 +286,9 @@
                 <button type="button" class="btn-vincular-doc inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 transition" data-doc-id="{{ doc.id }}" data-doc-nome="{{ nome }}" data-pagador="{{ (doc.razao_social or doc.cnpj) | default('', true) }}" {% if item.diagnostico %}title="NF: {{ item.diagnostico.nf_lida or doc.numero_nf or 'N/A' }}"{% elif doc.numero_nf %}title="NF: {{ doc.numero_nf }}"{% endif %}>
                     <i data-lucide="link" class="w-4 h-4 mr-2"></i>Vincular à Venda
                 </button>
+                <button type="button" class="inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-700 transition" onclick="confirmarExclusaoArquivo({{ doc.id }})" title="Excluir arquivo definitivamente">
+                    <i data-lucide="trash-2" class="w-4 h-4 mr-2"></i>Deletar
+                </button>
             </div>
         </div>
         {% endfor %}
@@ -1021,6 +1024,39 @@
         }
     });
 })();
+
+function confirmarExclusaoArquivo(id) {
+    if (!id) return;
+    var confirmado = confirm('Tem certeza que deseja excluir este arquivo? Esta ação remove o registro e o PDF no Cloudinary.');
+    if (!confirmado) return;
+
+    var headers = { 'X-Requested-With': 'XMLHttpRequest' };
+    if (typeof getCsrfHeaders === 'function') {
+        var csrfHeaders = getCsrfHeaders();
+        for (var k in csrfHeaders) headers[k] = csrfHeaders[k];
+    }
+
+    fetch('/arquivo/' + id + '/deletar', {
+        method: 'POST',
+        headers: headers
+    })
+    .then(function(resp) {
+        if (!resp.ok) throw new Error('Falha ao excluir arquivo');
+        return resp.json();
+    })
+    .then(function(data) {
+        if (!data || !data.ok) throw new Error((data && data.mensagem) || 'Erro ao excluir arquivo');
+        if (typeof showToast === 'function') showToast('Arquivo excluído com sucesso.', 'success');
+        window.location.reload();
+    })
+    .catch(function() {
+        if (typeof showToast === 'function') {
+            showToast('Não foi possível excluir o arquivo agora.', 'error');
+        } else {
+            alert('Não foi possível excluir o arquivo agora.');
+        }
+    });
+}
 
 // Modal de Detalhes Mensais
 function abrirDetalhesMes(ano, mes) {

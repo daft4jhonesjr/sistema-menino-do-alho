@@ -3273,44 +3273,24 @@ def upload_imagem_cheque():
         return jsonify({'error': str(e)}), 500
 
 
-def _normalizar_lista_valores_contagem(itens):
-    valores = []
-    if not isinstance(itens, list):
-        return valores
-    for item in itens:
-        bruto = item
-        if isinstance(item, dict):
-            bruto = item.get('valor')
-        valor = float(_limpar_valor_moeda(bruto))
-        if valor > 0:
-            valores.append(round(valor, 2))
-    return valores
-
-
-@app.route('/salvar_contagem_gaveta', methods=['POST'])
 @app.route('/caixa/gaveta/salvar', methods=['POST'])
 @login_required
 def salvar_contagem_gaveta():
     payload = request.get_json(silent=True) or {}
-    tipo_payload = str(payload.get('tipo') or '').strip().upper()
+    dinheiro = _normalizar_itens_contagem(payload.get('dinheiro', []), incluir_nome=False)
+    cheques = _normalizar_itens_contagem(payload.get('cheques', []), incluir_nome=True)
+
+    estado = {'dinheiro': dinheiro, 'cheques': cheques}
+    hoje = get_hoje_brasil()
 
     try:
-        if tipo_payload in ('DINHEIRO', 'CHEQUE'):
-            valores = _normalizar_lista_valores_contagem(payload.get('valores', []))
-            ContagemGaveta.query.filter_by(tipo=tipo_payload).delete()
-            for valor in valores:
-                db.session.add(ContagemGaveta(tipo=tipo_payload, valor=valor))
-        else:
-            dinheiro = _normalizar_lista_valores_contagem(payload.get('dinheiro', []))
-            cheques = _normalizar_lista_valores_contagem(payload.get('cheques', []))
-
-            ContagemGaveta.query.filter(ContagemGaveta.tipo.in_(['DINHEIRO', 'CHEQUE'])).delete(synchronize_session=False)
-
-            for valor in dinheiro:
-                db.session.add(ContagemGaveta(tipo='DINHEIRO', valor=valor))
-            for valor in cheques:
-                db.session.add(ContagemGaveta(tipo='CHEQUE', valor=valor))
-
+        ContagemGaveta.query.filter_by(data=hoje, usuario_id=current_user.id).delete()
+        novo = ContagemGaveta(
+            data=hoje,
+            usuario_id=current_user.id,
+            estado_json=json.dumps(estado, ensure_ascii=False)
+        )
+        db.session.add(novo)
         db.session.commit()
         return jsonify(ok=True, mensagem='Contagem de gaveta salva com sucesso.')
     except Exception:
@@ -3318,22 +3298,21 @@ def salvar_contagem_gaveta():
         return jsonify(ok=False, mensagem='Erro ao salvar contagem de gaveta.'), 500
 
 
-@app.route('/obter_contagem_gaveta', methods=['GET'])
 @app.route('/caixa/gaveta/carregar', methods=['GET'])
 @login_required
 def carregar_contagem_gaveta():
-    registros = ContagemGaveta.query.filter(
-        ContagemGaveta.tipo.in_(['DINHEIRO', 'CHEQUE'])
-    ).order_by(ContagemGaveta.id.asc()).all()
-
-    estado = {'dinheiro': [], 'cheques': []}
-    for registro in registros:
-        tipo = str(registro.tipo or '').strip().upper()
-        if tipo == 'DINHEIRO':
-            estado['dinheiro'].append({'valor': round(float(registro.valor or 0), 2)})
-        elif tipo == 'CHEQUE':
-            estado['cheques'].append({'valor': round(float(registro.valor or 0), 2)})
-
+    hoje = get_hoje_brasil()
+    registro = ContagemGaveta.query.filter_by(data=hoje, usuario_id=current_user.id).order_by(ContagemGaveta.id.desc()).first()
+    if not registro:
+        return jsonify(ok=True, estado={'dinheiro': [], 'cheques': []})
+    try:
+        estado = json.loads(registro.estado_json or '{}')
+    except Exception:
+        estado = {}
+    if not isinstance(estado, dict):
+        estado = {}
+    estado.setdefault('dinheiro', [])
+    estado.setdefault('cheques', [])
     return jsonify(ok=True, estado=estado)
 
 
@@ -6590,6 +6569,25 @@ def visualizar_documento(id):
         return redirect(documento.url_arquivo)
     flash('Link do arquivo não encontrado na nuvem. Faça o upload novamente.', 'error')
     return redirect(request.referrer or url_for('dashboard'))
+
+
+@app.route('/arquivo/<int:id>/deletar', methods=['POST'])
+@login_required
+def deletar_arquivo_dashboard(id):
+    """Exclui documento do banco e remove arquivo no Cloudinary."""
+    documento = Documento.query.get_or_404(id)
+
+    try:
+        if documento.public_id and (os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL')):
+            cloudinary.uploader.destroy(documento.public_id, resource_type='raw')
+
+        db.session.delete(documento)
+        db.session.commit()
+        return jsonify(ok=True, mensagem='Arquivo excluído com sucesso.')
+    except Exception as e:
+        db.session.rollback()
+        print(f"Erro ao excluir arquivo {id}: {e}")
+        return jsonify(ok=False, mensagem='Erro ao excluir arquivo.'), 500
 
 
 @app.route('/venda/<int:id>/ver_boleto')
