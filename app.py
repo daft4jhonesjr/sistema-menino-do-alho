@@ -2811,7 +2811,7 @@ def get_radar_recompra():
 
 @app.route('/dashboard')
 @login_required
-@cache.cached(timeout=300)  # Cache por 5 minutos (300 segundos)
+@cache.cached(timeout=300, key_prefix=lambda: f"dashboard:{getattr(current_user, 'id', 'anon')}:{session.get('csrf_token', 'no-csrf')}")  # Cache por 5 minutos, isolado por usuário/sessão CSRF
 def dashboard():
     # Obter ano ativo da sessão
     ano_ativo = session.get('ano_ativo', datetime.now().year)

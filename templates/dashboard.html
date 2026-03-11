@@ -1436,26 +1436,8 @@ document.addEventListener('DOMContentLoaded', function() {
     var btnOrganizar = document.getElementById('btn-organizar');
     var formOrganizar = document.getElementById('form-organizar-vincular');
     var loadingContainer = document.getElementById('loading-container');
-    var tokenMeta = document.querySelector('meta[name="csrf-token"]');
-    var tokenAtual = tokenMeta ? tokenMeta.getAttribute('content') : '';
-    if (formOrganizar && tokenAtual) {
-        var csrfInput = formOrganizar.querySelector('input[name="csrf_token"]');
-        if (!csrfInput) {
-            csrfInput = document.createElement('input');
-            csrfInput.type = 'hidden';
-            csrfInput.name = 'csrf_token';
-            formOrganizar.appendChild(csrfInput);
-        }
-        csrfInput.value = tokenAtual;
-    }
-
-    if (formOrganizar) {
-        formOrganizar.addEventListener('submit', function() {
-            var csrfInput = formOrganizar.querySelector('input[name="csrf_token"]');
-            var token = (tokenMeta ? tokenMeta.getAttribute('content') : '') || (csrfInput ? csrfInput.value : '');
-            if (csrfInput && token) csrfInput.value = token;
-        });
-    }
+    // Mantém o token CSRF original renderizado no form (input hidden),
+    // evitando sobrescrita por script que pode gerar mismatch.
 
     if (btnOrganizar && loadingContainer) {
         btnOrganizar.addEventListener('click', function() {
