@@ -223,8 +223,8 @@
         {% set nome = item.nome_arquivo %}
         {% set ok = item.leitura_ok %}
         {% set nf_nao = item.nf_nao_encontrada %}
-        <div class="rounded-xl border shadow-sm dark:shadow-none overflow-hidden flex flex-col md:flex-row md:items-center {% if ok and not nf_nao %}bg-emerald-50/50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800{% elif nf_nao %}bg-amber-50/50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800{% else %}bg-amber-50/50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800{% endif %}">
-            <div class="flex items-center gap-4 p-4 md:flex-1">
+        <div class="rounded-xl border shadow-sm dark:shadow-none overflow-hidden flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 {% if ok and not nf_nao %}bg-emerald-50/50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800{% elif nf_nao %}bg-amber-50/50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800{% else %}bg-amber-50/50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800{% endif %}">
+            <div class="flex items-center gap-4 p-4 flex-1 min-w-0">
                 <div class="flex-shrink-0 w-12 h-12 rounded-lg flex items-center justify-center {% if doc.tipo == 'BOLETO' %}bg-blue-100 text-blue-700{% else %}bg-emerald-100 text-emerald-700{% endif %}">
                     {% if doc.tipo == 'BOLETO' %}
                     <i data-lucide="file-text" class="w-6 h-6" aria-hidden="true"></i>
@@ -265,12 +265,12 @@
                     </p>
                 </div>
             </div>
-            <div class="flex items-center gap-2 p-4 md:p-4 md:border-l md:border-gray-200 dark:border-gray-700 md:border-t-0 border-t border-gray-200 dark:border-gray-700 flex-wrap">
-                <a href="{{ url_for('visualizar_documento', id=doc.id) }}" target="_blank" class="inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition">
+            <div class="flex flex-col sm:flex-row items-center gap-2 flex-shrink-0 p-4 sm:pl-0 sm:pr-4 sm:py-4 border-t sm:border-t-0 sm:border-l border-gray-200 dark:border-gray-700">
+                <a href="{{ url_for('visualizar_documento', id=doc.id) }}" target="_blank" class="inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition">
                     <i data-lucide="external-link" class="w-4 h-4 mr-2"></i>Visualizar
                 </a>
                 {% if item.diagnostico and item.diagnostico.cliente_id %}
-                <a href="{{ url_for('editar_cliente', id=item.diagnostico.cliente_id) }}" class="inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition" title="Verificar dados do cliente no cadastro">
+                <a href="{{ url_for('editar_cliente', id=item.diagnostico.cliente_id) }}" class="inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition" title="Verificar dados do cliente no cadastro">
                     <i data-lucide="user-check" class="w-4 h-4 mr-2"></i>Ver Cliente
                 </a>
                 {% endif %}
@@ -279,11 +279,11 @@
                 {% if doc.razao_social %}{% set _ = criar_venda_params.update({'cliente': doc.razao_social}) %}{% endif %}
                 {% if doc.numero_nf %}{% set _ = criar_venda_params.update({'nf': doc.numero_nf}) %}{% endif %}
                 {% if doc.data_vencimento %}{% set _ = criar_venda_params.update({'data': doc.data_vencimento.strftime('%Y-%m-%d')}) %}{% endif %}
-                <a href="{{ url_for('listar_vendas', **criar_venda_params) }}" class="inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium bg-gray-600 text-white hover:bg-gray-700 transition">
+                <a href="{{ url_for('listar_vendas', **criar_venda_params) }}" class="inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-gray-600 text-white hover:bg-gray-700 transition">
                     <i data-lucide="plus-circle" class="w-4 h-4 mr-2"></i>Criar venda
                 </a>
                 {% endif %}
-                <button type="button" class="btn-vincular-doc inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 transition" data-doc-id="{{ doc.id }}" data-doc-nome="{{ nome }}" data-pagador="{{ (doc.razao_social or doc.cnpj) | default('', true) }}" {% if item.diagnostico %}title="NF: {{ item.diagnostico.nf_lida or doc.numero_nf or 'N/A' }}"{% elif doc.numero_nf %}title="NF: {{ doc.numero_nf }}"{% endif %}>
+                <button type="button" class="btn-vincular-doc inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 transition" data-doc-id="{{ doc.id }}" data-doc-nome="{{ nome }}" data-pagador="{{ (doc.razao_social or doc.cnpj) | default('', true) }}" {% if item.diagnostico %}title="NF: {{ item.diagnostico.nf_lida or doc.numero_nf or 'N/A' }}"{% elif doc.numero_nf %}title="NF: {{ doc.numero_nf }}"{% endif %}>
                     <i data-lucide="link" class="w-4 h-4 mr-2"></i>Vincular à Venda
                 </button>
             </div>
