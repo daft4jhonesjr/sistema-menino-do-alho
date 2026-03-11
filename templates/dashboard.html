@@ -290,7 +290,7 @@
                 <button type="button" class="btn-vincular-doc inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 transition" data-doc-id="{{ doc.id }}" data-doc-nome="{{ nome }}" data-pagador="{{ (doc.razao_social or doc.cnpj) | default('', true) }}" {% if item.diagnostico %}title="NF: {{ item.diagnostico.nf_lida or doc.numero_nf or 'N/A' }}"{% elif doc.numero_nf %}title="NF: {{ doc.numero_nf }}"{% endif %}>
                     <i data-lucide="link" class="w-4 h-4 mr-2"></i>Vincular à Venda
                 </button>
-                <button type="button" class="inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-700 transition" onclick="confirmarExclusaoArquivo({{ doc.id }})" title="Excluir arquivo definitivamente">
+                <button type="button" class="inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-700 transition" onclick="confirmarExclusaoArquivo({{ doc.id }}, this)" title="Excluir arquivo definitivamente">
                     <i data-lucide="trash-2" class="w-4 h-4 mr-2"></i>Deletar
                 </button>
             </div>
@@ -1029,10 +1029,34 @@
     });
 })();
 
-function confirmarExclusaoArquivo(id) {
+var exclusaoDocumentoEmAndamento = false;
+var exclusaoMassaEmAndamento = false;
+
+function toggleLoadingDocumentos(mostrar) {
+    var loading = document.getElementById('loading-container');
+    if (!loading) return;
+    if (mostrar) {
+        loading.classList.remove('hidden');
+    } else {
+        loading.classList.add('hidden');
+    }
+}
+
+function confirmarExclusaoArquivo(id, botaoEl) {
     if (!id) return;
     var confirmado = confirm('Tem certeza que deseja excluir este arquivo? Esta ação remove o registro e o PDF no Cloudinary.');
     if (!confirmado) return;
+    if (exclusaoDocumentoEmAndamento) return;
+    exclusaoDocumentoEmAndamento = true;
+
+    var botao = botaoEl || null;
+    var htmlOriginal = botao ? botao.innerHTML : '';
+    if (botao) {
+        botao.disabled = true;
+        botao.classList.add('opacity-60', 'cursor-not-allowed');
+        botao.innerHTML = 'Deletando...';
+    }
+    toggleLoadingDocumentos(true);
 
     var headers = { 'X-Requested-With': 'XMLHttpRequest' };
     if (typeof getCsrfHeaders === 'function') {
@@ -1059,6 +1083,13 @@ function confirmarExclusaoArquivo(id) {
         window.location.reload();
     })
     .catch(function(error) {
+        toggleLoadingDocumentos(false);
+        exclusaoDocumentoEmAndamento = false;
+        if (botao) {
+            botao.disabled = false;
+            botao.classList.remove('opacity-60', 'cursor-not-allowed');
+            botao.innerHTML = htmlOriginal;
+        }
         var msg = (error && error.message) ? error.message : 'Não foi possível excluir o arquivo agora.';
         if (typeof showToast === 'function') {
             showToast(msg, 'error');
@@ -1090,6 +1121,17 @@ async function deletarDocumentosSelecionados() {
 
     var ok = confirm('Tem certeza que deseja excluir DE VEZ ' + ids.length + ' documento(s)?');
     if (!ok) return;
+    if (exclusaoMassaEmAndamento) return;
+    exclusaoMassaEmAndamento = true;
+
+    var btnMassa = document.getElementById('btnDeletarMassa');
+    var textoOriginalBtn = btnMassa ? btnMassa.innerHTML : '';
+    if (btnMassa) {
+        btnMassa.disabled = true;
+        btnMassa.classList.add('opacity-60', 'cursor-not-allowed');
+        btnMassa.innerHTML = 'Deletando...';
+    }
+    toggleLoadingDocumentos(true);
 
     try {
         var headers = {
@@ -1120,6 +1162,14 @@ async function deletarDocumentosSelecionados() {
 
         window.location.reload();
     } catch (error) {
+        toggleLoadingDocumentos(false);
+        exclusaoMassaEmAndamento = false;
+        if (btnMassa) {
+            btnMassa.disabled = false;
+            btnMassa.classList.remove('opacity-60', 'cursor-not-allowed');
+            btnMassa.innerHTML = textoOriginalBtn || 'Deletar Selecionados (<span id="countMassa">0</span>)';
+            verificarSelecaoMassa();
+        }
         var msg = (error && error.message) ? error.message : 'Erro de conexão.';
         if (typeof showToast === 'function') {
             showToast(msg, 'error');
