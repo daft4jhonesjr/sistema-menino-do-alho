@@ -252,9 +252,16 @@ def _extrair_cnpj(texto, nome_arquivo=None):
             return cnpj
     
     # Prioridade 4: CNPJ após "CPF/CNPJ" (Bradesco)
+    m = re.search(r'CPF/CNPJ\s*([\d\.\-\/]{14,18})', texto, re.IGNORECASE)
+    if m:
+        cnpj = (m.group(1) or '').strip()
+        if cnpj and cnpj not in CNPJS_EMISSORES:
+            return cnpj
+
+    # Prioridade 4.1: CNPJ após "CPF / CNPJ" com separação por barra e espaços
     m = re.search(r'CPF\s*/\s*CNPJ\s*[\s:]*(\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2})', texto, re.IGNORECASE)
     if m:
-        cnpj = m.group(1)
+        cnpj = (m.group(1) or '').strip()
         if cnpj not in CNPJS_EMISSORES:
             return cnpj
     
@@ -418,10 +425,12 @@ def _extrair_numero_nf(texto):
         (r'N[úu]m\.?\s*do\s*documento\s*[:\s]*(?:NF[-]?)?\s*(\d+)', False),
         (r'N[úu]mero\s*do\s*documento\s*[:\s]*(?:NF[-]?)?\s*(\d+)', False),
         (r'N[úu]mero\s+Documento\s*[:\s]*(?:NF[-]?)?\s*(\d+)', False),
+        (r'(?:Numero Documento|N[úu]mero do Documento)\s*(?:.*?\s+)?(\d+)(?:/\d+)?', False),
         (r'NF-(\d+)', True),
         (r'NF\s+(\d+)', True),
         (r'NF:\s*(\d+)', True),
         (r'NF(\d+)', True),
+        (r'(\d+)/\d+\s+DM', False),
     ]
     for p, exige_nf in padroes:
         m = re.search(p, texto, re.IGNORECASE)
@@ -541,6 +550,12 @@ def _extrair_razao_social(texto):
     m = re.search(r'Pagador\s*:\s*([A-ZÁÉÍÓÚÇa-z0-9][A-ZÁÉÍÓÚÇa-z0-9\s&\.\-(),]+?)(?:\s*[\r\n]|CNPJ|CPF|$)', texto, re.IGNORECASE)
     if m:
         razao = _limpar_razao_ate_cnpj_ou_data(m.group(1))
+        if razao and len(razao) > 2 and not _eh_linha_cabecalho_pagador(razao):
+            return razao[:200]
+    # Bradesco/PDF com texto colado: "PagadorS N SOARES... CPF/CNPJ ..."
+    m = re.search(r'Pagador\s*([A-Za-z0-9\s\&\.\-\*]+?)\s*CPF/CNPJ', texto, re.IGNORECASE)
+    if m:
+        razao = _limpar_razao_ate_cnpj_ou_data((m.group(1) or '').strip())
         if razao and len(razao) > 2 and not _eh_linha_cabecalho_pagador(razao):
             return razao[:200]
     # NF-e: "NOME / RAZÃO SOCIAL ..." na linha seguinte "JNS COMERCIO ... LTDA 24.333.585/..."
