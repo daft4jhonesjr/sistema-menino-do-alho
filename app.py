@@ -2237,14 +2237,43 @@ def _usuario_pode_gerenciar_documento(documento):
 
 
 def _usuario_pode_gerenciar_venda(venda):
-    """Permissão por recurso para vendas: admin ou dono de algum documento vinculado à venda."""
+    """Permissão por recurso para vendas com fallback seguro para legado órfão.
+
+    Regras:
+    - Admin sempre pode.
+    - Se houver documento(s) vinculado(s) com dono explícito, só o dono pode.
+    - Se a venda estiver órfã (sem documentos ou só com documentos sem usuario_id), permite operação.
+    """
     if current_user.is_admin():
         return True
     if venda is None:
         return False
     docs = getattr(venda, 'documentos', None) or []
     uid = getattr(current_user, 'id', None)
-    return any(getattr(d, 'usuario_id', None) == uid for d in docs)
+    if not docs:
+        # Legado: venda antiga sem vínculo de documento.
+        return True
+
+    # Se já houver owner explícito no documento, só ele pode gerenciar.
+    if any(getattr(d, 'usuario_id', None) == uid for d in docs):
+        return True
+
+    # Fallback controlado: todos sem dono definido => permite gestão operacional.
+    return all(getattr(d, 'usuario_id', None) is None for d in docs)
+
+
+def _assumir_ownership_venda_orfa(venda):
+    """Em vendas órfãs, atribui ao usuário atual os documentos sem dono."""
+    if venda is None or current_user.is_admin():
+        return 0
+    docs = getattr(venda, 'documentos', None) or []
+    uid = getattr(current_user, 'id', None)
+    atualizados = 0
+    for doc in docs:
+        if getattr(doc, 'usuario_id', None) is None:
+            doc.usuario_id = uid
+            atualizados += 1
+    return atualizados
 
 
 def _resposta_sem_permissao():
@@ -6205,6 +6234,7 @@ def venda_adicionar_item():
     venda_existente = Venda.query.get_or_404(venda_id)
     if not _usuario_pode_gerenciar_venda(venda_existente):
         return _resposta_sem_permissao()
+    _assumir_ownership_venda_orfa(venda_existente)
     produto = Produto.query.get_or_404(produto_id)
 
     preco_venda = _limpar_valor_moeda(preco_venda_raw)
@@ -6260,6 +6290,7 @@ def editar_venda(id):
             return None if txt == '' or txt.lower() in ('none', 'null', 'undefined') else txt
 
         try:
+            _assumir_ownership_venda_orfa(venda)
             def safe_float(value, default=0.0):
                 if value is None:
                     return default
@@ -6583,6 +6614,7 @@ def atualizar_status_venda(id_venda):
     venda = Venda.query.get_or_404(id_venda)
     if not _usuario_pode_gerenciar_venda(venda):
         return _resposta_sem_permissao()
+    _assumir_ownership_venda_orfa(venda)
     vendas_do_pedido = _vendas_do_pedido(venda)
     if any(str(getattr(v, 'tipo_operacao', 'VENDA') or 'VENDA').upper() == 'PERDA' for v in vendas_do_pedido):
         msg_perda = 'Pedidos de PERDA/QUEBRA não geram cobrança nem movimentação no caixa.'
@@ -6670,6 +6702,7 @@ def atualizar_situacao_rapida(id):
         venda = Venda.query.get_or_404(id)
         if not _usuario_pode_gerenciar_venda(venda):
             return jsonify({'status': 'erro', 'mensagem': 'Acesso negado.'}), 403
+        _assumir_ownership_venda_orfa(venda)
         venda.situacao = nova_situacao
         if nova_situacao == 'PERDA':
             venda.forma_pagamento = None
