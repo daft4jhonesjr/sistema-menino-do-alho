@@ -272,6 +272,7 @@
                         <option value="DESTAK">DESTAK</option>
                         <option value="PATY">PATY</option>
                         <option value="ARMAZEM LACERDA">ARMAZEM LACERDA</option>
+                        <option value="SERVE BEM">SERVE BEM</option>
                         <option value="NENHUM">NENHUM</option>
                     </select>
                 </div>
@@ -1369,6 +1370,9 @@ document.addEventListener('DOMContentLoaded', function() {
     var produtoSelect = document.getElementById('inline-produto_id');
     var clienteSelect = document.getElementById('inline-cliente_id');
     var empresaSelect = document.getElementById('inline-empresa_faturadora');
+    if (!produtoSelect || !empresaSelect) {
+        console.warn('Filtro Dinamico: selects de produto/empresa nao encontrados.');
+    }
     var clienteAvulsoContainer = document.getElementById('container-cliente-avulso');
     var clienteAvulsoInput = document.getElementById('input-cliente-avulso');
     var precoInput = document.getElementById('preco');
@@ -1404,25 +1408,36 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function aplicarEmpresaPorProduto() {
         if (!produtoSelect || !empresaSelect) return;
-        var opt = produtoSelect.options[produtoSelect.selectedIndex];
-        var produtoTexto = String(opt ? (opt.text || '') : '').toUpperCase();
-        var isBacalhau = produtoTexto.indexOf('BACALHAU') !== -1;
-        if (isBacalhau) {
-            var alvo = 'ARMAZEM LACERDA';
-            var existe = Array.prototype.some.call(empresaSelect.options, function(o) {
-                return String(o.value || '').toUpperCase() === alvo;
-            });
-            if (!existe) {
-                var novaOpcao = new Option('ARMAZEM LACERDA', 'ARMAZEM LACERDA');
-                empresaSelect.add(novaOpcao);
-            }
-            empresaSelect.value = 'ARMAZEM LACERDA';
-            empresaSelect.classList.add('bg-blue-50', 'border-blue-400', 'dark:bg-blue-900/30', 'dark:border-blue-700');
+
+        var opcaoSelecionada = produtoSelect.options[produtoSelect.selectedIndex];
+        if (!opcaoSelecionada) return;
+
+        var textoProduto = String(opcaoSelecionada.text || '').toUpperCase();
+        var valorAtual = empresaSelect.value;
+        var empresasPermitidas = [];
+
+        if (textoProduto.indexOf('ALHO') !== -1) {
+            empresasPermitidas = ['DESTAK', 'PATY'];
+        } else if (textoProduto.indexOf('BACALHAU') !== -1) {
+            empresasPermitidas = ['ARMAZEM LACERDA'];
+        } else if (textoProduto.indexOf('CAFÉ') !== -1 || textoProduto.indexOf('CAFE') !== -1) {
+            empresasPermitidas = ['SERVE BEM'];
         } else {
-            empresaSelect.classList.remove('bg-blue-50', 'border-blue-400', 'dark:bg-blue-900/30', 'dark:border-blue-700');
-            if (empresaSelect.value === 'ARMAZEM LACERDA') {
-                empresaSelect.value = '';
-            }
+            empresasPermitidas = ['DESTAK', 'PATY', 'ARMAZEM LACERDA', 'SERVE BEM'];
+        }
+
+        empresasPermitidas.push('NENHUM');
+
+        empresaSelect.innerHTML = '<option value="">--</option>';
+        empresasPermitidas.forEach(function(empresa) {
+            var opt = document.createElement('option');
+            opt.value = empresa;
+            opt.textContent = empresa;
+            empresaSelect.appendChild(opt);
+        });
+
+        if (empresasPermitidas.indexOf(valorAtual) !== -1) {
+            empresaSelect.value = valorAtual;
         }
     }
 
@@ -1698,6 +1713,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!opt || !opt.value) {
                 estoqueInfo.textContent = '';
                 precoClearAndResetSuggestion();
+                aplicarEmpresaPorProduto();
                 return;
             }
             var estoque = opt.getAttribute('data-estoque');
@@ -1724,6 +1740,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 estoqueInfo.textContent = '';
             }
         });
+
+        if (typeof jQuery !== 'undefined') {
+            jQuery(produtoSelect).on('change', aplicarEmpresaPorProduto);
+        }
     }
     if (operacaoSelect) {
         operacaoSelect.addEventListener('change', aplicarModoOperacao);
