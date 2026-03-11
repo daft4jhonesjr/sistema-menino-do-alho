@@ -32,12 +32,14 @@ import urllib.parse
 import json
 import csv
 import io
+import html
 import shutil
 import hashlib
 import socket
 import traceback
 import threading
 import time
+import urllib.request
 from werkzeug.utils import secure_filename
 from redis import Redis
 from rq import Queue
@@ -6569,6 +6571,77 @@ def visualizar_documento(id):
         return redirect(documento.url_arquivo)
     flash('Link do arquivo não encontrado na nuvem. Faça o upload novamente.', 'error')
     return redirect(request.referrer or url_for('dashboard'))
+
+
+def _extrair_texto_raw_pdfplumber(arquivo_pdf):
+    """Extrai texto com a mesma abordagem usada no processamento: pdfplumber + crop superior (75%)."""
+    texto_completo = ""
+    with pdfplumber.open(arquivo_pdf) as pdf:
+        for pagina in pdf.pages:
+            h = float(pagina.height) or 842
+            w = float(pagina.width) or 595
+            crop_bottom = max(0, h * 0.75)
+            cropped = pagina.crop((0, 0, w, crop_bottom)) if crop_bottom > 0 else pagina
+            texto_pagina = cropped.extract_text()
+            if texto_pagina:
+                texto_completo += texto_pagina + "\n"
+    return texto_completo
+
+
+@app.route('/arquivos/<int:id>/debug_texto', methods=['GET'])
+@login_required
+def debug_texto_arquivo(id):
+    """Raio-X: exibe o texto bruto extraído do PDF para depuração de regex."""
+    if not current_user.is_admin():
+        return "<html><body><h3>Acesso negado</h3><p>Somente administradores podem usar o modo Debug.</p></body></html>", 403
+
+    documento = Documento.query.get_or_404(id)
+
+    try:
+        texto_extraido = ""
+
+        if documento.url_arquivo:
+            with urllib.request.urlopen(documento.url_arquivo, timeout=30) as resp:
+                conteudo_pdf = resp.read()
+            texto_extraido = _extrair_texto_raw_pdfplumber(io.BytesIO(conteudo_pdf))
+        else:
+            path = (documento.caminho_arquivo or '').strip()
+            if not path:
+                return "<html><body><h3>Debug</h3><p>Documento sem URL/Caminho de arquivo.</p></body></html>", 404
+
+            nome_seguro = os.path.basename(path)
+            if os.path.isfile(path):
+                caminho_local = path
+            else:
+                base_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'documentos_entrada')
+                candidatos = [
+                    os.path.join(base_dir, 'boletos', nome_seguro),
+                    os.path.join(base_dir, 'notas_fiscais', nome_seguro),
+                    os.path.join(base_dir, 'bonificacoes', nome_seguro),
+                ]
+                caminho_local = next((c for c in candidatos if os.path.isfile(c)), None)
+
+            if not caminho_local:
+                return "<html><body><h3>Debug</h3><p>Arquivo PDF não encontrado localmente.</p></body></html>", 404
+
+            texto_extraido = _extrair_texto_raw_pdfplumber(caminho_local)
+
+        texto_escapado = html.escape(texto_extraido or "(sem texto extraído)")
+        return (
+            "<html><body>"
+            "<h3>Texto Extraído (Raio-X)</h3>"
+            f"<p><strong>Documento ID:</strong> {documento.id}</p>"
+            f"<p><strong>Tipo:</strong> {html.escape(str(documento.tipo or '-'))}</p>"
+            f"<pre style='white-space: pre-wrap; word-break: break-word;'>{texto_escapado}</pre>"
+            "</body></html>"
+        )
+    except Exception as e:
+        return (
+            "<html><body>"
+            "<h3>Erro no Debug de Texto</h3>"
+            f"<pre>{html.escape(str(e))}</pre>"
+            "</body></html>"
+        ), 500
 
 
 @app.route('/arquivo/<int:id>/deletar', methods=['POST'])
