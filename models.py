@@ -232,17 +232,16 @@ class LancamentoCaixa(db.Model):
 
 
 class ContagemGaveta(db.Model):
-    """Estado salvo da contagem de gaveta (dinheiro/cheques) por dia e usuário."""
-    __tablename__ = 'contagens_gaveta'
+    """Itens isolados da contagem de gaveta (sem relacionamentos)."""
+    __tablename__ = 'contagem_gaveta'
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    data = db.Column(db.Date, nullable=False, index=True)
-    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True, index=True)
-    estado_json = db.Column(db.Text, nullable=False)  # {"dinheiro":[...], "cheques":[...]}
-    atualizado_em = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    tipo = db.Column(db.String(20), nullable=False, index=True)  # DINHEIRO ou CHEQUE
+    valor = db.Column(db.Float, nullable=False, default=0.0)
+    data_atualizacao = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False, index=True)
 
     def __repr__(self):
-        return f'<ContagemGaveta {self.id} - {self.data}>'
+        return f'<ContagemGaveta {self.id} - {self.tipo} {self.valor}>'
 
 
 class Documento(db.Model):

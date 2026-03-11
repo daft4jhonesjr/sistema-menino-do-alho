@@ -772,8 +772,8 @@ function confirmarExclusaoMassa() {
             valores: []
         }
     };
-    var rotaSalvarContagem = '{{ url_for("salvar_contagem_gaveta") }}';
-    var rotaCarregarContagem = '{{ url_for("carregar_contagem_gaveta") }}';
+    var rotaSalvarContagem = '/salvar_contagem_gaveta';
+    var rotaCarregarContagem = '/obter_contagem_gaveta';
     var rotaUploadImagemCheque = '{{ url_for("upload_imagem_cheque") }}';
     var STATUS_CHEQUE_ENVIADO = 'ENVIADO';
     var STATUS_CHEQUE_NAO_ENVIADO = 'NÃO ENVIADO';
@@ -916,10 +916,12 @@ function confirmarExclusaoMassa() {
             if (!data || !data.ok) throw new Error((data && data.mensagem) || 'Erro ao salvar contagem');
             mostrarToast('Contagem de gaveta salva com sucesso.', 'success');
             finalizarBotao();
+            return true;
         })
         .catch(function() {
             mostrarToast('Não foi possível salvar a contagem agora. Tente novamente.', 'error');
             finalizarBotao();
+            return false;
         });
     }
 
@@ -1431,7 +1433,11 @@ function confirmarExclusaoMassa() {
     document.getElementById('btn-add-dinheiro').addEventListener('click', function() { addLinha('dinheiro'); });
     document.getElementById('btn-add-cheque').addEventListener('click', function() { addLinha('cheque'); });
     document.getElementById('btn-limpar-contagem').addEventListener('click', function() { limpar(abaAtiva); });
-    document.getElementById('btn-salvar-contagem').addEventListener('click', function() { salvarEstadoServidor(); });
+    document.getElementById('btn-salvar-contagem').addEventListener('click', function() {
+        salvarEstadoServidor().then(function(salvou) {
+            if (salvou) fechar();
+        });
+    });
     var modalContagem = document.getElementById('modal-contagem-dinheiro');
     if (modalContagem) {
         modalContagem.addEventListener('keydown', function(e) {
