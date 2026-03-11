@@ -6576,6 +6576,14 @@ def visualizar_documento(id):
 def deletar_arquivo_dashboard(id):
     """Exclui documento do banco e remove arquivo no Cloudinary."""
     documento = Documento.query.get_or_404(id)
+    usuario_doc = getattr(documento, 'usuario_id', None)
+    usuario_logado = getattr(current_user, 'id', None)
+    is_admin = bool(getattr(current_user, 'is_admin', lambda: False)())
+
+    # Segurança: só permite excluir documentos do próprio usuário.
+    # Admin mantém permissão para suporte/gestão.
+    if not is_admin and (usuario_doc is None or usuario_doc != usuario_logado):
+        return jsonify(ok=False, mensagem='Você não tem permissão para excluir este arquivo.'), 403
 
     try:
         if documento.public_id and (os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL')):
@@ -6583,6 +6591,7 @@ def deletar_arquivo_dashboard(id):
 
         db.session.delete(documento)
         db.session.commit()
+        limpar_cache_dashboard()
         return jsonify(ok=True, mensagem='Arquivo excluído com sucesso.')
     except Exception as e:
         db.session.rollback()
