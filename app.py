@@ -207,6 +207,22 @@ CNPJS_EMISSORES = frozenset({
 })
 
 
+def _extrair_linha_danfe_nome_cnpj_data(texto):
+    """DANFE: tenta capturar linha com 'NOME/RAZÃO SOCIAL + CNPJ + DATA DA EMISSÃO'."""
+    if not texto:
+        return None, None
+    m = re.search(
+        r'^([A-Z0-9\s\&\.\-\*]+?)\s+(\d{2}\.\d{3}\.\d{3}/\d{4}\-\d{2})\s+\d{2}/\d{2}/\d{4}',
+        texto,
+        re.MULTILINE
+    )
+    if not m:
+        return None, None
+    nome = (m.group(1) or '').strip()
+    cnpj = (m.group(2) or '').strip()
+    return nome or None, cnpj or None
+
+
 def _extrair_cnpj(texto, nome_arquivo=None):
     """Extrai CNPJ do PAGADOR/DESTINATÁRIO. Padrão \\d{2}\\.\\d{3}\\.\\d{3}/\\d{4}-\\d{2}.
     Ignora PATY, DESTAK e emissores conhecidos. Prioriza CNPJ próximo a 'Pagador', 'Destinatário', 'Razão Social'."""
@@ -229,6 +245,11 @@ def _extrair_cnpj(texto, nome_arquivo=None):
         if todos and nome_arquivo:
             print(f"DEBUG: Erro - Apenas CNPJ(s) do emissor localizado(s) em {nome_arquivo}: {emissores_encontrados}")
         return None
+
+    # Prioridade 0 (DANFE): linha "NOME / RAZÃO SOCIAL CNPJ / CPF DATA DA EMISSÃO"
+    _, cnpj_danfe = _extrair_linha_danfe_nome_cnpj_data(texto)
+    if cnpj_danfe and cnpj_danfe not in CNPJS_EMISSORES:
+        return cnpj_danfe
     
     # Prioridade 1: CNPJ após "CNPJ/CPF:" próximo ao Pagador (Itaú/DESTAK)
     m = re.search(r'Pagador[:\s]*[\s\S]{0,200}?CNPJ\s*/\s*CPF\s*[:\s]*(\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2})', texto, re.IGNORECASE | re.DOTALL)
@@ -409,12 +430,13 @@ def _extrair_numero_nf(texto):
         r'NFe?\s*N[º°]\s*(\d{3,12})',
         r'N[º°]\s*0*(\d{3,12})',
         r'NFe?\s*N[º°]\s*S[ée]rie[\s\S]{0,40}?(\d{3,12})',
+        r'N[ºo]\s*([\d\.]+)',
     ]
     for p in padroes_danfe:
         m = re.search(p, texto, re.IGNORECASE)
         if not m:
             continue
-        n = (m.group(1) or '').strip()
+        n = (m.group(1) or '').strip().replace('.', '')
         if not n:
             continue
         if n in BLACKLIST_NF:
@@ -545,6 +567,13 @@ def _extrair_razao_social(texto):
             cand = _limpar_razao_ate_cnpj_ou_data(linha)
             if cand and len(cand) > 3 and not _eh_linha_cabecalho_pagador(cand):
                 return cand[:200]
+
+    # DANFE (fallback do plano B): Nome + CNPJ + Data na mesma linha
+    nome_danfe, _ = _extrair_linha_danfe_nome_cnpj_data(texto)
+    if nome_danfe:
+        razao = _limpar_razao_ate_cnpj_ou_data(nome_danfe)
+        if razao and len(razao) > 2 and not _eh_linha_cabecalho_pagador(razao):
+            return razao[:200]
 
     # Itaú/DESTAK: "Pagador: CAPIM FRIOS EIRELI" (mesma linha ou próxima)
     m = re.search(r'Pagador\s*:\s*([A-ZÁÉÍÓÚÇa-z0-9][A-ZÁÉÍÓÚÇa-z0-9\s&\.\-(),]+?)(?:\s*[\r\n]|CNPJ|CPF|$)', texto, re.IGNORECASE)
