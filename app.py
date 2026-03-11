@@ -40,7 +40,10 @@ import traceback
 import threading
 import time
 import urllib.request
+import logging
+from logging.handlers import RotatingFileHandler
 from werkzeug.utils import secure_filename
+from werkzeug.exceptions import HTTPException
 from redis import Redis
 from rq import Queue
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -1810,6 +1813,23 @@ app.config.from_object(Config)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
+# Caixa preta de erros: log rotativo em arquivo
+_logs_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
+if not os.path.exists(_logs_dir):
+    os.mkdir(_logs_dir)
+
+_logs_file = os.path.join(_logs_dir, 'erros.log')
+file_handler = RotatingFileHandler(_logs_file, maxBytes=1024000, backupCount=1)
+file_handler.setFormatter(logging.Formatter(
+    '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'
+))
+file_handler.setLevel(logging.ERROR)
+
+if not any(isinstance(h, RotatingFileHandler) and getattr(h, 'baseFilename', '') == _logs_file for h in app.logger.handlers):
+    app.logger.addHandler(file_handler)
+app.logger.setLevel(logging.ERROR)
+app.logger.info('Sistema de Logs Iniciado')
+
 # Sessão e "Lembrar-me": persistir por 30 dias
 app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=30)
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
@@ -2565,6 +2585,36 @@ def configuracoes():
     return render_template('configuracoes.html', usuario=usuario)
 
 
+@app.route('/api/logs/erros', methods=['GET'])
+@login_required
+def ler_logs_erros():
+    if not current_user.is_admin():
+        return jsonify({'status': 'erro', 'mensagem': 'Acesso negado.'}), 403
+    try:
+        with open(_logs_file, 'r', encoding='utf-8') as f:
+            linhas = f.readlines()
+            conteudo = ''.join(linhas[-200:]) if linhas else 'Nenhum erro registrado ainda.'
+        return jsonify({'status': 'sucesso', 'logs': conteudo})
+    except FileNotFoundError:
+        return jsonify({'status': 'sucesso', 'logs': 'Arquivo de log não encontrado. O sistema está limpo.'})
+    except Exception as e:
+        app.logger.error(f"Erro ao ler logs: {str(e)}\n{traceback.format_exc()}")
+        return jsonify({'status': 'erro', 'mensagem': 'Falha ao ler o arquivo de logs.'}), 500
+
+
+@app.route('/api/logs/limpar', methods=['POST'])
+@login_required
+def limpar_logs_erros():
+    if not current_user.is_admin():
+        return jsonify({'status': 'erro', 'mensagem': 'Acesso negado.'}), 403
+    try:
+        open(_logs_file, 'w', encoding='utf-8').close()
+        return jsonify({'status': 'sucesso'})
+    except Exception as e:
+        app.logger.error(f"Erro ao limpar logs: {str(e)}\n{traceback.format_exc()}")
+        return jsonify({'status': 'erro', 'mensagem': str(e)}), 500
+
+
 @app.route('/perfil', methods=['GET', 'POST'])
 @login_required
 def perfil():
@@ -2748,6 +2798,15 @@ def alterar_role_usuario(id):
 
 
 # ========== ROTAS PRINCIPAIS ==========
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    """Interceptador global de exceções para registrar falhas não tratadas."""
+    if isinstance(e, HTTPException):
+        return e
+    app.logger.error(f"Erro Crítico não Tratado: {str(e)}\n{traceback.format_exc()}")
+    return "Ocorreu um erro interno no servidor. A equipe técnica foi notificada nos logs.", 500
+
 
 @app.errorhandler(500)
 def erro_interno(e):

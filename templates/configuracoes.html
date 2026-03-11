@@ -118,6 +118,17 @@
                 </a>
             </div>
         </div>
+
+        <div class="mb-6 border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-800/50">
+            <div class="flex items-center justify-between mb-3">
+                <h4 class="font-bold text-gray-800 dark:text-white">Monitor de Erros do Sistema (Logs)</h4>
+                <div class="flex items-center gap-2">
+                    <button type="button" id="btnAtualizarLogs" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2 px-3 rounded transition-colors">🔄 Atualizar Logs</button>
+                    <button type="button" id="btnLimparLogs" class="bg-red-600 hover:bg-red-700 text-white text-sm font-bold py-2 px-3 rounded transition-colors">🗑️ Limpar Logs</button>
+                </div>
+            </div>
+            <textarea id="logMonitor" readonly class="w-full h-64 bg-slate-900 text-emerald-400 font-mono text-xs p-4 rounded outline-none resize-none" placeholder="Carregando logs..."></textarea>
+        </div>
         {% endif %}
     </div>
 </div>
@@ -254,6 +265,63 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+
+    async function carregarLogs() {
+        var monitor = document.getElementById('logMonitor');
+        if (!monitor) return;
+        monitor.value = 'Carregando logs...';
+        try {
+            var response = await fetch('/api/logs/erros', {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            var data = await response.json();
+            if (!response.ok || (data && data.status === 'erro')) {
+                throw new Error((data && data.mensagem) || 'Erro ao carregar logs.');
+            }
+            monitor.value = (data && data.logs) ? data.logs : 'Nenhum erro registrado ainda.';
+            monitor.scrollTop = monitor.scrollHeight;
+        } catch (err) {
+            monitor.value = 'Falha ao carregar logs: ' + ((err && err.message) ? err.message : 'erro desconhecido');
+        }
+    }
+
+    async function limparLogs() {
+        var monitor = document.getElementById('logMonitor');
+        if (!monitor) return;
+        if (!confirm('Tem certeza que deseja limpar os logs de erro?')) return;
+        try {
+            var headers = {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            };
+            if (typeof getCsrfHeaders === 'function') {
+                var csrfHeaders = getCsrfHeaders();
+                for (var k in csrfHeaders) headers[k] = csrfHeaders[k];
+            }
+            var response = await fetch('/api/logs/limpar', {
+                method: 'POST',
+                headers: headers
+            });
+            var data = await response.json();
+            if (!response.ok || (data && data.status === 'erro')) {
+                throw new Error((data && data.mensagem) || 'Erro ao limpar logs.');
+            }
+            monitor.value = 'Nenhum erro registrado ainda.';
+            if (typeof showToast === 'function') showToast('Logs limpos com sucesso.', 'success');
+        } catch (err) {
+            if (typeof showToast === 'function') {
+                showToast((err && err.message) ? err.message : 'Erro ao limpar logs.', 'error');
+            } else {
+                alert((err && err.message) ? err.message : 'Erro ao limpar logs.');
+            }
+        }
+    }
+
+    var btnAtualizarLogs = document.getElementById('btnAtualizarLogs');
+    var btnLimparLogs = document.getElementById('btnLimparLogs');
+    if (btnAtualizarLogs) btnAtualizarLogs.addEventListener('click', carregarLogs);
+    if (btnLimparLogs) btnLimparLogs.addEventListener('click', limparLogs);
+    if (document.getElementById('logMonitor')) carregarLogs();
 });
 </script>
 {% endblock %}
