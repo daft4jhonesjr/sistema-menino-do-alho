@@ -9,6 +9,39 @@
             var m = document.querySelector('meta[name="csrf-token"]');
             return m ? { 'X-CSRFToken': m.getAttribute('content') } : {};
         };
+        // Blindagem global: garante CSRF em formulários POST sem campo explícito.
+        document.addEventListener('DOMContentLoaded', function() {
+            var tokenMeta = document.querySelector('meta[name="csrf-token"]');
+            var token = tokenMeta ? tokenMeta.getAttribute('content') : '';
+            if (!token) return;
+            document.querySelectorAll('form[method="post"], form[method="POST"]').forEach(function(form) {
+                var csrfInput = form.querySelector('input[name="csrf_token"]');
+                if (!csrfInput) {
+                    csrfInput = document.createElement('input');
+                    csrfInput.type = 'hidden';
+                    csrfInput.name = 'csrf_token';
+                    form.appendChild(csrfInput);
+                }
+                csrfInput.value = token;
+            });
+        });
+        // Blindagem global: injeta X-CSRFToken em fetch mutável same-origin.
+        (function() {
+            if (!window.fetch) return;
+            var originalFetch = window.fetch.bind(window);
+            window.fetch = function(input, init) {
+                var opts = init || {};
+                var method = String((opts.method || 'GET')).toUpperCase();
+                var mutating = (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE');
+                if (!mutating) return originalFetch(input, opts);
+                var headers = new Headers(opts.headers || {});
+                if (!headers.has('X-CSRFToken')) {
+                    var csrf = window.getCsrfHeaders ? window.getCsrfHeaders()['X-CSRFToken'] : '';
+                    if (csrf) headers.set('X-CSRFToken', csrf);
+                }
+                return originalFetch(input, Object.assign({}, opts, { headers: headers }));
+            };
+        })();
         window.loadingBotao = function(formElement) {
             if (!formElement || formElement.getAttribute('data-submitting') === '1') {
                 return false;

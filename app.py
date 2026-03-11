@@ -1122,6 +1122,11 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                         # Se havia documento no banco, removê-lo
                         doc_existente = Documento.query.filter_by(caminho_arquivo=caminho_relativo).first()
                         if doc_existente:
+                            _deletar_cloudinary_seguro(
+                                public_id=getattr(doc_existente, 'public_id', None),
+                                url=getattr(doc_existente, 'url_arquivo', None),
+                                resource_type='raw'
+                            )
                             db.session.delete(doc_existente)
                             db.session.commit()
                         resultado['mensagens'].append(f"Bonificação movida: {arquivo}")
@@ -1224,7 +1229,9 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                 if nf_limpa and nf_limpa not in nfs_invalidas:
                     # Buscar TODAS as vendas e normalizar suas NFs para comparação
                     # Isso garante que encontramos vendas mesmo com formatos diferentes (zeros à esquerda, prefixos, etc.)
-                    todas_vendas = Venda.query.options(
+                    todas_vendas = Venda.query.filter(
+                        Venda.nf.isnot(None)
+                    ).options(
                         joinedload(Venda.cliente), joinedload(Venda.produto)
                     ).all()
                     vendas_candidatas = []
@@ -2282,6 +2289,56 @@ def _resposta_sem_permissao():
     return "Forbidden", 403
 
 
+def _produto_com_lock(produto_id):
+    """Busca produto com lock pessimista para evitar corrida de estoque."""
+    return Produto.query.filter(Produto.id == int(produto_id)).with_for_update().first()
+
+
+def _public_id_cloudinary_from_url(url):
+    """Extrai public_id de uma URL do Cloudinary (fallback legado)."""
+    try:
+        parsed = urllib.parse.urlparse(url or '')
+        path = (parsed.path or '').strip('/')
+        marker = '/upload/'
+        if marker not in path:
+            return None
+        tail = path.split(marker, 1)[1]
+        parts = tail.split('/')
+        if parts and re.match(r'^v\d+$', parts[0]):
+            parts = parts[1:]
+        if not parts:
+            return None
+        joined = '/'.join(parts)
+        return re.sub(r'\.[A-Za-z0-9]+$', '', joined)
+    except Exception:
+        return None
+
+
+def _deletar_cloudinary_seguro(public_id=None, url=None, resource_type='image'):
+    """Tenta deletar recurso no Cloudinary sem interromper a transação."""
+    pid = (public_id or '').strip() or _public_id_cloudinary_from_url(url)
+    if not pid:
+        return False
+    if not (os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL')):
+        return False
+    try:
+        cloudinary.uploader.destroy(pid, resource_type=resource_type)
+        return True
+    except Exception as ex:
+        print(f"Aviso: falha ao deletar Cloudinary ({pid}): {ex}")
+        return False
+
+
+def _resolver_caminho_documento_seguro(subpasta, nome_arquivo):
+    """Monta caminho absoluto seguro dentro de documentos_entrada/<subpasta>."""
+    base_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'documentos_entrada')
+    base_permitida = os.path.normpath(os.path.join(base_dir, subpasta))
+    candidato = os.path.normpath(os.path.join(base_permitida, nome_arquivo or ''))
+    if not (candidato == base_permitida or candidato.startswith(base_permitida + os.sep)):
+        return None
+    return candidato
+
+
 def popular_fornecedores_iniciais():
     fornecedores_padrao = ['ARMAZEM LACERDA', 'PATY', 'DESTAK', 'SERVE BEM']
     houve_insercao = False
@@ -2391,6 +2448,12 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
                 db.session.commit()
             except (OperationalError, Exception):
                 db.session.rollback()
+        # Migração: public_id em produto_fotos (Cloudinary)
+        try:
+            db.session.execute(text('ALTER TABLE produto_fotos ADD COLUMN public_id VARCHAR(200)'))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
         # Migração: profile_image_url em usuarios (foto de perfil)
         try:
             db.session.execute(text('ALTER TABLE usuarios ADD COLUMN profile_image_url VARCHAR(500)'))
@@ -3295,7 +3358,7 @@ def caixa():
         LancamentoCaixa.tipo == 'SAIDA',
         LancamentoCaixa.setor == setor_atual
     ).scalar() or 0.0
-    saldo_atual = float(total_entradas) - float(total_saidas)
+    saldo_atual = Decimal(str(total_entradas or Decimal('0.00'))) - Decimal(str(total_saidas or Decimal('0.00')))
 
     # Limitar a 500 lançamentos mais recentes para exibição (índices em data/tipo/categoria)
     lancamentos = LancamentoCaixa.query.filter_by(setor=setor_atual).order_by(
@@ -3310,18 +3373,18 @@ def caixa():
                 'titulo': f"{meses_pt[l.data.month]}",
                 'id_html': f"mes-{chave_mes}",
                 'itens': [],
-                'entradas_mes': 0.0,
-                'saidas_mes': 0.0,
-                'saidas_fornecedor_mes': 0.0,
-                'saidas_pessoal_mes': 0.0,
-                'saldo_dinheiro': 0.0,
-                'saldo_cheque': 0.0,
-                'saldo_pix': 0.0,
-                'saldo_boleto': 0.0,
-                'entradas_dinheiro': 0.0,
-                'entradas_cheque': 0.0,
-                'entradas_pix': 0.0,
-                'entradas_boleto': 0.0
+                'entradas_mes': Decimal('0.00'),
+                'saidas_mes': Decimal('0.00'),
+                'saidas_fornecedor_mes': Decimal('0.00'),
+                'saidas_pessoal_mes': Decimal('0.00'),
+                'saldo_dinheiro': Decimal('0.00'),
+                'saldo_cheque': Decimal('0.00'),
+                'saldo_pix': Decimal('0.00'),
+                'saldo_boleto': Decimal('0.00'),
+                'entradas_dinheiro': Decimal('0.00'),
+                'entradas_cheque': Decimal('0.00'),
+                'entradas_pix': Decimal('0.00'),
+                'entradas_boleto': Decimal('0.00')
             }
         lancamentos_agrupados[chave_mes]['itens'].append(l)
         # Cálculo por forma de pagamento (Saldo líquido: Entradas - Saídas)
@@ -3358,7 +3421,7 @@ def caixa():
     # Lógica do Saldo Transitado (Acumulado) de um mês para o outro
     # Ordena do mês mais antigo para o mais novo (Ex: '2026-01' -> '2026-02')
     chaves_ordenadas = sorted(lancamentos_agrupados.keys())
-    saldo_acumulado = 0.0
+    saldo_acumulado = Decimal('0.00')
     for chave in chaves_ordenadas:
         grupo = lancamentos_agrupados[chave]
         grupo['saldo_anterior'] = saldo_acumulado
@@ -3383,22 +3446,22 @@ def caixa():
 
 
 def _limpar_valor_moeda(v):
-    """Converte string BRL (R$ 1.000,00 ou 1.000,00) ou número (300.5) para float.
+    """Converte string BRL (R$ 1.000,00 ou 1.000,00) ou número (300.5) para Decimal.
     Remove R$, espaços. Se tem vírgula: formato BR (remove pontos de milhar, vírgula→ponto).
     Se não tem vírgula: mantém ponto como decimal (ex: 300.5)."""
     if not v:
-        return 0.0
+        return Decimal('0.00')
     try:
         s = str(v).strip().replace('R$', '').replace(' ', '').strip()
         if not s:
-            return 0.0
+            return Decimal('0.00')
         # Se tem vírgula, assume formato BR (1.234,56)
         if ',' in s:
             s = s.replace('.', '').replace(',', '.')
         # Caso contrário mantém ponto como decimal (300.5)
-        return float(s)
+        return Decimal(s)
     except (ValueError, AttributeError):
-        return 0.0
+        return Decimal('0.00')
 
 
 def _normalizar_itens_contagem(itens, incluir_nome=False):
@@ -3656,13 +3719,13 @@ def desfazer_caixa(id):
             venda_id = int(match.group(1))
             venda = Venda.query.get(venda_id)
             if venda:
-                venda.valor_pago = (venda.valor_pago or 0.0) - lancamento.valor
-                if venda.valor_pago <= 0.01:
-                    venda.valor_pago = 0.0
+                venda.valor_pago = Decimal(str(venda.valor_pago or Decimal('0.00'))) - Decimal(str(lancamento.valor or Decimal('0.00')))
+                if venda.valor_pago <= Decimal('0.01'):
+                    venda.valor_pago = Decimal('0.00')
                     venda.situacao = 'PENDENTE'
                 else:
-                    valor_total_venda = float(venda.calcular_total())
-                    if venda.valor_pago < (valor_total_venda - 0.01):
+                    valor_total_venda = Decimal(str(venda.calcular_total() or Decimal('0.00')))
+                    if venda.valor_pago < (valor_total_venda - Decimal('0.01')):
                         venda.situacao = 'PARCIAL'
                     else:
                         venda.situacao = 'PAGO'
@@ -3688,14 +3751,14 @@ def deletar_caixa(id):
             venda = Venda.query.get(venda_id)
 
             if venda:
-                venda.valor_pago = (venda.valor_pago or 0.0) - lancamento.valor
+                venda.valor_pago = Decimal(str(venda.valor_pago or Decimal('0.00'))) - Decimal(str(lancamento.valor or Decimal('0.00')))
 
-                if venda.valor_pago <= 0.01:
-                    venda.valor_pago = 0.0
+                if venda.valor_pago <= Decimal('0.01'):
+                    venda.valor_pago = Decimal('0.00')
                     venda.situacao = 'PENDENTE'
                 else:
-                    valor_total_venda = float(venda.calcular_total())
-                    if venda.valor_pago < (valor_total_venda - 0.01):
+                    valor_total_venda = Decimal(str(venda.calcular_total() or Decimal('0.00')))
+                    if venda.valor_pago < (valor_total_venda - Decimal('0.01')):
                         venda.situacao = 'PARCIAL'
                     else:
                         venda.situacao = 'PAGO'
@@ -4000,7 +4063,10 @@ def extrato_cliente(cliente_id):
     ).options(joinedload(Venda.produto)).order_by(Venda.data_venda).all()
 
     # Total devido = soma do saldo restante (valor da nota - já pago) de cada venda
-    total_devido = sum(float(v.calcular_total()) - (v.valor_pago or 0.0) for v in vendas_pendentes)
+    total_devido = sum(
+        Decimal(str(v.calcular_total() or Decimal('0.00'))) - Decimal(str(v.valor_pago or Decimal('0.00')))
+        for v in vendas_pendentes
+    )
     data_hoje = datetime.now().strftime('%d/%m/%Y')
 
     return render_template('extrato.html', cliente=cliente, vendas=vendas_pendentes, total=total_devido, data_hoje=data_hoje)
@@ -4677,8 +4743,9 @@ def novo_produto():
                     try:
                         upload_result = cloudinary.uploader.upload(foto, folder="menino_do_alho/produtos")
                         url_segura = upload_result.get('secure_url')
+                        public_id_foto = upload_result.get('public_id')
                         if url_segura:
-                            nova_foto = ProdutoFoto(produto_id=produto.id, arquivo=url_segura)
+                            nova_foto = ProdutoFoto(produto_id=produto.id, arquivo=url_segura, public_id=public_id_foto)
                             db.session.add(nova_foto)
                     except Exception as e:
                         print(f"Erro ao fazer upload para o Cloudinary (produto {produto.id}): {e}")
@@ -4776,8 +4843,9 @@ def editar_produto(id):
                     try:
                         upload_result = cloudinary.uploader.upload(foto, folder="menino_do_alho/produtos")
                         url_segura = upload_result.get('secure_url')
+                        public_id_foto = upload_result.get('public_id')
                         if url_segura:
-                            nova_foto = ProdutoFoto(produto_id=produto.id, arquivo=url_segura)
+                            nova_foto = ProdutoFoto(produto_id=produto.id, arquivo=url_segura, public_id=public_id_foto)
                             db.session.add(nova_foto)
                     except Exception as e:
                         print(f"Erro ao fazer upload para o Cloudinary (produto {produto.id}): {e}")
@@ -4796,6 +4864,12 @@ def excluir_produto(id):
     produto = Produto.query.get_or_404(id)
     try:
         nome = produto.nome_produto or f'#{produto.id}'
+        for foto in list(getattr(produto, 'fotos', []) or []):
+            _deletar_cloudinary_seguro(
+                public_id=getattr(foto, 'public_id', None),
+                url=getattr(foto, 'arquivo', None),
+                resource_type='image'
+            )
         db.session.delete(produto)
         db.session.commit()
         limpar_cache_dashboard()
@@ -4821,6 +4895,12 @@ def bulk_delete_produtos():
         if not produto:
             continue
         try:
+            for foto in list(getattr(produto, 'fotos', []) or []):
+                _deletar_cloudinary_seguro(
+                    public_id=getattr(foto, 'public_id', None),
+                    url=getattr(foto, 'arquivo', None),
+                    resource_type='image'
+                )
             db.session.delete(produto)
             db.session.commit()
             excluidos += 1
@@ -5969,7 +6049,13 @@ def nova_venda():
             produtos = Produto.query.filter(Produto.estoque_atual > 0).all()
             return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
 
-        produto = Produto.query.get_or_404(produto_id)
+        produto = _produto_com_lock(produto_id)
+        if not produto:
+            msg = 'Produto não encontrado.'
+            if _is_ajax():
+                return jsonify(ok=False, mensagem=msg), 404
+            flash(msg, 'error')
+            return redirect(url_for('listar_vendas'))
         if produto.estoque_atual < quantidade_venda:
             msg = f'Estoque insuficiente! Disponível: {produto.estoque_atual}'
             if _is_ajax():
@@ -6041,7 +6127,15 @@ def nova_venda():
             lucro_percentual=lucro_percentual,
         )
         db.session.add(venda)
-        produto.estoque_atual -= quantidade_venda
+        novo_estoque = int(produto.estoque_atual) - int(quantidade_venda)
+        if novo_estoque < 0:
+            db.session.rollback()
+            msg = f'Estoque insuficiente! Disponível: {produto.estoque_atual}'
+            if _is_ajax():
+                return jsonify(ok=False, mensagem=msg), 400
+            flash(msg, 'error')
+            return redirect(url_for('listar_vendas'))
+        produto.estoque_atual = novo_estoque
         db.session.flush()
         # --- INÍCIO DA INTEGRAÇÃO COM CAIXA (PILOTO AUTOMÁTICO V4) ---
         if tipo_operacao != 'PERDA' and str(venda.situacao or '').strip().upper() in ('PAGO', 'CONCLUÍDO'):
@@ -6052,7 +6146,7 @@ def nova_venda():
                 cliente = Cliente.query.get(venda.cliente_id)
                 nome_cliente = cliente.nome_cliente if cliente else "Cliente Avulso"
                 forma_pgto = request.form.get('forma_pagamento', 'Dinheiro') or 'Dinheiro'
-                valor_venda = float(venda.calcular_total())
+                valor_venda = Decimal(str(venda.calcular_total() or Decimal('0.00')))
                 forma_pgto_upper = str(forma_pgto or '').upper()
                 data_venc = getattr(venda, 'data_vencimento', None)
                 if 'BOLETO' in forma_pgto_upper and data_venc:
@@ -6164,7 +6258,7 @@ def processar_carrinho():
             if not empresa_faturadora or empresa_faturadora not in ('DESTAK', 'PATY', 'NENHUM', 'ARMAZEM LACERDA'):
                 return jsonify(ok=False, mensagem='Empresa faturadora inválida.'), 400
 
-            produto = Produto.query.get(produto_id)
+            produto = _produto_com_lock(produto_id)
             if not produto:
                 return jsonify(ok=False, mensagem=f'Produto ID {produto_id} não encontrado.'), 400
             if produto.estoque_atual < quantidade_venda:
@@ -6199,7 +6293,10 @@ def processar_carrinho():
                 lucro_percentual=lucro_percentual,
             )
             db.session.add(venda)
-            produto.estoque_atual -= quantidade_venda
+            novo_estoque = int(produto.estoque_atual) - int(quantidade_venda)
+            if novo_estoque < 0:
+                raise ValueError(f'Estoque insuficiente para "{produto.nome_produto}".')
+            produto.estoque_atual = novo_estoque
             processados += 1
 
         db.session.commit()
@@ -6235,7 +6332,10 @@ def venda_adicionar_item():
     if not _usuario_pode_gerenciar_venda(venda_existente):
         return _resposta_sem_permissao()
     _assumir_ownership_venda_orfa(venda_existente)
-    produto = Produto.query.get_or_404(produto_id)
+    produto = _produto_com_lock(produto_id)
+    if not produto:
+        flash('Produto não encontrado.', 'error')
+        return redirect(url_for('listar_vendas'))
 
     preco_venda = _limpar_valor_moeda(preco_venda_raw)
     tipo_operacao = str(getattr(venda_existente, 'tipo_operacao', 'VENDA') or 'VENDA').strip().upper()
@@ -6265,7 +6365,12 @@ def venda_adicionar_item():
         tipo_operacao=tipo_operacao,
     )
     db.session.add(nova_venda)
-    produto.estoque_atual -= quantidade_venda
+    novo_estoque = int(produto.estoque_atual) - int(quantidade_venda)
+    if novo_estoque < 0:
+        db.session.rollback()
+        flash(f'Estoque insuficiente! Disponível: {produto.estoque_atual}', 'error')
+        return redirect(url_for('listar_vendas'))
+    produto.estoque_atual = novo_estoque
     db.session.commit()
     limpar_cache_dashboard()
     flash('Produto adicionado ao pedido com sucesso!', 'success')
@@ -6474,6 +6579,12 @@ def excluir_item_venda(id):
     if not _usuario_pode_gerenciar_venda(venda):
         return _resposta_sem_permissao()
     try:
+        for doc in list(getattr(venda, 'documentos', []) or []):
+            _deletar_cloudinary_seguro(
+                public_id=getattr(doc, 'public_id', None),
+                url=getattr(doc, 'url_arquivo', None),
+                resource_type='raw'
+            )
         _apagar_lancamentos_caixa_por_vendas([venda])
         produto = venda.produto
         if produto:
@@ -6545,6 +6656,12 @@ def excluir_venda(id):
         # Restaurar estoque de todos os produtos do pedido
         logs = []
         for v in vendas_do_pedido:
+            for doc in list(getattr(v, 'documentos', []) or []):
+                _deletar_cloudinary_seguro(
+                    public_id=getattr(doc, 'public_id', None),
+                    url=getattr(doc, 'url_arquivo', None),
+                    resource_type='raw'
+                )
             produto = v.produto
             quantidade = v.quantidade_venda
             nome_produto = produto.nome_produto  # Salvar antes de deletar
@@ -6911,10 +7028,11 @@ def ver_boleto_venda(id):
     doc = Documento.query.filter(or_(Documento.caminho_arquivo == path, Documento.url_arquivo == path)).first()
     if doc and doc.url_arquivo:
         return redirect(doc.url_arquivo)
-    # Bloquear path traversal: usar apenas o nome do arquivo final
+    # Bloquear path traversal: normalizar e garantir prefixo de diretório permitido
     nome_seguro = os.path.basename(path)
-    base_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'documentos_entrada')
-    full = os.path.join(base_dir, 'boletos', nome_seguro)
+    full = _resolver_caminho_documento_seguro('boletos', nome_seguro)
+    if not full:
+        return "Forbidden", 403
     if not os.path.isfile(full):
         flash('Arquivo do boleto não encontrado no servidor.', 'error')
         return redirect(request.referrer or url_for('listar_vendas'))
@@ -6977,10 +7095,11 @@ def ver_nf_venda(id):
         return redirect(url_for('listar_vendas'))
     if doc.url_arquivo:
         return redirect(doc.url_arquivo)
-    # Bloquear path traversal: usar apenas o nome do arquivo final
+    # Bloquear path traversal: normalizar e garantir prefixo de diretório permitido
     nome_seguro = os.path.basename(path)
-    base_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'documentos_entrada')
-    full = os.path.join(base_dir, 'notas_fiscais', nome_seguro)
+    full = _resolver_caminho_documento_seguro('notas_fiscais', nome_seguro)
+    if not full:
+        return "Forbidden", 403
     if not os.path.isfile(full):
         flash('Arquivo da nota fiscal não encontrado no servidor.', 'error')
         return redirect(request.referrer or url_for('listar_vendas'))
@@ -7002,7 +7121,7 @@ def _token_upload_required(f):
 
 
 @app.route('/upload', methods=['POST'])
-@csrf.exempt
+@login_required
 @_token_upload_required
 def upload_documento():
     """
@@ -7013,6 +7132,15 @@ def upload_documento():
     arquivo = request.files.get('file') or request.files.get('arquivo') or request.files.get('documento')
     if not arquivo or not arquivo.filename:
         return jsonify({'mensagem': 'Nenhum arquivo enviado.'}), 400
+    nome_arquivo = secure_filename(arquivo.filename or '')
+    extensao = os.path.splitext(nome_arquivo)[1].lower()
+    extensoes_permitidas = {'.pdf', '.png', '.jpg', '.jpeg'}
+    mimes_permitidos = {'application/pdf', 'image/png', 'image/jpeg'}
+    mime = (getattr(arquivo, 'mimetype', '') or '').lower()
+    if extensao not in extensoes_permitidas:
+        return jsonify({'mensagem': 'Extensão de arquivo não permitida.'}), 400
+    if mime not in mimes_permitidos:
+        return jsonify({'mensagem': 'Tipo MIME inválido para upload.'}), 400
 
     tipo = (request.form.get('tipo') or request.form.get('type') or '').strip().lower()
     if tipo == 'boleto':
@@ -7026,7 +7154,6 @@ def upload_documento():
         base_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'documentos_entrada')
         caminho_final = os.path.join(base_dir, subpasta)
         os.makedirs(caminho_final, exist_ok=True)
-        nome_arquivo = secure_filename(arquivo.filename)
         caminho_completo = os.path.join(caminho_final, nome_arquivo)
         arquivo.save(caminho_completo)
         return jsonify({'mensagem': 'Sucesso'}), 200
@@ -7038,10 +7165,10 @@ def upload_documento():
 @app.route('/api/receber_automatico', methods=['POST'])
 @csrf.exempt
 def api_receber_automatico():
-    """API para receber arquivos automaticamente. Requer token em Authorization (variável API_TOKEN)."""
-    token_esperado = os.environ.get('API_TOKEN')
+    """API para receber arquivos automaticamente. Requer token em Authorization."""
+    token_esperado = os.environ.get('API_RECEBER_AUTOMATICO_TOKEN')
     if not token_esperado:
-        return jsonify({'status': 'erro', 'mensagem': 'API_TOKEN não configurado no ambiente.'}), 503
+        return jsonify({'status': 'erro', 'mensagem': 'API_RECEBER_AUTOMATICO_TOKEN não configurado no ambiente.'}), 503
     auth = request.headers.get('Authorization', '')
     if auth != token_esperado and auth != f'Bearer {token_esperado}':
         return jsonify({'status': 'erro', 'mensagem': 'Token inválido ou ausente.'}), 403
@@ -8006,7 +8133,7 @@ def service_worker():
 def receber_lote_cliente(id):
     """Abatimento Inteligente: recebe valor em lote e abate nas vendas pendentes mais antigas."""
     valor_str = (request.form.get('valor_recebido') or '0').replace('.', '').replace(',', '.')
-    valor_recebido = float(valor_str) if valor_str else 0.0
+    valor_recebido = Decimal(valor_str) if valor_str else Decimal('0.00')
     forma_pgto = request.form.get('forma_pagamento', 'Dinheiro')
 
     cliente = Cliente.query.get_or_404(id)
@@ -8017,15 +8144,15 @@ def receber_lote_cliente(id):
         Venda.situacao.in_(['PENDENTE', 'PARCIAL'])
     ).order_by(Venda.data_venda.asc()).all()
 
-    valor_restante = valor_recebido
+    valor_restante = Decimal(str(valor_recebido or Decimal('0.00')))
 
     for venda in vendas_abertas:
         if valor_restante <= 0:
             break
 
-        venda.valor_pago = venda.valor_pago or 0.0
-        valor_total_venda = float(venda.calcular_total())
-        valor_falta = valor_total_venda - venda.valor_pago
+        venda.valor_pago = Decimal(str(venda.valor_pago or Decimal('0.00')))
+        valor_total_venda = Decimal(str(venda.calcular_total() or Decimal('0.00')))
+        valor_falta = valor_total_venda - Decimal(str(venda.valor_pago or Decimal('0.00')))
 
         if valor_restante >= valor_falta:
             valor_abatido = valor_falta
@@ -8034,7 +8161,7 @@ def receber_lote_cliente(id):
             valor_restante -= valor_falta
         else:
             valor_abatido = valor_restante
-            venda.valor_pago = (venda.valor_pago or 0) + valor_restante
+            venda.valor_pago = Decimal(str(venda.valor_pago or Decimal('0.00'))) + Decimal(str(valor_restante))
             venda.situacao = 'PARCIAL'
             valor_restante = 0
 

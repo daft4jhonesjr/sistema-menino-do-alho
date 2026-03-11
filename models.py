@@ -2,6 +2,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 from datetime import date, datetime
 from enum import Enum
+from decimal import Decimal
 
 db = SQLAlchemy()
 
@@ -84,6 +85,9 @@ PRECO_VENDA_ALVO_DEFAULT = 160.0
 
 class Produto(db.Model):
     __tablename__ = 'produtos'
+    __table_args__ = (
+        db.CheckConstraint('estoque_atual >= 0', name='ck_produtos_estoque_nao_negativo'),
+    )
     
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     tipo = db.Column(db.String(20), nullable=False)
@@ -148,6 +152,7 @@ class ProdutoFoto(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     produto_id = db.Column(db.Integer, db.ForeignKey('produtos.id', ondelete='CASCADE'), nullable=False)
     arquivo = db.Column(db.String(500), nullable=False)  # URL do Cloudinary ou nome do arquivo local (legado)
+    public_id = db.Column(db.String(200), nullable=True, index=True)
 
     def __repr__(self):
         return f'<ProdutoFoto {self.id} - Produto {self.produto_id}>'
@@ -165,7 +170,7 @@ class Venda(db.Model):
     data_venda = db.Column(db.Date, default=date.today, nullable=False, index=True)  # Índice para filtros e ordenação por data
     empresa_faturadora = db.Column(db.String(20), nullable=False, index=True)
     situacao = db.Column(db.String(20), nullable=False, default='PENDENTE', index=True)
-    valor_pago = db.Column(db.Float, default=0.0)  # Valor já pago (para abatimento parcial)
+    valor_pago = db.Column(db.Numeric(10, 2), default=Decimal('0.00'))  # Valor já pago (para abatimento parcial)
     status_entrega = db.Column(db.String(50), default='PENDENTE', index=True)
     forma_pagamento = db.Column(db.String(50), nullable=True, index=True)
     tipo_operacao = db.Column(db.String(20), default='VENDA', nullable=False, server_default='VENDA')
@@ -181,21 +186,26 @@ class Venda(db.Model):
     def calcular_total(self):
         """Valor total da venda = preco_venda * quantidade_venda."""
         if str(self.tipo_operacao or 'VENDA').upper() == 'PERDA':
-            return 0.0
-        return float(self.preco_venda or 0) * (self.quantidade_venda or 0)
+            return Decimal('0.00')
+        preco = Decimal(str(self.preco_venda or 0))
+        quantidade = Decimal(str(self.quantidade_venda or 0))
+        return preco * quantidade
     
     def calcular_lucro(self):
         """Lucro = (Preço de Venda - Preço de Custo) * Quantidade. Usa preco_custo do lote (Produto) vinculado."""
         if not self.produto:
-            return 0
+            return Decimal('0.00')
         if str(self.tipo_operacao or 'VENDA').upper() == 'PERDA':
-            return -float(self.produto.preco_custo or 0) * (self.quantidade_venda or 0)
-        percentual = float(self.lucro_percentual or 0)
+            custo = Decimal(str(self.produto.preco_custo or 0))
+            quantidade = Decimal(str(self.quantidade_venda or 0))
+            return -(custo * quantidade)
+        percentual = Decimal(str(self.lucro_percentual or 0))
         if percentual > 0:
-            return float(self.calcular_total()) * (percentual / 100.0)
-        custo = float(self.produto.preco_custo)
-        venda = float(self.preco_venda)
-        return (venda - custo) * self.quantidade_venda
+            return self.calcular_total() * (percentual / Decimal('100'))
+        custo = Decimal(str(self.produto.preco_custo or 0))
+        venda = Decimal(str(self.preco_venda or 0))
+        quantidade = Decimal(str(self.quantidade_venda or 0))
+        return (venda - custo) * quantidade
     
     def __repr__(self):
         return f'<Venda {self.id} - Cliente: {self.cliente_id}>'
@@ -224,7 +234,7 @@ class LancamentoCaixa(db.Model):
     forma_pagamento = db.Column(db.String(50), nullable=False)
     setor = db.Column(db.String(50), default='GERAL', nullable=False, server_default='GERAL')
     status_envio = db.Column(db.String(20), nullable=True, default='Não Enviado')  # Controle de envio físico de cheques
-    valor = db.Column(db.Float, nullable=False)
+    valor = db.Column(db.Numeric(10, 2), nullable=False)
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)
 
     def __repr__(self):
