@@ -6692,19 +6692,15 @@ def debug_texto_arquivo(id):
 @login_required
 def deletar_arquivo_dashboard(id):
     """Exclui documento do banco e remove arquivo no Cloudinary."""
-    documento = Documento.query.get_or_404(id)
-    usuario_doc = getattr(documento, 'usuario_id', None)
-    usuario_logado = getattr(current_user, 'id', None)
-    is_admin = bool(getattr(current_user, 'is_admin', lambda: False)())
-
-    # Segurança: só permite excluir documentos do próprio usuário.
-    # Admin mantém permissão para suporte/gestão.
-    if not is_admin and (usuario_doc is None or usuario_doc != usuario_logado):
-        return jsonify(ok=False, mensagem='Você não tem permissão para excluir este arquivo.'), 403
+    doc_id = int(id)
+    documento = Documento.query.get_or_404(doc_id)
 
     try:
         if documento.public_id and (os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL')):
-            cloudinary.uploader.destroy(documento.public_id, resource_type='raw')
+            try:
+                cloudinary.uploader.destroy(documento.public_id, resource_type='raw')
+            except Exception as ex:
+                print(f"Aviso: Falha ao deletar no Cloudinary (pode já ter sido deletado): {ex}")
 
         db.session.delete(documento)
         db.session.commit()
@@ -6731,13 +6727,10 @@ def deletar_arquivos_massa():
     except (TypeError, ValueError):
         return jsonify(ok=False, status='erro', mensagem='IDs inválidos.'), 400
 
-    is_admin = bool(getattr(current_user, 'is_admin', lambda: False)())
+    if not ids:
+        return jsonify(ok=False, status='erro', mensagem='Nenhum ID válido informado.'), 400
 
-    query = Documento.query.filter(Documento.id.in_(ids))
-    if not is_admin:
-        query = query.filter(Documento.usuario_id == current_user.id)
-
-    documentos = query.all()
+    documentos = Documento.query.filter(Documento.id.in_(ids)).all()
     if not documentos:
         return jsonify(ok=False, status='erro', mensagem='Nenhum documento encontrado para exclusão.'), 404
 
