@@ -1861,7 +1861,7 @@ MAIL_SERVER = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
 MAIL_PORT = int(os.environ.get('MAIL_PORT', 587))
 MAIL_USERNAME = os.environ.get('MAIL_USERNAME')
 MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
-CRON_SECRET = os.environ.get('CRON_SECRET', 'senha_super_secreta_123')
+CRON_SECRET = os.environ.get('CRON_SECRET')
 
 # Configurar compressão Gzip para HTML, CSS, JS e JSON
 Compress(app)
@@ -2186,7 +2186,7 @@ def injetar_alertas():
     return dict(alertas_sistema=alertas)
 
 
-@app.route('/alterar_ano/<int:ano>')
+@app.route('/alterar_ano/<int:ano>', methods=['POST'])
 @login_required
 def alterar_ano(ano):
     """Altera o ano ativo na sessão e redireciona de volta."""
@@ -2200,7 +2200,7 @@ def alterar_ano(ano):
     
     # Redirecionar de volta para a página anterior ou dashboard
     referrer = request.referrer
-    if referrer:
+    if referrer and _is_safe_next_url(referrer):
         return redirect(referrer)
     return redirect(url_for('dashboard'))
 
@@ -2216,6 +2216,41 @@ def admin_required(f):
             return redirect(url_for('dashboard'))
         return f(*args, **kwargs)
     return wrapped
+
+
+def _is_safe_next_url(target):
+    """Evita open redirect: só permite redirecionamentos internos para o mesmo host."""
+    if not target:
+        return False
+    ref_url = urllib.parse.urlparse(request.host_url)
+    test_url = urllib.parse.urlparse(urllib.parse.urljoin(request.host_url, target))
+    return test_url.scheme in ('http', 'https') and ref_url.netloc == test_url.netloc
+
+
+def _usuario_pode_gerenciar_documento(documento):
+    """Permissão por recurso: admin ou dono explícito do documento."""
+    if current_user.is_admin():
+        return True
+    if documento is None:
+        return False
+    return getattr(documento, 'usuario_id', None) == getattr(current_user, 'id', None)
+
+
+def _usuario_pode_gerenciar_venda(venda):
+    """Permissão por recurso para vendas: admin ou dono de algum documento vinculado à venda."""
+    if current_user.is_admin():
+        return True
+    if venda is None:
+        return False
+    docs = getattr(venda, 'documentos', None) or []
+    uid = getattr(current_user, 'id', None)
+    return any(getattr(d, 'usuario_id', None) == uid for d in docs)
+
+
+def _resposta_sem_permissao():
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.is_json:
+        return jsonify(ok=False, mensagem='Acesso negado.'), 403
+    return "Forbidden", 403
 
 
 def popular_fornecedores_iniciais():
@@ -2509,7 +2544,7 @@ def _log_vendas_login_hits():
     # #region agent log
     path = getattr(request, "path", None) or ""
     method = getattr(request, "method", None) or ""
-    if path not in ("/", "/login", "/dashboard", "/vendas", "/debug-ping"):
+    if path not in ("/", "/login", "/dashboard", "/vendas"):
         return
     try:
         _debug_log("app.py:before_request", "request hit", {"path": path, "method": method}, "H3")
@@ -2559,7 +2594,9 @@ def login():
         except Exception:
             pass
         # #endregion
-        next_url = request.form.get('next') or request.args.get('next') or url_for('dashboard')
+        next_url = request.form.get('next') or request.args.get('next')
+        if not _is_safe_next_url(next_url):
+            next_url = url_for('dashboard')
         return redirect(next_url)
     return render_template('auth/login.html')
 
@@ -6166,6 +6203,8 @@ def venda_adicionar_item():
         return redirect(url_for('listar_vendas'))
 
     venda_existente = Venda.query.get_or_404(venda_id)
+    if not _usuario_pode_gerenciar_venda(venda_existente):
+        return _resposta_sem_permissao()
     produto = Produto.query.get_or_404(produto_id)
 
     preco_venda = _limpar_valor_moeda(preco_venda_raw)
@@ -6207,6 +6246,8 @@ def venda_adicionar_item():
 @login_required
 def editar_venda(id):
     venda = Venda.query.get_or_404(id)
+    if not _usuario_pode_gerenciar_venda(venda):
+        return _resposta_sem_permissao()
     produto_original = venda.produto
     quantidade_original = venda.quantidade_venda
     # Congela o conjunto do pedido ANTES de qualquer alteração de campos gerais
@@ -6399,6 +6440,8 @@ def editar_venda(id):
 def excluir_item_venda(id):
     """Exclui um item individual de venda (uma linha), devolvendo estoque."""
     venda = Venda.query.get_or_404(id)
+    if not _usuario_pode_gerenciar_venda(venda):
+        return _resposta_sem_permissao()
     try:
         _apagar_lancamentos_caixa_por_vendas([venda])
         produto = venda.produto
@@ -6426,6 +6469,8 @@ def excluir_venda(id):
     Regra B (CNPJ = '0' ou '00000000000000'): Cliente + Data (ignora NF)
     """
     venda = Venda.query.get_or_404(id)
+    if not _usuario_pode_gerenciar_venda(venda):
+        return _resposta_sem_permissao()
     
     # Salvar dados necessários ANTES de deletar (evita DetachedInstanceError)
     nome_cliente = venda.cliente.nome_cliente
@@ -6536,6 +6581,8 @@ def _apagar_lancamentos_caixa_por_vendas(vendas):
 def atualizar_status_venda(id_venda):
     """Alterna o status do pedido: PENDENTE ↔ PAGO. Aplica a todos os itens do grupo."""
     venda = Venda.query.get_or_404(id_venda)
+    if not _usuario_pode_gerenciar_venda(venda):
+        return _resposta_sem_permissao()
     vendas_do_pedido = _vendas_do_pedido(venda)
     if any(str(getattr(v, 'tipo_operacao', 'VENDA') or 'VENDA').upper() == 'PERDA' for v in vendas_do_pedido):
         msg_perda = 'Pedidos de PERDA/QUEBRA não geram cobrança nem movimentação no caixa.'
@@ -6621,6 +6668,8 @@ def atualizar_situacao_rapida(id):
             return jsonify({'status': 'erro', 'mensagem': 'Situação inválida.'}), 400
 
         venda = Venda.query.get_or_404(id)
+        if not _usuario_pode_gerenciar_venda(venda):
+            return jsonify({'status': 'erro', 'mensagem': 'Acesso negado.'}), 403
         venda.situacao = nova_situacao
         if nova_situacao == 'PERDA':
             venda.forma_pagamento = None
@@ -6670,6 +6719,8 @@ def recibo_venda(id):
 def visualizar_documento(id):
     """Redireciona para o PDF na nuvem (Cloudinary)."""
     documento = Documento.query.get_or_404(id)
+    if not _usuario_pode_gerenciar_documento(documento):
+        return _resposta_sem_permissao()
     if documento.url_arquivo:
         return redirect(documento.url_arquivo)
     flash('Link do arquivo não encontrado na nuvem. Faça o upload novamente.', 'error')
@@ -6753,6 +6804,8 @@ def deletar_arquivo_dashboard(id):
     """Exclui documento do banco e remove arquivo no Cloudinary."""
     doc_id = int(id)
     documento = Documento.query.get_or_404(doc_id)
+    if not _usuario_pode_gerenciar_documento(documento):
+        return jsonify(ok=False, mensagem='Acesso negado.'), 403
 
     try:
         if documento.public_id and (os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL')):
@@ -6792,6 +6845,8 @@ def deletar_arquivos_massa():
     documentos = Documento.query.filter(Documento.id.in_(ids)).all()
     if not documentos:
         return jsonify(ok=False, status='erro', mensagem='Nenhum documento encontrado para exclusão.'), 404
+    if any(not _usuario_pode_gerenciar_documento(doc) for doc in documentos):
+        return jsonify(ok=False, status='erro', mensagem='Acesso negado para um ou mais documentos.'), 403
 
     try:
         for documento in documentos:
@@ -6903,7 +6958,9 @@ def _token_upload_required(f):
     """Permite autenticação via token no header Authorization (para robô)."""
     @wraps(f)
     def decorated(*args, **kwargs):
-        token_esperado = os.environ.get('API_TOKEN', 'SEGREDDO_DO_ALHO_2026')
+        token_esperado = os.environ.get('API_TOKEN')
+        if not token_esperado:
+            return jsonify({'mensagem': 'API_TOKEN não configurado no ambiente.'}), 503
         auth = request.headers.get('Authorization', '')
         if auth == token_esperado or auth == f'Bearer {token_esperado}':
             return f(*args, **kwargs)
@@ -6949,7 +7006,9 @@ def upload_documento():
 @csrf.exempt
 def api_receber_automatico():
     """API para receber arquivos automaticamente. Requer token em Authorization (variável API_TOKEN)."""
-    token_esperado = os.environ.get('API_TOKEN', 'SEGREDDO_DO_ALHO_2026')
+    token_esperado = os.environ.get('API_TOKEN')
+    if not token_esperado:
+        return jsonify({'status': 'erro', 'mensagem': 'API_TOKEN não configurado no ambiente.'}), 503
     auth = request.headers.get('Authorization', '')
     if auth != token_esperado and auth != f'Bearer {token_esperado}':
         return jsonify({'status': 'erro', 'mensagem': 'Token inválido ou ausente.'}), 403
@@ -7248,6 +7307,8 @@ def organizar_e_vincular():
 def vincular_documento_venda(id):
     """Associa o documento a um pedido (venda). Espera venda_id (primeira_venda_id do pedido)."""
     documento = Documento.query.get_or_404(id)
+    if not _usuario_pode_gerenciar_documento(documento):
+        return _resposta_sem_permissao()
     venda_id = request.form.get('venda_id') or (request.get_json(silent=True) or {}).get('venda_id')
     if not venda_id:
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -7267,6 +7328,8 @@ def vincular_documento_venda(id):
             return jsonify(ok=False, mensagem='Pedido não encontrado.'), 404
         flash('Pedido não encontrado.', 'error')
         return redirect(url_for('dashboard'))
+    if not _usuario_pode_gerenciar_venda(venda):
+        return _resposta_sem_permissao()
     try:
         documento.venda_id = venda_id
         path = documento.caminho_arquivo
@@ -7713,7 +7776,7 @@ def raio_x():
     return html
 
 
-@app.route('/admin/resgatar_orfaos', methods=['GET', 'POST'])
+@app.route('/admin/resgatar_orfaos', methods=['POST'])
 @login_required
 def resgatar_orfaos():
     """Atribui ao usuário atual todos os documentos com usuario_id NULL (órfãos)."""
@@ -7734,7 +7797,7 @@ def resgatar_orfaos():
     return redirect(url_for('dashboard'))
 
 
-@app.route('/admin/forcar_leitura_pasta', methods=['GET', 'POST'])
+@app.route('/admin/forcar_leitura_pasta', methods=['POST'])
 @login_required
 def forcar_leitura_pasta():
     """Rota de emergência: lê PDFs em boletos e notas_fiscais, cria registros Documento para os que não existem no banco."""
@@ -7798,7 +7861,7 @@ def forcar_leitura_pasta():
     return jsonify({'ressuscitados': ressuscitados, 'mensagem': f'{ressuscitados} arquivo(s) ressuscitado(s) e inserido(s) no banco.'})
 
 
-@app.route('/admin/limpar_fantasmas', methods=['GET', 'POST'])
+@app.route('/admin/limpar_fantasmas', methods=['POST'])
 @login_required
 def limpar_fantasmas():
     """Remove da tabela Documento os registros cujo arquivo físico não existe mais."""
@@ -7878,10 +7941,12 @@ def limpar_vinculos_quebrados():
     return redirect(url_for('dashboard'))
 
 
-@app.route('/debug/testar_log')
+@app.route('/debug/testar_log', methods=['POST'])
 @login_required
 def debug_testar_log():
     """Endpoint de debug para testar criação de arquivo de log"""
+    if not current_user.is_admin():
+        return jsonify({'sucesso': False, 'erro': 'Acesso negado.'}), 403
     import traceback
     try:
         log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'vinculo_detalhado.log')
@@ -7895,20 +7960,6 @@ def debug_testar_log():
         })
     except Exception as e:
         return jsonify({'sucesso': False, 'erro': str(e), 'traceback': traceback.format_exc()}), 500
-
-
-@app.route('/debug-ping')
-def debug_ping():
-    """Sem login. Escreve em debug.log, lê o arquivo e retorna OK + preview; confirma que logging em request funciona."""
-    try:
-        _debug_log("app.py:debug-ping", "debug-ping hit", {"path": DEBUG_LOG_PATH}, "ALL", run_id="ping")
-        lines = []
-        if os.path.exists(DEBUG_LOG_PATH):
-            with open(DEBUG_LOG_PATH, "r", encoding="utf-8") as f:
-                lines = f.readlines()
-        return jsonify({"ok": True, "path": DEBUG_LOG_PATH, "log_lines": len(lines), "log_preview": lines[-50:] if len(lines) > 50 else lines})
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @app.route('/sw.js')
@@ -7989,11 +8040,18 @@ def receber_lote_cliente(id):
     return redirect(url_for('listar_clientes'))
 
 
-@app.route('/api/disparar_relatorio')
+@app.route('/api/disparar_relatorio', methods=['POST'])
 def disparar_relatorio():
     """Envia relatório financeiro mensal por e-mail para admins cadastrados.
-    Protegido por token: /api/disparar_relatorio?token=SEU_CRON_SECRET"""
-    token = request.args.get('token')
+    Protegido por token (header X-CRON-TOKEN ou body/query token)."""
+    if not CRON_SECRET:
+        return jsonify({'erro': 'CRON_SECRET não configurado no ambiente.'}), 503
+    token = (
+        request.headers.get('X-CRON-TOKEN')
+        or (request.get_json(silent=True) or {}).get('token')
+        or request.form.get('token')
+        or request.args.get('token')
+    )
     if token != CRON_SECRET:
         return jsonify({'erro': 'Acesso negado'}), 403
 

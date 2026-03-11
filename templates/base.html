@@ -406,9 +406,12 @@
                     </button>
                     <div id="ano-dropdown" class="hidden absolute right-0 mt-1 w-32 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
                         {% for ano in anos_disponiveis %}
-                        <a href="{{ url_for('alterar_ano', ano=ano) }}" class="block px-4 py-2 text-sm hover:bg-emerald-50 transition {% if ano == ano_ativo %}bg-emerald-100 text-emerald-700 font-semibold{% else %}text-gray-700{% endif %}">
-                            {{ ano }}{% if ano == ano_ativo %} ✓{% endif %}
-                        </a>
+                        <form action="{{ url_for('alterar_ano', ano=ano) }}" method="POST">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="w-full text-left block px-4 py-2 text-sm hover:bg-emerald-50 transition {% if ano == ano_ativo %}bg-emerald-100 text-emerald-700 font-semibold{% else %}text-gray-700{% endif %}">
+                                {{ ano }}{% if ano == ano_ativo %} ✓{% endif %}
+                            </button>
+                        </form>
                         {% endfor %}
                     </div>
                 </div>
