@@ -62,12 +62,12 @@
                         {% if venda.situacao and venda.situacao|upper == 'PARCIAL' %}
                         <br>
                         <span class="text-xs text-gray-500" style="font-size: 0.75rem;">
-                            (Valor da Nota: R$ {{ ("{:,.2f}".format(venda.calcular_total())).replace(',', 'X').replace('.', ',').replace('X', '.') }} | Já Pago: R$ {{ ("{:,.2f}".format(venda.valor_pago or 0.0)).replace(',', 'X').replace('.', ',').replace('X', '.') }})
+                            (Valor da Nota: R$ {{ ("{:,.2f}".format(venda.calcular_total())).replace(',', 'X').replace('.', ',').replace('X', '.') }} | Já Pago: R$ {{ ("{:,.2f}".format(venda.valor_pago or 0)).replace(',', 'X').replace('.', ',').replace('X', '.') }})
                         </span>
                         {% endif %}
                     </td>
                     <td class="py-3 text-center">{{ venda.quantidade_venda }}</td>
-                    <td class="py-3 text-right font-medium">R$ {{ ("{:,.2f}".format(venda.calcular_total() - (venda.valor_pago or 0.0))).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                    <td class="py-3 text-right font-medium">R$ {{ ("{:,.2f}".format(venda.calcular_total() - (venda.valor_pago or 0))).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                 </tr>
                 {% else %}
                 <tr>
