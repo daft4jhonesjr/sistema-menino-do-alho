@@ -1224,7 +1224,7 @@ function abrirModalCorrigirCategoria() {
 })();
 </script>
 
-<!-- Script de Paginação "Carregar Mais" com Scroll Infinito -->
+<!-- Script de Paginação manual por botão "Carregar Mais" -->
 <script>
 (function() {
     var btnCarregarMais = document.getElementById('btn-carregar-mais');
@@ -1324,25 +1324,13 @@ function abrirModalCorrigirCategoria() {
     function esconderBotao() {
         fimDasEntradas = true;
         carregando = false;
-        if (observador) observador.disconnect();
-        btnCarregarMais.parentElement.style.display = 'none';
+        btnCarregarMais.classList.add('hidden');
+        if (btnCarregarMais.parentElement) {
+            btnCarregarMais.parentElement.classList.add('hidden');
+        }
     }
 
     btnCarregarMais.addEventListener('click', carregarMaisEntradas);
-
-    // Scroll Infinito via IntersectionObserver
-    var observador = null;
-    if ('IntersectionObserver' in window) {
-        observador = new IntersectionObserver(function(entries) {
-            if (entries[0].isIntersecting && !carregando && !fimDasEntradas) {
-                carregarMaisEntradas();
-            }
-        }, {
-            rootMargin: '200px',
-            threshold: 0.1
-        });
-        observador.observe(btnCarregarMais);
-    }
 })();
 </script>
 
