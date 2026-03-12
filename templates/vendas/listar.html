@@ -388,17 +388,6 @@
     {% if filtro_vencidos %}
         {% set _ = url_params.update({'filtro_vencidos': 1}) %}
     {% endif %}
-    {% set url_venc_cresc = url_params.copy() %}
-    {% set _ = url_venc_cresc.update({'ordem_data': 'vencimento_crescente'}) %}
-    {% set url_venc_decresc = url_params.copy() %}
-    {% set _ = url_venc_decresc.update({'ordem_data': 'vencimento_decrescente'}) %}
-    <a href="{{ url_for('listar_vendas', **url_venc_cresc) }}" class="px-4 py-2 rounded-xl text-sm font-medium transition {{ 'bg-emerald-700 text-white' if ordem_data == 'vencimento_crescente' else 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-emerald-50 dark:hover:bg-gray-700 hover:border-emerald-200 dark:hover:border-emerald-600' }}">
-        <i data-lucide="calendar-clock" class="w-4 h-4 inline-block mr-1.5 align-middle"></i>Vencimento Próximo
-    </a>
-    <a href="{{ url_for('listar_vendas', **url_venc_decresc) }}" class="px-4 py-2 rounded-xl text-sm font-medium transition {{ 'bg-emerald-700 text-white' if ordem_data == 'vencimento_decrescente' else 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-emerald-50 dark:hover:bg-gray-700 hover:border-emerald-200 dark:hover:border-emerald-600' }}">
-        <i data-lucide="calendar-clock" class="w-4 h-4 inline-block mr-1.5 align-middle"></i>Vencimento Distante
-    </a>
-    <span class="text-gray-300 dark:text-gray-600">|</span>
     {% if filtro_vencidos %}
         {% set url_sem_vencidos = {} %}
         {% if request.args.get('filtro') %}{% set _ = url_sem_vencidos.update({'filtro': request.args.get('filtro')}) %}{% endif %}
@@ -484,7 +473,26 @@
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Qtd Total</th>
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Valor Total</th>
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Lucro Total</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Vencimento</th>
+                        {% set url_th_venc = request.args.to_dict(flat=True) %}
+                        {% if url_th_venc.get('ordenar_por') %}
+                            {% set _ = url_th_venc.pop('ordenar_por') %}
+                        {% endif %}
+                        {% set proxima_ordem_venc = 'vencimento_decrescente' if ordem_data == 'vencimento_crescente' else 'vencimento_crescente' %}
+                        {% set _ = url_th_venc.update({'ordem_data': proxima_ordem_venc}) %}
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                            <a href="{{ url_for('listar_vendas', **url_th_venc) }}" class="inline-flex items-center gap-1 no-underline text-inherit">
+                                Vencimento
+                                {% if ordem_data == 'vencimento_crescente' %}
+                                    <svg class="w-3.5 h-3.5 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
+                                    </svg>
+                                {% elif ordem_data == 'vencimento_decrescente' %}
+                                    <svg class="w-3.5 h-3.5 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                    </svg>
+                                {% endif %}
+                            </a>
+                        </th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">
                             <select id="filtro-empresa" class="bg-transparent text-gray-500 dark:text-gray-400 font-medium uppercase cursor-pointer border-none p-0 focus:ring-0 text-xs tracking-wider appearance-none pr-4" style="background-image:url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 20 20%22%3E%3Cpath stroke=%22%236b7280%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%222%22 d=%22m6 8 4 4 4-4%22/%3E%3C/svg%3E');background-repeat:no-repeat;background-position:right 0 center;background-size:14px;">
                                 <option value="TODAS">Empresa ▾</option>
