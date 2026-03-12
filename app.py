@@ -3978,11 +3978,12 @@ def importar_caixa():
 @app.route('/clientes')
 @login_required
 def listar_clientes():
-    ordem = request.args.get('ordem', 'asc')
-    if ordem == 'desc':
+    ordem_param = (request.args.get('ordem') or '').strip().lower()
+    if ordem_param in ('desc', 'id_decrescente'):
+        ordem = 'id_decrescente'
         clientes = Cliente.query.order_by(Cliente.id.desc()).limit(500).all()
     else:
-        ordem = 'asc'
+        ordem = 'id_crescente'
         clientes = Cliente.query.order_by(Cliente.id.asc()).limit(500).all()
     return render_template('clientes/listar.html', clientes=clientes, ordem=ordem)
 
