@@ -146,7 +146,7 @@
     </div>
     <div class="flex gap-3">
         {% if current_user.is_authenticated and current_user.is_admin() %}
-        <a href="{{ url_for('importar_vendas') }}" class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 px-5 py-2.5 rounded-xl shadow-sm dark:shadow-none hover:bg-emerald-50 dark:hover:bg-gray-700 hover:border-emerald-200 dark:hover:border-emerald-600 hover:text-emerald-700 dark:hover:text-emerald-400 transition flex items-center font-medium">
+        <a href="{{ url_for('importar_vendas') }}" class="hidden lg:flex bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 px-5 py-2.5 rounded-xl shadow-sm dark:shadow-none hover:bg-emerald-50 dark:hover:bg-gray-700 hover:border-emerald-200 dark:hover:border-emerald-600 hover:text-emerald-700 dark:hover:text-emerald-400 transition items-center font-medium">
             <i data-lucide="upload" class="w-4 h-4 mr-2"></i>Importar Lista
         </a>
         {% endif %}
