@@ -17,18 +17,29 @@
                 ⊞ Grade
             </button>
         </div>
-        <button onclick="document.getElementById('modalImportarCaixa').classList.remove('hidden');travarFundo();" class="hidden lg:flex lg:w-auto bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 px-5 py-2.5 rounded-lg text-sm font-semibold shadow-sm items-center justify-center gap-2 transition-colors">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
-            Importar Planilha
-        </button>
         <button type="button" onclick="abrirModalContagemDinheiro()" class="w-full md:w-auto bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:hover:bg-emerald-800/40 px-5 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center justify-center gap-2 transition-colors border border-emerald-200 dark:border-emerald-800">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
             💵 Dinheiro
         </button>
-        <button onclick="abrirModalNovo()" class="w-full md:w-auto bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-lg flex items-center justify-center gap-2 transition-colors">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
-            Novo Lançamento
-        </button>
+        <div id="split-btn-caixa" class="relative w-full md:w-auto">
+            <div class="flex w-full md:w-auto">
+                <button type="button" onclick="abrirModalNovo()" class="w-full md:w-auto bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg lg:rounded-r-none text-sm font-semibold shadow-lg flex items-center justify-center gap-2 transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                    Novo Lançamento
+                </button>
+                <button type="button" onclick="toggleDropdownNovoCaixa(event)" class="hidden lg:flex bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2.5 rounded-r-lg border-l border-emerald-700 items-center justify-center shadow-lg transition-colors" aria-haspopup="true" aria-expanded="false" aria-controls="dropdown-importar-caixa">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </button>
+            </div>
+            <div id="dropdown-importar-caixa" class="hidden absolute right-0 mt-2 w-52 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-lg z-20 overflow-hidden">
+                <button type="button" onclick="abrirModalImportarCaixaDropdown()" class="w-full px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                    Importar Planilha
+                </button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -1679,6 +1690,40 @@ document.addEventListener('click', async function(e) {
         btn.disabled = false;
         btn.innerText = textoOriginal;
     }
+});
+</script>
+<script>
+function toggleDropdownNovoCaixa(event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    var dropdown = document.getElementById('dropdown-importar-caixa');
+    if (!dropdown) return;
+    dropdown.classList.toggle('hidden');
+}
+
+function abrirModalImportarCaixaDropdown() {
+    var dropdown = document.getElementById('dropdown-importar-caixa');
+    if (dropdown) dropdown.classList.add('hidden');
+    var modal = document.getElementById('modalImportarCaixa');
+    if (modal) modal.classList.remove('hidden');
+    if (typeof travarFundo === 'function') travarFundo();
+}
+
+document.addEventListener('click', function(e) {
+    var wrap = document.getElementById('split-btn-caixa');
+    var dropdown = document.getElementById('dropdown-importar-caixa');
+    if (!wrap || !dropdown) return;
+    if (!wrap.contains(e.target)) {
+        dropdown.classList.add('hidden');
+    }
+});
+
+document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Escape') return;
+    var dropdown = document.getElementById('dropdown-importar-caixa');
+    if (dropdown) dropdown.classList.add('hidden');
 });
 </script>
 {% endblock %}
