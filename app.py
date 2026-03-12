@@ -5578,10 +5578,9 @@ def listar_vendas():
 
     # Ordenação por data, vencimento ou colunas clicáveis (situacao, forma_pagamento)
     ordenar_por = request.args.get('ordenar_por')
-    ordem_data = request.args.get('ordem_data') or session.get('ordem_data_vendas', 'decrescente')
+    ordem_data = (request.args.get('ordem_data') or 'decrescente').strip().lower()
     if ordem_data not in ('crescente', 'decrescente', 'vencimento_crescente', 'vencimento_decrescente'):
         ordem_data = 'decrescente'
-    session['ordem_data_vendas'] = ordem_data
     
     # Obter ano ativo da sessão
     ano_ativo = session.get('ano_ativo', datetime.now().year)
