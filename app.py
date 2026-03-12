@@ -4381,7 +4381,7 @@ def listar_produtos():
     # Obter ano ativo da sessão
     ano_ativo = session.get('ano_ativo', datetime.now().year)
     
-    ordem_data = request.args.get('ordem_data') or session.get('ordem_data_produtos', 'crescente')
+    ordem_data = (request.args.get('ordem_data') or 'crescente').strip().lower()
     if ordem_data not in ('crescente', 'decrescente'):
         ordem_data = 'crescente'
     
@@ -4398,7 +4398,6 @@ def listar_produtos():
 
     # Query ordenada para paginação
     if ordem_data == 'crescente':
-        session['ordem_data_produtos'] = 'crescente'
         query_ordenada = query_base.order_by(ordem_estoque, asc(Produto.data_chegada), asc(Produto.id))
     else:
         query_ordenada = query_base.order_by(ordem_estoque, desc(Produto.data_chegada), desc(Produto.id))
