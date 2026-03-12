@@ -2165,6 +2165,47 @@ def injetar_datas():
         return dict(hoje=hoje, ontem=hoje - timedelta(days=1))
 
 
+def _contar_cobrancas_pendentes_visiveis():
+    """Conta pedidos vencidos que o usuário realmente enxerga na listagem de vendas."""
+    try:
+        hoje = get_hoje_brasil()
+        ano_ativo = session.get('ano_ativo', datetime.now().year)
+        vendas = Venda.query.filter(
+            extract('year', Venda.data_venda) == ano_ativo,
+            Venda.situacao.in_(['PENDENTE', 'PARCIAL'])
+        ).all()
+
+        # Cache de documentos por caminho_boleto para usar a mesma lógica de vencimento da listagem.
+        caminhos_boleto = list({
+            str(getattr(v, 'caminho_boleto', '') or '').strip()
+            for v in vendas
+            if str(getattr(v, 'caminho_boleto', '') or '').strip()
+        })
+        docs_por_caminho = {}
+        if caminhos_boleto:
+            docs_boleto = Documento.query.filter(Documento.caminho_arquivo.in_(caminhos_boleto)).all()
+            docs_por_caminho = {str(d.caminho_arquivo or '').strip(): d for d in docs_boleto}
+
+        total = 0
+        for v in vendas:
+            if not current_user.is_admin() and not _usuario_pode_gerenciar_venda(v):
+                continue
+            dv = getattr(v, 'data_vencimento', None)
+            if dv is None:
+                caminho_boleto = str(getattr(v, 'caminho_boleto', '') or '').strip()
+                doc_boleto = docs_por_caminho.get(caminho_boleto)
+                if doc_boleto and getattr(doc_boleto, 'data_vencimento', None) is not None:
+                    dv = doc_boleto.data_vencimento
+            if dv is None:
+                continue
+            # Mesma régua da listagem quando filtro_vencidos=1 ("vencido há mais de 1 dia").
+            if hoje > (dv + timedelta(days=1)):
+                total += 1
+        return total
+    except Exception:
+        return 0
+
+
 @app.context_processor
 def injetar_alertas():
     """Disponibiliza alertas_sistema (boletos vencendo, radar, logística) em todos os templates."""
@@ -2173,15 +2214,12 @@ def injetar_alertas():
         if current_user.is_authenticated:
             # 1. Alerta de Boletos Vencendo
             if getattr(current_user, 'notifica_boletos', False):
-                boletos_vencendo = Venda.query.filter(
-                    Venda.situacao == 'PENDENTE',
-                    Venda.data_vencimento <= date.today()
-                ).count()
+                boletos_vencendo = _contar_cobrancas_pendentes_visiveis()
                 if boletos_vencendo > 0:
                     alertas.append({
                         'id': 'alerta_boletos',
                         'titulo': 'Cobranças Pendentes',
-                        'mensagem': f'Você tem {boletos_vencendo} boleto(s) vencendo hoje ou atrasados.',
+                        'mensagem': f'Você tem {boletos_vencendo} boleto(s) vencido(s) para envio ao fornecedor.',
                         'cor': 'red',
                         'cor_border': 'border-red-500',
                         'cor_text': 'text-red-600',
@@ -5394,11 +5432,16 @@ def api_cobrancas_pendentes():
     """Retorna se há cobranças pendentes (vendas não pagas) para notificações no dispositivo."""
     try:
         ano_ativo = session.get('ano_ativo', datetime.now().year)
-        filtro_ano = extract('year', Venda.data_venda) == ano_ativo
-        total = db.session.query(
-            func.sum(Venda.preco_venda * Venda.quantidade_venda)
-        ).filter(Venda.situacao == 'PENDENTE', filtro_ano).scalar() or 0
-        return jsonify({'has_pendentes': float(total) > 0, 'total': float(total)})
+        vendas = Venda.query.filter(
+            extract('year', Venda.data_venda) == ano_ativo,
+            Venda.situacao.in_(['PENDENTE', 'PARCIAL'])
+        ).all()
+        total = Decimal('0.00')
+        for v in vendas:
+            if not current_user.is_admin() and not _usuario_pode_gerenciar_venda(v):
+                continue
+            total += Decimal(str(v.calcular_total() or Decimal('0.00'))) - Decimal(str(getattr(v, 'valor_pago', None) or Decimal('0.00')))
+        return jsonify({'has_pendentes': total > Decimal('0.00'), 'total': float(total)})
     except Exception:
         db.session.rollback()
         return jsonify({'has_pendentes': False, 'total': 0})
@@ -5731,14 +5774,14 @@ def listar_vendas():
         hoje = get_hoje_brasil()
         # is_vencido: qualquer boleto vencido (vencimento < hoje) - para destacar em vermelho
         pedido['is_vencido'] = (
-            pedido.get('situacao') == 'PENDENTE' and
+            pedido.get('situacao') in ('PENDENTE', 'PARCIAL') and
             dv is not None and
             hoje > dv
         )
         # is_vencido_para_abatimento: vencido há mais de 1 dia - para filtro "Enviar para Fornecedor"
         venc_limite = (dv + timedelta(days=1)) if dv else None
         pedido['is_vencido_para_abatimento'] = (
-            pedido.get('situacao') == 'PENDENTE' and
+            pedido.get('situacao') in ('PENDENTE', 'PARCIAL') and
             venc_limite is not None and
             hoje > venc_limite
         )
