@@ -4389,12 +4389,18 @@ def listar_produtos():
     # fazem cálculos que podem ser otimizados separadamente se necessário
     query_base = Produto.query.filter(extract('year', Produto.data_chegada) == ano_ativo)
     
+    # Ordenação primária: produtos com estoque > 0 primeiro, zerados/negativos depois.
+    ordem_estoque = case(
+        (Produto.estoque_atual > 0, 0),
+        else_=1
+    )
+
     # Query ordenada para paginação
     if ordem_data == 'crescente':
         session['ordem_data_produtos'] = 'crescente'
-        query_ordenada = query_base.order_by(asc(Produto.data_chegada), asc(Produto.id))
+        query_ordenada = query_base.order_by(ordem_estoque, asc(Produto.data_chegada), asc(Produto.id))
     else:
-        query_ordenada = query_base.order_by(desc(Produto.data_chegada), desc(Produto.id))
+        query_ordenada = query_base.order_by(ordem_estoque, desc(Produto.data_chegada), desc(Produto.id))
     
     # TOTAIS GLOBAIS: Calcular usando TODOS os produtos (sem paginação)
     produtos_todos = query_ordenada.all()
@@ -4517,12 +4523,21 @@ def listar_produtos():
             produtos_por_tipo[tipo_key] = []
         produtos_por_tipo[tipo_key].append(item)
 
-    # Ordenar produtos dentro de cada tipo por data
+    # Ordenar produtos dentro de cada tipo mantendo prioridade de estoque (>0 antes de 0).
     for tipo in produtos_por_tipo:
         produtos_por_tipo[tipo].sort(
-            key=lambda x: x['produto'].data_chegada.date() if hasattr(x['produto'].data_chegada, 'date') else x['produto'].data_chegada,
-            reverse=reverse_order
+            key=lambda x: (
+                0 if (x['produto'].estoque_atual or 0) > 0 else 1,
+                x['produto'].data_chegada.date() if hasattr(x['produto'].data_chegada, 'date') else x['produto'].data_chegada
+            ),
+            reverse=False
         )
+        if reverse_order:
+            ativos = [it for it in produtos_por_tipo[tipo] if (it['produto'].estoque_atual or 0) > 0]
+            inativos = [it for it in produtos_por_tipo[tipo] if (it['produto'].estoque_atual or 0) <= 0]
+            ativos.reverse()
+            inativos.reverse()
+            produtos_por_tipo[tipo] = ativos + inativos
 
     # Tipos em ordem preferencial (sempre exibe prateleiras padrão, mesmo vazias)
     preferidos = ['ALHO', 'SACOLA', 'CAFE', 'BACALHAU', 'OUTROS']
