@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_file, current_app
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_file, current_app, Response
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_wtf.csrf import CSRFProtect, generate_csrf
 from flask_compress import Compress
@@ -5929,6 +5929,103 @@ def listar_vendas():
                          filtro=filtro,
                          filtro_vencidos=filtro_vencidos,
                          graficos_data=graficos_data)
+
+
+@app.route('/vendas/exportar_relatorio', methods=['POST'])
+@login_required
+def exportar_relatorio_vendas():
+    ano_ativo = session.get('ano_ativo', datetime.now().year)
+    filtro_empresa = (request.form.get('filtro_empresa') or 'TODAS').strip().upper()
+    filtro_situacao = (request.form.get('filtro_situacao') or 'TODAS').strip().upper()
+    filtro_forma_pagamento = (request.form.get('filtro_forma_pagamento') or 'TODAS').strip().upper()
+    colunas_solicitadas = request.form.getlist('colunas')
+
+    colunas_disponiveis = {
+        'data': 'Data',
+        'cliente': 'Cliente',
+        'nf': 'NF',
+        'preco_unit': 'Preco Unit.',
+        'qtd': 'Qtd',
+        'valor_total': 'Valor Total',
+        'lucro': 'Lucro',
+        'vencimento': 'Vencimento',
+        'empresa': 'Empresa',
+        'situacao': 'Situacao',
+        'forma_pagto': 'Forma Pagto',
+    }
+    ordem_padrao_colunas = [
+        'data', 'cliente', 'nf', 'preco_unit', 'qtd', 'valor_total',
+        'lucro', 'vencimento', 'empresa', 'situacao', 'forma_pagto'
+    ]
+
+    colunas = [c for c in ordem_padrao_colunas if c in colunas_solicitadas and c in colunas_disponiveis]
+    if not colunas:
+        colunas = ordem_padrao_colunas
+
+    query = Venda.query.options(
+        joinedload(Venda.cliente),
+        joinedload(Venda.produto)
+    ).filter(
+        extract('year', Venda.data_venda) == ano_ativo
+    )
+
+    if filtro_empresa != 'TODAS':
+        query = query.filter(func.upper(func.coalesce(Venda.empresa_faturadora, 'NENHUM')) == filtro_empresa)
+    if filtro_situacao != 'TODAS':
+        query = query.filter(func.upper(func.coalesce(Venda.situacao, '')) == filtro_situacao)
+    if filtro_forma_pagamento != 'TODAS':
+        query = query.filter(func.upper(func.coalesce(Venda.forma_pagamento, '')) == filtro_forma_pagamento)
+
+    vendas = query.order_by(Venda.data_venda.desc(), Venda.id.desc()).all()
+    if not current_user.is_admin():
+        vendas = [v for v in vendas if _usuario_pode_gerenciar_venda(v)]
+
+    def _fmt_num(valor):
+        try:
+            numero = Decimal(str(valor or 0))
+        except Exception:
+            numero = Decimal('0.00')
+        return f"{numero:.2f}".replace('.', ',')
+
+    def _fmt_data(valor):
+        if not valor:
+            return ''
+        return valor.strftime('%d/%m/%Y') if hasattr(valor, 'strftime') else str(valor)
+
+    def _csv_safe(valor):
+        s = '' if valor is None else str(valor)
+        return "'" + s if s[:1] in ('=', '+', '-', '@') else s
+
+    output = io.StringIO()
+    output.write('\ufeff')
+    writer = csv.writer(output, delimiter=';')
+    writer.writerow([colunas_disponiveis[c] for c in colunas])
+
+    for venda in vendas:
+        cliente_nome = venda.cliente.nome_cliente if venda.cliente else (getattr(venda, 'cliente_avulso', None) or '-')
+        linha = {
+            'data': _fmt_data(venda.data_venda),
+            'cliente': _csv_safe(cliente_nome),
+            'nf': _csv_safe(venda.nf or '-'),
+            'preco_unit': _fmt_num(getattr(venda, 'preco_venda', 0)),
+            'qtd': str(getattr(venda, 'quantidade_venda', 0) or 0),
+            'valor_total': _fmt_num(venda.calcular_total()),
+            'lucro': _fmt_num(venda.calcular_lucro()),
+            'vencimento': _fmt_data(getattr(venda, 'data_vencimento', None)),
+            'empresa': _csv_safe(venda.empresa_faturadora or 'NENHUM'),
+            'situacao': _csv_safe(venda.situacao or ''),
+            'forma_pagto': _csv_safe(venda.forma_pagamento or ''),
+        }
+        writer.writerow([linha[c] for c in colunas])
+
+    csv_content = output.getvalue()
+    output.close()
+
+    return Response(
+        csv_content,
+        mimetype='text/csv; charset=utf-8',
+        headers={'Content-Disposition': 'attachment; filename=relatorio_vendas.csv'}
+    )
 
 
 @app.route('/logistica')
