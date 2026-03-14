@@ -4581,6 +4581,164 @@ def listar_produtos():
     )
 
 
+@app.route('/produtos/exportar_relatorio', methods=['POST'])
+@login_required
+def exportar_relatorio_produtos():
+    ano_ativo = session.get('ano_ativo', datetime.now().year)
+    filtro_fornecedor = (request.form.get('filtro_fornecedor') or 'TODOS').strip().upper()
+    filtro_tipo = (request.form.get('filtro_tipo') or 'TODOS').strip().upper()
+    filtro_nacionalidade = (request.form.get('filtro_nacionalidade') or 'TODAS').strip().upper()
+    colunas_solicitadas = request.form.getlist('colunas')
+
+    colunas_disponiveis = {
+        'produto': 'Produto',
+        'preco': 'Preco',
+        'qtd_entrada': 'Qtd Entrada',
+        'valor_total': 'Valor Total',
+        'estoque_atual': 'Estoque Atual',
+        'lucro_realizado': 'Lucro Realizado',
+        'data_chegada': 'Data Chegada',
+        'tipo': 'Tipo',
+        'fornecedor': 'Fornecedor',
+        'nacionalidade': 'Nacionalidade',
+    }
+    ordem_padrao_colunas = [
+        'produto', 'preco', 'qtd_entrada', 'valor_total', 'estoque_atual',
+        'lucro_realizado', 'data_chegada', 'tipo', 'fornecedor', 'nacionalidade'
+    ]
+
+    colunas = [c for c in ordem_padrao_colunas if c in colunas_solicitadas and c in colunas_disponiveis]
+    if not colunas:
+        colunas = ordem_padrao_colunas
+
+    query = Produto.query.filter(extract('year', Produto.data_chegada) == ano_ativo)
+    if filtro_fornecedor != 'TODOS':
+        query = query.filter(func.upper(func.coalesce(Produto.fornecedor, 'NENHUM')) == filtro_fornecedor)
+    if filtro_tipo != 'TODOS':
+        query = query.filter(func.upper(func.coalesce(Produto.tipo, 'OUTROS')) == filtro_tipo)
+    if filtro_nacionalidade != 'TODAS':
+        query = query.filter(func.upper(func.coalesce(Produto.nacionalidade, 'N/A')) == filtro_nacionalidade)
+
+    produtos = query.order_by(asc(Produto.data_chegada), asc(Produto.id)).all()
+    produto_ids = [p.id for p in produtos]
+
+    quantidade_vendida_por_produto = {}
+    lucro_realizado_por_produto = {}
+    if produto_ids:
+        vendas_agregadas = db.session.query(
+            Venda.produto_id,
+            func.sum(Venda.quantidade_venda).label('total_vendido')
+        ).filter(Venda.produto_id.in_(produto_ids)).group_by(Venda.produto_id).all()
+        for produto_id, total_vendido in vendas_agregadas:
+            quantidade_vendida_por_produto[produto_id] = int(total_vendido or 0)
+
+        lucros_agregados = db.session.query(
+            Venda.produto_id,
+            func.sum((Venda.preco_venda - Produto.preco_custo) * Venda.quantidade_venda).label('lucro_total')
+        ).join(Produto, Venda.produto_id == Produto.id)\
+         .filter(Venda.produto_id.in_(produto_ids))\
+         .group_by(Venda.produto_id).all()
+        for produto_id, lucro_total in lucros_agregados:
+            lucro_realizado_por_produto[produto_id] = Decimal(str(lucro_total or 0))
+
+    def _qtd_entrada_exibicao(produto):
+        qtd_vendida = quantidade_vendida_por_produto.get(produto.id, 0)
+        if produto.quantidade_entrada == 0 or produto.quantidade_entrada < (produto.estoque_atual + qtd_vendida):
+            return int((produto.estoque_atual or 0) + qtd_vendida)
+        return int(produto.quantidade_entrada or 0)
+
+    def _fmt_num(valor):
+        try:
+            numero = Decimal(str(valor or 0))
+        except Exception:
+            numero = Decimal('0.00')
+        return f"{numero:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+
+    def _fmt_data(valor):
+        if not valor:
+            return ''
+        return valor.strftime('%d/%m/%Y') if hasattr(valor, 'strftime') else str(valor)
+
+    def _csv_safe(valor):
+        s = '' if valor is None else str(valor)
+        return "'" + s if s[:1] in ('=', '+', '-', '@') else s
+
+    output = io.StringIO()
+    output.write('\ufeff')
+    writer = csv.writer(output, delimiter=';')
+    writer.writerow([colunas_disponiveis[c] for c in colunas])
+
+    soma_qtd_entrada = 0
+    soma_valor_total = Decimal('0.0')
+    soma_estoque = 0
+    soma_lucro = Decimal('0.0')
+
+    for produto in produtos:
+        qtd_entrada = _qtd_entrada_exibicao(produto)
+        preco = Decimal(str(produto.preco_custo or 0))
+        valor_total = preco * Decimal(str(qtd_entrada))
+        estoque_atual = int(produto.estoque_atual or 0)
+        lucro_realizado = Decimal(str(lucro_realizado_por_produto.get(produto.id, Decimal('0.0'))))
+
+        soma_qtd_entrada += qtd_entrada
+        soma_valor_total += valor_total
+        soma_estoque += estoque_atual
+        soma_lucro += lucro_realizado
+
+        linha = {
+            'produto': _csv_safe(produto.nome_produto or ''),
+            'preco': _fmt_num(preco),
+            'qtd_entrada': str(qtd_entrada),
+            'valor_total': _fmt_num(valor_total),
+            'estoque_atual': str(estoque_atual),
+            'lucro_realizado': _fmt_num(lucro_realizado),
+            'data_chegada': _fmt_data(produto.data_chegada),
+            'tipo': _csv_safe(produto.tipo or ''),
+            'fornecedor': _csv_safe(produto.fornecedor or 'NENHUM'),
+            'nacionalidade': _csv_safe(produto.nacionalidade or 'N/A'),
+        }
+        writer.writerow([linha[c] for c in colunas])
+
+    linha_total = [''] * len(colunas)
+    if linha_total:
+        linha_total[0] = 'TOTAL GERAL'
+    if 'qtd_entrada' in colunas:
+        linha_total[colunas.index('qtd_entrada')] = str(soma_qtd_entrada)
+    if 'valor_total' in colunas:
+        linha_total[colunas.index('valor_total')] = _fmt_num(soma_valor_total)
+    if 'estoque_atual' in colunas:
+        linha_total[colunas.index('estoque_atual')] = str(soma_estoque)
+    if 'lucro_realizado' in colunas:
+        linha_total[colunas.index('lucro_realizado')] = _fmt_num(soma_lucro)
+    writer.writerow(linha_total)
+
+    csv_content = output.getvalue()
+    output.close()
+
+    data_hoje = datetime.now().strftime('%d-%m-%Y')
+    partes = ['relatorio_produtos', data_hoje]
+
+    def _normalizar_nome_arquivo(parte):
+        txt = str(parte or '').strip().upper().replace(' ', '_')
+        txt = re.sub(r'[^A-Z0-9_\-]', '', txt)
+        return txt
+
+    if filtro_fornecedor and filtro_fornecedor != 'TODOS':
+        partes.append(_normalizar_nome_arquivo(filtro_fornecedor))
+    if filtro_tipo and filtro_tipo != 'TODOS':
+        partes.append(_normalizar_nome_arquivo(filtro_tipo))
+    if filtro_nacionalidade and filtro_nacionalidade != 'TODAS':
+        partes.append(_normalizar_nome_arquivo(filtro_nacionalidade))
+
+    nome_arquivo = f"{'_'.join([p for p in partes if p])}.csv"
+
+    return Response(
+        csv_content,
+        mimetype='text/csv; charset=utf-8',
+        headers={'Content-Disposition': f'attachment; filename={nome_arquivo}'}
+    )
+
+
 @app.route('/fornecedores/novo', methods=['POST'])
 @login_required
 def novo_fornecedor():
@@ -7451,8 +7609,31 @@ def admin_arquivos():
     if not current_user.is_admin():
         flash('Acesso negado. Apenas administradores podem gerenciar arquivos.', 'error')
         return redirect(url_for('dashboard'))
-    documentos = Documento.query.order_by(Documento.data_processamento.desc()).all()
-    return render_template('gerenciar_arquivos.html', documentos=documentos)
+    busca = (request.args.get('busca') or '').strip()
+    query = Documento.query.options(
+        joinedload(Documento.venda).joinedload(Venda.cliente)
+    )
+    if busca:
+        termo = f"%{busca}%"
+        filtros = [
+            Documento.numero_nf.ilike(termo),
+            Documento.razao_social.ilike(termo),
+            Venda.nf.ilike(termo),
+            Cliente.nome_cliente.ilike(termo),
+        ]
+        if busca.isdigit():
+            busca_id = int(busca)
+            filtros.extend([
+                Documento.id == busca_id,
+                Documento.venda_id == busca_id,
+                Venda.id == busca_id,
+            ])
+        query = query.outerjoin(Venda, Documento.venda_id == Venda.id)\
+                     .outerjoin(Cliente, Venda.cliente_id == Cliente.id)\
+                     .filter(or_(*filtros))\
+                     .distinct()
+    documentos = query.order_by(Documento.data_processamento.desc(), Documento.id.desc()).all()
+    return render_template('gerenciar_arquivos.html', documentos=documentos, busca=busca)
 
 
 @app.route('/arquivos/upload_massa', methods=['POST'])

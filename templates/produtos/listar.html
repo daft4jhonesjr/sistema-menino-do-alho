@@ -32,6 +32,9 @@
         <button type="button" id="bulk-delete-btn" class="hidden bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-xl transition duration-200 ease-in-out flex items-center" data-endpoint="{{ url_for('bulk_delete_produtos') }}" data-redirect="{{ url_for('listar_produtos', ordem_data=ordem_data) }}">
             <i data-lucide="trash-2" class="w-4 h-4 mr-2"></i>Excluir Selecionados
         </button>
+        <button type="button" onclick="abrirModalRelatorioProdutos()" class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 px-4 py-2 rounded-md font-semibold text-sm hover:bg-emerald-50 dark:hover:bg-gray-700 transition-colors flex items-center gap-2">
+            <i data-lucide="file-down" class="w-4 h-4"></i>Gerar Relatorio
+        </button>
         <div class="relative inline-flex shadow-sm rounded-md" id="grupo-botoes-entrada">
             <button type="button" id="btn-abrir-modal-nova-entrada" class="bg-emerald-700 text-white px-4 py-2 rounded-l-md font-semibold text-sm hover:bg-emerald-800 transition-colors border-r border-emerald-800/50 flex items-center gap-2">
                 <i data-lucide="plus" class="w-4 h-4"></i>Nova Entrada
@@ -56,6 +59,83 @@
                     <span>📋 Fornecedores Cadastrados</span>
                 </button>
             </div>
+        </div>
+    </div>
+</div>
+
+<div id="modal-relatorio-produtos-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
+    <div class="fixed inset-0 bg-black/50" id="modal-relatorio-produtos-overlay"></div>
+    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 z-50" onclick="event.stopPropagation()">
+        <div class="sticky top-0 flex justify-between items-center px-8 py-5 bg-emerald-700 text-white rounded-t-xl z-10">
+            <h3 class="text-xl font-bold flex items-center">
+                <i data-lucide="file-spreadsheet" class="w-5 h-5 mr-2"></i>Gerador de Relatorio de Produtos
+            </h3>
+            <button type="button" id="modal-relatorio-produtos-fechar" class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-emerald-600 text-white font-bold transition" title="Fechar">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+        <div class="p-6">
+            <form action="{{ url_for('exportar_relatorio_produtos') }}" method="POST" id="form-relatorio-produtos">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+                <div class="mb-6">
+                    <h4 class="text-sm font-bold uppercase tracking-wide text-gray-600 dark:text-gray-300 mb-3">Filtros</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label for="filtro_fornecedor" class="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Fornecedor</label>
+                            <select id="filtro_fornecedor" name="filtro_fornecedor" class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm px-3 py-2 focus:ring-2 focus:ring-emerald-500">
+                                <option value="TODOS">Todos</option>
+                                {% for f in fornecedores %}
+                                <option value="{{ (f.nome or '')|upper }}">{{ (f.nome or '')|upper }}</option>
+                                {% endfor %}
+                                <option value="NENHUM">NENHUM</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="filtro_tipo" class="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Tipo</label>
+                            <select id="filtro_tipo" name="filtro_tipo" class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm px-3 py-2 focus:ring-2 focus:ring-emerald-500">
+                                <option value="TODOS">Todos</option>
+                                <option value="ALHO">ALHO</option>
+                                <option value="SACOLA">SACOLA</option>
+                                <option value="CAFE">CAFE</option>
+                                <option value="BACALHAU">BACALHAU</option>
+                                <option value="OUTROS">OUTROS</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="filtro_nacionalidade" class="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Nacionalidade</label>
+                            <select id="filtro_nacionalidade" name="filtro_nacionalidade" class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm px-3 py-2 focus:ring-2 focus:ring-emerald-500">
+                                <option value="TODAS">Todas</option>
+                                <option value="NACIONAL">NACIONAL</option>
+                                <option value="ARGENTINO">ARGENTINO</option>
+                                <option value="CHINES">CHINES</option>
+                                <option value="N/A">N/A</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-6">
+                    <h4 class="text-sm font-bold uppercase tracking-wide text-gray-600 dark:text-gray-300 mb-3">Colunas para exportar</h4>
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+                        <label class="flex items-center gap-2"><input type="checkbox" name="colunas" value="produto" checked class="rounded text-emerald-600 focus:ring-emerald-500">Produto</label>
+                        <label class="flex items-center gap-2"><input type="checkbox" name="colunas" value="preco" checked class="rounded text-emerald-600 focus:ring-emerald-500">Preco</label>
+                        <label class="flex items-center gap-2"><input type="checkbox" name="colunas" value="qtd_entrada" checked class="rounded text-emerald-600 focus:ring-emerald-500">Qtd Entrada</label>
+                        <label class="flex items-center gap-2"><input type="checkbox" name="colunas" value="valor_total" checked class="rounded text-emerald-600 focus:ring-emerald-500">Valor Total</label>
+                        <label class="flex items-center gap-2"><input type="checkbox" name="colunas" value="estoque_atual" checked class="rounded text-emerald-600 focus:ring-emerald-500">Estoque Atual</label>
+                        <label class="flex items-center gap-2"><input type="checkbox" name="colunas" value="lucro_realizado" checked class="rounded text-emerald-600 focus:ring-emerald-500">Lucro Realizado</label>
+                        <label class="flex items-center gap-2"><input type="checkbox" name="colunas" value="data_chegada" checked class="rounded text-emerald-600 focus:ring-emerald-500">Data Chegada</label>
+                        <label class="flex items-center gap-2"><input type="checkbox" name="colunas" value="tipo" checked class="rounded text-emerald-600 focus:ring-emerald-500">Tipo</label>
+                        <label class="flex items-center gap-2"><input type="checkbox" name="colunas" value="fornecedor" checked class="rounded text-emerald-600 focus:ring-emerald-500">Fornecedor</label>
+                        <label class="flex items-center gap-2"><input type="checkbox" name="colunas" value="nacionalidade" checked class="rounded text-emerald-600 focus:ring-emerald-500">Nacionalidade</label>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                    <button type="button" id="modal-relatorio-produtos-cancelar" class="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 transition">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-700 text-white hover:bg-emerald-600 transition font-semibold">Baixar Relatorio (CSV)</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
@@ -1463,6 +1543,20 @@ function fecharDropdownEntrada() {
     }
 }
 
+function abrirModalRelatorioProdutos() {
+    var wrap = document.getElementById('modal-relatorio-produtos-wrap');
+    if (!wrap) return;
+    wrap.classList.remove('hidden');
+    if (typeof travarFundo === 'function') travarFundo();
+}
+
+function fecharModalRelatorioProdutos() {
+    var wrap = document.getElementById('modal-relatorio-produtos-wrap');
+    if (!wrap) return;
+    wrap.classList.add('hidden');
+    if (typeof liberarFundo === 'function') liberarFundo();
+}
+
 document.addEventListener('click', function(event) {
     var dropdown = document.getElementById('dropdown-entrada');
     var grupo = document.getElementById('grupo-botoes-entrada');
@@ -1471,6 +1565,31 @@ document.addEventListener('click', function(event) {
         if (!grupo || !grupo.contains(event.target)) {
             dropdown.classList.add('hidden');
         }
+    }
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    var overlayRel = document.getElementById('modal-relatorio-produtos-overlay');
+    var btnFecharRel = document.getElementById('modal-relatorio-produtos-fechar');
+    var btnCancelarRel = document.getElementById('modal-relatorio-produtos-cancelar');
+    var formRel = document.getElementById('form-relatorio-produtos');
+
+    if (overlayRel) overlayRel.addEventListener('click', fecharModalRelatorioProdutos);
+    if (btnFecharRel) btnFecharRel.addEventListener('click', fecharModalRelatorioProdutos);
+    if (btnCancelarRel) btnCancelarRel.addEventListener('click', fecharModalRelatorioProdutos);
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') fecharModalRelatorioProdutos();
+    });
+
+    if (formRel) {
+        formRel.addEventListener('submit', function(e) {
+            var checks = formRel.querySelectorAll('input[name="colunas"]:checked');
+            if (!checks.length) {
+                e.preventDefault();
+                alert('Selecione pelo menos uma coluna para exportar.');
+            }
+        });
     }
 });
 
