@@ -6056,11 +6056,28 @@ def exportar_relatorio_vendas():
 
     csv_content = output.getvalue()
     output.close()
+    
+    data_hoje = datetime.now().strftime('%d-%m-%Y')
+    partes_nome = ['relatorio_vendas', data_hoje]
+    
+    def _normalizar_nome_arquivo(parte):
+        txt = str(parte or '').strip().upper().replace(' ', '_')
+        txt = re.sub(r'[^A-Z0-9_\-]', '', txt)
+        return txt
+    
+    if filtro_empresa and filtro_empresa != 'TODAS':
+        partes_nome.append(_normalizar_nome_arquivo(filtro_empresa))
+    if filtro_situacao and filtro_situacao != 'TODAS':
+        partes_nome.append(_normalizar_nome_arquivo(filtro_situacao))
+    if filtro_forma_pagamento and filtro_forma_pagamento != 'TODAS':
+        partes_nome.append(_normalizar_nome_arquivo(filtro_forma_pagamento))
+    
+    nome_arquivo = f"{'_'.join([p for p in partes_nome if p])}.csv"
 
     return Response(
         csv_content,
         mimetype='text/csv; charset=utf-8',
-        headers={'Content-Disposition': 'attachment; filename=relatorio_vendas.csv'}
+        headers={'Content-Disposition': f'attachment; filename={nome_arquivo}'}
     )
 
 
