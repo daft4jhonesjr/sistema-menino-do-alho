@@ -4484,27 +4484,25 @@ def listar_produtos():
             'total_lucro_realizado': sum(lucro_realizado_por_produto.get(it['produto'].id, 0.0) for it in itens),
         }
     
-    # PAGINAÇÃO: Aplicar apenas na lista de produtos para exibição
-    from math import ceil
+    # PAGINAÇÃO: aplicar somente na listagem exibida (totais continuam com todos os produtos).
     is_ajax = request.args.get('ajax', type=int) == 1
-    page = request.args.get('page', 1, type=int)
+    page = request.args.get('page', 1, type=int) or 1
     per_page = 20
-    
-    total_produtos = len(produtos_todos)
-    total_pages = ceil(total_produtos / per_page) if total_produtos > 0 else 1
-    
     if page < 1:
         page = 1
-    elif not is_ajax and page > total_pages and total_pages > 0:
-        page = total_pages
     
-    # Em paginação AJAX, páginas além do fim devem retornar vazio (evita repetir a última página).
-    if is_ajax and page > total_pages:
+    pagination = query_ordenada.paginate(page=page, per_page=per_page, error_out=False)
+    
+    # Em requisições normais, se vier página além do fim, clamp para a última existente.
+    if not is_ajax and pagination.pages and page > pagination.pages:
+        page = pagination.pages
+        pagination = query_ordenada.paginate(page=page, per_page=per_page, error_out=False)
+    
+    # Em requisições AJAX, página além do fim deve retornar vazio para evitar duplicação.
+    if is_ajax and not pagination.items:
         return jsonify({'html': '', 'has_next': False, 'page': page})
     
-    start_idx = (page - 1) * per_page
-    end_idx = start_idx + per_page
-    produtos_paginados = produtos_todos[start_idx:end_idx]
+    produtos_paginados = pagination.items
     
     # Calcular quantidade_entrada_real apenas para produtos paginados
     # Reutilizar quantidade_vendida_por_produto já calculado acima
@@ -4558,20 +4556,6 @@ def listar_produtos():
     outros_itens = produtos_agrupados.get('OUTROS', [])
     produtos_outros = [{'id': it['produto'].id, 'nome_produto': it['produto'].nome_produto} for it in outros_itens]
 
-    # Criar objeto pagination simulado
-    class Pagination:
-        def __init__(self, page, per_page, total):
-            self.page = page
-            self.per_page = per_page
-            self.total = total
-            self.pages = total_pages
-            self.has_prev = page > 1
-            self.has_next = page < total_pages
-            self.prev_num = page - 1 if self.has_prev else None
-            self.next_num = page + 1 if self.has_next else None
-    
-    pagination = Pagination(page, per_page, total_produtos)
-    
     if is_ajax:
         # Retornar HTML + metadados para o frontend controlar paginação sem duplicar itens.
         html_linhas = render_template(
