@@ -6001,22 +6001,58 @@ def exportar_relatorio_vendas():
     writer = csv.writer(output, delimiter=';')
     writer.writerow([colunas_disponiveis[c] for c in colunas])
 
+    soma_qtd = 0
+    soma_valor_total = Decimal('0.0')
+    soma_lucro = Decimal('0.0')
+
     for venda in vendas:
+        qtd_venda = int(getattr(venda, 'quantidade_venda', 0) or 0)
+        try:
+            valor_total_venda = Decimal(str(venda.calcular_total() or Decimal('0.00')))
+        except Exception:
+            valor_total_venda = Decimal('0.00')
+        try:
+            lucro_venda = Decimal(str(venda.calcular_lucro() or Decimal('0.00')))
+        except Exception:
+            lucro_venda = Decimal('0.00')
+
+        soma_qtd += qtd_venda
+        soma_valor_total += valor_total_venda
+        soma_lucro += lucro_venda
+
         cliente_nome = venda.cliente.nome_cliente if venda.cliente else (getattr(venda, 'cliente_avulso', None) or '-')
         linha = {
             'data': _fmt_data(venda.data_venda),
             'cliente': _csv_safe(cliente_nome),
             'nf': _csv_safe(venda.nf or '-'),
             'preco_unit': _fmt_num(getattr(venda, 'preco_venda', 0)),
-            'qtd': str(getattr(venda, 'quantidade_venda', 0) or 0),
-            'valor_total': _fmt_num(venda.calcular_total()),
-            'lucro': _fmt_num(venda.calcular_lucro()),
+            'qtd': str(qtd_venda),
+            'valor_total': _fmt_num(valor_total_venda),
+            'lucro': _fmt_num(lucro_venda),
             'vencimento': _fmt_data(getattr(venda, 'data_vencimento', None)),
             'empresa': _csv_safe(venda.empresa_faturadora or 'NENHUM'),
             'situacao': _csv_safe(venda.situacao or ''),
             'forma_pagto': _csv_safe(venda.forma_pagamento or ''),
         }
         writer.writerow([linha[c] for c in colunas])
+
+    def _fmt_total_br(valor):
+        try:
+            numero = Decimal(str(valor or 0))
+        except Exception:
+            numero = Decimal('0.00')
+        return f"{numero:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+
+    linha_total = [''] * len(colunas)
+    if linha_total:
+        linha_total[0] = 'TOTAL GERAL'
+    if 'qtd' in colunas:
+        linha_total[colunas.index('qtd')] = str(soma_qtd)
+    if 'valor_total' in colunas:
+        linha_total[colunas.index('valor_total')] = _fmt_total_br(soma_valor_total)
+    if 'lucro' in colunas:
+        linha_total[colunas.index('lucro')] = _fmt_total_br(soma_lucro)
+    writer.writerow(linha_total)
 
     csv_content = output.getvalue()
     output.close()
