@@ -1257,9 +1257,11 @@ function abrirModalCorrigirCategoria() {
         })
         .then(function(response) {
             if (!response.ok) throw new Error('Erro ao carregar produtos');
-            return response.text();
+            return response.json();
         })
-        .then(function(html) {
+        .then(function(payload) {
+            var html = payload && payload.html ? payload.html : '';
+            var hasNext = !!(payload && payload.has_next);
             if (!html || html.trim() === '') {
                 esconderBotao();
                 return;
@@ -1305,7 +1307,7 @@ function abrirModalCorrigirCategoria() {
 
             if (typeof lucide !== 'undefined') lucide.createIcons();
 
-            if (produtosCarregados < 20) {
+            if (!hasNext) {
                 esconderBotao();
             } else {
                 btnCarregarMais.disabled = false;

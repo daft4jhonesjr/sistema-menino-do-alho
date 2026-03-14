@@ -4486,6 +4486,7 @@ def listar_produtos():
     
     # PAGINAÇÃO: Aplicar apenas na lista de produtos para exibição
     from math import ceil
+    is_ajax = request.args.get('ajax', type=int) == 1
     page = request.args.get('page', 1, type=int)
     per_page = 20
     
@@ -4494,8 +4495,12 @@ def listar_produtos():
     
     if page < 1:
         page = 1
-    elif page > total_pages and total_pages > 0:
+    elif not is_ajax and page > total_pages and total_pages > 0:
         page = total_pages
+    
+    # Em paginação AJAX, páginas além do fim devem retornar vazio (evita repetir a última página).
+    if is_ajax and page > total_pages:
+        return jsonify({'html': '', 'has_next': False, 'page': page})
     
     start_idx = (page - 1) * per_page
     end_idx = start_idx + per_page
@@ -4567,14 +4572,14 @@ def listar_produtos():
     
     pagination = Pagination(page, per_page, total_produtos)
     
-    # Verificar se é requisição AJAX
-    is_ajax = request.args.get('ajax', type=int) == 1
-    
     if is_ajax:
-        # Renderizar apenas o template parcial com as linhas
-        return render_template('_linhas_entrada.html', 
-                             produtos_agrupados=produtos_agrupados,
-                             current_page=page)
+        # Retornar HTML + metadados para o frontend controlar paginação sem duplicar itens.
+        html_linhas = render_template(
+            '_linhas_entrada.html',
+            produtos_agrupados=produtos_agrupados,
+            current_page=page
+        )
+        return jsonify({'html': html_linhas, 'has_next': pagination.has_next, 'page': page})
 
     fornecedores = Fornecedor.query.order_by(Fornecedor.nome).all()
 
