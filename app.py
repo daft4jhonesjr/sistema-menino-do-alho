@@ -7316,6 +7316,7 @@ def _token_upload_required(f):
     return decorated
 
 
+@csrf.exempt
 @app.route('/upload', methods=['POST'])
 @login_required
 @_token_upload_required
