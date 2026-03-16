@@ -8,7 +8,17 @@ db = SQLAlchemy()
 
 
 class Usuario(UserMixin, db.Model):
-    __tablename__ = 'usuarios'
+    """
+    Utilizador do sistema. Suporta roles (admin/user) e autenticação via Flask-Login.
+
+    Attributes:
+        username: Nome de login único.
+        password_hash: Hash da senha (werkzeug).
+        role: 'admin' ou 'user'.
+        profile_image_url: URL da foto no Cloudinary.
+    """
+
+    __tablename__ = "usuarios"
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
@@ -62,8 +72,17 @@ class SituacaoVenda(Enum):
 
 
 class Cliente(db.Model):
-    __tablename__ = 'clientes'
-    
+    """
+    Cliente cadastrado. Possui vendas associadas.
+
+    Attributes:
+        nome_cliente: Nome ou razão social.
+        cnpj: CNPJ único (opcional).
+        vendas: Relacionamento com Venda (lazy).
+    """
+
+    __tablename__ = "clientes"
+
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     nome_cliente = db.Column(db.String(200), nullable=False, index=True)  # Índice para buscas por nome
     razao_social = db.Column(db.String(200), index=True)  # Índice para buscas por razão social
@@ -84,7 +103,16 @@ PRECO_VENDA_ALVO_DEFAULT = 160.0
 
 
 class Produto(db.Model):
-    __tablename__ = 'produtos'
+    """
+    Produto/lote com estoque. Possui vendas e fotos.
+
+    Attributes:
+        tipo: ALHO, SACOLA, CAFE, BACALHAU, OUTROS.
+        estoque_atual: Saldo atual (CheckConstraint >= 0).
+        fotos: Relacionamento com ProdutoFoto (até 5).
+    """
+
+    __tablename__ = "produtos"
     __table_args__ = (
         db.CheckConstraint('estoque_atual >= 0', name='ck_produtos_estoque_nao_negativo'),
     )
@@ -133,7 +161,16 @@ class Produto(db.Model):
 
 
 class Fornecedor(db.Model):
-    __tablename__ = 'fornecedores'
+    """
+    Fornecedor de produtos. Vinculado a produtos via campo texto (não FK).
+
+    Attributes:
+        nome: Nome fantasia único.
+        razao_social: Razão social.
+        cnpj: CNPJ opcional.
+    """
+
+    __tablename__ = "fornecedores"
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     nome = db.Column(db.String(100), nullable=False, unique=True, index=True)
@@ -159,8 +196,19 @@ class ProdutoFoto(db.Model):
 
 
 class Venda(db.Model):
-    __tablename__ = 'vendas'
-    
+    """
+    Venda de produto a cliente. Possui documentos (boleto/NF) vinculados.
+
+    Attributes:
+        cliente_id: FK para Cliente.
+        produto_id: FK para Produto.
+        nf: Número da nota fiscal.
+        situacao: PENDENTE, PAGO, PARCIAL, PERDA.
+        documentos: Relacionamento com Documento.
+    """
+
+    __tablename__ = "vendas"
+
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     cliente_id = db.Column(db.Integer, db.ForeignKey('clientes.id'), nullable=False, index=True)  # Índice para filtros e joins
     produto_id = db.Column(db.Integer, db.ForeignKey('produtos.id'), nullable=False, index=True)
@@ -256,8 +304,18 @@ class ContagemGaveta(db.Model):
 
 
 class Documento(db.Model):
-    __tablename__ = 'documentos'
-    
+    """
+    Documento PDF (boleto ou nota fiscal) armazenado no Cloudinary.
+
+    Attributes:
+        url_arquivo: URL do Cloudinary.
+        public_id: ID para exclusão no Cloudinary.
+        tipo: BOLETO ou NOTA_FISCAL.
+        venda_id: FK opcional para Venda vinculada.
+    """
+
+    __tablename__ = "documentos"
+
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     url_arquivo = db.Column(db.String(500), nullable=True)  # URL do Cloudinary (armazenamento em nuvem)
     public_id = db.Column(db.String(200), nullable=True, unique=True)  # ID público do Cloudinary (para exclusão)

@@ -23,7 +23,7 @@ def get_hoje_brasil():
         return date.today()
 from functools import wraps
 from sqlalchemy import func, desc, asc, text, or_, extract, case, cast
-from sqlalchemy.orm import joinedload, contains_eager
+from sqlalchemy.orm import joinedload, contains_eager, selectinload
 from sqlalchemy.exc import IntegrityError, OperationalError
 import pandas as pd
 import os
@@ -35,10 +35,8 @@ import io
 import html
 import shutil
 import hashlib
-import socket
 import traceback
 import threading
-import time
 import urllib.request
 import logging
 from logging.handlers import RotatingFileHandler
@@ -76,6 +74,27 @@ def _debug_log(location, message, data, hypothesis_id, run_id="run1"):
     except Exception as e:
         print(f"DEBUG LOG ERROR: {e}")
 # #endregion
+
+
+def _safe_db_commit() -> tuple[bool, str | None]:
+    """
+    Executa db.session.commit() com tratamento robusto de erros.
+
+    Returns:
+        (sucesso: bool, mensagem_erro: str | None)
+    """
+    try:
+        db.session.commit()
+        return True, None
+    except (IntegrityError, OperationalError) as e:
+        db.session.rollback()
+        logging.error("Erro de banco ao commitar: %s", str(e), exc_info=True)
+        return False, str(e)
+    except Exception as e:
+        db.session.rollback()
+        logging.error("Erro inesperado ao commitar: %s", str(e), exc_info=True)
+        return False, str(e)
+
 
 # Mapeamento flexível: nomes possíveis no arquivo -> nomes do banco (models.Produto)
 COLUNA_ARQUIVO_PARA_BANCO = {
@@ -2792,6 +2811,16 @@ def limpar_logs_erros():
 @app.route('/perfil', methods=['GET', 'POST'])
 @login_required
 def perfil():
+    """
+    Exibe e atualiza o perfil do utilizador autenticado.
+
+    GET: Renderiza o formulário com dados atuais.
+    POST: Atualiza nome, username, email e foto de perfil (Cloudinary).
+
+    Returns:
+        redirect: Para 'perfil' após sucesso ou erro.
+        render_template: Formulário de perfil.
+    """
     if request.method == 'POST':
         novo_nome_real = request.form.get('nome', '').strip()
         novo_username = request.form.get('username', '').strip()
@@ -2824,19 +2853,36 @@ def perfil():
                     flash(f'Erro ao fazer upload da imagem: {str(e)}', 'error')
             else:
                 flash('Cloudinary não configurado. Não foi possível enviar a foto.', 'error')
-        db.session.commit()
+        ok, err = _safe_db_commit()
+        if not ok:
+            flash(err or "Erro ao salvar perfil. Tente novamente.", "error")
+            return redirect(url_for("perfil"))
         flash('Perfil atualizado com sucesso!', 'success')
         return redirect(url_for('perfil'))
     return render_template('auth/perfil.html', user=current_user)
 
 
 def get_config():
-    """Retorna o registro único de Configuracao. Cria com código padrão se a tabela estiver vazia."""
+    """
+    Retorna o registro único de Configuracao.
+    Cria com código padrão se a tabela estiver vazia.
+
+    Returns:
+        Configuracao: Instância única de configuração.
+
+    Raises:
+        RuntimeError: Se falhar ao criar a configuração inicial.
+    """
     config = Configuracao.query.first()
     if config is None:
-        config = Configuracao(codigo_cadastro='alho123')
+        config = Configuracao(codigo_cadastro="alho123")
         db.session.add(config)
-        db.session.commit()
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            logging.error("Erro ao criar Configuracao inicial: %s", str(e), exc_info=True)
+            raise RuntimeError("Falha ao criar configuração inicial.") from e
     return config
 
 
@@ -2865,9 +2911,12 @@ def cadastro():
             email_cadastro = (request.form.get('email') or '').strip() or None
             u = Usuario(username=username, password_hash=generate_password_hash(senha), role='user', email=email_cadastro)
             db.session.add(u)
-            db.session.commit()
-            flash('Cadastro realizado! Faça login.', 'success')
-            return redirect(url_for('login'))
+            ok, err = _safe_db_commit()
+            if not ok:
+                flash(err or "Erro ao criar conta. Tente novamente.", "error")
+                return render_template("auth/cadastro.html")
+            flash("Cadastro realizado! Faça login.", "success")
+            return redirect(url_for("login"))
         if erro:
             flash(erro, 'error')
     return render_template('auth/cadastro.html')
@@ -2897,9 +2946,12 @@ def atualizar_codigo_cadastro():
         return redirect(url_for('gerenciar_usuarios'))
     config = get_config()
     config.codigo_cadastro = novo_codigo
-    db.session.commit()
-    flash('Código de cadastro atualizado com sucesso.', 'success')
-    return redirect(url_for('gerenciar_usuarios'))
+    ok, err = _safe_db_commit()
+    if not ok:
+        flash(err or "Erro ao atualizar código de cadastro.", "error")
+        return redirect(url_for("gerenciar_usuarios"))
+    flash("Código de cadastro atualizado com sucesso.", "success")
+    return redirect(url_for("gerenciar_usuarios"))
 
 
 @app.route('/gerenciar_usuarios/editar_completo/<int:id>', methods=['POST'])
@@ -2926,7 +2978,10 @@ def editar_usuario_completo(id):
             flash('Atenção: O administrador principal não pode ser alterado para usuário comum.', 'warning')
         else:
             u.role = novo_role
-    db.session.commit()
+    ok, err = _safe_db_commit()
+    if not ok:
+        flash(err or "Erro ao atualizar usuário. Tente novamente.", "error")
+        return redirect(url_for("gerenciar_usuarios"))
     flash(f'Usuário {u.username} atualizado com sucesso!', 'success')
     return redirect(url_for('gerenciar_usuarios'))
 
@@ -2966,7 +3021,10 @@ def alterar_role_usuario(id):
         flash('O administrador principal (Jhones) não pode ser alterado.', 'warning')
         return redirect(url_for('gerenciar_usuarios'))
     u.role = novo_role
-    db.session.commit()
+    ok, err = _safe_db_commit()
+    if not ok:
+        flash(err or "Erro ao alterar nível do usuário.", "error")
+        return redirect(url_for("gerenciar_usuarios"))
     flash(f'Nível de "{u.username}" alterado para {novo_role}.', 'success')
     return redirect(url_for('gerenciar_usuarios'))
 
@@ -3685,7 +3743,10 @@ def adicionar_caixa():
             ))
         for lanc in lancamentos:
             db.session.add(lanc)
-        db.session.commit()
+        ok, err = _safe_db_commit()
+        if not ok:
+            flash(err or "Erro ao adicionar lançamentos.", "error")
+            return redirect(url_for("caixa", setor=setor))
         flash('Lançamentos divididos adicionados com sucesso!', 'success')
     else:
         # Modo simples: um único lançamento
@@ -3702,7 +3763,10 @@ def adicionar_caixa():
             usuario_id=current_user.id
         )
         db.session.add(novo_lancamento)
-        db.session.commit()
+        ok, err = _safe_db_commit()
+        if not ok:
+            flash(err or "Erro ao adicionar lançamento.", "error")
+            return redirect(url_for("caixa", setor=setor))
         flash(f'Lançamento adicionado com sucesso!|UNDO_CAIXA_{novo_lancamento.id}', 'success')
     return redirect(url_for('caixa', setor=setor))
 
@@ -4023,6 +4087,16 @@ def _is_ajax():
 @app.route('/clientes/novo', methods=['GET', 'POST'])
 @login_required
 def novo_cliente():
+    """
+    Cria um novo cliente.
+
+    GET: Exibe formulário vazio.
+    POST: Recebe nome_cliente, cnpj, telefone, etc. e persiste no banco.
+
+    Returns:
+        redirect: Para listar_clientes em sucesso.
+        render_template: Formulário em caso de erro ou GET.
+    """
     if request.method == 'POST':
         try:
             cnpj = request.form.get('cnpj', '').strip() or None
@@ -4406,6 +4480,14 @@ def _validar_sacola(tipo, nacionalidade, marca, tamanho):
 @app.route('/produtos')
 @login_required
 def listar_produtos():
+    """
+    Lista produtos do ano ativo com totais por tipo e paginação.
+
+    Query params: ordem_data (crescente|decrescente), pagina, por_pagina.
+
+    Returns:
+        render_template: Página de produtos com totais globais.
+    """
     # Obter ano ativo da sessão
     ano_ativo = session.get('ano_ativo', datetime.now().year)
     
@@ -4414,9 +4496,12 @@ def listar_produtos():
         ordem_data = 'crescente'
     
     # Query base com filtro por ano (data_chegada) e eager loading para evitar Query N+1
-    # Nota: Não usamos joinedload para vendas aqui porque quantidade_vendida() e lucro_realizado() 
+    # selectinload(Produto.fotos) evita N+1 ao exibir galeria de fotos no modal
+    # Nota: Não usamos joinedload para vendas aqui porque quantidade_vendida() e lucro_realizado()
     # fazem cálculos que podem ser otimizados separadamente se necessário
-    query_base = Produto.query.filter(extract('year', Produto.data_chegada) == ano_ativo)
+    query_base = Produto.query.options(selectinload(Produto.fotos)).filter(
+        extract('year', Produto.data_chegada) == ano_ativo
+    )
     
     # Ordenação primária: produtos com estoque > 0 primeiro, zerados/negativos depois.
     ordem_estoque = case(
@@ -4961,7 +5046,13 @@ def novo_produto():
             nome_produto=nome_produto
         )
         db.session.add(produto)
-        db.session.commit()
+        ok, err = _safe_db_commit()
+        if not ok:
+            msg = err or "Erro ao cadastrar produto. Tente novamente."
+            if _is_ajax():
+                return jsonify(ok=False, mensagem=msg), 500
+            flash(msg, "error")
+            return render_template("produtos/formulario.html", produto=None)
 
         # Upload de fotos para Cloudinary (até 5)
         if os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL') or (app.config.get('CLOUDINARY_CLOUD_NAME') and app.config.get('CLOUDINARY_API_KEY')):
@@ -4977,7 +5068,13 @@ def novo_produto():
                             db.session.add(nova_foto)
                     except Exception as e:
                         print(f"Erro ao fazer upload para o Cloudinary (produto {produto.id}): {e}")
-        db.session.commit()
+        ok2, err2 = _safe_db_commit()
+        if not ok2:
+            msg = err2 or "Produto criado, mas falha ao salvar fotos. Edite o produto para adicionar fotos."
+            if _is_ajax():
+                return jsonify(ok=False, mensagem=msg), 500
+            flash(msg, "warning")
+            return redirect(url_for("listar_produtos"))
 
         limpar_cache_dashboard()
         msg_sucesso = f'✅ Que maravilha! A entrada de {nome_produto} ({quantidade_entrada} un.) foi registrada no estoque com sucesso.'
@@ -5078,7 +5175,10 @@ def editar_produto(id):
                     except Exception as e:
                         print(f"Erro ao fazer upload para o Cloudinary (produto {produto.id}): {e}")
 
-        db.session.commit()
+        ok, err = _safe_db_commit()
+        if not ok:
+            flash(err or "Erro ao atualizar produto. Tente novamente.", "error")
+            return redirect(url_for("listar_produtos"))
         limpar_cache_dashboard()
         flash(f'✅ Produto {nome_produto} atualizado com sucesso!', 'success')
         return redirect(url_for('listar_produtos'))
@@ -5740,6 +5840,15 @@ def api_detalhes_mes(ano, mes):
 @app.route('/vendas')
 @login_required
 def listar_vendas():
+    """
+    Lista vendas do ano ativo com filtros e agrupamento por pedido.
+
+    Query params: produto_id, cliente_id, filtro (geral|bacalhau),
+    ordenar_por, ordem_data, filtro_vencidos.
+
+    Returns:
+        render_template: Página de vendas com pedidos agrupados.
+    """
     # #region agent log
     _debug_log("app.py:listar-vendas", "listar_vendas entered", {"route": "/vendas"}, "H3")
     # #endregion
