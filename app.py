@@ -23,7 +23,7 @@ def get_hoje_brasil():
         return date.today()
 from functools import wraps
 from sqlalchemy import func, desc, asc, text, or_, extract, case
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, contains_eager
 from sqlalchemy.exc import IntegrityError, OperationalError
 import pandas as pd
 import os
@@ -7527,52 +7527,78 @@ def api_receber_automatico():
     auth = request.headers.get('Authorization', '')
     if auth != token_esperado and auth != f'Bearer {token_esperado}':
         return jsonify({'status': 'erro', 'mensagem': 'Token inválido ou ausente.'}), 403
-    if 'file' not in request.files:
-        return jsonify({'status': 'erro', 'mensagem': 'Nenhum arquivo enviado.'}), 400
-    arquivo = request.files['file']
+
+    # Aceita múltiplas chaves para compatibilidade com bots diferentes.
+    arquivo = request.files.get('file') or request.files.get('arquivo') or request.files.get('documento')
     if not arquivo or not arquivo.filename:
         return jsonify({'status': 'erro', 'mensagem': 'Arquivo vazio ou inexistente.'}), 400
-    filename = secure_filename(arquivo.filename)
-    pasta = app.config['UPLOAD_FOLDER']
-    os.makedirs(pasta, exist_ok=True)
-    caminho = os.path.join(pasta, filename)
-    arquivo.save(caminho)
 
     try:
+        filename = secure_filename(arquivo.filename)
+        if not filename:
+            return jsonify({'status': 'erro', 'mensagem': 'Nome de arquivo inválido.'}), 400
+
+        extensao = os.path.splitext(filename)[1].lower()
+        if extensao not in {'.pdf', '.png', '.jpg', '.jpeg'}:
+            return jsonify({'status': 'erro', 'mensagem': 'Extensão de arquivo não permitida.'}), 400
+
+        tipo_bruto = (request.form.get('tipo') or request.form.get('type') or '').strip().lower()
+        if tipo_bruto in ('boleto', 'boletos'):
+            tipo_documento = 'BOLETO'
+        elif tipo_bruto in ('nfe', 'nf', 'nota_fiscal', 'nota fiscal', 'notas_fiscais'):
+            tipo_documento = 'NOTA_FISCAL'
+        else:
+            tipo_documento = 'NOTA_FISCAL' if ('nfe' in filename.lower() or 'nota' in filename.lower()) else 'BOLETO'
+
         user_id = None
         if current_user.is_authenticated:
             user_id = current_user.id
         else:
-            # Fallback para o robô: pega o primeiro usuário (Admin)
+            # Fallback para o robô: usa primeiro usuário disponível.
             primeiro_user = Usuario.query.first()
             if primeiro_user:
                 user_id = primeiro_user.id
 
-        def processar_background(app, filepath, uid):
+        url_arquivo = None
+        public_id = None
+        if os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL'):
             try:
-                with app.app_context():
-                    try:
-                        if uid:
-                            usuario = Usuario.query.get(uid)
-                            if usuario:
-                                login_user(usuario)
-                        _processar_documento(filepath, user_id_forcado=uid)
-                        print(f"[receber_automatico] Processamento concluído: {filepath}")
-                    except Exception as e:
-                        db.session.rollback()
-                        print(f"[receber_automatico] ERRO ao processar {filepath}: {type(e).__name__}: {e}")
-                        traceback.print_exc()
-                    finally:
-                        db.session.remove()
+                arquivo.stream.seek(0)
+                resultado_nuvem = cloudinary.uploader.upload(arquivo, resource_type='raw')
+                url_arquivo = resultado_nuvem.get('secure_url')
+                public_id = resultado_nuvem.get('public_id')
             except Exception as e:
-                db.session.rollback()
-                print(f'Erro no processamento: {e}')
-                print(f"[receber_automatico] ERRO ao processar {filepath}: {type(e).__name__}: {e}")
-                traceback.print_exc()
+                return jsonify({'status': 'erro', 'mensagem': f'Falha no upload Cloudinary: {str(e)}'}), 500
 
-        thread = threading.Thread(target=processar_background, args=(current_app._get_current_object(), caminho, user_id))
-        thread.start()
-        return jsonify({'message': 'Processamento iniciado em segundo plano'}), 202
+        # Fallback local para rastreabilidade quando Cloudinary não estiver configurado.
+        caminho_relativo = None
+        if not url_arquivo:
+            pasta = app.config['UPLOAD_FOLDER']
+            os.makedirs(pasta, exist_ok=True)
+            caminho = os.path.join(pasta, filename)
+            arquivo.stream.seek(0)
+            arquivo.save(caminho)
+            caminho_relativo = os.path.relpath(caminho, os.path.dirname(os.path.abspath(__file__)))
+
+        novo_documento = Documento(
+            url_arquivo=url_arquivo,
+            public_id=public_id,
+            caminho_arquivo=caminho_relativo,
+            tipo=tipo_documento,
+            numero_nf=(request.form.get('numero_nf') or request.form.get('nf') or None),
+            razao_social=(request.form.get('razao_social') or request.form.get('pagador') or None),
+            usuario_id=user_id,
+            data_processamento=date.today()
+        )
+        db.session.add(novo_documento)
+        db.session.commit()
+
+        return jsonify({
+            'status': 'success',
+            'mensagem': 'Arquivo recebido',
+            'documento_id': novo_documento.id,
+            'url_arquivo': novo_documento.url_arquivo
+        }), 200
     except Exception as e:
         db.session.rollback()
         return jsonify({'status': 'erro', 'mensagem': str(e)}), 500
@@ -7610,9 +7636,7 @@ def admin_arquivos():
         flash('Acesso negado. Apenas administradores podem gerenciar arquivos.', 'error')
         return redirect(url_for('dashboard'))
     busca = (request.args.get('busca') or '').strip()
-    query = Documento.query.options(
-        joinedload(Documento.venda).joinedload(Venda.cliente)
-    )
+    query = Documento.query
     if busca:
         termo = f"%{busca}%"
         filtros = [
@@ -7628,10 +7652,17 @@ def admin_arquivos():
                 Documento.venda_id == busca_id,
                 Venda.id == busca_id,
             ])
-        query = query.outerjoin(Venda, Documento.venda_id == Venda.id)\
-                     .outerjoin(Cliente, Venda.cliente_id == Cliente.id)\
+        query = query.outerjoin(Documento.venda)\
+                     .outerjoin(Venda.cliente)\
+                     .options(
+                         contains_eager(Documento.venda).contains_eager(Venda.cliente)
+                     )\
                      .filter(or_(*filtros))\
                      .distinct()
+    else:
+        query = query.options(
+            joinedload(Documento.venda).joinedload(Venda.cliente)
+        )
     documentos = query.order_by(Documento.data_processamento.desc(), Documento.id.desc()).all()
     return render_template('gerenciar_arquivos.html', documentos=documentos, busca=busca)
 
