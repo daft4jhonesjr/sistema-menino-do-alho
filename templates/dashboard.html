@@ -218,22 +218,14 @@
             </div>
         </div>
     </div>
-    <div id="lista-documentos" class="overflow-hidden transition-all duration-300" style="max-height: 0px; opacity: 0;">
-    {% set lista_docs_dashboard = documentos_recem_chegados if documentos_recem_chegados is defined else documentos_pendentes %}
-    {% if lista_docs_dashboard %}
+    <div id="lista-documentos" class="overflow-visible">
+    {% if documentos_pendentes and documentos_pendentes|length > 0 %}
     <div class="space-y-4">
-        {% for item in lista_docs_dashboard %}
-        {% if item.doc is defined %}
+        {% for item in documentos_pendentes %}
         {% set doc = item.doc %}
         {% set nome = item.nome_arquivo %}
         {% set ok = item.leitura_ok %}
         {% set nf_nao = item.nf_nao_encontrada %}
-        {% else %}
-        {% set doc = item %}
-        {% set nome = (doc.caminho_arquivo.split('/')[-1] if doc.caminho_arquivo else ('Documento #' ~ doc.id)) %}
-        {% set ok = true %}
-        {% set nf_nao = false %}
-        {% endif %}
         <div class="rounded-xl border shadow-sm dark:shadow-none overflow-hidden flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 {% if ok and not nf_nao %}bg-emerald-50/50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800{% elif nf_nao %}bg-amber-50/50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800{% else %}bg-amber-50/50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800{% endif %}">
             <div class="flex items-center gap-4 p-4 flex-1 min-w-0">
                 <input type="checkbox" class="checkbox-documento w-5 h-5 text-emerald-600 rounded focus:ring-emerald-500 cursor-pointer" value="{{ doc.id }}" onchange="verificarSelecaoMassa()">

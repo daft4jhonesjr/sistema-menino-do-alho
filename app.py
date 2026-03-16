@@ -22,7 +22,7 @@ def get_hoje_brasil():
     except Exception:
         return date.today()
 from functools import wraps
-from sqlalchemy import func, desc, asc, text, or_, extract, case
+from sqlalchemy import func, desc, asc, text, or_, extract, case, cast
 from sqlalchemy.orm import joinedload, contains_eager
 from sqlalchemy.exc import IntegrityError, OperationalError
 import pandas as pd
@@ -1737,10 +1737,17 @@ def _listar_documentos_recem_chegados(user_id=None):
     """Lista documentos da tabela Documento onde venda_id é None (arquivos soltos, sem vínculo).
     Mostra todos os documentos órfãos, independente de status. Filtra por usuario_id se informado."""
     resultado_processamento = {"sucesso": 0, "falha": 0, "erros": [], "vinculos_novos": 0, "processados": 0}
-    query = Documento.query.filter(Documento.venda_id.is_(None))
+    # Blindagem: considera órfãos com FK nula, zero ou vazia (dados legados/sujos).
+    query = Documento.query.filter(
+        or_(
+            Documento.venda_id.is_(None),
+            Documento.venda_id == 0,
+            cast(Documento.venda_id, db.String) == ''
+        )
+    )
     # Para o Dashboard, documentos órfãos devem ser visíveis independentemente de ownership.
     # Mantemos o parâmetro user_id por compatibilidade, mas sem restringir esta listagem.
-    docs = query.order_by(Documento.data_processamento.desc()).limit(5).all()
+    docs = query.order_by(Documento.id.desc()).all()
     documentos = []
     for doc in docs:
         diag = _diagnosticar_vinculo_falhou(doc)
@@ -3092,11 +3099,11 @@ def dashboard():
     filtro_sem_bacalhau_tipo = ~Produto.tipo.ilike('%BACALHAU%')
     filtro_sem_bacalhau_nome = ~Produto.nome_produto.ilike('%BACALHAU%')
     
-    # Lista documentos órfãos sem vínculo (venda_id=None), sem filtro por usuário.
-    documentos_recem_chegados, resultado_processamento = _listar_documentos_recem_chegados()
-    documentos_pendentes = [item.get('doc') for item in documentos_recem_chegados if item.get('doc')]
+    # Lista documentos órfãos sem vínculo (NULL/0/vazio), sem filtro por usuário.
+    documentos_pendentes, resultado_processamento = _listar_documentos_recem_chegados()
+    documentos_recem_chegados = documentos_pendentes
     vinculos_novos = resultado_processamento.get('vinculos_novos', 0)
-    pendentes = len(documentos_recem_chegados)
+    pendentes = len(documentos_pendentes)
     processados = resultado_processamento.get('processados', 0)
     erros = resultado_processamento.get('erros', [])  # erros é uma lista, não um número
     
