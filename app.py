@@ -1739,7 +1739,8 @@ def _listar_documentos_recem_chegados(user_id=None):
     resultado_processamento = {"sucesso": 0, "falha": 0, "erros": [], "vinculos_novos": 0, "processados": 0}
     query = Documento.query.filter(Documento.venda_id.is_(None))
     if user_id is not None:
-        query = query.filter(Documento.usuario_id == user_id)
+        # Documentos globais (usuario_id=None) também devem aparecer para o usuário.
+        query = query.filter(or_(Documento.usuario_id == user_id, Documento.usuario_id.is_(None)))
     docs = query.order_by(Documento.data_processamento.desc()).limit(5).all()
     documentos = []
     for doc in docs:
@@ -3092,8 +3093,9 @@ def dashboard():
     filtro_sem_bacalhau_tipo = ~Produto.tipo.ilike('%BACALHAU%')
     filtro_sem_bacalhau_nome = ~Produto.nome_produto.ilike('%BACALHAU%')
     
-    # Lista documentos sem vínculo (venda_id=None), filtrados pelo usuário atual
-    documentos_recem_chegados, resultado_processamento = _listar_documentos_recem_chegados(user_id=current_user.id)
+    # Lista documentos sem vínculo (venda_id=None). Admin vê todos; usuário comum vê os seus + globais.
+    user_id_docs = None if current_user.is_admin() else current_user.id
+    documentos_recem_chegados, resultado_processamento = _listar_documentos_recem_chegados(user_id=user_id_docs)
     vinculos_novos = resultado_processamento.get('vinculos_novos', 0)
     pendentes = len(documentos_recem_chegados)
     processados = resultado_processamento.get('processados', 0)
@@ -7511,8 +7513,27 @@ def upload_documento():
         os.makedirs(caminho_final, exist_ok=True)
         caminho_completo = os.path.join(caminho_final, nome_arquivo)
         arquivo.save(caminho_completo)
+
+        # Persistência imediata no banco para aparecer nos "Recém-Chegados".
+        uid = current_user.id if current_user.is_authenticated else None
+        _processar_documento(caminho_completo, user_id_forcado=uid)
+        limpar_cache_dashboard()
+        caminho_relativo = os.path.join('documentos_entrada', subpasta, nome_arquivo).replace('\\', '/')
+        doc_criado = Documento.query.filter_by(caminho_arquivo=caminho_relativo).order_by(Documento.id.desc()).first()
+        _debug_log(
+            "app.py:upload_documento",
+            "Upload manual processado",
+            {
+                "origem": "manual_upload",
+                "nome_arquivo": nome_arquivo,
+                "documento_id": doc_criado.id if doc_criado else None,
+                "user_id": uid
+            },
+            "UPLOAD_SYNC"
+        )
         return jsonify({'mensagem': 'Sucesso'}), 200
     except Exception as e:
+        db.session.rollback()
         print(f"Erro ao guardar ficheiro em documentos_entrada/{subpasta}: {e}")
         return jsonify({'mensagem': str(e)}), 500
 
@@ -7592,6 +7613,19 @@ def api_receber_automatico():
         )
         db.session.add(novo_documento)
         db.session.commit()
+        limpar_cache_dashboard()
+        _debug_log(
+            "app.py:api_receber_automatico",
+            "Upload API processado",
+            {
+                "origem": "api_receber_automatico",
+                "nome_arquivo": filename,
+                "documento_id": novo_documento.id,
+                "user_id": user_id,
+                "cloudinary": bool(url_arquivo)
+            },
+            "UPLOAD_SYNC"
+        )
 
         return jsonify({
             'status': 'success',
@@ -7683,6 +7717,7 @@ def upload_massa_arquivos():
     arquivos_salvos = 0
     arquivos_processados = 0
     erros_processamento = []
+    documentos_ids = []
     try:
         for arquivo in arquivos:
             if not arquivo or not arquivo.filename:
@@ -7701,6 +7736,11 @@ def upload_massa_arquivos():
             try:
                 _processar_documento(caminho_temporario, user_id_forcado=current_user.id)
                 arquivos_processados += 1
+                doc_criado = Documento.query.filter(
+                    Documento.caminho_arquivo.ilike(f"%/{nome_seguro}")
+                ).order_by(Documento.id.desc()).first()
+                if doc_criado:
+                    documentos_ids.append(doc_criado.id)
             except Exception as e:
                 erros_processamento.append(f'{nome_seguro}: {str(e)}')
             arquivos_salvos += 1
@@ -7714,6 +7754,20 @@ def upload_massa_arquivos():
         msg = f'{arquivos_processados} arquivo(s) importado(s) e enviado(s) para extração automática.'
         if erros_processamento:
             msg += f' {len(erros_processamento)} arquivo(s) com falha foram ignorados.'
+        limpar_cache_dashboard()
+        _debug_log(
+            "app.py:upload_massa_arquivos",
+            "Upload em massa processado",
+            {
+                "origem": "upload_massa",
+                "documentos_ids": documentos_ids,
+                "arquivos_processados": arquivos_processados,
+                "arquivos_salvos": arquivos_salvos,
+                "erros": len(erros_processamento),
+                "user_id": current_user.id
+            },
+            "UPLOAD_SYNC"
+        )
         return jsonify({'success': True, 'mensagem': msg, 'erros': erros_processamento})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
