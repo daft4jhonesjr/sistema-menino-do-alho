@@ -785,6 +785,7 @@ function confirmarExclusaoMassa() {
     };
     var rotaSalvarContagem = '{{ url_for("salvar_contagem_gaveta") }}';
     var rotaCarregarContagem = '{{ url_for("carregar_contagem_gaveta") }}';
+    var estadoInicialGaveta = {{ (contagem_gaveta_estado or {'dinheiro': [], 'cheques': []})|tojson }};
     var rotaUploadImagemCheque = '{{ url_for("upload_imagem_cheque") }}';
     var STATUS_CHEQUE_ENVIADO = 'ENVIADO';
     var STATUS_CHEQUE_NAO_ENVIADO = 'NÃO ENVIADO';
@@ -904,6 +905,11 @@ function confirmarExclusaoMassa() {
         if (typeof getCsrfHeaders === 'function') {
             var csrfHeaders = getCsrfHeaders();
             for (var k in csrfHeaders) headers[k] = csrfHeaders[k];
+        } else {
+            var tokenMeta = document.querySelector('meta[name="csrf-token"]');
+            var tokenInput = document.querySelector('input[name="csrf_token"]');
+            var token = (tokenMeta && tokenMeta.getAttribute('content')) || (tokenInput && tokenInput.value) || '';
+            if (token) headers['X-CSRFToken'] = token;
         }
 
         function finalizarBotao() {
@@ -925,7 +931,7 @@ function confirmarExclusaoMassa() {
         })
         .then(function(data) {
             if (!data || !data.ok) throw new Error((data && data.mensagem) || 'Erro ao salvar contagem');
-            mostrarToast('Contagem de gaveta salva com sucesso.', 'success');
+            mostrarToast('Contagem salva permanentemente!', 'success');
             finalizarBotao();
         })
         .catch(function() {
@@ -936,7 +942,7 @@ function confirmarExclusaoMassa() {
 
     function carregarDados(tipo) {
         var cfg = abas[tipo];
-        try { cfg.valores = JSON.parse(localStorage.getItem(cfg.key)) || []; } catch(_) { cfg.valores = []; }
+        cfg.valores = [];
         if (tipo === 'cheque') {
             cfg.valores = cfg.valores.map(function(item) {
                 var copia = Object.assign({}, item || {});
@@ -950,6 +956,7 @@ function confirmarExclusaoMassa() {
     }
     carregarDados('dinheiro');
     carregarDados('cheque');
+    aplicarEstadoServidor(estadoInicialGaveta);
 
     function parseMoedaBR(valor) {
         if (valor === null || valor === undefined) return 0;
@@ -1026,7 +1033,7 @@ function confirmarExclusaoMassa() {
             copia.valor = numero ? numero.toFixed(2) : '';
             return copia;
         });
-        localStorage.setItem(cfg.key, JSON.stringify(cfg.valores));
+        // Estado local em memória; persistência oficial ocorre no backend.
     }
 
     function fmt(v) {

@@ -3479,6 +3479,19 @@ def caixa():
     hoje = date.today()
     ontem = hoje - timedelta(days=1)
 
+    contagem_gaveta_estado = {'dinheiro': [], 'cheques': []}
+    try:
+        registro_gaveta = ContagemGaveta.query.filter_by(
+            usuario_id=current_user.id
+        ).order_by(ContagemGaveta.id.desc()).first()
+        if registro_gaveta:
+            estado = json.loads(registro_gaveta.estado_json or '{}')
+            if isinstance(estado, dict):
+                contagem_gaveta_estado['dinheiro'] = estado.get('dinheiro', []) if isinstance(estado.get('dinheiro', []), list) else []
+                contagem_gaveta_estado['cheques'] = estado.get('cheques', []) if isinstance(estado.get('cheques', []), list) else []
+    except Exception:
+        contagem_gaveta_estado = {'dinheiro': [], 'cheques': []}
+
     return render_template('caixa.html',
                          lancamentos_agrupados=lancamentos_agrupados,
                          setor_atual=setor_atual,
@@ -3489,7 +3502,8 @@ def caixa():
                          saldo_atual=saldo_atual,
                          data_hoje=hoje.strftime('%Y-%m-%d'),
                          hoje=hoje,
-                         ontem=ontem)
+                         ontem=ontem,
+                         contagem_gaveta_estado=contagem_gaveta_estado)
 
 
 def _limpar_valor_moeda(v):
@@ -3555,6 +3569,7 @@ def upload_imagem_cheque():
 
 
 @app.route('/caixa/gaveta/salvar', methods=['POST'])
+@app.route('/caixa/salvar_gaveta', methods=['POST'])
 @login_required
 def salvar_contagem_gaveta():
     payload = request.get_json(silent=True) or {}
@@ -3565,13 +3580,17 @@ def salvar_contagem_gaveta():
     hoje = get_hoje_brasil()
 
     try:
-        ContagemGaveta.query.filter_by(data=hoje, usuario_id=current_user.id).delete()
-        novo = ContagemGaveta(
-            data=hoje,
-            usuario_id=current_user.id,
-            estado_json=json.dumps(estado, ensure_ascii=False)
-        )
-        db.session.add(novo)
+        registro = ContagemGaveta.query.filter_by(usuario_id=current_user.id).order_by(ContagemGaveta.id.desc()).first()
+        if registro:
+            registro.data = hoje
+            registro.estado_json = json.dumps(estado, ensure_ascii=False)
+        else:
+            novo = ContagemGaveta(
+                data=hoje,
+                usuario_id=current_user.id,
+                estado_json=json.dumps(estado, ensure_ascii=False)
+            )
+            db.session.add(novo)
         db.session.commit()
         return jsonify(ok=True, mensagem='Contagem de gaveta salva com sucesso.')
     except Exception:
@@ -3580,10 +3599,10 @@ def salvar_contagem_gaveta():
 
 
 @app.route('/caixa/gaveta/carregar', methods=['GET'])
+@app.route('/caixa/obter_gaveta', methods=['GET'])
 @login_required
 def carregar_contagem_gaveta():
-    hoje = get_hoje_brasil()
-    registro = ContagemGaveta.query.filter_by(data=hoje, usuario_id=current_user.id).order_by(ContagemGaveta.id.desc()).first()
+    registro = ContagemGaveta.query.filter_by(usuario_id=current_user.id).order_by(ContagemGaveta.id.desc()).first()
     if not registro:
         return jsonify(ok=True, estado={'dinheiro': [], 'cheques': []})
     try:
