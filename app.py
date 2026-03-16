@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_file, current_app, Response
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_file, Response
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_wtf.csrf import CSRFProtect, generate_csrf
 from flask_compress import Compress
@@ -13,14 +13,6 @@ from sqlalchemy import event
 from sqlalchemy.engine import Engine
 import pytz
 from utils import otimizar_imagem, otimizar_imagem_em_memoria
-
-def get_hoje_brasil():
-    """Retorna a data de hoje no fuso horário do Brasil (Recife/São Paulo)."""
-    try:
-        fuso = pytz.timezone('America/Recife')
-        return datetime.now(fuso).date()
-    except Exception:
-        return date.today()
 from functools import wraps
 from sqlalchemy import func, desc, asc, text, or_, extract, case, cast
 from sqlalchemy.orm import joinedload, contains_eager, selectinload
@@ -36,7 +28,6 @@ import html
 import shutil
 import hashlib
 import traceback
-import threading
 import urllib.request
 import logging
 from logging.handlers import RotatingFileHandler
@@ -51,6 +42,16 @@ import cloudinary.uploader
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+
+
+def get_hoje_brasil():
+    """Retorna a data de hoje no fuso horário do Brasil (Recife/São Paulo)."""
+    try:
+        fuso = pytz.timezone('America/Recife')
+        return datetime.now(fuso).date()
+    except Exception:
+        return date.today()
+
 
 # #region agent log
 _log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.cursor')
@@ -118,7 +119,6 @@ COLUNA_ARQUIVO_PARA_BANCO = {
     'tamanho': 'tamanho',
     'classificacao': 'tamanho',
     'marca': 'marca',
-    'preco': 'preco_custo',
 }
 
 
@@ -261,7 +261,7 @@ def _extrair_cnpj(texto, nome_arquivo=None):
         if candidatos:
             print(f"DEBUG: CNPJs candidatos (pagador): {candidatos}")
         elif todos:
-            print(f"DEBUG: AVISO - Apenas CNPJs de emissores encontrados. CNPJ do pagador não identificado.")
+            print("DEBUG: AVISO - Apenas CNPJs de emissores encontrados. CNPJ do pagador não identificado.")
     
     if not candidatos:
         if todos and nome_arquivo:
@@ -574,7 +574,7 @@ def _extrair_razao_social(texto):
     )
     if bloco_dest:
         trecho = bloco_dest.group(1)
-        linhas = [re.sub(r'\s+', ' ', l).strip() for l in re.split(r'[\r\n]+', trecho) if l and l.strip()]
+        linhas = [re.sub(r'\s+', ' ', linha).strip() for linha in re.split(r'[\r\n]+', trecho) if linha and linha.strip()]
         # Se houver cabeçalho "Nome/Razão Social", capturar a linha imediatamente abaixo
         for i, linha in enumerate(linhas):
             if re.search(r'Nome\s*/\s*Raz[ãa]o\s+Social', linha, re.IGNORECASE):
@@ -1004,7 +1004,6 @@ def _processar_pdf(caminho_arquivo, tipo_documento):
         # Extrai NF, vencimento, valor do boleto, etc.
         padrao_cnpj = r'\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}'
         todos_cnpjs = re.findall(padrao_cnpj, texto_completo)
-        emissores_encontrados = [c for c in todos_cnpjs if c in CNPJS_EMISSORES]
         apenas_emissor = len(todos_cnpjs) > 0 and len([c for c in todos_cnpjs if c not in CNPJS_EMISSORES]) == 0
         
         # Tentar extrair NF do PDF primeiro
@@ -1093,7 +1092,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
     # Log inicial para confirmar execução
     try:
         _log_detalhado(f"\n{'='*80}")
-        _log_detalhado(f"=== PROCESSAMENTO DE DOCUMENTOS PENDENTES INICIADO ===")
+        _log_detalhado("=== PROCESSAMENTO DE DOCUMENTOS PENDENTES INICIADO ===")
         _log_detalhado(f"Arquivo de log: {log_detalhado_path}")
         _log_detalhado(f"Arquivo existe: {os.path.exists(log_detalhado_path)}")
         _log_detalhado(f"{'='*80}\n")
@@ -1290,7 +1289,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                     # PERMITE vincular mesmo se já tiver outro tipo de documento (ex: já tem boleto, mas pode vincular NF)
                     # VERIFICA se o documento vinculado realmente existe no banco antes de bloquear
                     vendas_validas = []
-                    _log_detalhado(f"\n--- Comparação Detalhada de NFs (Detecção de Espaços Invisíveis) ---")
+                    _log_detalhado("\n--- Comparação Detalhada de NFs (Detecção de Espaços Invisíveis) ---")
                     for v in vendas_candidatas:
                         nf_venda_raw = v.nf or ''
                         nf_venda_norm = _normalizar_nf(str(nf_venda_raw))
@@ -1353,7 +1352,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                                 print(f"DEBUG: ⚠️ CONFLITO DE EMPRESA DETECTADO MAS IGNORADO: {mensagem_conflito}")
                                 resultado['mensagens'].append(f"⚠️ {mensagem_conflito}")
                                 # Mesmo com conflito, permite vínculo (override) - REGRA: NF é soberana
-                                print(f"DEBUG: ⚠️ SOBRESCREVENDO apesar do conflito de empresa (NF é a única chave)")
+                                print("DEBUG: ⚠️ SOBRESCREVENDO apesar do conflito de empresa (NF é a única chave)")
                         
                         print(f"DEBUG: ✅ VÍNCULO AUTOMÁTICO FORÇADO (SOBRESCRITA): NF '{nf_limpa}' → Venda {venda_id} (Cliente: {cliente_nome})")
                         # FORÇAR vínculo: não há retorno prematuro, vai direto para o commit
@@ -1490,7 +1489,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                         _debug_log("app.py:836", "ANTES do commit", {"venda_id": venda_id, "documento_id": documento.id, "nf": nf_doc, "processados_antes": resultado['processados']}, "B")
                         # #endregion
                         _log_detalhado(f"DEBUG: Tentando gravar vínculo Venda ID {venda_id} com Documento ID {documento.id}")
-                        _log_detalhado(f"DEBUG: Estado antes do commit:")
+                        _log_detalhado("DEBUG: Estado antes do commit:")
                         _log_detalhado(f"  - Documento.venda_id = {documento.venda_id}")
                         _log_detalhado(f"  - Venda.caminho_boleto = {venda_match.caminho_boleto if tipo == 'BOLETO' else 'N/A'}")
                         _log_detalhado(f"  - Venda.caminho_nf = {venda_match.caminho_nf if tipo == 'NOTA_FISCAL' else 'N/A'}")
@@ -1517,24 +1516,24 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                         # LOG DETALHADO: Erro exato do banco de dados
                         erro_completo = traceback.format_exc()
                         _log_detalhado(f"\n{'='*80}")
-                        _log_detalhado(f"❌ ERRO DE COMMIT DETECTADO (Vínculo Único)")
+                        _log_detalhado("❌ ERRO DE COMMIT DETECTADO (Vínculo Único)")
                         _log_detalhado(f"{'='*80}")
                         _log_detalhado(f"Tipo de Erro: {type(commit_error).__name__}")
                         _log_detalhado(f"Mensagem: {str(commit_error)}")
-                        _log_detalhado(f"\nTraceback Completo:")
+                        _log_detalhado("\nTraceback Completo:")
                         _log_detalhado(erro_completo)
                         _log_detalhado(f"{'='*80}\n")
                         
                         # Verificar se é erro de chave estrangeira
                         if 'foreign key' in str(commit_error).lower() or 'FOREIGN KEY' in str(commit_error):
-                            _log_detalhado(f"⚠️ ERRO DE CHAVE ESTRANGEIRA DETECTADO:")
+                            _log_detalhado("⚠️ ERRO DE CHAVE ESTRANGEIRA DETECTADO:")
                             _log_detalhado(f"   Isso pode indicar que a Venda ID {venda_id} não existe mais no banco.")
                         elif 'integrity' in str(commit_error).lower() or 'INTEGRITY' in str(commit_error):
-                            _log_detalhado(f"⚠️ ERRO DE INTEGRIDADE DETECTADO:")
-                            _log_detalhado(f"   Isso pode indicar violação de constraint única ou chave estrangeira.")
+                            _log_detalhado("⚠️ ERRO DE INTEGRIDADE DETECTADO:")
+                            _log_detalhado("   Isso pode indicar violação de constraint única ou chave estrangeira.")
                         elif 'operational' in str(commit_error).lower() or 'OPERATIONAL' in str(commit_error):
-                            _log_detalhado(f"⚠️ ERRO OPERACIONAL DETECTADO:")
-                            _log_detalhado(f"   Isso pode indicar problema de conexão ou estrutura do banco.")
+                            _log_detalhado("⚠️ ERRO OPERACIONAL DETECTADO:")
+                            _log_detalhado("   Isso pode indicar problema de conexão ou estrutura do banco.")
                         
                         mensagem_erro = f"Falha técnica ao vincular NF {nf_doc}: {str(commit_error)}"
                         _log_detalhado(f"DEBUG: ❌ ERRO DE COMMIT: {mensagem_erro}")
@@ -2459,7 +2458,7 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
                 )
             '''))
             db.session.commit()
-        except (OperationalError, Exception) as e:
+        except (OperationalError, Exception):
             db.session.rollback()
         # Migração: caminho_pdf em vendas (PDF vinculado) — apenas para DBs antigos
         try:
@@ -3471,11 +3470,11 @@ def caixa():
     ).limit(500).all()
     meses_pt = {1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril', 5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto', 9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'}
     lancamentos_agrupados = {}
-    for l in lancamentos:
-        chave_mes = l.data.strftime('%Y-%m')
+    for lancamento in lancamentos:
+        chave_mes = lancamento.data.strftime('%Y-%m')
         if chave_mes not in lancamentos_agrupados:
             lancamentos_agrupados[chave_mes] = {
-                'titulo': f"{meses_pt[l.data.month]}",
+                'titulo': f"{meses_pt[lancamento.data.month]}",
                 'id_html': f"mes-{chave_mes}",
                 'itens': [],
                 'entradas_mes': Decimal('0.00'),
@@ -3491,10 +3490,10 @@ def caixa():
                 'entradas_pix': Decimal('0.00'),
                 'entradas_boleto': Decimal('0.00')
             }
-        lancamentos_agrupados[chave_mes]['itens'].append(l)
+        lancamentos_agrupados[chave_mes]['itens'].append(lancamento)
         # Cálculo por forma de pagamento (Saldo líquido: Entradas - Saídas)
-        valor_sinal = l.valor if l.tipo == 'ENTRADA' else -l.valor
-        forma = str(l.forma_pagamento or '').lower()
+        valor_sinal = lancamento.valor if lancamento.tipo == 'ENTRADA' else -lancamento.valor
+        forma = str(lancamento.forma_pagamento or '').lower()
         if 'dinheiro' in forma:
             lancamentos_agrupados[chave_mes]['saldo_dinheiro'] += valor_sinal
         elif 'cheque' in forma:
@@ -3504,22 +3503,22 @@ def caixa():
         elif 'boleto' in forma:
             lancamentos_agrupados[chave_mes]['saldo_boleto'] += valor_sinal
         # Cálculo de Entradas e Saídas
-        if l.tipo == 'ENTRADA':
-            lancamentos_agrupados[chave_mes]['entradas_mes'] += l.valor
+        if lancamento.tipo == 'ENTRADA':
+            lancamentos_agrupados[chave_mes]['entradas_mes'] += lancamento.valor
             if 'dinheiro' in forma:
-                lancamentos_agrupados[chave_mes]['entradas_dinheiro'] += l.valor
+                lancamentos_agrupados[chave_mes]['entradas_dinheiro'] += lancamento.valor
             elif 'cheque' in forma:
-                lancamentos_agrupados[chave_mes]['entradas_cheque'] += l.valor
+                lancamentos_agrupados[chave_mes]['entradas_cheque'] += lancamento.valor
             elif 'pix' in forma or 'transfer' in forma:
-                lancamentos_agrupados[chave_mes]['entradas_pix'] += l.valor
+                lancamentos_agrupados[chave_mes]['entradas_pix'] += lancamento.valor
             elif 'boleto' in forma:
-                lancamentos_agrupados[chave_mes]['entradas_boleto'] += l.valor
+                lancamentos_agrupados[chave_mes]['entradas_boleto'] += lancamento.valor
         else:
-            lancamentos_agrupados[chave_mes]['saidas_mes'] += l.valor
-            if l.categoria and 'Fornecedor' in l.categoria:
-                lancamentos_agrupados[chave_mes]['saidas_fornecedor_mes'] += l.valor
-            elif l.categoria and 'Pessoal' in l.categoria:
-                lancamentos_agrupados[chave_mes]['saidas_pessoal_mes'] += l.valor
+            lancamentos_agrupados[chave_mes]['saidas_mes'] += lancamento.valor
+            if lancamento.categoria and 'Fornecedor' in lancamento.categoria:
+                lancamentos_agrupados[chave_mes]['saidas_fornecedor_mes'] += lancamento.valor
+            elif lancamento.categoria and 'Pessoal' in lancamento.categoria:
+                lancamentos_agrupados[chave_mes]['saidas_pessoal_mes'] += lancamento.valor
     # Calcula o saldo de cada mês isolado
     for chave, grupo in lancamentos_agrupados.items():
         grupo['saldo_mes'] = grupo['entradas_mes'] - grupo['saidas_mes']
@@ -4184,7 +4183,7 @@ def excluir_cliente(id):
         db.session.delete(cliente)
         db.session.commit()
         flash('Cliente excluído com sucesso!', 'success')
-    except Exception as e:
+    except Exception:
         db.session.rollback()
         flash('Não é possível excluir este cliente, pois ele possui vínculos no sistema.', 'error')
     return redirect(url_for('listar_clientes'))
@@ -4261,7 +4260,7 @@ def _processar_linhas_clientes_upsert(linhas, erros_detalhados, sucesso_ref, err
                 sucesso_ref[0] += 1
             else:
                 if cnpj and Cliente.query.filter_by(cnpj=cnpj).first():
-                    erros_detalhados.append(_msg_linha(linha_num, nome, f"O CNPJ já está cadastrado para outro cliente. Use um CNPJ único.", True))
+                    erros_detalhados.append(_msg_linha(linha_num, nome, "O CNPJ já está cadastrado para outro cliente. Use um CNPJ único.", True))
                     erros_ref[0] += 1
                     continue
                 cliente = Cliente(
@@ -5319,7 +5318,7 @@ def _load_csv_produtos_flexible(filepath):
     try:
         with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
             content = f.read()
-    except Exception as e:
+    except Exception:
         return None, False
     lines = [ln.strip() for ln in content.strip().splitlines() if ln.strip()]
     if not lines:
@@ -6481,7 +6480,7 @@ def toggle_entrega(venda_id):
         Venda.query.filter(Venda.id.in_(ids)).update({'status_entrega': novo_status}, synchronize_session=False)
         db.session.commit()
         flash('Status de entrega atualizado com sucesso!', 'success')
-    except Exception as e:
+    except Exception:
         db.session.rollback()
         flash('Erro ao atualizar status de entrega. Tente novamente.', 'error')
     return redirect(url_for('logistica', status=status))
@@ -7137,7 +7136,7 @@ def excluir_venda(id):
         if nf_normalizada:
             query = query.filter(Venda.nf == nf_pedido)
         else:
-            query = query.filter((Venda.nf == None) | (Venda.nf == ''))
+            query = query.filter((Venda.nf.is_(None)) | (Venda.nf == ''))
     
     vendas_do_pedido = query.all()
     
@@ -7199,7 +7198,7 @@ def _vendas_do_pedido(venda):
         if nf_normalizada:
             query = query.filter(Venda.nf == nf_pedido)
         else:
-            query = query.filter((Venda.nf == None) | (Venda.nf == ''))
+            query = query.filter((Venda.nf.is_(None)) | (Venda.nf == ''))
     return query.all()
 
 
@@ -8856,12 +8855,12 @@ def disparar_relatorio():
 
     admins = Usuario.query.filter(
         Usuario.role == 'admin',
-        Usuario.email != None,
+        Usuario.email.isnot(None),
         Usuario.email != ''
     ).all()
     admins_jhones = Usuario.query.filter(
         Usuario.username == 'Jhones',
-        Usuario.email != None,
+        Usuario.email.isnot(None),
         Usuario.email != ''
     ).all()
     todos_admins = {a.id: a for a in admins + admins_jhones}
