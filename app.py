@@ -97,6 +97,10 @@ def _safe_db_commit() -> tuple[bool, str | None]:
         return False, str(e)
 
 
+# Timeout padrão para chamadas externas (Cloudinary, SMTP, urllib) — evita travar workers
+_EXTERNAL_TIMEOUT = 15
+
+
 # Mapeamento flexível: nomes possíveis no arquivo -> nomes do banco (models.Produto)
 COLUNA_ARQUIVO_PARA_BANCO = {
     'produto': 'nome_produto',
@@ -421,18 +425,20 @@ def _parse_clientes_raw_tsv(text):
 
 def _cliente_from_documento(cnpj, razao_social):
     """Encontra Cliente a partir de dados do documento (boleto/NF).
-    Prioridade 1: CNPJ (igual, ignorando formatação).
+    Prioridade 1: CNPJ (igual, ignorando formatação) — query indexada.
     Prioridade 2: razao_social (igual ou contém, case-insensitive).
     NÃO usa nome_cliente. Retorna Cliente ou None."""
     if cnpj and (cnpj_limpo := _normalizar_cnpj(cnpj)):
-        for c in Cliente.query.all():
+        cliente = Cliente.query.filter(Cliente.cnpj.isnot(None), Cliente.cnpj != '').all()
+        for c in cliente:
             if c.cnpj and _normalizar_cnpj(c.cnpj) == cnpj_limpo:
                 return c
     razao = (razao_social or '').strip()
     if not razao:
         return None
     razao_upper = razao.upper()
-    for c in Cliente.query.all():
+    candidatos = Cliente.query.filter(Cliente.razao_social.isnot(None), Cliente.razao_social != '').all()
+    for c in candidatos:
         rs = (c.razao_social or '').strip()
         if not rs:
             continue
@@ -1177,7 +1183,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                 documento = doc_existente
                 if not documento.url_arquivo and (os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL')):
                     try:
-                        resultado_nuvem = cloudinary.uploader.upload(caminho_completo, resource_type='raw')
+                        resultado_nuvem = cloudinary.uploader.upload(caminho_completo, resource_type='raw', timeout=_EXTERNAL_TIMEOUT)
                         documento.url_arquivo = resultado_nuvem.get('secure_url')
                         documento.public_id = resultado_nuvem.get('public_id')
                         db.session.flush()
@@ -1413,7 +1419,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                     # OBRIGATÓRIO: Fazer o upload para a nuvem ANTES de salvar no banco
                     if os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL'):
                         try:
-                            resultado_nuvem = cloudinary.uploader.upload(caminho_completo, resource_type='raw')
+                            resultado_nuvem = cloudinary.uploader.upload(caminho_completo, resource_type='raw', timeout=_EXTERNAL_TIMEOUT)
                             url_arquivo = resultado_nuvem.get('secure_url')
                             public_id = resultado_nuvem.get('public_id')
                             print(f"✅ Sucesso Nuvem: {url_arquivo}")
@@ -1707,11 +1713,12 @@ def _diagnosticar_vinculo_falhou(doc):
             'nf_tentada': nf_limpa,
             'nf_lida': doc_nf
         }
-    # Buscar todas as vendas e filtrar por _nf_match (exact ou base + sufixo numérico)
+    # Buscar vendas com NF preenchida (evita carregar tabela inteira)
     vendas_validas = []
-    for v in Venda.query.all():
-        if not v.nf:
-            continue
+    vendas_com_nf = Venda.query.filter(
+        Venda.nf.isnot(None), Venda.nf != ''
+    ).options(joinedload(Venda.cliente)).limit(5000).all()
+    for v in vendas_com_nf:
         nf_venda_norm = _normalizar_nf(str(v.nf))
         if _nf_match(nf_limpa, nf_venda_norm):
             vendas_validas.append(v)
@@ -1790,7 +1797,7 @@ def _auto_vincular_documentos_pendentes_por_nf(user_id=None):
         query = query.filter(Documento.usuario_id == user_id)
     docs = query.all()
 
-    vendas_com_nf = [v for v in Venda.query.all() if (v.nf or '').strip()]
+    vendas_com_nf = Venda.query.filter(Venda.nf.isnot(None), Venda.nf != '').limit(5000).all()
 
     for doc in docs:
         try:
@@ -2385,7 +2392,7 @@ def _deletar_cloudinary_seguro(public_id=None, url=None, resource_type='image'):
     if not (os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL')):
         return False
     try:
-        cloudinary.uploader.destroy(pid, resource_type=resource_type)
+        cloudinary.uploader.destroy(pid, resource_type=resource_type, timeout=_EXTERNAL_TIMEOUT)
         return True
     except Exception as ex:
         print(f"Aviso: falha ao deletar Cloudinary ({pid}): {ex}")
@@ -2843,6 +2850,7 @@ def perfil():
                         imagem,
                         folder="perfis_usuarios",
                         public_id=f"user_{current_user.id}_profile",
+                        timeout=_EXTERNAL_TIMEOUT,
                         overwrite=True,
                         resource_type="image"
                     )
@@ -3619,7 +3627,7 @@ def upload_imagem_cheque():
         return jsonify({'error': 'Arquivo inválido'}), 400
 
     try:
-        upload_result = cloudinary.uploader.upload(file, folder='cheques_gaveta')
+        upload_result = cloudinary.uploader.upload(file, folder='cheques_gaveta', timeout=_EXTERNAL_TIMEOUT)
         return jsonify({'url': upload_result.get('secure_url')}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -5059,7 +5067,7 @@ def novo_produto():
             for foto in fotos[:5]:
                 if foto and foto.filename:
                     try:
-                        upload_result = cloudinary.uploader.upload(foto, folder="menino_do_alho/produtos")
+                        upload_result = cloudinary.uploader.upload(foto, folder="menino_do_alho/produtos", timeout=_EXTERNAL_TIMEOUT)
                         url_segura = upload_result.get('secure_url')
                         public_id_foto = upload_result.get('public_id')
                         if url_segura:
@@ -5165,7 +5173,7 @@ def editar_produto(id):
             for foto in fotos[:slots_disponiveis]:
                 if foto and foto.filename:
                     try:
-                        upload_result = cloudinary.uploader.upload(foto, folder="menino_do_alho/produtos")
+                        upload_result = cloudinary.uploader.upload(foto, folder="menino_do_alho/produtos", timeout=_EXTERNAL_TIMEOUT)
                         url_segura = upload_result.get('secure_url')
                         public_id_foto = upload_result.get('public_id')
                         if url_segura:
@@ -6525,8 +6533,8 @@ def nova_venda():
             msg = 'Produto e quantidade são obrigatórios.'
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
-            clientes = Cliente.query.all()
-            produtos = Produto.query.filter(Produto.estoque_atual > 0).all()
+            clientes = Cliente.query.order_by(Cliente.nome_cliente).limit(1000).all()
+            produtos = Produto.query.filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
             return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
 
         # Validação de quantidade (deve ser positiva mesmo para perdas)
@@ -6535,8 +6543,8 @@ def nova_venda():
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
             flash(msg, 'error')
-            clientes = Cliente.query.all()
-            produtos = Produto.query.filter(Produto.estoque_atual > 0).all()
+            clientes = Cliente.query.order_by(Cliente.nome_cliente).limit(1000).all()
+            produtos = Produto.query.filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
             return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
 
         produto = _produto_com_lock(produto_id)
@@ -6550,8 +6558,8 @@ def nova_venda():
             msg = f'Estoque insuficiente! Disponível: {produto.estoque_atual}'
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
-            clientes = Cliente.query.all()
-            produtos = Produto.query.filter(Produto.estoque_atual > 0).all()
+            clientes = Cliente.query.order_by(Cliente.nome_cliente).limit(1000).all()
+            produtos = Produto.query.filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
             return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
 
         # ✅ Valores negativos no preço são permitidos (para ajustes, perdas, etc.)
@@ -6570,8 +6578,8 @@ def nova_venda():
             msg = 'Cliente é obrigatório.'
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
-            clientes = Cliente.query.all()
-            produtos = Produto.query.filter(Produto.estoque_atual > 0).all()
+            clientes = Cliente.query.order_by(Cliente.nome_cliente).limit(1000).all()
+            produtos = Produto.query.filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
             return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
         cliente_obj = Cliente.query.get(cliente_id)
         if not cliente_obj:
@@ -6579,8 +6587,8 @@ def nova_venda():
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
             flash(msg, 'error')
-            clientes = Cliente.query.all()
-            produtos = Produto.query.filter(Produto.estoque_atual > 0).all()
+            clientes = Cliente.query.order_by(Cliente.nome_cliente).limit(1000).all()
+            produtos = Produto.query.filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
             return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
         cliente_avulso = cliente_avulso_raw if 'DESCONHECIDO' in str(cliente_obj.nome_cliente or '').upper() else None
         forma_pagamento = (request.form.get('forma_pagamento') or '').strip() or None
@@ -6690,8 +6698,8 @@ def nova_venda():
         flash('Venda registrada com sucesso!', 'success')
         return redirect(url_for('listar_vendas'))
 
-    clientes = Cliente.query.all()
-    produtos = Produto.query.filter(Produto.estoque_atual > 0).all()
+    clientes = Cliente.query.order_by(Cliente.nome_cliente).limit(1000).all()
+    produtos = Produto.query.filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
     return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
 
 
@@ -6841,6 +6849,12 @@ def venda_adicionar_item():
         flash(f'Estoque insuficiente! Disponível: {produto.estoque_atual}', 'error')
         return redirect(url_for('listar_vendas'))
 
+    novo_estoque = int(produto.estoque_atual) - int(quantidade_venda)
+    if novo_estoque < 0:
+        flash(f'Estoque insuficiente! Disponível: {produto.estoque_atual}', 'error')
+        return redirect(url_for('listar_vendas'))
+    produto.estoque_atual = novo_estoque
+
     nova_venda = Venda(
         cliente_id=venda_existente.cliente_id,
         cliente_avulso=venda_existente.cliente_avulso,
@@ -6855,12 +6869,6 @@ def venda_adicionar_item():
         tipo_operacao=tipo_operacao,
     )
     db.session.add(nova_venda)
-    novo_estoque = int(produto.estoque_atual) - int(quantidade_venda)
-    if novo_estoque < 0:
-        db.session.rollback()
-        flash(f'Estoque insuficiente! Disponível: {produto.estoque_atual}', 'error')
-        return redirect(url_for('listar_vendas'))
-    produto.estoque_atual = novo_estoque
     db.session.commit()
     limpar_cache_dashboard()
     flash('Produto adicionado ao pedido com sucesso!', 'success')
@@ -6921,7 +6929,10 @@ def editar_venda(id):
                 flash('Produto é obrigatório.', 'error')
                 return redirect(url_for('listar_vendas'))
 
-            produto = Produto.query.get_or_404(produto_id)
+            produto = Produto.query.filter(Produto.id == produto_id).with_for_update().first()
+            if not produto:
+                flash('Produto não encontrado.', 'error')
+                return redirect(url_for('listar_vendas'))
 
             # Calcular estoque disponível considerando a devolução da quantidade original
             if produto.id == produto_original.id:
@@ -6933,6 +6944,10 @@ def editar_venda(id):
             if estoque_disponivel < quantidade_venda:
                 flash(f'Estoque insuficiente! Disponível: {estoque_disponivel}', 'error')
                 return redirect(url_for('listar_vendas'))
+
+            # Lock no produto original também se for diferente (evita race condition)
+            if produto.id != produto_original.id:
+                db.session.refresh(produto_original, with_for_update=True)
 
             # Atualizar estoque ANTES de atualizar a venda
             if produto.id == produto_original.id:
@@ -7055,8 +7070,8 @@ def editar_venda(id):
             flash('Erro ao salvar: verifique os dados preenchidos.', 'error')
             return redirect(request.referrer or url_for('listar_vendas'))
     
-    clientes = Cliente.query.all()
-    produtos = Produto.query.all()
+    clientes = Cliente.query.order_by(Cliente.nome_cliente).limit(1000).all()
+    produtos = Produto.query.order_by(Produto.nome_produto).limit(1000).all()
     venda_nf = venda.nf if venda.nf else ''
     return render_template('vendas/formulario.html', venda=venda, venda_nf=venda_nf, clientes=clientes, produtos=produtos)
 
@@ -7395,9 +7410,13 @@ def debug_texto_arquivo(id):
         texto_extraido = ""
 
         if documento.url_arquivo:
-            with urllib.request.urlopen(documento.url_arquivo, timeout=30) as resp:
+            with urllib.request.urlopen(documento.url_arquivo, timeout=_EXTERNAL_TIMEOUT) as resp:
                 conteudo_pdf = resp.read()
-            texto_extraido = _extrair_texto_raw_pdfplumber(io.BytesIO(conteudo_pdf))
+            pdf_buffer = io.BytesIO(conteudo_pdf)
+            try:
+                texto_extraido = _extrair_texto_raw_pdfplumber(pdf_buffer)
+            finally:
+                pdf_buffer.close()
         else:
             path = (documento.caminho_arquivo or '').strip()
             if not path:
@@ -7450,7 +7469,7 @@ def deletar_arquivo_dashboard(id):
     try:
         if documento.public_id and (os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL')):
             try:
-                cloudinary.uploader.destroy(documento.public_id, resource_type='raw')
+                cloudinary.uploader.destroy(documento.public_id, resource_type='raw', timeout=_EXTERNAL_TIMEOUT)
             except Exception as ex:
                 print(f"Aviso: Falha ao deletar no Cloudinary (pode já ter sido deletado): {ex}")
 
@@ -7492,7 +7511,7 @@ def deletar_arquivos_massa():
         for documento in documentos:
             if documento.public_id and (os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL')):
                 try:
-                    cloudinary.uploader.destroy(documento.public_id, resource_type='raw')
+                    cloudinary.uploader.destroy(documento.public_id, resource_type='raw', timeout=_EXTERNAL_TIMEOUT)
                 except Exception as ex:
                     print(f"Erro ao excluir do Cloudinary {documento.public_id}: {ex}")
             db.session.delete(documento)
@@ -7732,7 +7751,7 @@ def api_receber_automatico():
         if os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL'):
             try:
                 arquivo.stream.seek(0)
-                resultado_nuvem = cloudinary.uploader.upload(arquivo, resource_type='raw')
+                resultado_nuvem = cloudinary.uploader.upload(arquivo, resource_type='raw', timeout=_EXTERNAL_TIMEOUT)
                 url_arquivo = resultado_nuvem.get('secure_url')
                 public_id = resultado_nuvem.get('public_id')
             except Exception as e:
@@ -7945,7 +7964,7 @@ def admin_arquivos_deletar_massa():
         for d in docs:
             if d.public_id and (os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL')):
                 try:
-                    cloudinary.uploader.destroy(d.public_id, resource_type='raw')
+                    cloudinary.uploader.destroy(d.public_id, resource_type='raw', timeout=_EXTERNAL_TIMEOUT)
                 except Exception as ex:
                     print(f"Erro ao excluir do Cloudinary {d.public_id}: {ex}")
             db.session.delete(d)
@@ -8347,7 +8366,7 @@ def importar_vendas():
             erros = 0
             erros_detalhados = []
             # Mapa nome normalizado -> Produto para busca tolerante a espaços (evita rejeitar por espaços duplos/invisíveis)
-            _produtos_por_nome_normalizado = {_normalizar_nome_busca(p.nome_produto): p for p in Produto.query.all()}
+            _produtos_por_nome_normalizado = {_normalizar_nome_busca(p.nome_produto): p for p in Produto.query.limit(5000).all()}
             first_iter = True
             for idx, row in df.iterrows():
                 # #region agent log
@@ -8375,8 +8394,8 @@ def importar_vendas():
                         erros += 1
                         continue
                     nome_produto_clean = _normalizar_nome_busca(nome_produto)
-                    produto = _produtos_por_nome_normalizado.get(nome_produto_clean)
-                    if not produto:
+                    produto_cache = _produtos_por_nome_normalizado.get(nome_produto_clean)
+                    if not produto_cache:
                         erros_detalhados.append(_msg_linha(linha_num, nome_produto, "O produto não foi encontrado. Verifique se está cadastrado (o nome é comparado ignorando espaços extras e maiúsculas/minúsculas)", True))
                         erros += 1
                         continue
@@ -8386,6 +8405,7 @@ def importar_vendas():
                         erros_detalhados.append(_msg_linha(linha_num, contexto, f"A quantidade está vazia ou inválida ({qtd_raw}). Use um número inteiro (ex: 5)", True))
                         erros += 1
                         continue
+                    produto = Produto.query.filter(Produto.id == produto_cache.id).with_for_update().first()
                     if produto.estoque_atual < quantidade_venda:
                         erros_detalhados.append(_msg_linha(linha_num, nome_produto, f"Estoque insuficiente. Disponível: {produto.estoque_atual} unidades, solicitado: {quantidade_venda}. Ajuste a quantidade ou o estoque", True))
                         erros += 1
@@ -8416,7 +8436,7 @@ def importar_vendas():
                     )
                     base_dup = Venda.query.filter(
                         Venda.cliente_id == cliente.id,
-                        Venda.produto_id == produto.id,
+                        Venda.produto_id == produto_cache.id,
                         Venda.data_venda == data_venda
                     )
                     if nf_sn_zero:
@@ -8596,7 +8616,7 @@ def forcar_leitura_pasta():
                     public_id = None
                     if os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL'):
                         try:
-                            resultado_nuvem = cloudinary.uploader.upload(caminho_full, resource_type='raw')
+                            resultado_nuvem = cloudinary.uploader.upload(caminho_full, resource_type='raw', timeout=_EXTERNAL_TIMEOUT)
                             url_arquivo = resultado_nuvem.get('secure_url')
                             public_id = resultado_nuvem.get('public_id')
                         except Exception as ex:
@@ -8642,10 +8662,8 @@ def limpar_fantasmas():
     base_path = os.path.dirname(os.path.abspath(__file__))
     removidos = 0
     try:
-        docs = Documento.query.all()
+        docs = Documento.query.filter(Documento.url_arquivo.is_(None)).limit(2000).all()
         for doc in docs:
-            if doc.url_arquivo:
-                continue  # Documentos no Cloudinary não têm arquivo local
             caminho_full = os.path.join(base_path, doc.caminho_arquivo or '')
             if doc.caminho_arquivo and not os.path.exists(caminho_full):
                 db.session.delete(doc)
@@ -8869,7 +8887,7 @@ def disparar_relatorio():
         return jsonify({'msg': 'Nenhum administrador com e-mail cadastrado.'}), 200
 
     try:
-        server = smtplib.SMTP(MAIL_SERVER, MAIL_PORT)
+        server = smtplib.SMTP(MAIL_SERVER, MAIL_PORT, timeout=_EXTERNAL_TIMEOUT)
         server.starttls()
         server.login(MAIL_USERNAME, MAIL_PASSWORD)
 
@@ -8880,15 +8898,15 @@ def disparar_relatorio():
             msg['From'] = MAIL_USERNAME
             msg['To'] = admin.email
 
-            html = render_template('emails/relatorio.html',
-                                   nome=admin.nome or admin.username,
-                                   mes_ano=mes_ano_str,
-                                   faturamento=faturamento_fmt,
-                                   lucro=lucro_fmt,
-                                   qtd_vendas=qtd_vendas,
-                                   ticket_medio=ticket_fmt)
+            corpo_html = render_template('emails/relatorio.html',
+                                         nome=admin.nome or admin.username,
+                                         mes_ano=mes_ano_str,
+                                         faturamento=faturamento_fmt,
+                                         lucro=lucro_fmt,
+                                         qtd_vendas=qtd_vendas,
+                                         ticket_medio=ticket_fmt)
 
-            msg.attach(MIMEText(html, 'html'))
+            msg.attach(MIMEText(corpo_html, 'html'))
             server.send_message(msg)
             enviados += 1
 
@@ -8909,7 +8927,7 @@ def backup_excel():
     # Seção 1: Vendas
     writer.writerow(["=== VENDAS ==="])
     writer.writerow(["ID", "Data", "Cliente", "Produto", "Qtd", "Preço Unit.", "Valor Total", "Custo Total", "Lucro", "Situação", "Status Entrega"])
-    vendas = Venda.query.options(joinedload(Venda.cliente), joinedload(Venda.produto)).all()
+    vendas = Venda.query.options(joinedload(Venda.cliente), joinedload(Venda.produto)).order_by(Venda.data_venda.desc()).limit(10000).all()
     for v in vendas:
         cliente = v.cliente
         nome_cliente = cliente.nome_cliente if cliente else "Desconhecido"
@@ -8926,7 +8944,7 @@ def backup_excel():
     writer.writerow([])
     writer.writerow(["=== CLIENTES ==="])
     writer.writerow(["ID", "Nome", "Razão Social", "CNPJ", "Cidade", "Endereço"])
-    clientes = Cliente.query.all()
+    clientes = Cliente.query.order_by(Cliente.nome_cliente).limit(5000).all()
     for c in clientes:
         writer.writerow([c.id, c.nome_cliente or "", c.razao_social or "", c.cnpj or "", c.cidade or "", c.endereco or ""])
 
@@ -8934,12 +8952,13 @@ def backup_excel():
     writer.writerow([])
     writer.writerow(["=== ESTOQUE ==="])
     writer.writerow(["ID", "Nome", "Tipo", "Fornecedor", "Nacionalidade", "Tamanho", "Marca", "Preço Custo", "Qtd Entrada", "Estoque Atual", "Data Chegada"])
-    produtos = Produto.query.all()
+    produtos = Produto.query.order_by(Produto.data_chegada.desc()).limit(5000).all()
     for p in produtos:
         data_chegada = p.data_chegada.strftime('%d/%m/%Y') if p.data_chegada else ""
         writer.writerow([p.id, p.nome_produto or "", p.tipo or "", p.fornecedor or "", p.nacionalidade or "", p.tamanho or "", p.marca or "", float(p.preco_custo or 0), p.quantidade_entrada or 0, p.estoque_atual or 0, data_chegada])
 
     csv_data = output.getvalue()
+    output.close()
     data_atual = datetime.now().strftime('%Y-%m-%d_%Hh%M')
     nome_arquivo = f"backup_menino_do_alho_{data_atual}.csv"
     return send_file(
