@@ -219,13 +219,21 @@
         </div>
     </div>
     <div id="lista-documentos" class="overflow-hidden transition-all duration-300" style="max-height: 0px; opacity: 0;">
-    {% if documentos_recem_chegados %}
+    {% set lista_docs_dashboard = documentos_recem_chegados if documentos_recem_chegados is defined else documentos_pendentes %}
+    {% if lista_docs_dashboard %}
     <div class="space-y-4">
-        {% for item in documentos_recem_chegados %}
+        {% for item in lista_docs_dashboard %}
+        {% if item.doc is defined %}
         {% set doc = item.doc %}
         {% set nome = item.nome_arquivo %}
         {% set ok = item.leitura_ok %}
         {% set nf_nao = item.nf_nao_encontrada %}
+        {% else %}
+        {% set doc = item %}
+        {% set nome = (doc.caminho_arquivo.split('/')[-1] if doc.caminho_arquivo else ('Documento #' ~ doc.id)) %}
+        {% set ok = true %}
+        {% set nf_nao = false %}
+        {% endif %}
         <div class="rounded-xl border shadow-sm dark:shadow-none overflow-hidden flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 {% if ok and not nf_nao %}bg-emerald-50/50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800{% elif nf_nao %}bg-amber-50/50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800{% else %}bg-amber-50/50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800{% endif %}">
             <div class="flex items-center gap-4 p-4 flex-1 min-w-0">
                 <input type="checkbox" class="checkbox-documento w-5 h-5 text-emerald-600 rounded focus:ring-emerald-500 cursor-pointer" value="{{ doc.id }}" onchange="verificarSelecaoMassa()">
@@ -240,7 +248,7 @@
                     <p class="font-semibold text-gray-900 dark:text-gray-100 truncate">{% if item.etiqueta_pasta %}<span class="text-gray-500 dark:text-gray-400 font-medium">[{{ item.etiqueta_pasta }}]</span> {% endif %}{{ nome }}</p>
                     {% if not ok %}
                     <p class="text-sm text-amber-700 font-medium mt-0.5">Leitura incompleta — Verifique o arquivo manualmente.</p>
-                    {% elif item.diagnostico %}
+                    {% elif item.diagnostico is defined and item.diagnostico %}
                     {% set diag = item.diagnostico %}
                     {% if diag.cenario == 'B' %}
                     <p class="text-sm text-orange-700 font-medium mt-0.5" title="NF: {{ diag.nf_lida or doc.numero_nf or 'N/A' }}">{{ diag.mensagem }}</p>
@@ -278,7 +286,7 @@
                     <i data-lucide="search" class="w-4 h-4 mr-2"></i>Debug
                 </a>
                 {% endif %}
-                {% if item.diagnostico and item.diagnostico.cliente_id %}
+                {% if item.diagnostico is defined and item.diagnostico and item.diagnostico.cliente_id %}
                 <a href="{{ url_for('editar_cliente', id=item.diagnostico.cliente_id) }}" class="inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition" title="Verificar dados do cliente no cadastro">
                     <i data-lucide="user-check" class="w-4 h-4 mr-2"></i>Ver Cliente
                 </a>
@@ -292,7 +300,7 @@
                     <i data-lucide="plus-circle" class="w-4 h-4 mr-2"></i>Criar venda
                 </a>
                 {% endif %}
-                <button type="button" class="btn-vincular-doc inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 transition" data-doc-id="{{ doc.id }}" data-doc-nome="{{ nome }}" data-pagador="{{ (doc.razao_social or doc.cnpj) | default('', true) }}" {% if item.diagnostico %}title="NF: {{ item.diagnostico.nf_lida or doc.numero_nf or 'N/A' }}"{% elif doc.numero_nf %}title="NF: {{ doc.numero_nf }}"{% endif %}>
+                <button type="button" class="btn-vincular-doc inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 transition" data-doc-id="{{ doc.id }}" data-doc-nome="{{ nome }}" data-pagador="{{ (doc.razao_social or doc.cnpj) | default('', true) }}" {% if item.diagnostico is defined and item.diagnostico %}title="NF: {{ item.diagnostico.nf_lida or doc.numero_nf or 'N/A' }}"{% elif doc.numero_nf %}title="NF: {{ doc.numero_nf }}"{% endif %}>
                     <i data-lucide="link" class="w-4 h-4 mr-2"></i>Vincular à Venda
                 </button>
                 <button type="button" class="inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-700 transition" onclick="confirmarExclusaoArquivo({{ doc.id }}, this)" title="Excluir arquivo definitivamente">

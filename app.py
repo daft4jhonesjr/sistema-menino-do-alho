@@ -1738,9 +1738,8 @@ def _listar_documentos_recem_chegados(user_id=None):
     Mostra todos os documentos órfãos, independente de status. Filtra por usuario_id se informado."""
     resultado_processamento = {"sucesso": 0, "falha": 0, "erros": [], "vinculos_novos": 0, "processados": 0}
     query = Documento.query.filter(Documento.venda_id.is_(None))
-    if user_id is not None:
-        # Documentos globais (usuario_id=None) também devem aparecer para o usuário.
-        query = query.filter(or_(Documento.usuario_id == user_id, Documento.usuario_id.is_(None)))
+    # Para o Dashboard, documentos órfãos devem ser visíveis independentemente de ownership.
+    # Mantemos o parâmetro user_id por compatibilidade, mas sem restringir esta listagem.
     docs = query.order_by(Documento.data_processamento.desc()).limit(5).all()
     documentos = []
     for doc in docs:
@@ -3093,9 +3092,9 @@ def dashboard():
     filtro_sem_bacalhau_tipo = ~Produto.tipo.ilike('%BACALHAU%')
     filtro_sem_bacalhau_nome = ~Produto.nome_produto.ilike('%BACALHAU%')
     
-    # Lista documentos sem vínculo (venda_id=None). Admin vê todos; usuário comum vê os seus + globais.
-    user_id_docs = None if current_user.is_admin() else current_user.id
-    documentos_recem_chegados, resultado_processamento = _listar_documentos_recem_chegados(user_id=user_id_docs)
+    # Lista documentos órfãos sem vínculo (venda_id=None), sem filtro por usuário.
+    documentos_recem_chegados, resultado_processamento = _listar_documentos_recem_chegados()
+    documentos_pendentes = [item.get('doc') for item in documentos_recem_chegados if item.get('doc')]
     vinculos_novos = resultado_processamento.get('vinculos_novos', 0)
     pendentes = len(documentos_recem_chegados)
     processados = resultado_processamento.get('processados', 0)
@@ -3353,6 +3352,7 @@ def dashboard():
                          margem_porcentagem=float(margem_porcentagem),
                          ticket_medio=float(ticket_medio),
                          documentos_recem_chegados=documentos_recem_chegados,
+                         documentos_pendentes=documentos_pendentes,
                          # Estatísticas de saúde do sistema
                          total_documentos=total_documentos,
                          documentos_vinculados=documentos_vinculados,
@@ -7520,6 +7520,19 @@ def upload_documento():
         limpar_cache_dashboard()
         caminho_relativo = os.path.join('documentos_entrada', subpasta, nome_arquivo).replace('\\', '/')
         doc_criado = Documento.query.filter_by(caminho_arquivo=caminho_relativo).order_by(Documento.id.desc()).first()
+        if not doc_criado:
+            # Fallback defensivo: nunca perder o arquivo recebido, mesmo sem venda correspondente.
+            tipo_doc = 'BOLETO' if subpasta == 'boletos' else 'NOTA_FISCAL'
+            doc_criado = Documento(
+                caminho_arquivo=caminho_relativo,
+                tipo=tipo_doc,
+                usuario_id=uid,
+                venda_id=None,
+                data_processamento=date.today()
+            )
+            db.session.add(doc_criado)
+            db.session.commit()
+            limpar_cache_dashboard()
         _debug_log(
             "app.py:upload_documento",
             "Upload manual processado",
@@ -7609,6 +7622,7 @@ def api_receber_automatico():
             numero_nf=(request.form.get('numero_nf') or request.form.get('nf') or None),
             razao_social=(request.form.get('razao_social') or request.form.get('pagador') or None),
             usuario_id=user_id,
+            venda_id=None,
             data_processamento=date.today()
         )
         db.session.add(novo_documento)
