@@ -7787,6 +7787,94 @@ def api_receber_automatico():
         return jsonify({'status': 'erro', 'mensagem': str(e)}), 500
 
 
+@app.route('/api/bot/upload', methods=['POST'])
+@csrf.exempt
+def api_bot_upload():
+    """Rota dedicada para o bot externo (Node.js) enviar boletos/NFes.
+
+    Autenticação via header X-API-KEY validado contra a variável
+    de ambiente API_BOT_TOKEN. Aceita campos: file/arquivo/documento (arquivo),
+    tipo (boleto|nfe), numero_nf, razao_social.
+    """
+    token_enviado = request.headers.get('X-API-KEY')
+    token_verdadeiro = os.environ.get('API_BOT_TOKEN')
+
+    if not token_verdadeiro or token_enviado != token_verdadeiro:
+        return jsonify({'erro': 'Acesso negado. Token inválido ou ausente.'}), 403
+
+    arquivo = request.files.get('file') or request.files.get('arquivo') or request.files.get('documento')
+    if not arquivo or not arquivo.filename:
+        return jsonify({'erro': 'Nenhum arquivo enviado.'}), 400
+
+    filename = secure_filename(arquivo.filename)
+    if not filename:
+        return jsonify({'erro': 'Nome de arquivo inválido.'}), 400
+
+    extensao = os.path.splitext(filename)[1].lower()
+    if extensao not in {'.pdf', '.png', '.jpg', '.jpeg'}:
+        return jsonify({'erro': 'Extensão não permitida. Use .pdf, .png, .jpg ou .jpeg.'}), 400
+
+    tipo_bruto = (request.form.get('tipo') or request.form.get('type') or '').strip().lower()
+    if tipo_bruto in ('boleto', 'boletos'):
+        tipo_documento = 'BOLETO'
+    elif tipo_bruto in ('nfe', 'nf', 'nota_fiscal', 'nota fiscal', 'notas_fiscais'):
+        tipo_documento = 'NOTA_FISCAL'
+    else:
+        tipo_documento = 'NOTA_FISCAL' if ('nfe' in filename.lower() or 'nota' in filename.lower()) else 'BOLETO'
+
+    primeiro_user = Usuario.query.first()
+    user_id = primeiro_user.id if primeiro_user else None
+
+    try:
+        url_arquivo = None
+        public_id = None
+        caminho_relativo = None
+
+        if os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL'):
+            arquivo.stream.seek(0)
+            resultado_nuvem = cloudinary.uploader.upload(arquivo, resource_type='raw', timeout=_EXTERNAL_TIMEOUT)
+            url_arquivo = resultado_nuvem.get('secure_url')
+            public_id = resultado_nuvem.get('public_id')
+
+        if not url_arquivo:
+            pasta = app.config['UPLOAD_FOLDER']
+            os.makedirs(pasta, exist_ok=True)
+            caminho = os.path.join(pasta, filename)
+            arquivo.stream.seek(0)
+            arquivo.save(caminho)
+            caminho_relativo = os.path.relpath(caminho, os.path.dirname(os.path.abspath(__file__)))
+
+        novo_documento = Documento(
+            url_arquivo=url_arquivo,
+            public_id=public_id,
+            caminho_arquivo=caminho_relativo,
+            tipo=tipo_documento,
+            numero_nf=(request.form.get('numero_nf') or request.form.get('nf') or None),
+            razao_social=(request.form.get('razao_social') or request.form.get('pagador') or None),
+            usuario_id=user_id,
+            venda_id=None,
+            data_processamento=date.today()
+        )
+        db.session.add(novo_documento)
+        db.session.commit()
+        limpar_cache_dashboard()
+
+        current_app.logger.info(f"Bot upload: {filename} (doc_id={novo_documento.id}, tipo={tipo_documento})")
+
+        return jsonify({
+            'status': 'success',
+            'mensagem': 'Arquivo recebido com sucesso.',
+            'documento_id': novo_documento.id,
+            'tipo': tipo_documento,
+            'url_arquivo': novo_documento.url_arquivo
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erro no bot upload: {e}")
+        return jsonify({'erro': str(e)}), 500
+
+
 @app.route('/processar_documentos', methods=['POST'])
 @login_required
 def processar_documentos():
