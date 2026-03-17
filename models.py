@@ -56,7 +56,8 @@ class Cliente(db.Model):
     cidade = db.Column(db.String(100))
     telefone = db.Column(db.String(20), nullable=True)
     endereco = db.Column(db.String(255))
-    
+    ativo = db.Column(db.Boolean, default=True, nullable=False, server_default='1')
+
     # Relacionamento com vendas
     vendas = db.relationship('Venda', backref='cliente', lazy=True, cascade='all, delete-orphan')
     

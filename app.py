@@ -2587,6 +2587,12 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             db.session.commit()
         except (OperationalError, Exception):
             db.session.rollback()
+        # Migração: ativo em clientes (soft delete / inativação)
+        try:
+            db.session.execute(text("ALTER TABLE clientes ADD COLUMN ativo BOOLEAN NOT NULL DEFAULT TRUE"))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
         # Migração: índices para campos filtráveis (performance em 10k+ registros)
         for idx_sql in [
             'CREATE INDEX IF NOT EXISTS ix_clientes_cnpj ON clientes(cnpj)',
@@ -3010,9 +3016,12 @@ def get_radar_recompra():
 
     vendas_all = Venda.query.options(
         joinedload(Venda.cliente), joinedload(Venda.produto)
-    ).join(Produto, Venda.produto_id == Produto.id).filter(
+    ).join(Produto, Venda.produto_id == Produto.id).join(
+        Cliente, Venda.cliente_id == Cliente.id
+    ).filter(
         ~Produto.tipo.ilike('%BACALHAU%'),
-        ~Produto.nome_produto.ilike('%BACALHAU%')
+        ~Produto.nome_produto.ilike('%BACALHAU%'),
+        Cliente.ativo == True
     ).order_by(Venda.cliente_id, Venda.data_venda.asc()).all()
 
     grupos = {}
@@ -4121,6 +4130,27 @@ def excluir_cliente(id):
     except Exception:
         db.session.rollback()
         flash('Não é possível excluir este cliente, pois ele possui vínculos no sistema.', 'error')
+    return redirect(url_for('listar_clientes'))
+
+
+@app.route('/cliente/<int:id>/toggle_ativo', methods=['POST'])
+@login_required
+def toggle_ativo_cliente(id: int):
+    """Alterna o status ativo/inativo de um cliente (soft delete)."""
+    cliente = Cliente.query.get_or_404(id)
+    try:
+        cliente.ativo = not cliente.ativo
+        db.session.commit()
+        estado = 'ativado' if cliente.ativo else 'inativado'
+        if _is_ajax():
+            return jsonify(ok=True, ativo=cliente.ativo, mensagem=f'Cliente {cliente.nome_cliente} {estado} com sucesso.')
+        flash(f'Cliente {cliente.nome_cliente} {estado} com sucesso.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erro ao alternar status do cliente {id}: {e}")
+        if _is_ajax():
+            return jsonify(ok=False, mensagem='Erro ao alterar status do cliente.'), 500
+        flash('Erro ao alterar status do cliente.', 'error')
     return redirect(url_for('listar_clientes'))
 
 
@@ -6481,7 +6511,7 @@ def nova_venda():
             msg = 'Produto e quantidade são obrigatórios.'
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
-            clientes = Cliente.query.order_by(Cliente.nome_cliente).limit(1000).all()
+            clientes = Cliente.query.filter_by(ativo=True).order_by(Cliente.nome_cliente).limit(1000).all()
             produtos = Produto.query.filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
             return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
 
@@ -6491,7 +6521,7 @@ def nova_venda():
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
             flash(msg, 'error')
-            clientes = Cliente.query.order_by(Cliente.nome_cliente).limit(1000).all()
+            clientes = Cliente.query.filter_by(ativo=True).order_by(Cliente.nome_cliente).limit(1000).all()
             produtos = Produto.query.filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
             return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
 
@@ -6506,7 +6536,7 @@ def nova_venda():
             msg = f'Estoque insuficiente! Disponível: {produto.estoque_atual}'
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
-            clientes = Cliente.query.order_by(Cliente.nome_cliente).limit(1000).all()
+            clientes = Cliente.query.filter_by(ativo=True).order_by(Cliente.nome_cliente).limit(1000).all()
             produtos = Produto.query.filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
             return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
 
@@ -6526,7 +6556,7 @@ def nova_venda():
             msg = 'Cliente é obrigatório.'
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
-            clientes = Cliente.query.order_by(Cliente.nome_cliente).limit(1000).all()
+            clientes = Cliente.query.filter_by(ativo=True).order_by(Cliente.nome_cliente).limit(1000).all()
             produtos = Produto.query.filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
             return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
         cliente_obj = Cliente.query.get(cliente_id)
@@ -6535,7 +6565,7 @@ def nova_venda():
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
             flash(msg, 'error')
-            clientes = Cliente.query.order_by(Cliente.nome_cliente).limit(1000).all()
+            clientes = Cliente.query.filter_by(ativo=True).order_by(Cliente.nome_cliente).limit(1000).all()
             produtos = Produto.query.filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
             return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
         cliente_avulso = cliente_avulso_raw if 'DESCONHECIDO' in str(cliente_obj.nome_cliente or '').upper() else None
@@ -6646,7 +6676,7 @@ def nova_venda():
         flash('Venda registrada com sucesso!', 'success')
         return redirect(url_for('listar_vendas'))
 
-    clientes = Cliente.query.order_by(Cliente.nome_cliente).limit(1000).all()
+    clientes = Cliente.query.filter_by(ativo=True).order_by(Cliente.nome_cliente).limit(1000).all()
     produtos = Produto.query.filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
     return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
 

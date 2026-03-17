@@ -74,16 +74,24 @@
                 </thead>
                 <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                     {% for cliente in clientes %}
-                    <tr class="{% if loop.index0 % 2 == 0 %}bg-white dark:bg-gray-800{% else %}bg-gray-50 dark:bg-gray-700{% endif %} hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition">
+                    {% set cli_inativo = not cliente.ativo %}
+                    <tr class="{% if loop.index0 % 2 == 0 %}bg-white dark:bg-gray-800{% else %}bg-gray-50 dark:bg-gray-700{% endif %} hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition {{ 'opacity-50' if cli_inativo else '' }}">
                         <td class="px-4 py-4">
                             <input type="checkbox" class="bulk-row rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" value="{{ cliente.id }}">
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ cliente.id }}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
-                        <button type="button" onclick="abrirModalVendas('cliente', {{ cliente.id }})"
-                                class="text-emerald-700 dark:text-emerald-400 hover:underline font-bold transition text-left cursor-pointer">
-                            {{ cliente.nome_cliente }}
-                        </button>
+                        <div class="flex items-center gap-2">
+                            <button type="button" onclick="abrirModalVendas('cliente', {{ cliente.id }})"
+                                    class="text-emerald-700 dark:text-emerald-400 hover:underline font-bold transition text-left cursor-pointer">
+                                {{ cliente.nome_cliente }}
+                            </button>
+                            {% if cli_inativo %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300">Inativo</span>
+                            {% else %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">Ativo</span>
+                            {% endif %}
+                        </div>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ cliente.razao_social or '-' }}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ (cliente.cnpj | format_cnpj) or '-' }}</td>
@@ -124,6 +132,12 @@
                                 data-endereco="{{ cliente.endereco or '' }}"
                                 title="Editar cliente">
                             <i data-lucide="pencil" class="w-4 h-4"></i>
+                        </button>
+                        <button type="button" class="btn-toggle-ativo {{ 'text-gray-400 dark:text-gray-500 hover:text-emerald-600 dark:hover:text-emerald-400' if cli_inativo else 'text-emerald-600 dark:text-emerald-400 hover:text-gray-400 dark:hover:text-gray-500' }} inline-flex items-center cursor-pointer bg-transparent border-none p-0 mr-4 transition-colors"
+                                data-id="{{ cliente.id }}"
+                                data-ativo="{{ 'true' if cliente.ativo else 'false' }}"
+                                title="{{ 'Reativar cliente' if cli_inativo else 'Inativar cliente' }}">
+                            <i data-lucide="power" class="w-4 h-4"></i>
                         </button>
                         <form action="{{ url_for('excluir_cliente', id=cliente.id) }}" method="POST" class="inline" onsubmit="return confirm('Tem certeza que deseja excluir este cliente?');">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
@@ -540,6 +554,34 @@ function toggleDropdownNovoCliente(event) {
             form.submit();
         });
     }
+})();
+
+// Toggle Ativo/Inativo via AJAX
+(function() {
+    document.querySelectorAll('.btn-toggle-ativo').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var id = btn.getAttribute('data-id');
+            var ativo = btn.getAttribute('data-ativo') === 'true';
+            var acao = ativo ? 'inativar' : 'reativar';
+            if (!confirm('Deseja ' + acao + ' este cliente?')) return;
+            fetch('/cliente/' + id + '/toggle_ativo', {
+                method: 'POST',
+                headers: Object.assign(
+                    { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json' },
+                    window.getCsrfHeaders ? window.getCsrfHeaders() : {}
+                )
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.ok) {
+                    window.location.reload();
+                } else {
+                    alert(data.mensagem || 'Erro ao alterar status.');
+                }
+            })
+            .catch(function() { alert('Erro de conexão. Tente novamente.'); });
+        });
+    });
 })();
 
 // Busca instantânea na tabela de clientes com debounce
