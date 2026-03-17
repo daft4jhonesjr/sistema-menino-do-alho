@@ -14,7 +14,7 @@ from sqlalchemy import event
 from sqlalchemy.engine import Engine
 import pytz
 from functools import wraps
-from sqlalchemy import func, desc, asc, text, or_, extract, case, cast
+from sqlalchemy import func, desc, asc, text, or_, extract, case, cast, inspect
 from sqlalchemy.orm import joinedload, contains_eager, selectinload
 from sqlalchemy.exc import IntegrityError, OperationalError
 import pandas as pd
@@ -2363,15 +2363,32 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             popular_fornecedores_iniciais()
         except Exception:
             db.session.rollback()
-        try:
-            db.session.execute(text('ALTER TABLE produtos ADD COLUMN preco_venda_alvo NUMERIC(10,2)'))
+        inspector = inspect(db.engine)
+        colunas_cache = {}
+
+        def _colunas_tabela(nome_tabela):
+            """Retorna set de colunas da tabela (com cache local)."""
+            if nome_tabela not in colunas_cache:
+                colunas_cache[nome_tabela] = {c['name'] for c in inspector.get_columns(nome_tabela)}
+            return colunas_cache[nome_tabela]
+
+        def _adicionar_coluna_se_ausente(nome_tabela, nome_coluna, ddl_coluna):
+            """Adiciona coluna apenas quando ausente (compatível SQLite/PostgreSQL)."""
+            if nome_coluna in _colunas_tabela(nome_tabela):
+                return False
+            db.session.execute(text(f'ALTER TABLE {nome_tabela} ADD COLUMN {nome_coluna} {ddl_coluna}'))
             db.session.commit()
+            # Atualiza cache local após alteração
+            colunas_cache[nome_tabela].add(nome_coluna)
+            return True
+
+        try:
+            _adicionar_coluna_se_ausente('produtos', 'preco_venda_alvo', 'NUMERIC(10,2)')
         except (OperationalError, Exception):
             db.session.rollback()
         # Migração: adicionar quantidade_entrada e popular com estoque_atual existente
         try:
-            db.session.execute(text('ALTER TABLE produtos ADD COLUMN quantidade_entrada INTEGER DEFAULT 0'))
-            db.session.commit()
+            _adicionar_coluna_se_ausente('produtos', 'quantidade_entrada', 'INTEGER DEFAULT 0')
             db.session.execute(text('UPDATE produtos SET quantidade_entrada = estoque_atual WHERE quantidade_entrada = 0 OR quantidade_entrada IS NULL'))
             db.session.commit()
         except (OperationalError, Exception):
@@ -2380,36 +2397,21 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
                 db.session.commit()
             except Exception:
                 db.session.rollback()
-        # Migração: criar tabela documentos se não existir
+        # Migração: garantir tabela documentos (cross-database)
         try:
-            db.session.execute(text('''
-                CREATE TABLE IF NOT EXISTS documentos (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    caminho_arquivo VARCHAR(500) NOT NULL UNIQUE,
-                    tipo VARCHAR(20) NOT NULL,
-                    cnpj VARCHAR(18),
-                    numero_nf VARCHAR(50),
-                    razao_social VARCHAR(200),
-                    data_vencimento DATE,
-                    venda_id INTEGER,
-                    data_processamento DATE NOT NULL,
-                    FOREIGN KEY (venda_id) REFERENCES vendas(id)
-                )
-            '''))
+            Documento.__table__.create(bind=db.engine, checkfirst=True)
             db.session.commit()
         except (OperationalError, Exception):
             db.session.rollback()
         # Migração: caminho_pdf em vendas (PDF vinculado) — apenas para DBs antigos
         try:
-            db.session.execute(text('ALTER TABLE vendas ADD COLUMN caminho_pdf VARCHAR(500)'))
-            db.session.commit()
+            _adicionar_coluna_se_ausente('vendas', 'caminho_pdf', 'VARCHAR(500)')
         except (OperationalError, Exception):
             db.session.rollback()
         # Migração: caminho_boleto e caminho_nf em vendas
         for col in ('caminho_boleto', 'caminho_nf'):
             try:
-                db.session.execute(text(f'ALTER TABLE vendas ADD COLUMN {col} VARCHAR(500)'))
-                db.session.commit()
+                _adicionar_coluna_se_ausente('vendas', col, 'VARCHAR(500)')
             except (OperationalError, Exception):
                 db.session.rollback()
         # Índice em vendas.nf para buscas por NF
@@ -2420,8 +2422,7 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             db.session.rollback()
         # Cache OCR: nf_extraida em documentos (evita re-rodar OCR)
         try:
-            db.session.execute(text('ALTER TABLE documentos ADD COLUMN nf_extraida VARCHAR(50)'))
-            db.session.commit()
+            _adicionar_coluna_se_ausente('documentos', 'nf_extraida', 'VARCHAR(50)')
         except (OperationalError, Exception):
             db.session.rollback()
         try:
@@ -2431,104 +2432,69 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             db.session.rollback()
         # Migração: usuario_id em documentos (quem processou/recuperou)
         try:
-            db.session.execute(text('ALTER TABLE documentos ADD COLUMN usuario_id INTEGER'))
-            db.session.commit()
+            _adicionar_coluna_se_ausente('documentos', 'usuario_id', 'INTEGER')
         except (OperationalError, Exception):
             db.session.rollback()
         # Migração: conteudo_binario em documentos (PDF armazenado no banco)
         try:
             uri = app.config.get('SQLALCHEMY_DATABASE_URI', '')
             col_type = 'BYTEA' if 'postgres' in uri.lower() else 'BLOB'
-            db.session.execute(text(f'ALTER TABLE documentos ADD COLUMN conteudo_binario {col_type}'))
-            db.session.commit()
+            _adicionar_coluna_se_ausente('documentos', 'conteudo_binario', col_type)
         except (OperationalError, Exception):
             db.session.rollback()
         # Migração: url_arquivo e public_id em documentos (Cloudinary)
         for col, col_def in [('url_arquivo', 'VARCHAR(500)'), ('public_id', 'VARCHAR(200)')]:
             try:
-                db.session.execute(text(f'ALTER TABLE documentos ADD COLUMN {col} {col_def}'))
-                db.session.commit()
+                _adicionar_coluna_se_ausente('documentos', col, col_def)
             except (OperationalError, Exception):
                 db.session.rollback()
         # Migração: public_id em produto_fotos (Cloudinary)
         try:
-            db.session.execute(text('ALTER TABLE produto_fotos ADD COLUMN public_id VARCHAR(200)'))
-            db.session.commit()
+            _adicionar_coluna_se_ausente('produto_fotos', 'public_id', 'VARCHAR(200)')
         except (OperationalError, Exception):
             db.session.rollback()
         # Migração: profile_image_url em usuarios (foto de perfil)
         try:
-            db.session.execute(text('ALTER TABLE usuarios ADD COLUMN profile_image_url VARCHAR(500)'))
-            db.session.commit()
+            _adicionar_coluna_se_ausente('usuarios', 'profile_image_url', 'VARCHAR(500)')
         except (OperationalError, Exception):
             db.session.rollback()
         # Migração: nome em usuarios (nome completo/real)
         try:
-            db.session.execute(text('ALTER TABLE usuarios ADD COLUMN nome VARCHAR(100)'))
-            db.session.commit()
+            _adicionar_coluna_se_ausente('usuarios', 'nome', 'VARCHAR(100)')
         except (OperationalError, Exception):
             db.session.rollback()
         # Migração: email em usuarios
         try:
-            db.session.execute(text('ALTER TABLE usuarios ADD COLUMN email VARCHAR(150)'))
-            db.session.commit()
+            _adicionar_coluna_se_ausente('usuarios', 'email', 'VARCHAR(150)')
         except (OperationalError, Exception):
             db.session.rollback()
-        # --- MIGRACAO AUTOMATICA: Colunas de notificacao em usuarios (PostgreSQL) ---
+        # --- MIGRACAO AUTOMATICA: Colunas de notificacao em usuarios (cross-database) ---
         try:
-            # ADD COLUMN IF NOT EXISTS garante que só cria na primeira vez (PostgreSQL)
-            db.session.execute(text('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS notifica_boletos BOOLEAN DEFAULT TRUE'))
-            db.session.execute(text('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS notifica_radar BOOLEAN DEFAULT TRUE'))
-            db.session.execute(text('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS notifica_logistica BOOLEAN DEFAULT TRUE'))
-            db.session.execute(text('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS notifica_frase BOOLEAN DEFAULT TRUE'))
-            db.session.commit()
-            print("Migração: Colunas de notificação verificadas/adicionadas com sucesso.")
+            colunas_notificacao = ('notifica_boletos', 'notifica_radar', 'notifica_logistica', 'notifica_frase')
+            adicionadas = []
+
+            for col in colunas_notificacao:
+                if _adicionar_coluna_se_ausente('usuarios', col, 'BOOLEAN DEFAULT 1'):
+                    adicionadas.append(col)
+
+            if adicionadas:
+                print(f"Migração: Colunas de notificação adicionadas: {', '.join(adicionadas)}")
+            else:
+                print("Migração: Colunas de notificação já estavam presentes.")
         except Exception as e:
             db.session.rollback()
-            # Fallback para SQLite (não suporta IF NOT EXISTS em ADD COLUMN)
-            try:
-                for col in ('notifica_boletos', 'notifica_radar', 'notifica_logistica', 'notifica_frase'):
-                    db.session.execute(text(f'ALTER TABLE usuarios ADD COLUMN {col} BOOLEAN DEFAULT 1'))
-                    db.session.commit()
-            except (OperationalError, Exception):
-                db.session.rollback()
-            print(f"Migração ignorada (provavelmente banco SQLite local ou erro): {e}")
+            print(f"Migração notificação (usuarios) falhou: {e}")
         # Migração: tabela de inscrições Web Push
         try:
-            db.session.execute(text('''
-                CREATE TABLE IF NOT EXISTS push_subscriptions (
-                    id SERIAL PRIMARY KEY,
-                    user_id INTEGER REFERENCES usuarios(id) ON DELETE CASCADE,
-                    endpoint TEXT NOT NULL UNIQUE,
-                    p256dh TEXT NOT NULL,
-                    auth VARCHAR(64) NOT NULL,
-                    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            '''))
+            PushSubscription.__table__.create(bind=db.engine, checkfirst=True)
             db.session.commit()
             print("Migração: tabela push_subscriptions verificada/criada com sucesso.")
         except Exception as e:
             db.session.rollback()
-            # Fallback SQLite
-            try:
-                db.session.execute(text('''
-                    CREATE TABLE IF NOT EXISTS push_subscriptions (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        user_id INTEGER REFERENCES usuarios(id) ON DELETE CASCADE,
-                        endpoint TEXT NOT NULL UNIQUE,
-                        p256dh TEXT NOT NULL,
-                        auth TEXT NOT NULL,
-                        criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
-                    )
-                '''))
-                db.session.commit()
-            except Exception:
-                db.session.rollback()
-            print(f"Migração push_subscriptions (fallback): {e}")
+            print(f"Migração push_subscriptions falhou: {e}")
         # Migração: data_vencimento em vendas (vencimento do boleto extraído do PDF)
         try:
-            db.session.execute(text('ALTER TABLE vendas ADD COLUMN data_vencimento DATE'))
-            db.session.commit()
+            _adicionar_coluna_se_ausente('vendas', 'data_vencimento', 'DATE')
         except (OperationalError, Exception):
             db.session.rollback()
         # Backfill data_vencimento em vendas a partir dos Documentos (boletos) vinculados
@@ -2574,14 +2540,12 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
                 db.session.rollback()
         # Migração: endereco em clientes (endereço completo para Google Maps)
         try:
-            db.session.execute(text('ALTER TABLE clientes ADD COLUMN endereco VARCHAR(255)'))
-            db.session.commit()
+            _adicionar_coluna_se_ausente('clientes', 'endereco', 'VARCHAR(255)')
         except (OperationalError, Exception):
             db.session.rollback()
         # Migração: status_entrega em vendas (status logístico independente do financeiro)
         try:
-            db.session.execute(text("ALTER TABLE vendas ADD COLUMN status_entrega VARCHAR(50) DEFAULT 'PENDENTE'"))
-            db.session.commit()
+            _adicionar_coluna_se_ausente('vendas', 'status_entrega', "VARCHAR(50) DEFAULT 'PENDENTE'")
         except (OperationalError, Exception):
             db.session.rollback()
         try:
@@ -2591,44 +2555,37 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             db.session.rollback()
         # Migração: valor_pago em vendas (abatimento inteligente / pagamento parcial)
         try:
-            db.session.execute(text('ALTER TABLE vendas ADD COLUMN valor_pago FLOAT DEFAULT 0.0'))
-            db.session.commit()
+            _adicionar_coluna_se_ausente('vendas', 'valor_pago', 'FLOAT DEFAULT 0.0')
         except (OperationalError, Exception):
             db.session.rollback()
         # Migração: forma_pagamento em vendas (Dinheiro, Pix, Boleto, Cheque, etc.)
         try:
-            db.session.execute(text('ALTER TABLE vendas ADD COLUMN forma_pagamento VARCHAR(50)'))
-            db.session.commit()
+            _adicionar_coluna_se_ausente('vendas', 'forma_pagamento', 'VARCHAR(50)')
         except (OperationalError, Exception):
             db.session.rollback()
         # Migração: setor em lancamentos_caixa (GERAL/BACALHAU)
         try:
-            db.session.execute(text("ALTER TABLE lancamentos_caixa ADD COLUMN setor VARCHAR(50) NOT NULL DEFAULT 'GERAL'"))
-            db.session.commit()
+            _adicionar_coluna_se_ausente('lancamentos_caixa', 'setor', "VARCHAR(50) NOT NULL DEFAULT 'GERAL'")
         except (OperationalError, Exception):
             db.session.rollback()
         # Migração: cliente_avulso em vendas (identificação quando cliente é "Desconhecido")
         try:
-            db.session.execute(text('ALTER TABLE vendas ADD COLUMN cliente_avulso VARCHAR(100)'))
-            db.session.commit()
+            _adicionar_coluna_se_ausente('vendas', 'cliente_avulso', 'VARCHAR(100)')
         except (OperationalError, Exception):
             db.session.rollback()
         # Migração: tipo_operacao em vendas (VENDA/PERDA)
         try:
-            db.session.execute(text("ALTER TABLE vendas ADD COLUMN tipo_operacao VARCHAR(20) NOT NULL DEFAULT 'VENDA'"))
-            db.session.commit()
+            _adicionar_coluna_se_ausente('vendas', 'tipo_operacao', "VARCHAR(20) NOT NULL DEFAULT 'VENDA'")
         except (OperationalError, Exception):
             db.session.rollback()
         # Migração: lucro_percentual em vendas (opcional por item)
         try:
-            db.session.execute(text("ALTER TABLE vendas ADD COLUMN lucro_percentual NUMERIC(6,2)"))
-            db.session.commit()
+            _adicionar_coluna_se_ausente('vendas', 'lucro_percentual', 'NUMERIC(6,2)')
         except (OperationalError, Exception):
             db.session.rollback()
         # Migração: status_envio em lancamentos_caixa (ciclo de vida de cheques)
         try:
-            db.session.execute(text("ALTER TABLE lancamentos_caixa ADD COLUMN status_envio VARCHAR(20) DEFAULT 'Não Enviado'"))
-            db.session.commit()
+            _adicionar_coluna_se_ausente('lancamentos_caixa', 'status_envio', "VARCHAR(20) DEFAULT 'Não Enviado'")
         except (OperationalError, Exception):
             db.session.rollback()
         try:
@@ -2638,14 +2595,12 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             db.session.rollback()
         # Migração: telefone em clientes (WhatsApp / contato)
         try:
-            db.session.execute(text('ALTER TABLE clientes ADD COLUMN telefone VARCHAR(20)'))
-            db.session.commit()
+            _adicionar_coluna_se_ausente('clientes', 'telefone', 'VARCHAR(20)')
         except (OperationalError, Exception):
             db.session.rollback()
         # Migração: ativo em clientes (soft delete / inativação)
         try:
-            db.session.execute(text("ALTER TABLE clientes ADD COLUMN ativo BOOLEAN NOT NULL DEFAULT TRUE"))
-            db.session.commit()
+            _adicionar_coluna_se_ausente('clientes', 'ativo', 'BOOLEAN NOT NULL DEFAULT TRUE')
         except (OperationalError, Exception):
             db.session.rollback()
         # Migração: índices para campos filtráveis (performance em 10k+ registros)
