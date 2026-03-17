@@ -109,7 +109,7 @@
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nova Senha</label>
-                    <input type="password" name="password" class="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100" placeholder="Deixe vazio para manter a atual">
+                    <input type="password" name="nova_senha" class="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100" placeholder="Deixe em branco para manter a atual">
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nível de Acesso</label>
@@ -135,7 +135,7 @@ function abrirModalUsuario(id, username, role) {
     form.action = '/gerenciar_usuarios/editar_completo/' + id;
     document.getElementById('modal_username').value = username || '';
     document.getElementById('modal_role').value = role || 'user';
-    form.querySelector('input[name="password"]').value = '';
+    form.querySelector('input[name="nova_senha"]').value = '';
     const modal = document.getElementById('modalUsuario');
     modal.classList.remove('hidden');
     modal.classList.add('flex');

@@ -2967,8 +2967,10 @@ def atualizar_codigo_cadastro():
 def editar_usuario_completo(id):
     u = Usuario.query.get_or_404(id)
     novo_nome = request.form.get('username', '').strip()
-    nova_senha = request.form.get('password', '')
+    # Compatível com formulários antigos (password) e novo padrão (nova_senha).
+    nova_senha = (request.form.get('nova_senha') or request.form.get('password') or '').strip()
     novo_role = request.form.get('role')
+    senha_alterada = False
     # Lógica para alterar o Nome de Usuário
     if novo_nome and novo_nome != u.username:
         existe = Usuario.query.filter_by(username=novo_nome).first()
@@ -2979,6 +2981,7 @@ def editar_usuario_completo(id):
     # Atualiza senha apenas se algo for digitado
     if nova_senha:
         u.password_hash = generate_password_hash(nova_senha)
+        senha_alterada = True
     # Atualiza nível (Proteção para o Jhones não se auto-rebaixar)
     if novo_role in ('admin', 'user'):
         if u.username == 'Jhones' and novo_role == 'user':
@@ -2989,7 +2992,10 @@ def editar_usuario_completo(id):
     if not ok:
         flash(err or "Erro ao atualizar usuário. Tente novamente.", "error")
         return redirect(url_for("gerenciar_usuarios"))
-    flash(f'Usuário {u.username} atualizado com sucesso!', 'success')
+    if senha_alterada:
+        flash(f'Usuário {u.username} atualizado com sucesso! A senha foi redefinida.', 'success')
+    else:
+        flash(f'Usuário {u.username} atualizado com sucesso!', 'success')
     return redirect(url_for('gerenciar_usuarios'))
 
 
