@@ -1,5 +1,8 @@
 """Citações filosóficas do dia — seleção determinística por data."""
+from collections import defaultdict, deque
 import datetime
+import re
+import unicodedata
 
 FRASES = [
     # ── Estoicismo: Marco Aurélio ──
@@ -144,7 +147,128 @@ FRASES = [
     ("A vida encolhe ou expande em proporção à nossa coragem.", "Anaïs Nin"),
     ("O maior erro que podes cometer na vida é ter sempre medo de cometer um erro.", "Elbert Hubbard"),
     ("Só existe um êxito: viver a tua vida à tua maneira.", "Christopher Morley"),
+    # ── Expansão: Resiliência, Vendas, Liderança e Estratégia ──
+    ("Concentra-te no que depende de ti; o resto é ruído.", "Epicteto"),
+    ("A calma é uma vantagem competitiva em tempos de pressa.", "Sêneca"),
+    ("A disciplina diária vence a motivação passageira.", "Marco Aurélio"),
+    ("O preço da grandeza é a responsabilidade.", "Winston Churchill"),
+    ("Vitória sem preparo é sorte; com preparo é método.", "Sun Tzu"),
+    ("Quem domina o próprio impulso negocia melhor.", "Provérbio Estoico"),
+    ("Não peças um caminho fácil; torna-te mais forte para o caminho.", "Provérbio"),
+    ("Quem não mede, apenas adivinha.", "Peter Drucker"),
+    ("A melhor estratégia é tornar a execução inevitável.", "Provérbio de Gestão"),
+    ("Onde há clareza de meta, há economia de energia.", "Provérbio"),
+    ("O cliente compra confiança antes de comprar produto.", "Provérbio de Vendas"),
+    ("A reputação abre portas que o desconto não abre.", "Warren Buffett"),
+    ("Preço convence uma vez; valor convence para sempre.", "Provérbio de Negócios"),
+    ("A objeção é um pedido de explicação, não uma rejeição final.", "Provérbio de Vendas"),
+    ("Quem escuta bem vende melhor.", "Stephen Covey"),
+    ("Negócios de longo prazo começam com promessas cumpridas no curto prazo.", "Provérbio"),
+    ("Sem processo, talento vira improviso caro.", "Provérbio de Gestão"),
+    ("Liderar é tornar os outros capazes.", "Lao Tzu"),
+    ("Um líder dá direção, contexto e exemplo.", "John C. Maxwell"),
+    ("Se queres confiança da equipa, entrega consistência.", "Provérbio"),
+    ("A cultura da empresa é aquilo que se tolera em silêncio.", "Peter Drucker"),
+    ("Velocidade sem foco é só agitação.", "Provérbio Estratégico"),
+    ("Planeia com frieza, executa com energia.", "Sun Tzu"),
+    ("Quem se prepara para o pior, trabalha com mais paz no presente.", "Sêneca"),
+    ("Uma decisão mediana tomada hoje costuma vencer a decisão perfeita adiada.", "General Patton"),
+    ("Coragem é agir com medo, não sem medo.", "Nelson Mandela"),
+    ("A consistência cria resultados que o entusiasmo isolado não sustenta.", "James Clear"),
+    ("Não subestimes o poder de melhorar 1% por dia.", "James Clear"),
+    ("A tua agenda revela as tuas prioridades reais.", "Peter Drucker"),
+    ("Crises revelam o caráter da liderança.", "John F. Kennedy"),
+    ("Para vender bem, primeiro serve bem.", "Zig Ziglar"),
+    ("Toda venda começa quando termina a apresentação e começa a escuta.", "Brian Tracy"),
+    ("Urgência sem verdade destrói relacionamento; urgência com verdade constrói decisão.", "Provérbio de Vendas"),
+    ("Quem domina follow-up domina faturamento.", "Provérbio de Vendas"),
+    ("A melhor previsão do futuro é criá-lo.", "Peter Drucker"),
+    ("A sorte segue os preparados que persistem.", "Provérbio"),
+    ("Gestão é fazer certo; liderança é fazer o certo.", "Peter Drucker"),
+    ("A excelência operacional é disciplina repetida.", "Provérbio"),
+    ("O impossível costuma ser um prazo mal planejado.", "Provérbio de Gestão"),
+    ("Resultados extraordinários exigem prioridades extraordinariamente claras.", "Gary Keller"),
+    ("No mercado, confiança é moeda forte.", "Provérbio"),
+    ("Quem melhora o sistema melhora o resultado sem aumentar o esforço.", "W. Edwards Deming"),
+    ("Sem padrão não há escala.", "Provérbio de Operações"),
+    ("A paciência estratégica evita perdas táticas.", "Sun Tzu"),
+    ("Em tempos difíceis, caixa é oxigênio.", "Provérbio de Negócios"),
+    ("Não confundas movimento com progresso.", "Denzel Washington"),
+    ("Se não há aprendizado, há repetição de erro.", "Provérbio"),
+    ("A humildade de corrigir rota é sinal de inteligência, não de fraqueza.", "Ray Dalio"),
+    ("Quem documenta processos preserva lucro.", "Provérbio de Gestão"),
+    ("Liderança é exemplo visível em dias invisivelmente difíceis.", "Provérbio"),
+    ("A melhor resposta ao caos é prioridade.", "Jocko Willink"),
+    ("Foco é dizer não para quase tudo.", "Steve Jobs"),
+    ("Estratégia é escolher também o que não fazer.", "Michael Porter"),
+    ("Quando os dados falam, o ego deve ouvir.", "W. Edwards Deming"),
+    ("Persistência com direção transforma esforço em resultado.", "Provérbio"),
+    ("A confiança da equipa cresce quando a liderança cumpre o combinado.", "Provérbio"),
+    ("Quem prepara o terreno colhe com menos surpresa.", "Maquiavel"),
 ]
+
+
+def _normalizar_texto_para_comparacao(texto: str) -> str:
+    """Normaliza texto para detectar duplicatas com robustez."""
+    texto = unicodedata.normalize("NFKD", texto)
+    texto = "".join(ch for ch in texto if not unicodedata.combining(ch))
+    texto = texto.lower()
+    texto = re.sub(r"[^a-z0-9 ]+", " ", texto)
+    texto = re.sub(r"\s+", " ", texto).strip()
+    return texto
+
+
+def _deduplicar_frases(frases: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """Remove frases duplicadas (comparação por texto normalizado)."""
+    vistos: set[str] = set()
+    unicas: list[tuple[str, str]] = []
+    for texto, autor in frases:
+        chave = _normalizar_texto_para_comparacao(texto)
+        if chave in vistos:
+            continue
+        vistos.add(chave)
+        unicas.append((texto, autor))
+    return unicas
+
+
+def _intercalar_por_autor(frases: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """Reordena para reduzir repetição de autor em dias consecutivos.
+
+    Estratégia:
+    - agrupa por autor preservando ordem de inserção;
+    - distribui de forma gulosa escolhendo, a cada passo, o autor com mais
+      frases restantes que não seja o mesmo da frase anterior.
+    """
+    filas_por_autor: dict[str, deque[tuple[str, str]]] = defaultdict(deque)
+    ordem_autores: list[str] = []
+
+    for texto, autor in frases:
+        if autor not in filas_por_autor:
+            ordem_autores.append(autor)
+        filas_por_autor[autor].append((texto, autor))
+
+    pos_autor = {autor: idx for idx, autor in enumerate(ordem_autores)}
+    resultado: list[tuple[str, str]] = []
+    ultimo_autor: str | None = None
+
+    while True:
+        candidatos = [a for a, fila in filas_por_autor.items() if fila and a != ultimo_autor]
+        if not candidatos:
+            candidatos = [a for a, fila in filas_por_autor.items() if fila]
+        if not candidatos:
+            break
+
+        # Maior fila primeiro; desempate pela ordem original dos autores.
+        candidatos.sort(key=lambda a: (-len(filas_por_autor[a]), pos_autor[a]))
+        autor_escolhido = candidatos[0]
+        resultado.append(filas_por_autor[autor_escolhido].popleft())
+        ultimo_autor = autor_escolhido
+
+    return resultado
+
+
+# Sanitiza e balanceia acervo em tempo de import sem mudar o formato externo.
+FRASES = _intercalar_por_autor(_deduplicar_frases(FRASES))
 
 
 def frase_do_dia() -> dict:
