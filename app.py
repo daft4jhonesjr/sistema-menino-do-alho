@@ -1747,12 +1747,10 @@ def _listar_documentos_recem_chegados():
 
     Regra de negócio da fila "Documentos Recém-Chegados":
     - exibir apenas documentos sem vínculo com venda (``venda_id IS NULL``)
-    - exibir apenas documentos com ``status='PENDENTE'``
     """
     resultado_processamento = {"sucesso": 0, "falha": 0, "erros": [], "vinculos_novos": 0, "processados": 0}
     query = Documento.query.filter(
-        Documento.venda_id.is_(None),
-        Documento.status == 'PENDENTE'
+        Documento.venda_id.is_(None)
     )
     # Para o Dashboard, documentos órfãos devem ser visíveis independentemente de ownership.
     # Mantemos o parâmetro user_id por compatibilidade, mas sem restringir esta listagem.
@@ -8266,7 +8264,6 @@ def vincular_documento_venda(id):
         return _resposta_sem_permissao()
     try:
         documento.venda_id = venda_id
-        documento.status = 'VINCULADO'
         path = documento.caminho_arquivo
         vendas_pedido = _vendas_do_pedido(venda)
         is_boleto = (documento.tipo or '').upper() == 'BOLETO'
