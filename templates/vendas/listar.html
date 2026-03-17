@@ -518,7 +518,7 @@
                             <input type="checkbox" id="bulk-master" class="rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" title="Selecionar todos" aria-label="Selecionar todos">
                         </th>
                         <th class="px-4 py-3 text-left w-12"></th>
-                        {% set data_ordenacao_ativa = (not ordenar_por) and (ordem_data in ['crescente', 'decrescente']) %}
+                        {% set data_ordenacao_ativa = (not ordenar_por) and (not sort) and (ordem_data in ['crescente', 'decrescente']) %}
                         {% set url_th_data = request.args.to_dict(flat=True) %}
                         {% if url_th_data.get('ordenar_por') %}
                             {% set _ = url_th_data.pop('ordenar_por') %}
@@ -539,7 +539,24 @@
                                 {% endif %}
                             </a>
                         </th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Cliente</th>
+                        {% set cliente_ordenacao_ativa = sort in ['cliente_asc', 'cliente_desc'] %}
+                        {% set url_th_cliente = request.args.to_dict(flat=True) %}
+                        {% set proximo_sort_cliente = 'cliente_desc' if sort == 'cliente_asc' else 'cliente_asc' %}
+                        {% set _ = url_th_cliente.update({'sort': proximo_sort_cliente}) %}
+                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors {{ 'text-emerald-600 dark:text-emerald-400 font-bold' if cliente_ordenacao_ativa else 'text-gray-500 dark:text-gray-400' }}">
+                            <a href="{{ url_for('listar_vendas', **url_th_cliente) }}" class="inline-flex items-center gap-1 no-underline text-inherit">
+                                Cliente
+                                {% if sort == 'cliente_asc' %}
+                                    <svg class="w-3.5 h-3.5 {{ 'text-emerald-600 dark:text-emerald-400' if cliente_ordenacao_ativa else 'text-gray-400 dark:text-gray-500' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
+                                    </svg>
+                                {% else %}
+                                    <svg class="w-3.5 h-3.5 {{ 'text-emerald-600 dark:text-emerald-400' if cliente_ordenacao_ativa else 'text-gray-400 dark:text-gray-500' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                    </svg>
+                                {% endif %}
+                            </a>
+                        </th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">NF</th>
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Preço Unit.</th>
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Qtd Total</th>
