@@ -589,6 +589,7 @@
                         {% if request.args.get('filtro') %}{% set _ = url_th_situacao.update({'filtro': request.args.get('filtro')}) %}{% endif %}
                         {% if request.args.get('produto_id') %}{% set _ = url_th_situacao.update({'produto_id': request.args.get('produto_id')}) %}{% endif %}
                         {% if request.args.get('cliente_id') %}{% set _ = url_th_situacao.update({'cliente_id': request.args.get('cliente_id')}) %}{% endif %}
+                        {% if request.args.get('forma_pagto') %}{% set _ = url_th_situacao.update({'forma_pagto': request.args.get('forma_pagto')}) %}{% endif %}
                         {% if filtro_vencidos %}{% set _ = url_th_situacao.update({'filtro_vencidos': 1}) %}{% endif %}
                         {% set _ = url_th_situacao.update({'ordem_data': ordem_data}) %}
                         {% set _ = url_th_situacao.update({'ordenar_por': 'situacao'}) %}
@@ -598,18 +599,25 @@
                                 <svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path></svg>
                             </a>
                         </th>
-                        {% set url_th_forma = {} %}
-                        {% if request.args.get('filtro') %}{% set _ = url_th_forma.update({'filtro': request.args.get('filtro')}) %}{% endif %}
-                        {% if request.args.get('produto_id') %}{% set _ = url_th_forma.update({'produto_id': request.args.get('produto_id')}) %}{% endif %}
-                        {% if request.args.get('cliente_id') %}{% set _ = url_th_forma.update({'cliente_id': request.args.get('cliente_id')}) %}{% endif %}
-                        {% if filtro_vencidos %}{% set _ = url_th_forma.update({'filtro_vencidos': 1}) %}{% endif %}
-                        {% set _ = url_th_forma.update({'ordem_data': ordem_data}) %}
-                        {% set _ = url_th_forma.update({'ordenar_por': 'forma_pagamento'}) %}
-                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors {{ 'text-blue-600 dark:text-blue-400 font-bold' if ordenar_por == 'forma_pagamento' else 'text-gray-500 dark:text-gray-400' }}">
-                            <a href="{{ url_for('listar_vendas', **url_th_forma) }}" class="flex items-center gap-1 no-underline text-inherit">
-                                Forma Pagto
-                                <svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path></svg>
-                            </a>
+                        {% set forma_pagto_ativo = (forma_pagto or 'TODAS') != 'TODAS' %}
+                        {% set url_forma_todas = request.args.to_dict(flat=True) %}
+                        {% set _ = url_forma_todas.update({'forma_pagto': 'Todas'}) %}
+                        {% set url_forma_boleto = request.args.to_dict(flat=True) %}
+                        {% set _ = url_forma_boleto.update({'forma_pagto': 'BOLETO'}) %}
+                        {% set url_forma_cheque = request.args.to_dict(flat=True) %}
+                        {% set _ = url_forma_cheque.update({'forma_pagto': 'CHEQUE'}) %}
+                        {% set url_forma_pix = request.args.to_dict(flat=True) %}
+                        {% set _ = url_forma_pix.update({'forma_pagto': 'PIX'}) %}
+                        {% set url_forma_dinheiro = request.args.to_dict(flat=True) %}
+                        {% set _ = url_forma_dinheiro.update({'forma_pagto': 'DINHEIRO'}) %}
+                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap {{ 'text-emerald-600 dark:text-emerald-400 font-bold' if forma_pagto_ativo else 'text-gray-500 dark:text-gray-400' }}">
+                            <select id="filtro-forma-pagto" onchange="if(this.value){window.location.href=this.value;}" class="bg-transparent {{ 'text-emerald-600 dark:text-emerald-400 font-bold' if forma_pagto_ativo else 'text-gray-500 dark:text-gray-400' }} font-medium uppercase cursor-pointer border-none p-0 focus:ring-0 text-xs tracking-wider appearance-none pr-4" style="background-image:url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 20 20%22%3E%3Cpath stroke=%22%236b7280%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%222%22 d=%22m6 8 4 4 4-4%22/%3E%3C/svg%3E');background-repeat:no-repeat;background-position:right 0 center;background-size:14px;">
+                                <option value="{{ url_for('listar_vendas', **url_forma_todas) }}" {{ 'selected' if (forma_pagto or 'TODAS') == 'TODAS' else '' }}>Forma Pagto ▾</option>
+                                <option value="{{ url_for('listar_vendas', **url_forma_boleto) }}" {{ 'selected' if forma_pagto == 'BOLETO' else '' }}>BOLETO</option>
+                                <option value="{{ url_for('listar_vendas', **url_forma_cheque) }}" {{ 'selected' if forma_pagto == 'CHEQUE' else '' }}>CHEQUE</option>
+                                <option value="{{ url_for('listar_vendas', **url_forma_pix) }}" {{ 'selected' if forma_pagto == 'PIX' else '' }}>PIX</option>
+                                <option value="{{ url_for('listar_vendas', **url_forma_dinheiro) }}" {{ 'selected' if forma_pagto == 'DINHEIRO' else '' }}>DINHEIRO</option>
+                            </select>
                         </th>
                         <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider min-w-[180px] whitespace-nowrap">AÇÕES</th>
                     </tr>

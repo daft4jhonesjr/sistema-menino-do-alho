@@ -5851,7 +5851,7 @@ def listar_vendas():
     Lista vendas do ano ativo com filtros e agrupamento por pedido.
 
     Query params: produto_id, cliente_id, filtro (geral|bacalhau),
-    ordenar_por, ordem_data, filtro_vencidos.
+    ordenar_por, ordem_data, filtro_vencidos, forma_pagto.
 
     Returns:
         render_template: Página de vendas com pedidos agrupados.
@@ -5864,6 +5864,9 @@ def listar_vendas():
     cliente_id = request.args.get('cliente_id', type=int)
     filtro_vencidos = request.args.get('filtro_vencidos', type=int) == 1
     filtro = (request.args.get('filtro') or 'geral').strip().lower()
+    forma_pagto = (request.args.get('forma_pagto') or 'Todas').strip().upper()
+    if forma_pagto in ('', 'TODAS'):
+        forma_pagto = 'TODAS'
     if filtro not in ('geral', 'bacalhau'):
         filtro = 'geral'
 
@@ -5900,6 +5903,8 @@ def listar_vendas():
         joinedload(Venda.cliente),
         joinedload(Venda.produto)
     ).filter(Venda.id.in_(subq_ids))
+    if forma_pagto != 'TODAS':
+        query = query.filter(func.upper(func.coalesce(Venda.forma_pagamento, '')) == forma_pagto)
     
     # Ordenar por Cliente, Data (conforme escolha do usuário), NF e ID para agrupar pedidos visualmente
     # (Consumidores finais serão agrupados apenas por Cliente+Data, ignorando NF no template)
@@ -6235,6 +6240,7 @@ def listar_vendas():
                          todos_produtos=todos_produtos,
                          ordem_data=ordem_data,
                          ordenar_por=ordenar_por,
+                         forma_pagto=forma_pagto,
                          filtro=filtro,
                          filtro_vencidos=filtro_vencidos,
                          graficos_data=graficos_data)
