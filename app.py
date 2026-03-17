@@ -2813,6 +2813,7 @@ def get_config():
 
 
 @app.route('/cadastro', methods=['GET', 'POST'])
+@limiter.limit("10 per hour")
 def cadastro():
     if current_user.is_authenticated:
         return redirect(url_for('dashboard'))
@@ -5113,8 +5114,9 @@ def editar_produto(id):
         else:
             nome_produto = gerar_nome_produto(tipo_upper, nacionalidade, marca, data_chegada, tamanho)
         
-        # Se houver nova entrada, somar ao estoque atual
+        # Lock pessimista antes de alterar estoque para evitar race condition.
         if quantidade_entrada > 0:
+            produto = _produto_com_lock(produto.id)
             produto.estoque_atual += quantidade_entrada
 
         produto.tipo = tipo_upper
@@ -5518,7 +5520,7 @@ def api_vendas_por_filtro():
     if not produto_id and not cliente_id:
         return jsonify({'erro': 'Informe produto_id ou cliente_id'}), 400
     
-    query = Venda.query
+    query = Venda.query.options(joinedload(Venda.cliente), joinedload(Venda.produto))
     if produto_id:
         query = query.filter(Venda.produto_id == produto_id)
     if cliente_id:
@@ -5529,7 +5531,6 @@ def api_vendas_por_filtro():
     total_lucro = None
     total_qtd = None
     if cliente_id:
-        # Query para calcular totais de TODAS as vendas do cliente
         vendas_totais = query.all()
         total_vendido = sum(float(v.preco_venda * v.quantidade_venda) for v in vendas_totais)
         total_lucro = sum(float(v.calcular_lucro()) for v in vendas_totais)
@@ -5646,7 +5647,9 @@ def api_dashboard_detalhes(filtro):
         elif filtro == 'destak':
             query = query.filter(Venda.empresa_faturadora == 'DESTAK')
 
-        vendas = query.order_by(Venda.data_venda.desc(), Venda.id.desc()).all()
+        vendas = query.options(
+            joinedload(Venda.cliente), joinedload(Venda.produto)
+        ).order_by(Venda.data_venda.desc(), Venda.id.desc()).all()
         vendas_lista = []
         for venda in vendas:
             vendas_lista.append({
@@ -7073,9 +7076,10 @@ def excluir_item_venda(id):
                 resource_type='raw'
             )
         _apagar_lancamentos_caixa_por_vendas([venda])
-        produto = venda.produto
-        if produto:
-            produto.estoque_atual += venda.quantidade_venda
+        if venda.produto_id:
+            produto = _produto_com_lock(venda.produto_id)
+            if produto:
+                produto.estoque_atual += venda.quantidade_venda
         db.session.delete(venda)
         db.session.commit()
         limpar_cache_dashboard()
@@ -7140,7 +7144,6 @@ def excluir_venda(id):
     try:
         lancamentos_removidos = _apagar_lancamentos_caixa_por_vendas(vendas_do_pedido)
 
-        # Restaurar estoque de todos os produtos do pedido
         logs = []
         for v in vendas_do_pedido:
             for doc in list(getattr(v, 'documentos', []) or []):
@@ -7149,10 +7152,11 @@ def excluir_venda(id):
                     url=getattr(doc, 'url_arquivo', None),
                     resource_type='raw'
                 )
-            produto = v.produto
+            produto = _produto_com_lock(v.produto_id) if v.produto_id else None
             quantidade = v.quantidade_venda
-            nome_produto = produto.nome_produto  # Salvar antes de deletar
-            produto.estoque_atual += quantidade
+            nome_produto = produto.nome_produto if produto else 'Desconhecido'
+            if produto:
+                produto.estoque_atual += quantidade
             logs.append(f"{quantidade} unidades devolvidas ao produto [{nome_produto}]")
             db.session.delete(v)
 
@@ -7700,6 +7704,7 @@ def upload_documento():
 
 @app.route('/api/receber_automatico', methods=['POST'])
 @csrf.exempt
+@limiter.limit("10 per minute")
 def api_receber_automatico():
     """API para receber arquivos automaticamente. Requer token em Authorization."""
     token_esperado = os.environ.get('API_RECEBER_AUTOMATICO_TOKEN')
@@ -7801,6 +7806,7 @@ def api_receber_automatico():
 
 @app.route('/api/bot/upload', methods=['POST'])
 @csrf.exempt
+@limiter.limit("10 per minute")
 def api_bot_upload():
     """Rota dedicada para o bot externo (Node.js) enviar boletos/NFes.
 
@@ -8291,20 +8297,26 @@ def vendas_deletar_massa():
         return jsonify({'ok': False, 'mensagem': 'Nenhum registro encontrado.'}), 404
     if len(vendas) != len(ids):
         return jsonify({'ok': False, 'mensagem': 'Alguns IDs não existem. Nenhuma exclusão realizada.'}), 400
-    logs = []
-    lancamentos_removidos = _apagar_lancamentos_caixa_por_vendas(vendas)
-    for v in vendas:
-        produto = v.produto
-        qty = v.quantidade_venda
-        nome = produto.nome_produto
-        produto.estoque_atual += qty
-        logs.append(f"Venda {v.id}: {qty} un. devolvidas ao produto [{nome}].")
-        db.session.delete(v)
-    db.session.commit()
-    limpar_cache_dashboard()  # Limpar cache após exclusão em massa de vendas
-    for msg in logs:
-        print(msg)
-    return jsonify({'ok': True, 'mensagem': f'{len(vendas)} registro(s) excluído(s). Estoque restaurado e {lancamentos_removidos} lançamento(s) de caixa removido(s).', 'excluidos': len(vendas)})
+    try:
+        logs = []
+        lancamentos_removidos = _apagar_lancamentos_caixa_por_vendas(vendas)
+        for v in vendas:
+            produto = _produto_com_lock(v.produto_id) if v.produto_id else None
+            qty = v.quantidade_venda
+            nome = produto.nome_produto if produto else 'Desconhecido'
+            if produto:
+                produto.estoque_atual += qty
+            logs.append(f"Venda {v.id}: {qty} un. devolvidas ao produto [{nome}].")
+            db.session.delete(v)
+        db.session.commit()
+        limpar_cache_dashboard()
+        for msg in logs:
+            print(msg)
+        return jsonify({'ok': True, 'mensagem': f'{len(vendas)} registro(s) excluído(s). Estoque restaurado e {lancamentos_removidos} lançamento(s) de caixa removido(s).', 'excluidos': len(vendas)})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erro na exclusão em massa de vendas: {e}")
+        return jsonify({'ok': False, 'mensagem': str(e)}), 500
 
 
 @app.route('/bulk_delete_vendas', methods=['POST'])
@@ -8321,10 +8333,11 @@ def bulk_delete_vendas():
             venda = Venda.query.get(id_)
             if venda:
                 vendas_para_remocao.append(venda)
-                produto = venda.produto
+                produto = _produto_com_lock(venda.produto_id) if venda.produto_id else None
                 quantidade_venda = venda.quantidade_venda
-                produto.estoque_atual += quantidade_venda
-                logs.append(f"Venda deletada: {quantidade_venda} unidades devolvidas ao produto [{produto.nome_produto}].")
+                if produto:
+                    produto.estoque_atual += quantidade_venda
+                logs.append(f"Venda deletada: {quantidade_venda} unidades devolvidas ao produto [{produto.nome_produto if produto else 'Desconhecido'}].")
                 db.session.delete(venda)
         lancamentos_removidos = _apagar_lancamentos_caixa_por_vendas(vendas_para_remocao)
         db.session.commit()
@@ -9001,6 +9014,7 @@ def disparar_relatorio():
 
 
 @app.route('/api/backup_diario', methods=['GET', 'POST'])
+@limiter.limit("5 per hour")
 def backup_diario_email():
     """Gera backup CSV das tabelas críticas e envia por e-mail aos admins.
 
@@ -9156,6 +9170,7 @@ def backup_diario_email():
 
 
 @app.route('/api/cron/enviar_frase_diaria', methods=['GET', 'POST'])
+@limiter.limit("5 per hour")
 def enviar_frase_diaria():
     """Envia a frase filosófica do dia por e-mail para usuários que optaram por recebê-la.
 

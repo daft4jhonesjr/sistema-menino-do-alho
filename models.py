@@ -57,7 +57,7 @@ class Cliente(db.Model):
     cidade = db.Column(db.String(100))
     telefone = db.Column(db.String(20), nullable=True)
     endereco = db.Column(db.String(255))
-    ativo = db.Column(db.Boolean, default=True, nullable=False, server_default='1')
+    ativo = db.Column(db.Boolean, default=True, nullable=False, server_default='1', index=True)
 
     # Relacionamento com vendas
     vendas = db.relationship('Venda', backref='cliente', lazy=True, cascade='all, delete-orphan')
@@ -86,11 +86,11 @@ class Produto(db.Model):
     )
     
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    tipo = db.Column(db.String(20), nullable=False)
-    nacionalidade = db.Column(db.String(20), nullable=False)
+    tipo = db.Column(db.String(20), nullable=False, index=True)
+    nacionalidade = db.Column(db.String(20), nullable=False, index=True)
     marca = db.Column(db.String(100), nullable=False)
     tamanho = db.Column(db.String(10), nullable=False)  # Aceita números ('7', '8') ou letras ('P', 'M', 'G', 'S/N')
-    fornecedor = db.Column(db.String(20), nullable=False)
+    fornecedor = db.Column(db.String(20), nullable=False, index=True)
     caminhoneiro = db.Column(db.String(100), nullable=False)
     preco_custo = db.Column(db.Numeric(10, 2), nullable=False)
     preco_venda_alvo = db.Column(db.Numeric(10, 2), nullable=True)  # Opcional; padrão ex.: R$ 160 para alho
@@ -155,7 +155,7 @@ class ProdutoFoto(db.Model):
     __tablename__ = 'produto_fotos'
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    produto_id = db.Column(db.Integer, db.ForeignKey('produtos.id', ondelete='CASCADE'), nullable=False)
+    produto_id = db.Column(db.Integer, db.ForeignKey('produtos.id', ondelete='CASCADE'), nullable=False, index=True)
     arquivo = db.Column(db.String(500), nullable=False)  # URL do Cloudinary ou nome do arquivo local (legado)
     public_id = db.Column(db.String(200), nullable=True, index=True)
 
@@ -192,7 +192,7 @@ class Venda(db.Model):
     tipo_operacao = db.Column(db.String(20), default='VENDA', nullable=False, server_default='VENDA')
     lucro_percentual = db.Column(db.Numeric(6, 2), nullable=True)
     cliente_avulso = db.Column(db.String(100), nullable=True)
-    caminho_boleto = db.Column(db.String(500), nullable=True)
+    caminho_boleto = db.Column(db.String(500), nullable=True, index=True)
     caminho_nf = db.Column(db.String(500), nullable=True)
     data_vencimento = db.Column(db.Date, nullable=True, index=True)  # vencimento do boleto vinculado (extraído do PDF)
 
@@ -248,7 +248,7 @@ class LancamentoCaixa(db.Model):
     tipo = db.Column(db.String(20), nullable=False, index=True)  # 'ENTRADA' ou 'SAIDA'
     categoria = db.Column(db.String(50), nullable=False, index=True)
     forma_pagamento = db.Column(db.String(50), nullable=False)
-    setor = db.Column(db.String(50), default='GERAL', nullable=False, server_default='GERAL')
+    setor = db.Column(db.String(50), default='GERAL', nullable=False, server_default='GERAL', index=True)
     status_envio = db.Column(db.String(20), nullable=True, default='Não Enviado')  # Controle de envio físico de cheques
     valor = db.Column(db.Numeric(10, 2), nullable=False)
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)
@@ -287,15 +287,15 @@ class Documento(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     url_arquivo = db.Column(db.String(500), nullable=True)  # URL do Cloudinary (armazenamento em nuvem)
     public_id = db.Column(db.String(200), nullable=True, unique=True)  # ID público do Cloudinary (para exclusão)
-    caminho_arquivo = db.Column(db.String(500), nullable=True)  # Deprecado: mantido para compatibilidade com Venda.caminho_boleto/nf
-    tipo = db.Column(db.String(20), nullable=False)  # 'BOLETO' ou 'NOTA_FISCAL'
+    caminho_arquivo = db.Column(db.String(500), nullable=True, index=True)
+    tipo = db.Column(db.String(20), nullable=False, index=True)  # 'BOLETO' ou 'NOTA_FISCAL'
     cnpj = db.Column(db.String(18))  # CNPJ extraído do documento
     numero_nf = db.Column(db.String(50))  # Número da NF (se aplicável)
     nf_extraida = db.Column(db.String(50))  # Cache OCR: NF extraída; se preenchida, não roda OCR de novo
     razao_social = db.Column(db.String(200))  # Razão social extraída
     data_vencimento = db.Column(db.Date)  # Data de vencimento (para boletos)
-    venda_id = db.Column(db.Integer, db.ForeignKey('vendas.id', ondelete='CASCADE'), nullable=True)  # FK opcional para associar a uma venda
-    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)  # Usuário que processou/recuperou
+    venda_id = db.Column(db.Integer, db.ForeignKey('vendas.id', ondelete='CASCADE'), nullable=True, index=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True, index=True)
     data_processamento = db.Column(db.Date, default=date.today, nullable=False)  # Quando foi processado
     
     def __repr__(self):
