@@ -298,6 +298,43 @@ class PushSubscription(db.Model):
         return f'<PushSubscription user_id={self.user_id} endpoint={self.endpoint[:40]}...>'
 
 
+class LogAtividade(db.Model):
+    """
+    Registro de auditoria de todas as ações do sistema.
+
+    Cada linha representa uma ação realizada por um usuário:
+    criação, edição ou exclusão de vendas, clientes, produtos, etc.
+
+    Attributes:
+        usuario_id: FK para Usuario (quem executou a ação).
+        acao: Verbo da ação ('CRIAR', 'EDITAR', 'EXCLUIR', 'INATIVAR', 'ATIVAR', 'PAGAR').
+        modulo: Seção do sistema ('VENDAS', 'CLIENTES', 'PRODUTOS', 'USUARIOS').
+        descricao: Texto livre detalhando o que foi feito.
+        data_hora: Timestamp UTC de quando ocorreu.
+        ip_address: IP do cliente (opcional, para auditoria de segurança).
+    """
+
+    __tablename__ = 'log_atividades'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    usuario_id = db.Column(
+        db.Integer,
+        db.ForeignKey('usuarios.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True,
+    )
+    acao = db.Column(db.String(20), nullable=False, index=True)
+    modulo = db.Column(db.String(30), nullable=False, index=True)
+    descricao = db.Column(db.Text, nullable=False)
+    data_hora = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+    ip_address = db.Column(db.String(45), nullable=True)
+
+    usuario = db.relationship('Usuario', backref=db.backref('logs', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<LogAtividade {self.acao}/{self.modulo} by user_id={self.usuario_id}>'
+
+
 class Documento(db.Model):
     """
     Documento PDF (boleto ou nota fiscal) armazenado no Cloudinary.

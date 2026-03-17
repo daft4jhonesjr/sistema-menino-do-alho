@@ -5,7 +5,7 @@ from flask_compress import Compress
 from flask_caching import Cache
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from models import db, Cliente, Produto, ProdutoFoto, Venda, Usuario, Configuracao, Documento, LancamentoCaixa, ContagemGaveta, Fornecedor, PushSubscription
+from models import db, Cliente, Produto, ProdutoFoto, Venda, Usuario, Configuracao, Documento, LancamentoCaixa, ContagemGaveta, Fornecedor, PushSubscription, LogAtividade
 from quotes import frase_do_dia
 from config import Config
 from datetime import date, datetime, timedelta
@@ -77,6 +77,36 @@ def _debug_log(location, message, data, hypothesis_id, run_id="run1"):
     except Exception as e:
         print(f"DEBUG LOG ERROR: {e}")
 # #endregion
+
+
+def registrar_log(acao: str, modulo: str, descricao: str) -> None:
+    """
+    Persiste uma entrada no log de auditoria do sistema.
+
+    Deve ser chamada APÓS o db.session.commit() da operação principal,
+    dentro de um bloco try/except próprio para não bloquear a operação
+    original caso o log falhe.
+
+    Args:
+        acao: Verbo da ação ('CRIAR', 'EDITAR', 'EXCLUIR', 'INATIVAR', 'ATIVAR', 'PAGAR').
+        modulo: Módulo do sistema ('VENDAS', 'CLIENTES', 'PRODUTOS', 'USUARIOS').
+        descricao: Texto livre detalhando o que foi feito.
+    """
+    try:
+        usuario_id = current_user.id if current_user and current_user.is_authenticated else None
+        ip = request.remote_addr if request else None
+        log = LogAtividade(
+            usuario_id=usuario_id,
+            acao=acao,
+            modulo=modulo,
+            descricao=descricao,
+            ip_address=ip,
+        )
+        db.session.add(log)
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.warning(f"Falha ao registrar log [{acao}/{modulo}]: {exc}")
 
 
 def _safe_db_commit() -> tuple[bool, str | None]:
@@ -2603,6 +2633,12 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             _adicionar_coluna_se_ausente('clientes', 'ativo', 'BOOLEAN NOT NULL DEFAULT TRUE')
         except (OperationalError, Exception):
             db.session.rollback()
+        # Migração: tabela de auditoria de ações (log de atividades)
+        try:
+            LogAtividade.__table__.create(bind=db.engine, checkfirst=True)
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
         # Migração: índices para campos filtráveis (performance em 10k+ registros)
         for idx_sql in [
             'CREATE INDEX IF NOT EXISTS ix_clientes_cnpj ON clientes(cnpj)',
@@ -2978,6 +3014,65 @@ def alterar_role_usuario(id):
         return redirect(url_for("gerenciar_usuarios"))
     flash(f'Nível de "{u.username}" alterado para {novo_role}.', 'success')
     return redirect(url_for('gerenciar_usuarios'))
+
+
+@app.route('/historico')
+@login_required
+@admin_required
+def historico_atividades():
+    """
+    Exibe o log de auditoria de ações do sistema.
+
+    Parâmetros de URL:
+        modulo: Filtrar por módulo (VENDAS, CLIENTES, PRODUTOS, USUARIOS).
+        acao: Filtrar por ação (CRIAR, EDITAR, EXCLUIR, PAGAR, INATIVAR, ATIVAR).
+        usuario_id: Filtrar por usuário específico.
+        pagina: Número da página (paginação).
+
+    Returns:
+        render_template: historico.html com lista paginada de logs.
+    """
+    pagina = request.args.get('pagina', 1, type=int)
+    modulo_filtro = request.args.get('modulo', '')
+    acao_filtro = request.args.get('acao', '')
+    usuario_filtro = request.args.get('usuario_id', '', type=str)
+
+    query = LogAtividade.query
+
+    if modulo_filtro:
+        query = query.filter(LogAtividade.modulo == modulo_filtro)
+    if acao_filtro:
+        query = query.filter(LogAtividade.acao == acao_filtro)
+    if usuario_filtro and usuario_filtro.isdigit():
+        query = query.filter(LogAtividade.usuario_id == int(usuario_filtro))
+
+    query = query.order_by(LogAtividade.data_hora.desc())
+    total = query.count()
+    por_pagina = 50
+    logs = query.offset((pagina - 1) * por_pagina).limit(por_pagina).all()
+
+    # Carregar nomes de usuários para exibição
+    ids_usuarios = {log.usuario_id for log in logs if log.usuario_id}
+    mapa_usuarios = {}
+    if ids_usuarios:
+        for u in Usuario.query.filter(Usuario.id.in_(ids_usuarios)).all():
+            mapa_usuarios[u.id] = u.username
+
+    total_paginas = max(1, (total + por_pagina - 1) // por_pagina)
+    todos_usuarios = Usuario.query.order_by(Usuario.username).all()
+
+    return render_template(
+        'historico.html',
+        logs=logs,
+        mapa_usuarios=mapa_usuarios,
+        pagina=pagina,
+        total_paginas=total_paginas,
+        total=total,
+        modulo_filtro=modulo_filtro,
+        acao_filtro=acao_filtro,
+        usuario_filtro=usuario_filtro,
+        todos_usuarios=todos_usuarios,
+    )
 
 
 # ========== ROTAS PRINCIPAIS ==========
@@ -4082,6 +4177,7 @@ def novo_cliente():
             )
             db.session.add(cliente)
             db.session.commit()
+            registrar_log('CRIAR', 'CLIENTES', f"Cliente #{cliente.id} — {cliente.nome_cliente} criado.")
             if _is_ajax():
                 return jsonify(ok=True, mensagem='Cliente cadastrado com sucesso!')
             flash('Cliente cadastrado com sucesso!', 'success')
@@ -4120,6 +4216,7 @@ def editar_cliente(id):
             cliente.cidade = request.form.get('cidade', '')
             cliente.endereco = request.form.get('endereco', '') or None
             db.session.commit()
+            registrar_log('EDITAR', 'CLIENTES', f"Cliente #{cliente.id} — {cliente.nome_cliente} editado.")
             flash('Cliente atualizado com sucesso!', 'success')
             return redirect(url_for('listar_clientes'))
 
@@ -4136,9 +4233,11 @@ def editar_cliente(id):
 @login_required
 def excluir_cliente(id):
     cliente = Cliente.query.get_or_404(id)
+    nome_cliente_del = cliente.nome_cliente
     try:
         db.session.delete(cliente)
         db.session.commit()
+        registrar_log('EXCLUIR', 'CLIENTES', f"Cliente #{id} — {nome_cliente_del} excluído permanentemente.")
         flash('Cliente excluído com sucesso!', 'success')
     except Exception:
         db.session.rollback()
@@ -4155,6 +4254,8 @@ def toggle_ativo_cliente(id: int):
         cliente.ativo = not cliente.ativo
         db.session.commit()
         estado = 'ativado' if cliente.ativo else 'inativado'
+        acao_log = 'ATIVAR' if cliente.ativo else 'INATIVAR'
+        registrar_log(acao_log, 'CLIENTES', f"Cliente #{cliente.id} — {cliente.nome_cliente} {estado}.")
         if _is_ajax():
             return jsonify(ok=True, ativo=cliente.ativo, mensagem=f'Cliente {cliente.nome_cliente} {estado} com sucesso.')
         flash(f'Cliente {cliente.nome_cliente} {estado} com sucesso.', 'success')
@@ -5054,6 +5155,7 @@ def novo_produto():
             return redirect(url_for("listar_produtos"))
 
         limpar_cache_dashboard()
+        registrar_log('CRIAR', 'PRODUTOS', f"Produto #{produto.id} — {nome_produto} criado ({quantidade_entrada} un., custo R$ {produto.preco_custo}).")
         msg_sucesso = f'✅ Que maravilha! A entrada de {nome_produto} ({quantidade_entrada} un.) foi registrada no estoque com sucesso.'
         if _is_ajax():
             return jsonify(ok=True, mensagem=msg_sucesso)
@@ -5158,6 +5260,7 @@ def editar_produto(id):
             flash(err or "Erro ao atualizar produto. Tente novamente.", "error")
             return redirect(url_for("listar_produtos"))
         limpar_cache_dashboard()
+        registrar_log('EDITAR', 'PRODUTOS', f"Produto #{produto.id} — {nome_produto} editado.")
         flash(f'✅ Produto {nome_produto} atualizado com sucesso!', 'success')
         return redirect(url_for('listar_produtos'))
     
@@ -5179,6 +5282,7 @@ def excluir_produto(id):
         db.session.delete(produto)
         db.session.commit()
         limpar_cache_dashboard()
+        registrar_log('EXCLUIR', 'PRODUTOS', f"Produto #{id} — {nome} excluído.")
         flash(f'🗑️ Produto {nome} excluído com sucesso.', 'success')
     except IntegrityError:
         db.session.rollback()
@@ -6669,6 +6773,13 @@ def nova_venda():
         # --- FIM DA INTEGRAÇÃO ---
         db.session.commit()
         limpar_cache_dashboard()  # Limpar cache após nova venda
+        _nome_cli_log = venda.cliente.nome_cliente if venda.cliente else (venda.cliente_avulso or 'Avulso')
+        registrar_log(
+            'CRIAR', 'VENDAS',
+            f"Venda #{venda.id} — {venda.quantidade_venda} un. de {venda.produto.nome_produto} "
+            f"para {_nome_cli_log}. NF: {venda.nf or '-'}, Total: R$ {venda.calcular_total():.2f}, "
+            f"Situação: {venda.situacao}."
+        )
 
         if _is_ajax():
             return jsonify(
@@ -7055,6 +7166,15 @@ def editar_venda(id):
             db.session.commit()
 
             limpar_cache_dashboard()  # Limpar cache após editar venda
+            _venda_editada = Venda.query.get(venda.id)
+            if _venda_editada:
+                _cli_edit = Cliente.query.get(_venda_editada.cliente_id)
+                registrar_log(
+                    'EDITAR', 'VENDAS',
+                    f"Venda #{_venda_editada.id} editada — Cliente: "
+                    f"{_cli_edit.nome_cliente if _cli_edit else 'N/A'}, NF: {_venda_editada.nf or '-'}, "
+                    f"Total: R$ {_venda_editada.calcular_total():.2f}."
+                )
             flash('Venda atualizada com sucesso!', 'success')
             return redirect(url_for('listar_vendas'))
         except Exception as e:
@@ -7179,6 +7299,11 @@ def excluir_venda(id):
         if lancamentos_removidos:
             print(f"  - {lancamentos_removidos} lançamento(s) de caixa removido(s).")
 
+        registrar_log(
+            'EXCLUIR', 'VENDAS',
+            f"Pedido excluído — Cliente: {nome_cliente}, NF: {nf_pedido or 'N/A'}, "
+            f"Data: {data_pedido.strftime('%d/%m/%Y')}, {len(vendas_do_pedido)} item(ns)."
+        )
         flash(f'Pedido completo excluído com sucesso! {len(vendas_do_pedido)} item(ns) removido(s) e {lancamentos_removidos} lançamento(s) de caixa removido(s).', 'success')
     except Exception as e:
         db.session.rollback()  # OBRIGATÓRIO para destravar o sistema em caso de erro
@@ -7301,6 +7426,12 @@ def atualizar_status_venda(id_venda):
     db.session.commit()
     limpar_cache_dashboard()  # Limpar cache após atualizar status da venda
     nf = venda.nf or '-'
+    _cli_nome = Cliente.query.get(venda.cliente_id)
+    registrar_log(
+        'PAGAR', 'VENDAS',
+        f"Status do pedido NF: {nf} (Cliente: {_cli_nome.nome_cliente if _cli_nome else 'N/A'}) "
+        f"alterado de {atual} para {novo}."
+    )
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.is_json:
         return jsonify(ok=True, novo_status=novo, mensagem=f'Pedido (NF: {nf}) atualizado para {novo}.')
     flash(f'Pedido (NF: {nf}) atualizado para {novo}.', 'success')
