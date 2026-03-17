@@ -621,7 +621,7 @@
                     {% else %}
                     <tr id="vendas-empty-row">
                         <td colspan="14" class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
-                            {% if filtro_vencidos %}Nenhum pedido vencido há mais de 1 dia (para enviar ao fornecedor).{% else %}Nenhuma venda registrada ainda.{% endif %}
+                            {% if filtro_vencidos %}Nenhuma venda com pagamento pendente e data de vencimento ultrapassada foi encontrada.{% else %}Nenhuma venda registrada ainda.{% endif %}
                         </td>
                     </tr>
                     {% endif %}

@@ -2189,7 +2189,7 @@ def inject_ano_ativo():
 def injetar_datas():
     """Disponibiliza hoje e ontem (fuso Brasil) em todos os templates para destaque visual por data."""
     try:
-        hoje = get_hoje_brasil()
+        hoje = date.today()
         ontem = hoje - timedelta(days=1)
         return dict(hoje=hoje, ontem=ontem)
     except Exception:
@@ -2230,8 +2230,8 @@ def _contar_cobrancas_pendentes_visiveis():
                     dv = doc_boleto.data_vencimento
             if dv is None:
                 continue
-            # Mesma régua da listagem quando filtro_vencidos=1 ("vencido há mais de 1 dia").
-            if hoje > (dv + timedelta(days=1)):
+            # Mesma régua da listagem: vencimento estritamente anterior à data atual.
+            if dv < hoje:
                 total += 1
         return total
     except Exception:
@@ -6077,18 +6077,17 @@ def listar_vendas():
             dv = doc_boleto.data_vencimento
         pedido['data_vencimento'] = dv
         hoje = get_hoje_brasil()
-        # is_vencido: qualquer boleto vencido (vencimento < hoje) - para destacar em vermelho
+        # is_vencido: pagamento pendente/parcial com vencimento estritamente anterior a hoje.
         pedido['is_vencido'] = (
             pedido.get('situacao') in ('PENDENTE', 'PARCIAL') and
             dv is not None and
-            hoje > dv
+            dv < hoje
         )
-        # is_vencido_para_abatimento: vencido há mais de 1 dia - para filtro "Enviar para Fornecedor"
-        venc_limite = (dv + timedelta(days=1)) if dv else None
+        # Mesma régua do filtro de vencidos na tela de vendas.
         pedido['is_vencido_para_abatimento'] = (
             pedido.get('situacao') in ('PENDENTE', 'PARCIAL') and
-            venc_limite is not None and
-            hoje > venc_limite
+            dv is not None and
+            dv < hoje
         )
         # #region agent log
         listar_pedido_sample += 1
@@ -6134,7 +6133,7 @@ def listar_vendas():
             key=lambda x: 1 if str(x.get('situacao') or '').upper() == 'PAGO' else 0
         )
     
-    # Filtro "Ver Vencidos (Enviar para Fornecedor)": apenas pedidos vencidos há mais de 1 dia
+    # Filtro "Ver Vencidos": mostra pendentes/parciais com vencimento já ultrapassado.
     if filtro_vencidos:
         pedidos_agrupados = [p for p in pedidos_agrupados if p.get('is_vencido_para_abatimento')]
     # Commit das limpezas de vínculos órfãos
