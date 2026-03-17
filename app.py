@@ -103,6 +103,23 @@ def _safe_db_commit() -> tuple[bool, str | None]:
 _EXTERNAL_TIMEOUT = 15
 
 
+def pad_base64(data: str | None) -> str | None:
+    """Normaliza Base64/Base64URL adicionando padding '=' quando necessário.
+
+    Alguns geradores de chave VAPID retornam formato Base64URL sem padding.
+    A biblioteca cryptography pode falhar ao desserializar sem esse ajuste.
+    """
+    if not data:
+        return data
+    # Se vier em PEM (BEGIN/END), não alterar.
+    if '-----BEGIN' in data and '-----END' in data:
+        return data
+    missing_padding = len(data) % 4
+    if missing_padding:
+        data += '=' * (4 - missing_padding)
+    return data
+
+
 # Mapeamento flexível: nomes possíveis no arquivo -> nomes do banco (models.Produto)
 COLUNA_ARQUIVO_PARA_BANCO = {
     'produto': 'nome_produto',
@@ -9315,7 +9332,10 @@ def debug_testar_push():
     Returns:
         JSON com ``status``, ``mensagem`` e detalhes do dispositivo testado.
     """
-    if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
+    vapid_private_key = pad_base64(VAPID_PRIVATE_KEY)
+    vapid_public_key = pad_base64(VAPID_PUBLIC_KEY)
+
+    if not vapid_private_key or not vapid_public_key:
         return jsonify({
             'status': 'erro',
             'mensagem': 'VAPID_PRIVATE_KEY ou VAPID_PUBLIC_KEY não configuradas no ambiente (Render). '
@@ -9362,7 +9382,7 @@ def debug_testar_push():
                 'keys': {'p256dh': sub.p256dh, 'auth': sub.auth}
             },
             data=payload,
-            vapid_private_key=VAPID_PRIVATE_KEY,
+            vapid_private_key=vapid_private_key,
             vapid_claims={'sub': VAPID_CLAIM_EMAIL},
             timeout=_EXTERNAL_TIMEOUT
         )
@@ -9483,7 +9503,9 @@ def enviar_frase_diaria():
     # ── 2. Envio por Web Push (pywebpush) ────────────────────────────────────
     push_enviados = 0
     push_erros = 0
-    if VAPID_PRIVATE_KEY and VAPID_PUBLIC_KEY:
+    vapid_private_key = pad_base64(VAPID_PRIVATE_KEY)
+    vapid_public_key = pad_base64(VAPID_PUBLIC_KEY)
+    if vapid_private_key and vapid_public_key:
         try:
             from pywebpush import webpush, WebPushException
         except ImportError:
@@ -9519,7 +9541,7 @@ def enviar_frase_diaria():
                             'keys': {'p256dh': sub.p256dh, 'auth': sub.auth}
                         },
                         data=payload,
-                        vapid_private_key=VAPID_PRIVATE_KEY,
+                        vapid_private_key=vapid_private_key,
                         vapid_claims={'sub': VAPID_CLAIM_EMAIL},
                         timeout=_EXTERNAL_TIMEOUT
                     )
