@@ -6180,7 +6180,8 @@ def listar_vendas():
     if cliente_id:
         cliente_filtro = Cliente.query.get(cliente_id)
 
-    clientes = Cliente.query.order_by(Cliente.nome_cliente).limit(500).all()
+    # Nova venda (autocomplete): exibe apenas clientes ativos.
+    clientes = Cliente.query.filter_by(ativo=True).order_by(Cliente.nome_cliente).limit(500).all()
     produtos = Produto.query.filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
     todos_clientes = Cliente.query.order_by(Cliente.nome_cliente).limit(500).all()
     todos_produtos = Produto.query.order_by(Produto.nome_produto).limit(500).all()
