@@ -271,6 +271,33 @@ class ContagemGaveta(db.Model):
         return f'<ContagemGaveta {self.id} - {self.data}>'
 
 
+class PushSubscription(db.Model):
+    """Armazena inscrições de Web Push de cada browser/dispositivo.
+
+    Cada linha representa um dispositivo inscrito. Um mesmo usuário
+    pode ter múltiplas linhas (celular + desktop + tablet).
+    O endpoint é único por dispositivo.
+
+    Attributes:
+        user_id: FK opcional para Usuario (nullable para subscriptions anônimas).
+        endpoint: URL única fornecida pelo browser (PushManager.subscribe).
+        p256dh: Chave pública de criptografia do browser.
+        auth: Segredo de autenticação do browser.
+    """
+
+    __tablename__ = 'push_subscriptions'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('usuarios.id', ondelete='CASCADE'), nullable=True, index=True)
+    endpoint = db.Column(db.Text, nullable=False, unique=True)
+    p256dh = db.Column(db.Text, nullable=False)
+    auth = db.Column(db.String(64), nullable=False)
+    criado_em = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def __repr__(self):
+        return f'<PushSubscription user_id={self.user_id} endpoint={self.endpoint[:40]}...>'
+
+
 class Documento(db.Model):
     """
     Documento PDF (boleto ou nota fiscal) armazenado no Cloudinary.

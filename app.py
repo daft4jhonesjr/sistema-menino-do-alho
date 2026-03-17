@@ -5,7 +5,7 @@ from flask_compress import Compress
 from flask_caching import Cache
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from models import db, Cliente, Produto, ProdutoFoto, Venda, Usuario, Configuracao, Documento, LancamentoCaixa, ContagemGaveta, Fornecedor
+from models import db, Cliente, Produto, ProdutoFoto, Venda, Usuario, Configuracao, Documento, LancamentoCaixa, ContagemGaveta, Fornecedor, PushSubscription
 from quotes import frase_do_dia
 from config import Config
 from datetime import date, datetime, timedelta
@@ -1869,6 +1869,12 @@ MAIL_USERNAME = os.environ.get('MAIL_USERNAME')
 MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
 CRON_SECRET = os.environ.get('CRON_SECRET')
 
+# Chaves VAPID para Web Push — gere com: python -c "from py_vapid import Vapid; v=Vapid(); v.generate_keys(); print('PRIV:', v.private_pem().decode()); print('PUB:', v.public_key.public_bytes(__import__('cryptography.hazmat.primitives.serialization', fromlist=['Encoding','PublicFormat']).Encoding.X962, __import__('cryptography.hazmat.primitives.serialization', fromlist=['PublicFormat']).PublicFormat.UncompressedPoint).hex())"
+# Ou via: npx web-push generate-vapid-keys
+VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY')
+VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY')
+VAPID_CLAIM_EMAIL = os.environ.get('VAPID_CLAIM_EMAIL', 'mailto:admin@meninoalho.com.br')
+
 # Configurar compressão Gzip para HTML, CSS, JS e JSON
 Compress(app)
 app.config['COMPRESS_MIMETYPES'] = ['text/html', 'text/css', 'text/javascript', 'application/javascript', 'application/json', 'text/xml', 'application/xml']
@@ -2472,6 +2478,38 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             except (OperationalError, Exception):
                 db.session.rollback()
             print(f"Migração ignorada (provavelmente banco SQLite local ou erro): {e}")
+        # Migração: tabela de inscrições Web Push
+        try:
+            db.session.execute(text('''
+                CREATE TABLE IF NOT EXISTS push_subscriptions (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER REFERENCES usuarios(id) ON DELETE CASCADE,
+                    endpoint TEXT NOT NULL UNIQUE,
+                    p256dh TEXT NOT NULL,
+                    auth VARCHAR(64) NOT NULL,
+                    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            '''))
+            db.session.commit()
+            print("Migração: tabela push_subscriptions verificada/criada com sucesso.")
+        except Exception as e:
+            db.session.rollback()
+            # Fallback SQLite
+            try:
+                db.session.execute(text('''
+                    CREATE TABLE IF NOT EXISTS push_subscriptions (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER REFERENCES usuarios(id) ON DELETE CASCADE,
+                        endpoint TEXT NOT NULL UNIQUE,
+                        p256dh TEXT NOT NULL,
+                        auth TEXT NOT NULL,
+                        criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                '''))
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+            print(f"Migração push_subscriptions (fallback): {e}")
         # Migração: data_vencimento em vendas (vencimento do boleto extraído do PDF)
         try:
             db.session.execute(text('ALTER TABLE vendas ADD COLUMN data_vencimento DATE'))
@@ -9169,6 +9207,100 @@ def backup_diario_email():
         return jsonify({'status': 'erro', 'mensagem': str(e)}), 500
 
 
+@app.route('/api/vapid-public-key', methods=['GET'])
+def vapid_public_key():
+    """Retorna a VAPID Public Key em formato ApplicationServerKey para o frontend.
+
+    O frontend usa esta chave ao chamar PushManager.subscribe().
+    Returns:
+        JSON com o campo ``publicKey``.
+    """
+    if not VAPID_PUBLIC_KEY:
+        return jsonify({'erro': 'VAPID_PUBLIC_KEY não configurada no ambiente.'}), 503
+    return jsonify({'publicKey': VAPID_PUBLIC_KEY}), 200
+
+
+@app.route('/api/subscribe', methods=['POST'])
+@login_required
+@csrf.exempt
+@limiter.limit("20 per hour")
+def push_subscribe():
+    """Recebe e persiste uma inscrição de Web Push do browser.
+
+    O corpo da requisição deve ser o JSON gerado por PushManager.subscribe(),
+    com os campos ``endpoint``, ``keys.p256dh`` e ``keys.auth``.
+
+    Returns:
+        JSON indicando se a inscrição foi criada ou já existia.
+    """
+    data = request.get_json(silent=True) or {}
+    endpoint = data.get('endpoint')
+    keys = data.get('keys', {})
+    p256dh = keys.get('p256dh')
+    auth_key = keys.get('auth')
+
+    if not endpoint or not p256dh or not auth_key:
+        return jsonify({'erro': 'Dados de inscrição incompletos (endpoint, p256dh, auth obrigatórios).'}), 400
+
+    existing = PushSubscription.query.filter_by(endpoint=endpoint).first()
+    if existing:
+        # Atualiza as chaves caso o browser as tenha renovado
+        existing.p256dh = p256dh
+        existing.auth = auth_key
+        existing.user_id = current_user.id if current_user.is_authenticated else None
+        try:
+            db.session.commit()
+            return jsonify({'status': 'atualizado'}), 200
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Erro ao atualizar PushSubscription: {e}")
+            return jsonify({'erro': 'Erro ao atualizar inscrição.'}), 500
+
+    sub = PushSubscription(
+        user_id=current_user.id if current_user.is_authenticated else None,
+        endpoint=endpoint,
+        p256dh=p256dh,
+        auth=auth_key
+    )
+    try:
+        db.session.add(sub)
+        db.session.commit()
+        current_app.logger.info(f"Nova PushSubscription user_id={sub.user_id} endpoint={endpoint[:40]}...")
+        return jsonify({'status': 'criado'}), 201
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erro ao salvar PushSubscription: {e}")
+        return jsonify({'erro': 'Erro ao salvar inscrição.'}), 500
+
+
+@app.route('/api/unsubscribe', methods=['POST'])
+@login_required
+@csrf.exempt
+def push_unsubscribe():
+    """Remove uma inscrição de Web Push do banco de dados.
+
+    Chamado pelo frontend quando o usuário cancela as notificações.
+    Body JSON: ``{ "endpoint": "..." }``
+    """
+    data = request.get_json(silent=True) or {}
+    endpoint = data.get('endpoint')
+    if not endpoint:
+        return jsonify({'erro': 'endpoint obrigatório.'}), 400
+
+    sub = PushSubscription.query.filter_by(endpoint=endpoint).first()
+    if sub:
+        try:
+            db.session.delete(sub)
+            db.session.commit()
+            return jsonify({'status': 'removido'}), 200
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Erro ao remover PushSubscription: {e}")
+            return jsonify({'erro': 'Erro ao remover inscrição.'}), 500
+
+    return jsonify({'status': 'não encontrado'}), 404
+
+
 @app.route('/api/cron/enviar_frase_diaria', methods=['GET', 'POST'])
 @limiter.limit("5 per hour")
 def enviar_frase_diaria():
@@ -9200,55 +9332,131 @@ def enviar_frase_diaria():
         Usuario.email != ''
     ).all()
 
-    if not destinatarios:
-        return jsonify({'status': 'ok', 'mensagem': 'Nenhum usuário optou por receber a frase diária.', 'enviados': 0}), 200
-
     data_hoje = datetime.now().strftime('%d/%m/%Y')
 
-    try:
-        server = smtplib.SMTP(MAIL_SERVER, MAIL_PORT, timeout=_EXTERNAL_TIMEOUT)
-        server.starttls()
-        server.login(MAIL_USERNAME, MAIL_PASSWORD)
+    # ── 1. Envio por e-mail ─────────────────────────────────────────────────
+    emails_enviados = 0
+    if destinatarios and MAIL_USERNAME and MAIL_PASSWORD:
+        try:
+            server = smtplib.SMTP(MAIL_SERVER, MAIL_PORT, timeout=_EXTERNAL_TIMEOUT)
+            server.starttls()
+            server.login(MAIL_USERNAME, MAIL_PASSWORD)
 
-        enviados = 0
-        for user in destinatarios:
-            msg = MIMEMultipart('alternative')
-            msg['Subject'] = f"🏛️ Sabedoria do Dia — {frase['autor']} [{data_hoje}]"
-            msg['From'] = MAIL_USERNAME
-            msg['To'] = user.email
+            for user in destinatarios:
+                msg = MIMEMultipart('alternative')
+                msg['Subject'] = f"🏛️ Sabedoria do Dia — {frase['autor']} [{data_hoje}]"
+                msg['From'] = MAIL_USERNAME
+                msg['To'] = user.email
 
-            nome = user.nome or user.username or 'colega'
-            corpo_html = f"""
-            <div style="font-family: Georgia, 'Times New Roman', serif; max-width: 520px; margin: 0 auto; padding: 32px 24px;">
-                <p style="color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 24px;">Sabedoria do Dia</p>
-                <blockquote style="margin: 0; padding: 0 0 0 20px; border-left: 3px solid #059669; color: #1f2937; font-size: 18px; line-height: 1.7; font-style: italic;">
-                    &ldquo;{frase['texto']}&rdquo;
-                </blockquote>
-                <p style="text-align: right; color: #6b7280; font-size: 14px; margin-top: 16px; font-weight: 600;">&mdash; {frase['autor']}</p>
-                <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0 16px;">
-                <p style="color: #9ca3af; font-size: 11px;">
-                    Olá, {nome}. Esta mensagem é enviada automaticamente pelo Sistema Menino do Alho.
-                    Para deixar de receber, desative &ldquo;Frase Motivacional Diária&rdquo; nas Configurações.
-                </p>
-            </div>
-            """
-            msg.attach(MIMEText(corpo_html, 'html', 'utf-8'))
-            server.send_message(msg)
-            enviados += 1
+                nome = user.nome or user.username or 'colega'
+                corpo_html = f"""
+                <div style="font-family: Georgia, 'Times New Roman', serif; max-width: 520px; margin: 0 auto; padding: 32px 24px;">
+                    <p style="color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 24px;">Sabedoria do Dia</p>
+                    <blockquote style="margin: 0; padding: 0 0 0 20px; border-left: 3px solid #059669; color: #1f2937; font-size: 18px; line-height: 1.7; font-style: italic;">
+                        &ldquo;{frase['texto']}&rdquo;
+                    </blockquote>
+                    <p style="text-align: right; color: #6b7280; font-size: 14px; margin-top: 16px; font-weight: 600;">&mdash; {frase['autor']}</p>
+                    <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0 16px;">
+                    <p style="color: #9ca3af; font-size: 11px;">
+                        Olá, {nome}. Esta mensagem é enviada automaticamente pelo Sistema Menino do Alho.
+                        Para deixar de receber, desative &ldquo;Frase Motivacional Diária&rdquo; nas Configurações.
+                    </p>
+                </div>
+                """
+                msg.attach(MIMEText(corpo_html, 'html', 'utf-8'))
+                server.send_message(msg)
+                emails_enviados += 1
 
-        server.quit()
-        current_app.logger.info(f"Frase diária enviada para {enviados} usuário(s).")
-        return jsonify({
-            'status': 'ok',
-            'mensagem': f'Frase diária enviada para {enviados} usuário(s).',
-            'frase': frase['texto'],
-            'autor': frase['autor'],
-            'enviados': enviados
-        }), 200
+            server.quit()
+            current_app.logger.info(f"Frase diária enviada por e-mail para {emails_enviados} usuário(s).")
+        except Exception as e:
+            current_app.logger.error(f"Erro ao enviar frase diária por e-mail: {e}")
 
-    except Exception as e:
-        current_app.logger.error(f"Erro ao enviar frase diária: {e}")
-        return jsonify({'status': 'erro', 'mensagem': str(e)}), 500
+    # ── 2. Envio por Web Push (pywebpush) ────────────────────────────────────
+    push_enviados = 0
+    push_erros = 0
+    if VAPID_PRIVATE_KEY and VAPID_PUBLIC_KEY:
+        try:
+            from pywebpush import webpush, WebPushException
+        except ImportError:
+            current_app.logger.warning("pywebpush não instalado; pulando Web Push.")
+            webpush = None
+            WebPushException = Exception
+
+        if webpush:
+            # Obtém IDs dos usuários que querem a frase
+            ids_notifica = {u.id for u in destinatarios}
+
+            # Busca todas as subscriptions de usuários que opted-in
+            # Inclui também subscriptions cujo user_id não está na lista (null ou não encontrado)
+            subs = PushSubscription.query.filter(
+                PushSubscription.user_id.in_(ids_notifica)
+            ).all()
+
+            payload = json.dumps({
+                'title': 'Sabedoria do Dia 🏛️',
+                'body': f'"{frase["texto"]}" — {frase["autor"]}',
+                'icon': '/static/images/logo_menino_do_alho_amarelo1.jpeg',
+                'badge': '/static/images/logo_menino_do_alho_amarelo1.jpeg',
+                'tag': 'frase-diaria',
+                'url': '/'
+            })
+
+            subs_para_remover = []
+            for sub in subs:
+                try:
+                    webpush(
+                        subscription_info={
+                            'endpoint': sub.endpoint,
+                            'keys': {'p256dh': sub.p256dh, 'auth': sub.auth}
+                        },
+                        data=payload,
+                        vapid_private_key=VAPID_PRIVATE_KEY,
+                        vapid_claims={'sub': VAPID_CLAIM_EMAIL},
+                        timeout=_EXTERNAL_TIMEOUT
+                    )
+                    push_enviados += 1
+                except WebPushException as ex:
+                    push_erros += 1
+                    # 410 Gone = browser revogou a subscription; remove do banco
+                    if ex.response and ex.response.status_code in (404, 410):
+                        subs_para_remover.append(sub)
+                    else:
+                        current_app.logger.warning(f"Web Push falhou para sub {sub.id}: {ex}")
+                except Exception as ex:
+                    push_erros += 1
+                    current_app.logger.warning(f"Erro genérico no Web Push sub {sub.id}: {ex}")
+
+            # Remove subscriptions expiradas
+            for sub in subs_para_remover:
+                try:
+                    db.session.delete(sub)
+                except Exception:
+                    pass
+            if subs_para_remover:
+                try:
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+
+            current_app.logger.info(
+                f"Web Push frase diária: {push_enviados} ok, {push_erros} erros, "
+                f"{len(subs_para_remover)} subscriptions removidas."
+            )
+
+    total_enviados = emails_enviados + push_enviados
+    if total_enviados == 0 and not destinatarios:
+        return jsonify({'status': 'ok', 'mensagem': 'Nenhum usuário optou por receber a frase diária.', 'enviados': 0}), 200
+
+    return jsonify({
+        'status': 'ok',
+        'mensagem': f'Frase diária enviada: {emails_enviados} e-mail(s), {push_enviados} push(es).',
+        'frase': frase['texto'],
+        'autor': frase['autor'],
+        'emails_enviados': emails_enviados,
+        'push_enviados': push_enviados,
+        'push_erros': push_erros
+    }), 200
 
 
 @app.route('/api/backup/excel')

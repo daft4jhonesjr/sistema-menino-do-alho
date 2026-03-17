@@ -30,3 +30,4 @@ cloudinary
 psycopg2-binary
 redis
 rq
+pywebpush
