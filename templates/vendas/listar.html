@@ -518,13 +518,14 @@
                             <input type="checkbox" id="bulk-master" class="rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" title="Selecionar todos" aria-label="Selecionar todos">
                         </th>
                         <th class="px-4 py-3 text-left w-12"></th>
+                        {% set data_ordenacao_ativa = (not ordenar_por) and (ordem_data in ['crescente', 'decrescente']) %}
                         {% set url_th_data = request.args.to_dict(flat=True) %}
                         {% if url_th_data.get('ordenar_por') %}
                             {% set _ = url_th_data.pop('ordenar_por') %}
                         {% endif %}
                         {% set proxima_ordem_data = 'decrescente' if ordem_data == 'crescente' else 'crescente' %}
                         {% set _ = url_th_data.update({'ordem_data': proxima_ordem_data}) %}
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors {{ 'text-blue-600 dark:text-blue-400 font-bold' if data_ordenacao_ativa else 'text-gray-500 dark:text-gray-400' }}">
                             <a href="{{ url_for('listar_vendas', **url_th_data) }}" class="inline-flex items-center gap-1 no-underline text-inherit">
                                 Data
                                 {% if ordem_data == 'crescente' %}
@@ -552,7 +553,8 @@
                         {% set _ = url_venc_distante.update({'ordem_data': 'vencimento_decrescente'}) %}
                         {% set url_vencidos_fornecedor = url_params.copy() %}
                         {% set _ = url_vencidos_fornecedor.update({'filtro_vencidos': 1, 'ordem_data': ordem_data}) %}
-                        <th class="relative px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">
+                        {% set vencimento_ordenacao_ativa = ordem_data in ['vencimento_crescente', 'vencimento_decrescente'] %}
+                        <th class="relative px-6 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap {{ 'text-emerald-600 dark:text-emerald-400 font-bold' if vencimento_ordenacao_ativa else 'text-gray-500 dark:text-gray-400' }}">
                             <details class="relative inline-block">
                                 <summary class="list-none inline-flex items-center gap-1 cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200 transition-colors">
                                     Vencimento
@@ -574,8 +576,9 @@
                                 </div>
                             </details>
                         </th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">
-                            <select id="filtro-empresa" class="bg-transparent text-gray-500 dark:text-gray-400 font-medium uppercase cursor-pointer border-none p-0 focus:ring-0 text-xs tracking-wider appearance-none pr-4" style="background-image:url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 20 20%22%3E%3Cpath stroke=%22%236b7280%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%222%22 d=%22m6 8 4 4 4-4%22/%3E%3C/svg%3E');background-repeat:no-repeat;background-position:right 0 center;background-size:14px;">
+                        {% set empresa_coluna_ativa = request.args.get('filtro_empresa') and request.args.get('filtro_empresa') != 'TODAS' %}
+                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap {{ 'text-blue-600 dark:text-blue-400 font-bold' if empresa_coluna_ativa else 'text-gray-500 dark:text-gray-400' }}">
+                            <select id="filtro-empresa" class="bg-transparent {{ 'text-blue-600 dark:text-blue-400 font-bold' if empresa_coluna_ativa else 'text-gray-500 dark:text-gray-400' }} font-medium uppercase cursor-pointer border-none p-0 focus:ring-0 text-xs tracking-wider appearance-none pr-4" style="background-image:url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 20 20%22%3E%3Cpath stroke=%22%236b7280%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%222%22 d=%22m6 8 4 4 4-4%22/%3E%3C/svg%3E');background-repeat:no-repeat;background-position:right 0 center;background-size:14px;">
                                 <option value="TODAS">Empresa ▾</option>
                                 <option value="DESTAK">DESTAK</option>
                                 <option value="PATY">PATY</option>
@@ -589,7 +592,7 @@
                         {% if filtro_vencidos %}{% set _ = url_th_situacao.update({'filtro_vencidos': 1}) %}{% endif %}
                         {% set _ = url_th_situacao.update({'ordem_data': ordem_data}) %}
                         {% set _ = url_th_situacao.update({'ordenar_por': 'situacao'}) %}
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors {{ 'text-blue-600 dark:text-blue-400 font-bold' if ordenar_por == 'situacao' else 'text-gray-500 dark:text-gray-400' }}">
                             <a href="{{ url_for('listar_vendas', **url_th_situacao) }}" class="flex items-center gap-1 no-underline text-inherit">
                                 Situação
                                 <svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path></svg>
@@ -602,7 +605,7 @@
                         {% if filtro_vencidos %}{% set _ = url_th_forma.update({'filtro_vencidos': 1}) %}{% endif %}
                         {% set _ = url_th_forma.update({'ordem_data': ordem_data}) %}
                         {% set _ = url_th_forma.update({'ordenar_por': 'forma_pagamento'}) %}
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors {{ 'text-blue-600 dark:text-blue-400 font-bold' if ordenar_por == 'forma_pagamento' else 'text-gray-500 dark:text-gray-400' }}">
                             <a href="{{ url_for('listar_vendas', **url_th_forma) }}" class="flex items-center gap-1 no-underline text-inherit">
                                 Forma Pagto
                                 <svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path></svg>

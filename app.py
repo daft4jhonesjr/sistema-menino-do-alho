@@ -6117,13 +6117,21 @@ def listar_vendas():
         )
         pedidos_agrupados.sort(key=lambda x: str(x.get('forma_pagamento') or ''))
     elif ordem_data == 'vencimento_crescente':
+        # Regra de negócio: ao ordenar por vencimento, pedidos PAGO ficam sempre no final.
         pedidos_agrupados.sort(
             key=lambda x: (x.get('data_vencimento') is None, x.get('data_vencimento') or date.max)
         )
+        pedidos_agrupados.sort(
+            key=lambda x: 1 if str(x.get('situacao') or '').upper() == 'PAGO' else 0
+        )
     elif ordem_data == 'vencimento_decrescente':
+        # Mantém PAGO no final mesmo no modo "distante primeiro".
         pedidos_agrupados.sort(
             key=lambda x: (x.get('data_vencimento') is None, x.get('data_vencimento') or date.min),
             reverse=True
+        )
+        pedidos_agrupados.sort(
+            key=lambda x: 1 if str(x.get('situacao') or '').upper() == 'PAGO' else 0
         )
     
     # Filtro "Ver Vencidos (Enviar para Fornecedor)": apenas pedidos vencidos há mais de 1 dia
