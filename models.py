@@ -1,7 +1,6 @@
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 from datetime import date, datetime
-from enum import Enum
 from decimal import Decimal
 
 db = SQLAlchemy()
@@ -37,39 +36,6 @@ class Usuario(UserMixin, db.Model):
 
     def __repr__(self):
         return f'<Usuario {self.username}>'
-
-# Enums
-class TipoProduto(Enum):
-    ALHO = "ALHO"
-    SACOLA = "SACOLA"
-    CAFE = "CAFE"
-
-class Nacionalidade(Enum):
-    ARGENTINO = "ARGENTINO"
-    NACIONAL = "NACIONAL"
-    CHINES = "CHINES"
-
-class Tamanho(Enum):
-    TAMANHO_4 = "4"
-    TAMANHO_5 = "5"
-    TAMANHO_6 = "6"
-    TAMANHO_7 = "7"
-    TAMANHO_8 = "8"
-    TAMANHO_9 = "9"
-    TAMANHO_10 = "10"
-
-class FornecedorEnum(Enum):
-    DESTAK = "DESTAK"
-    PATY = "PATY"
-
-class EmpresaFaturadora(Enum):
-    PATY = "PATY"
-    DESTAK = "DESTAK"
-
-class SituacaoVenda(Enum):
-    PENDENTE = "PENDENTE"
-    PAGO = "PAGO"
-
 
 class Cliente(db.Model):
     """

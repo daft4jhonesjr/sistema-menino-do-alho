@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_file, Response
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_file, Response, current_app
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_wtf.csrf import CSRFProtect, generate_csrf
 from flask_compress import Compress
@@ -12,7 +12,6 @@ from decimal import Decimal
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
 import pytz
-from utils import otimizar_imagem, otimizar_imagem_em_memoria
 from functools import wraps
 from sqlalchemy import func, desc, asc, text, or_, extract, case, cast
 from sqlalchemy.orm import joinedload, contains_eager, selectinload
@@ -421,33 +420,6 @@ def _parse_clientes_raw_tsv(text):
             'endereco': endereco,
         })
     return out
-
-
-def _cliente_from_documento(cnpj, razao_social):
-    """Encontra Cliente a partir de dados do documento (boleto/NF).
-    Prioridade 1: CNPJ (igual, ignorando formatação) — query indexada.
-    Prioridade 2: razao_social (igual ou contém, case-insensitive).
-    NÃO usa nome_cliente. Retorna Cliente ou None."""
-    if cnpj and (cnpj_limpo := _normalizar_cnpj(cnpj)):
-        cliente = Cliente.query.filter(Cliente.cnpj.isnot(None), Cliente.cnpj != '').all()
-        for c in cliente:
-            if c.cnpj and _normalizar_cnpj(c.cnpj) == cnpj_limpo:
-                return c
-    razao = (razao_social or '').strip()
-    if not razao:
-        return None
-    razao_upper = razao.upper()
-    candidatos = Cliente.query.filter(Cliente.razao_social.isnot(None), Cliente.razao_social != '').all()
-    for c in candidatos:
-        rs = (c.razao_social or '').strip()
-        if not rs:
-            continue
-        rs_upper = rs.upper()
-        if rs_upper == razao_upper:
-            return c
-        if razao_upper in rs_upper or rs_upper in razao_upper:
-            return c
-    return None
 
 
 def _extrair_numero_nf(texto):
@@ -1681,14 +1653,6 @@ def _reprocessar_vencimentos_vendas():
     return resultado
 
 
-def _vendas_com_documento():
-    """Vendas consideradas VINCULADAS: possuem boleto OU nota fiscal (qualquer um basta).
-    Regra: preenchido caminho_nf OU caminho_boleto. NF sozinha já vale como documento principal."""
-    return Venda.query.filter(
-        or_(Venda.caminho_nf.isnot(None), Venda.caminho_boleto.isnot(None))
-    ).all()
-
-
 def _diagnosticar_vinculo_falhou(doc):
     """Diagnostica por que um documento não foi vinculado automaticamente.
     Lógica simplificada: compara APENAS NF (normalizada, sem zeros à esquerda).
@@ -1758,9 +1722,9 @@ def _diagnosticar_vinculo_falhou(doc):
         }
 
 
-def _listar_documentos_recem_chegados(user_id=None):
+def _listar_documentos_recem_chegados():
     """Lista documentos da tabela Documento onde venda_id é None (arquivos soltos, sem vínculo).
-    Mostra todos os documentos órfãos, independente de status. Filtra por usuario_id se informado."""
+    Mostra todos os documentos órfãos, independente de status."""
     resultado_processamento = {"sucesso": 0, "falha": 0, "erros": [], "vinculos_novos": 0, "processados": 0}
     # Blindagem: considera órfãos com FK nula, zero ou vazia (dados legados/sujos).
     query = Documento.query.filter(
@@ -2039,62 +2003,6 @@ def limpar_cache_dashboard():
             cache.clear()
         except Exception:
             pass  # Ignora erros de cache
-
-
-def salvar_arquivo_com_otimizacao(arquivo_upload, pasta_destino=None):
-    """
-    Salva um arquivo de upload, otimizando automaticamente se for uma imagem.
-    
-    Args:
-        arquivo_upload: Objeto FileStorage do Flask (request.files['arquivo'])
-        pasta_destino (str): Pasta de destino (padrão: app.config['UPLOAD_FOLDER'])
-    
-    Returns:
-        tuple: (caminho_completo, nome_arquivo) ou (None, None) em caso de erro
-    """
-    if not arquivo_upload or not arquivo_upload.filename:
-        return None, None
-    
-    # Determinar pasta de destino
-    if pasta_destino is None:
-        pasta_destino = app.config['UPLOAD_FOLDER']
-    
-    # Verificar se é uma imagem
-    extensoes_imagem = ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp')
-    nome_arquivo_original = arquivo_upload.filename
-    nome_arquivo_lower = nome_arquivo_original.lower()
-    is_imagem = any(nome_arquivo_lower.endswith(ext) for ext in extensoes_imagem)
-    
-    if is_imagem:
-        # Otimizar imagem em memória antes de salvar
-        arquivo_otimizado = otimizar_imagem_em_memoria(arquivo_upload)
-        
-        if arquivo_otimizado:
-            # Gerar nome de arquivo seguro
-            nome_base, _ = os.path.splitext(secure_filename(nome_arquivo_original))
-            filename = nome_base + '.jpg'  # Sempre salvar como JPEG após otimização
-            filepath = os.path.join(pasta_destino, filename)
-            
-            # Salvar arquivo otimizado
-            with open(filepath, 'wb') as f:
-                f.write(arquivo_otimizado.read())
-            
-            return filepath, filename
-        else:
-            # Se falhou a otimização, salvar normalmente
-            filename = secure_filename(nome_arquivo_original)
-            filepath = os.path.join(pasta_destino, filename)
-            arquivo_upload.seek(0)
-            arquivo_upload.save(filepath)
-            # Tentar otimizar após salvar
-            otimizar_imagem(filepath)
-            return filepath, filename
-    else:
-        # Não é imagem, salvar normalmente
-        filename = secure_filename(nome_arquivo_original)
-        filepath = os.path.join(pasta_destino, filename)
-        arquivo_upload.save(filepath)
-        return filepath, filename
 
 
 @login_manager.user_loader
@@ -3066,6 +2974,7 @@ def handle_exception(e):
 @app.errorhandler(500)
 def erro_interno(e):
     """Página amigável para erros 500. Evita exibir traceback no navegador."""
+    current_app.logger.error(f"Erro interno: {e}")
     return render_template('500.html'), 500
 
 
