@@ -1,6 +1,7 @@
 // Service Worker PWA - Menino do Alho
 // Cache local de estáticos para carregamento instantâneo
-const CACHE_NAME = 'menino-alho-v2';
+// v3: adicionado suporte a Web Push (eventos push e notificationclick)
+const CACHE_NAME = 'menino-alho-v3';
 const ASSETS_TO_CACHE = [
     '/static/images/logo_menino_do_alho_amarelo1.jpeg',
     '/static/manifest.json',
@@ -84,4 +85,66 @@ self.addEventListener('message', (event) => {
     if (event.data && event.data.type === 'SKIP_WAITING') {
         self.skipWaiting();
     }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WEB PUSH — Recebe notificações em background (aba fechada / tela bloqueada)
+// Requisito do lado do servidor: VAPID + pywebpush + tabela de subscriptions.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// 4. Recebe o payload enviado pelo servidor via protocolo Web Push (VAPID)
+self.addEventListener('push', function(event) {
+    var data = {};
+    if (event.data) {
+        try {
+            data = event.data.json();
+        } catch (e) {
+            data = { title: 'Menino do Alho', body: event.data.text() };
+        }
+    }
+
+    var title   = data.title  || 'Menino do Alho 🧄';
+    var options = {
+        body:    data.body    || 'Você tem uma nova notificação.',
+        icon:    data.icon    || '/static/images/logo_menino_do_alho_amarelo1.jpeg',
+        badge:   data.badge   || '/static/images/logo_menino_do_alho_amarelo1.jpeg',
+        vibrate: [100, 50, 100],
+        tag:     data.tag     || 'menino-alho-push',
+        renotify: true,
+        data: {
+            url: data.url || '/'
+        }
+    };
+
+    event.waitUntil(self.registration.showNotification(title, options));
+});
+
+// 5. Clique na notificação: abre/foca o app e fecha o banner
+self.addEventListener('notificationclick', function(event) {
+    event.notification.close();
+
+    var targetUrl = (event.notification.data && event.notification.data.url)
+        ? event.notification.data.url
+        : '/';
+
+    event.waitUntil(
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(windowClients) {
+            // Se já há uma aba aberta com a URL alvo, foca nela
+            for (var i = 0; i < windowClients.length; i++) {
+                var client = windowClients[i];
+                if (client.url === targetUrl && 'focus' in client) {
+                    return client.focus();
+                }
+            }
+            // Caso contrário, abre uma nova aba
+            if (clients.openWindow) {
+                return clients.openWindow(targetUrl);
+            }
+        })
+    );
+});
+
+// 6. Notificação ignorada (swipe para fechar) — opcional, útil para analytics
+self.addEventListener('notificationclose', function(event) {
+    // Nenhuma ação obrigatória; reservado para futura telemetria.
 });
