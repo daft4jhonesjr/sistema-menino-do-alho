@@ -539,6 +539,8 @@
         <div class="hidden sm:flex justify-center items-center gap-2 w-full sm:w-1/3 text-gray-500 dark:text-gray-400">
             <span>👤 {{ current_user.username|default('Usuário') }}</span>
             <span>|</span>
+            <span class="font-medium">📅 <span id="data-atual">00/00/0000</span></span>
+            <span>|</span>
             <span class="font-mono font-medium">🕒 <span id="relogio-rodape">00:00:00</span></span>
         </div>
         <div class="flex items-center justify-start sm:justify-end gap-3 w-full sm:w-1/3">
@@ -1455,8 +1457,19 @@
     <script>
     (function() {
         function atualizarRelogio() {
-            var el = document.getElementById('relogio-rodape');
-            if (el) el.textContent = new Date().toLocaleTimeString('pt-BR');
+            var agora = new Date();
+            var elHora = document.getElementById('relogio-rodape');
+            var elData = document.getElementById('data-atual');
+            if (elHora) {
+                elHora.textContent = agora.toLocaleTimeString('pt-BR');
+            }
+            if (elData) {
+                elData.textContent = agora.toLocaleDateString('pt-BR', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric'
+                });
+            }
         }
         setInterval(atualizarRelogio, 1000);
         atualizarRelogio();
