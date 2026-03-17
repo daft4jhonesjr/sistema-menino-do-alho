@@ -6181,7 +6181,7 @@ def listar_vendas():
         cliente_filtro = Cliente.query.get(cliente_id)
 
     # Nova venda (autocomplete): exibe apenas clientes ativos.
-    clientes = Cliente.query.filter_by(ativo=True).order_by(Cliente.nome_cliente).limit(500).all()
+    clientes = Cliente.query.filter(Cliente.ativo.is_(True)).order_by(Cliente.nome_cliente).limit(500).all()
     produtos = Produto.query.filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
     todos_clientes = Cliente.query.order_by(Cliente.nome_cliente).limit(500).all()
     todos_produtos = Produto.query.order_by(Produto.nome_produto).limit(500).all()
@@ -6527,7 +6527,7 @@ def nova_venda():
             msg = 'Produto e quantidade são obrigatórios.'
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
-            clientes = Cliente.query.filter_by(ativo=True).order_by(Cliente.nome_cliente).limit(1000).all()
+            clientes = Cliente.query.filter(Cliente.ativo.is_(True)).order_by(Cliente.nome_cliente).limit(1000).all()
             produtos = Produto.query.filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
             return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
 
@@ -6537,7 +6537,7 @@ def nova_venda():
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
             flash(msg, 'error')
-            clientes = Cliente.query.filter_by(ativo=True).order_by(Cliente.nome_cliente).limit(1000).all()
+            clientes = Cliente.query.filter(Cliente.ativo.is_(True)).order_by(Cliente.nome_cliente).limit(1000).all()
             produtos = Produto.query.filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
             return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
 
@@ -6552,7 +6552,7 @@ def nova_venda():
             msg = f'Estoque insuficiente! Disponível: {produto.estoque_atual}'
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
-            clientes = Cliente.query.filter_by(ativo=True).order_by(Cliente.nome_cliente).limit(1000).all()
+            clientes = Cliente.query.filter(Cliente.ativo.is_(True)).order_by(Cliente.nome_cliente).limit(1000).all()
             produtos = Produto.query.filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
             return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
 
@@ -6572,7 +6572,7 @@ def nova_venda():
             msg = 'Cliente é obrigatório.'
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
-            clientes = Cliente.query.filter_by(ativo=True).order_by(Cliente.nome_cliente).limit(1000).all()
+            clientes = Cliente.query.filter(Cliente.ativo.is_(True)).order_by(Cliente.nome_cliente).limit(1000).all()
             produtos = Produto.query.filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
             return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
         cliente_obj = Cliente.query.get(cliente_id)
@@ -6581,7 +6581,7 @@ def nova_venda():
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
             flash(msg, 'error')
-            clientes = Cliente.query.filter_by(ativo=True).order_by(Cliente.nome_cliente).limit(1000).all()
+            clientes = Cliente.query.filter(Cliente.ativo.is_(True)).order_by(Cliente.nome_cliente).limit(1000).all()
             produtos = Produto.query.filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
             return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
         cliente_avulso = cliente_avulso_raw if 'DESCONHECIDO' in str(cliente_obj.nome_cliente or '').upper() else None
@@ -6692,7 +6692,7 @@ def nova_venda():
         flash('Venda registrada com sucesso!', 'success')
         return redirect(url_for('listar_vendas'))
 
-    clientes = Cliente.query.filter_by(ativo=True).order_by(Cliente.nome_cliente).limit(1000).all()
+    clientes = Cliente.query.filter(Cliente.ativo.is_(True)).order_by(Cliente.nome_cliente).limit(1000).all()
     produtos = Produto.query.filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
     return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
 
