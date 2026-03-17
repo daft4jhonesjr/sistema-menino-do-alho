@@ -41,6 +41,8 @@ import cloudinary.uploader
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
 
 
 def get_hoje_brasil():
@@ -8861,6 +8863,161 @@ def disparar_relatorio():
     except Exception as e:
         print(f"Erro ao enviar relatório por e-mail: {e}")
         return jsonify({'erro': str(e)}), 500
+
+
+@app.route('/api/backup_diario', methods=['GET', 'POST'])
+def backup_diario_email():
+    """Gera backup CSV das tabelas críticas e envia por e-mail aos admins.
+
+    Protegido por CRON_SECRET — projetado para ser chamado por um Cron Job
+    externo (ex: cron-job.org) diariamente.
+
+    Variáveis de ambiente necessárias na Render:
+        CRON_SECRET   – token de autenticação (mesmo usado no relatório mensal)
+        MAIL_USERNAME – e-mail remetente (ex: seuemail@gmail.com)
+        MAIL_PASSWORD – App Password do Gmail (não a senha normal)
+        MAIL_SERVER   – servidor SMTP (padrão: smtp.gmail.com)
+        MAIL_PORT     – porta SMTP (padrão: 587)
+        BACKUP_DEST_EMAIL – (opcional) e-mail de destino fixo; se ausente,
+                            envia para todos os admins com e-mail cadastrado.
+    """
+    if not CRON_SECRET:
+        return jsonify({'erro': 'CRON_SECRET não configurado no ambiente.'}), 503
+
+    token = (
+        request.headers.get('X-CRON-TOKEN')
+        or (request.get_json(silent=True) or {}).get('token')
+        or request.form.get('token')
+        or request.args.get('token')
+    )
+    if token != CRON_SECRET:
+        return jsonify({'erro': 'Acesso negado'}), 403
+
+    if not MAIL_USERNAME or not MAIL_PASSWORD:
+        return jsonify({'erro': 'Credenciais de e-mail não configuradas (MAIL_USERNAME / MAIL_PASSWORD).'}), 500
+
+    try:
+        output = io.StringIO()
+        writer = csv.writer(output, delimiter=';')
+
+        writer.writerow(["=== VENDAS ==="])
+        writer.writerow(["ID", "Data", "Cliente", "Produto", "Qtd", "Preço Unit.",
+                         "Valor Total", "Custo Total", "Lucro", "Situação",
+                         "Forma Pagto", "Empresa", "Vencimento"])
+        vendas = (Venda.query
+                  .options(joinedload(Venda.cliente), joinedload(Venda.produto))
+                  .order_by(Venda.data_venda.desc())
+                  .limit(10000).all())
+        for v in vendas:
+            nome_cli = v.cliente.nome_cliente if v.cliente else "Desconhecido"
+            dt = v.data_venda.strftime('%d/%m/%Y') if v.data_venda else ""
+            qtd = v.quantidade_venda or 0
+            preco = float(v.preco_venda or 0)
+            total = float(v.calcular_total())
+            lucro = float(v.calcular_lucro())
+            custo = total - lucro
+            prod = v.produto.nome_produto if v.produto else "-"
+            venc = v.data_vencimento.strftime('%d/%m/%Y') if v.data_vencimento else ""
+            writer.writerow([v.id, dt, nome_cli, prod, qtd, preco, total, custo,
+                             lucro, v.situacao or "", v.forma_pagamento or "",
+                             v.empresa_faturadora or "", venc])
+
+        writer.writerow([])
+        writer.writerow(["=== CLIENTES ==="])
+        writer.writerow(["ID", "Nome", "Razão Social", "CNPJ", "Cidade", "Endereço"])
+        for c in Cliente.query.order_by(Cliente.nome_cliente).limit(5000).all():
+            writer.writerow([c.id, c.nome_cliente or "", c.razao_social or "",
+                             c.cnpj or "", c.cidade or "", c.endereco or ""])
+
+        writer.writerow([])
+        writer.writerow(["=== ESTOQUE / PRODUTOS ==="])
+        writer.writerow(["ID", "Nome", "Tipo", "Fornecedor", "Marca",
+                         "Preço Custo", "Estoque Atual", "Data Chegada"])
+        for p in Produto.query.order_by(Produto.data_chegada.desc()).limit(5000).all():
+            dc = p.data_chegada.strftime('%d/%m/%Y') if p.data_chegada else ""
+            writer.writerow([p.id, p.nome_produto or "", p.tipo or "",
+                             p.fornecedor or "", p.marca or "",
+                             float(p.preco_custo or 0), p.estoque_atual or 0, dc])
+
+        writer.writerow([])
+        writer.writerow(["=== CAIXA (Últimos 5000 lançamentos) ==="])
+        writer.writerow(["ID", "Data", "Descrição", "Categoria", "Tipo",
+                         "Valor", "Forma Pagamento"])
+        for lc in LancamentoCaixa.query.order_by(LancamentoCaixa.data.desc()).limit(5000).all():
+            dl = lc.data.strftime('%d/%m/%Y') if lc.data else ""
+            writer.writerow([lc.id, dl, lc.descricao or "", lc.categoria or "",
+                             lc.tipo or "", float(lc.valor or 0),
+                             lc.forma_pagamento or ""])
+
+        csv_bytes = output.getvalue().encode('utf-8-sig')
+        output.close()
+
+        data_hoje = datetime.now().strftime('%d/%m/%Y')
+        data_arquivo = datetime.now().strftime('%Y-%m-%d_%Hh%M')
+        nome_arquivo = f"backup_menino_do_alho_{data_arquivo}.csv"
+
+        dest_fixo = os.environ.get('BACKUP_DEST_EMAIL', '').strip()
+        if dest_fixo:
+            destinatarios = [dest_fixo]
+        else:
+            admins = Usuario.query.filter(
+                Usuario.role == 'admin',
+                Usuario.email.isnot(None),
+                Usuario.email != ''
+            ).all()
+            destinatarios = [a.email for a in admins if a.email]
+
+        if not destinatarios:
+            return jsonify({'erro': 'Nenhum destinatário de backup encontrado.'}), 404
+
+        server = smtplib.SMTP(MAIL_SERVER, MAIL_PORT, timeout=_EXTERNAL_TIMEOUT)
+        server.starttls()
+        server.login(MAIL_USERNAME, MAIL_PASSWORD)
+
+        enviados = 0
+        for email_dest in destinatarios:
+            msg = MIMEMultipart()
+            msg['Subject'] = f"📦 Backup Diário - Sistema Menino do Alho [{data_hoje}]"
+            msg['From'] = MAIL_USERNAME
+            msg['To'] = email_dest
+
+            corpo = MIMEText(
+                f"Olá,\n\n"
+                f"Segue em anexo o backup automático do sistema Menino do Alho "
+                f"gerado em {data_hoje}.\n\n"
+                f"Conteúdo:\n"
+                f"  • Vendas (até 10.000 registros)\n"
+                f"  • Clientes (até 5.000 registros)\n"
+                f"  • Estoque / Produtos (até 5.000 registros)\n"
+                f"  • Caixa - Lançamentos (até 5.000 registros)\n\n"
+                f"Este e-mail é enviado automaticamente. Não responda.\n\n"
+                f"— Sistema Menino do Alho",
+                'plain', 'utf-8'
+            )
+            msg.attach(corpo)
+
+            anexo = MIMEBase('application', 'octet-stream')
+            anexo.set_payload(csv_bytes)
+            encoders.encode_base64(anexo)
+            anexo.add_header('Content-Disposition', f'attachment; filename="{nome_arquivo}"')
+            msg.attach(anexo)
+
+            server.send_message(msg)
+            enviados += 1
+
+        server.quit()
+
+        current_app.logger.info(f"Backup diário enviado para {enviados} destinatário(s).")
+        return jsonify({
+            'status': 'sucesso',
+            'mensagem': f'Backup enviado com sucesso para {enviados} destinatário(s).',
+            'arquivo': nome_arquivo,
+            'destinatarios': enviados
+        }), 200
+
+    except Exception as e:
+        current_app.logger.error(f"Erro no backup diário por e-mail: {e}")
+        return jsonify({'status': 'erro', 'mensagem': str(e)}), 500
 
 
 @app.route('/api/backup/excel')
