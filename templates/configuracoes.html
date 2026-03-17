@@ -110,6 +110,9 @@
                 </label>
             </div>
             <div id="notif-status" class="mt-3 text-xs font-medium rounded-md px-3 py-2 hidden"></div>
+            <button id="btnTestarPush" class="hidden mt-3 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-sm font-medium rounded-md transition-colors flex items-center gap-2">
+                🔔 Disparar Teste no Aparelho
+            </button>
         </div>
 
         {% if current_user.is_admin() %}
@@ -176,6 +179,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var toggleNotif = document.getElementById('toggleNotificacoes');
     var notifContainer = document.getElementById('notif-container');
     var notifStatus = document.getElementById('notif-status');
+    var btnTestarPush = document.getElementById('btnTestarPush');
 
     function mostrarStatus(tipo, msg) {
         if (!notifStatus) return;
@@ -198,6 +202,14 @@ document.addEventListener('DOMContentLoaded', function() {
             notifStatus.classList.add('bg-gray-100', 'text-gray-600', 'dark:bg-gray-700', 'dark:text-gray-400');
         }
         notifStatus.textContent = msg;
+        // Exibe o botão de teste apenas quando as notificações estão ativas
+        if (btnTestarPush) {
+            if (tipo === 'ativo') {
+                btnTestarPush.classList.remove('hidden');
+            } else {
+                btnTestarPush.classList.add('hidden');
+            }
+        }
     }
 
     function atualizarEstadoNotificacoes() {
@@ -408,6 +420,56 @@ document.addEventListener('DOMContentLoaded', function() {
     if (btnAtualizarLogs) btnAtualizarLogs.addEventListener('click', carregarLogs);
     if (btnLimparLogs) btnLimparLogs.addEventListener('click', limparLogs);
     if (document.getElementById('logMonitor')) carregarLogs();
+
+    // Botão de teste de Push Notification
+    if (btnTestarPush) {
+        btnTestarPush.addEventListener('click', async function() {
+            var textoOriginal = btnTestarPush.innerHTML;
+            btnTestarPush.disabled = true;
+            btnTestarPush.innerHTML = '<svg class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg> Enviando...';
+
+            try {
+                var headers = { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
+                if (typeof getCsrfHeaders === 'function') {
+                    var csrfH = getCsrfHeaders();
+                    for (var k in csrfH) headers[k] = csrfH[k];
+                }
+                var resp = await fetch('/api/debug/testar_push', { method: 'POST', headers: headers });
+                var data = await resp.json();
+
+                if (resp.ok && data.status === 'ok') {
+                    if (typeof showToast === 'function') {
+                        showToast(data.mensagem, 'success');
+                    } else {
+                        alert('✅ ' + data.mensagem);
+                    }
+                } else {
+                    var msg = (data && data.mensagem) ? data.mensagem : 'Erro desconhecido.';
+                    if (typeof showToast === 'function') {
+                        showToast(msg, 'error');
+                    } else {
+                        alert('⚠️ ' + msg);
+                    }
+                    // Se a subscription foi revogada, oculta o botão e atualiza o estado
+                    if (resp.status === 410) {
+                        btnTestarPush.classList.add('hidden');
+                        localStorage.setItem('menino_alho_device_notif', 'false');
+                        atualizarEstadoNotificacoes();
+                    }
+                }
+            } catch (err) {
+                var errMsg = (err && err.message) ? err.message : 'Falha na comunicação com o servidor.';
+                if (typeof showToast === 'function') {
+                    showToast('Erro: ' + errMsg, 'error');
+                } else {
+                    alert('❌ Erro: ' + errMsg);
+                }
+            } finally {
+                btnTestarPush.disabled = false;
+                btnTestarPush.innerHTML = textoOriginal;
+            }
+        });
+    }
 });
 </script>
 {% endblock %}

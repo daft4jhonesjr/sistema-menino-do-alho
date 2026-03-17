@@ -9301,6 +9301,114 @@ def push_unsubscribe():
     return jsonify({'status': 'não encontrado'}), 404
 
 
+@app.route('/api/debug/testar_push', methods=['POST'])
+@login_required
+@csrf.exempt
+@limiter.limit("10 per minute")
+def debug_testar_push():
+    """Dispara uma notificação Web Push de teste para o dispositivo do usuário atual.
+
+    Busca a subscription mais recente do usuário no banco, envia um payload
+    de teste via pywebpush e remove automaticamente subscriptions expiradas
+    (HTTP 404/410). Útil para validar o fluxo de ponta a ponta.
+
+    Returns:
+        JSON com ``status``, ``mensagem`` e detalhes do dispositivo testado.
+    """
+    if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
+        return jsonify({
+            'status': 'erro',
+            'mensagem': 'VAPID_PRIVATE_KEY ou VAPID_PUBLIC_KEY não configuradas no ambiente (Render). '
+                        'Adicione as variáveis de ambiente e faça o deploy novamente.'
+        }), 503
+
+    # Busca a subscription mais recente do usuário logado
+    sub = (
+        PushSubscription.query
+        .filter_by(user_id=current_user.id)
+        .order_by(PushSubscription.criado_em.desc())
+        .first()
+    )
+
+    if not sub:
+        return jsonify({
+            'status': 'erro',
+            'mensagem': 'Nenhuma inscrição Push encontrada para este usuário. '
+                        'Ative as notificações na seção "Notificações no Dispositivo" acima e tente novamente.'
+        }), 404
+
+    try:
+        from pywebpush import webpush, WebPushException
+    except ImportError:
+        return jsonify({
+            'status': 'erro',
+            'mensagem': 'Biblioteca pywebpush não instalada no servidor. '
+                        'Verifique o requirements.txt e aguarde o próximo deploy.'
+        }), 503
+
+    payload = json.dumps({
+        'title': 'Teste de Conexão 🟢',
+        'body': 'Se você está lendo isso, o Menino do Alho está conectado em background no seu aparelho!',
+        'icon': '/static/images/logo_menino_do_alho_amarelo1.jpeg',
+        'badge': '/static/images/logo_menino_do_alho_amarelo1.jpeg',
+        'tag': 'push-teste',
+        'url': '/dashboard'
+    })
+
+    try:
+        webpush(
+            subscription_info={
+                'endpoint': sub.endpoint,
+                'keys': {'p256dh': sub.p256dh, 'auth': sub.auth}
+            },
+            data=payload,
+            vapid_private_key=VAPID_PRIVATE_KEY,
+            vapid_claims={'sub': VAPID_CLAIM_EMAIL},
+            timeout=_EXTERNAL_TIMEOUT
+        )
+        current_app.logger.info(
+            f"[DEBUG] Push de teste enviado para user_id={current_user.id} sub_id={sub.id}"
+        )
+        return jsonify({
+            'status': 'ok',
+            'mensagem': '✅ Notificação de teste enviada! Verifique seu dispositivo. '
+                        'Se não aparecer, certifique-se que o app está fechado e que as permissões estão ativas.',
+            'endpoint': sub.endpoint[:50] + '...',
+            'sub_id': sub.id
+        }), 200
+
+    except WebPushException as ex:
+        status_code = ex.response.status_code if ex.response else None
+        current_app.logger.warning(
+            f"[DEBUG] WebPushException para sub_id={sub.id}: HTTP {status_code} — {ex}"
+        )
+        # 404/410 = subscription revogada pelo browser; remove do banco
+        if status_code in (404, 410):
+            try:
+                db.session.delete(sub)
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+            return jsonify({
+                'status': 'erro',
+                'mensagem': f'🔴 Subscription expirada ou revogada pelo navegador (HTTP {status_code}). '
+                            'A inscrição foi removida. Desative e reative as notificações para se inscrever novamente.',
+                'codigo': status_code
+            }), 410
+        return jsonify({
+            'status': 'erro',
+            'mensagem': f'Erro no envio Push (HTTP {status_code}): {str(ex)}',
+            'codigo': status_code
+        }), 500
+
+    except Exception as ex:
+        current_app.logger.error(f"[DEBUG] Erro inesperado no teste push: {ex}")
+        return jsonify({
+            'status': 'erro',
+            'mensagem': f'Erro inesperado: {str(ex)}'
+        }), 500
+
+
 @app.route('/api/cron/enviar_frase_diaria', methods=['GET', 'POST'])
 @limiter.limit("5 per hour")
 def enviar_frase_diaria():
