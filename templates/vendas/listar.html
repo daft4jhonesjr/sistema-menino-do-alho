@@ -572,7 +572,7 @@
                         {% set _ = url_vencidos_fornecedor.update({'filtro_vencidos': 1, 'ordem_data': ordem_data}) %}
                         {% set vencimento_ordenacao_ativa = ordem_data in ['vencimento_crescente', 'vencimento_decrescente'] %}
                         <th class="relative px-6 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap {{ 'text-emerald-600 dark:text-emerald-400 font-bold' if vencimento_ordenacao_ativa else 'text-gray-500 dark:text-gray-400' }}">
-                            <details class="relative inline-block">
+                            <details class="relative inline-block js-filtro-dropdown">
                                 <summary class="list-none inline-flex items-center gap-1 cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200 transition-colors">
                                     Vencimento
                                     <svg class="w-3.5 h-3.5 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -603,7 +603,7 @@
                         {% set url_empresa_nenhum = request.args.to_dict(flat=True) %}
                         {% set _ = url_empresa_nenhum.update({'filtro_empresa': 'NENHUM'}) %}
                         <th class="relative px-6 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap {{ 'text-emerald-600 dark:text-emerald-400 font-bold' if empresa_coluna_ativa else 'text-gray-500 dark:text-gray-400' }}">
-                            <details class="relative inline-block">
+                            <details class="relative inline-block js-filtro-dropdown">
                                 <summary class="list-none inline-flex items-center gap-1 cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200 transition-colors">
                                     Empresa
                                     <svg class="w-3.5 h-3.5 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -652,7 +652,7 @@
                         {% set url_forma_dinheiro = request.args.to_dict(flat=True) %}
                         {% set _ = url_forma_dinheiro.update({'forma_pagto': 'DINHEIRO'}) %}
                         <th class="relative px-6 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap {{ 'text-emerald-600 dark:text-emerald-400 font-bold' if forma_pagto_ativo else 'text-gray-500 dark:text-gray-400' }}">
-                            <details class="relative inline-block">
+                            <details class="relative inline-block js-filtro-dropdown">
                                 <summary class="list-none inline-flex items-center gap-1 cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200 transition-colors">
                                     Forma Pagto
                                     <svg class="w-3.5 h-3.5 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -2822,6 +2822,32 @@ function toggleAnaliseVendas(event) {
 
     selectFiltro.addEventListener('change', filtrarPorEmpresa);
     window._filtrarPorEmpresa = filtrarPorEmpresa;
+})();
+
+// Dropdowns dos cabeçalhos (Vencimento, Empresa, Forma Pagto):
+// fecha ao clicar fora e mantém abertura exclusiva (somente um aberto por vez).
+(function() {
+    var dropdowns = Array.prototype.slice.call(document.querySelectorAll('details.js-filtro-dropdown'));
+    if (!dropdowns.length) return;
+
+    dropdowns.forEach(function(dropdown) {
+        dropdown.addEventListener('toggle', function() {
+            if (!dropdown.open) return;
+            dropdowns.forEach(function(outro) {
+                if (outro !== dropdown && outro.open) {
+                    outro.open = false;
+                }
+            });
+        });
+    });
+
+    document.addEventListener('click', function(event) {
+        dropdowns.forEach(function(dropdown) {
+            if (dropdown.open && !dropdown.contains(event.target)) {
+                dropdown.open = false;
+            }
+        });
+    });
 })();
 </script>
 {% endblock %}
