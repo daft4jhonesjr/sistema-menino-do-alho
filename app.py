@@ -1743,16 +1743,16 @@ def _diagnosticar_vinculo_falhou(doc):
 
 
 def _listar_documentos_recem_chegados():
-    """Lista documentos da tabela Documento onde venda_id é None (arquivos soltos, sem vínculo).
-    Mostra todos os documentos órfãos, independente de status."""
+    """Lista documentos órfãos e pendentes para a fila do Dashboard.
+
+    Regra de negócio da fila "Documentos Recém-Chegados":
+    - exibir apenas documentos sem vínculo com venda (``venda_id IS NULL``)
+    - exibir apenas documentos com ``status='PENDENTE'``
+    """
     resultado_processamento = {"sucesso": 0, "falha": 0, "erros": [], "vinculos_novos": 0, "processados": 0}
-    # Blindagem: considera órfãos com FK nula, zero ou vazia (dados legados/sujos).
     query = Documento.query.filter(
-        or_(
-            Documento.venda_id.is_(None),
-            Documento.venda_id == 0,
-            cast(Documento.venda_id, db.String) == ''
-        )
+        Documento.venda_id.is_(None),
+        Documento.status == 'PENDENTE'
     )
     # Para o Dashboard, documentos órfãos devem ser visíveis independentemente de ownership.
     # Mantemos o parâmetro user_id por compatibilidade, mas sem restringir esta listagem.
@@ -8266,6 +8266,7 @@ def vincular_documento_venda(id):
         return _resposta_sem_permissao()
     try:
         documento.venda_id = venda_id
+        documento.status = 'VINCULADO'
         path = documento.caminho_arquivo
         vendas_pedido = _vendas_do_pedido(venda)
         is_boleto = (documento.tipo or '').upper() == 'BOLETO'
@@ -8308,7 +8309,7 @@ def vincular_documento_venda(id):
     else:
         msg = f'Documento vinculado ao pedido (Cliente: {label_cliente}, NF: {venda.nf or "-"}).'
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        return jsonify(ok=True, mensagem=msg)
+        return jsonify(ok=True, sucesso=True, mensagem=msg, doc_id=documento.id)
     flash(msg, 'success')
     return redirect(url_for('dashboard'))
 

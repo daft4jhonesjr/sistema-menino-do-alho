@@ -235,7 +235,7 @@
         {% set nome = item.nome_arquivo %}
         {% set ok = item.leitura_ok %}
         {% set nf_nao = item.nf_nao_encontrada %}
-        <div class="rounded-xl border shadow-sm dark:shadow-none overflow-hidden flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 {% if ok and not nf_nao %}bg-emerald-50/50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800{% elif nf_nao %}bg-amber-50/50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800{% else %}bg-amber-50/50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800{% endif %}">
+        <div id="doc-{{ doc.id }}" class="rounded-xl border shadow-sm dark:shadow-none overflow-hidden flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 {% if ok and not nf_nao %}bg-emerald-50/50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800{% elif nf_nao %}bg-amber-50/50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800{% else %}bg-amber-50/50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800{% endif %}">
             <div class="flex items-center gap-4 p-4 flex-1 min-w-0">
                 <input type="checkbox" class="checkbox-documento w-5 h-5 text-emerald-600 rounded focus:ring-emerald-500 cursor-pointer" value="{{ doc.id }}" onchange="verificarSelecaoMassa()">
                 <div class="flex-shrink-0 w-12 h-12 rounded-lg flex items-center justify-center {% if doc.tipo == 'BOLETO' %}bg-blue-100 text-blue-700{% else %}bg-emerald-100 text-emerald-700{% endif %}">
@@ -1007,8 +1007,62 @@
         var vendaId = selectPedido.value;
         if (!vendaId) return;
         garantirCsrfNoForm(form);
-        form.action = '/documento/' + (inputDocId.value || '') + '/vincular';
-        form.submit();
+        var docId = inputDocId.value || '';
+        var csrfInput = form.querySelector('input[name="csrf_token"]');
+        var csrf = csrfInput ? csrfInput.value : '';
+
+        var headers = {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        };
+        if (csrf) {
+            headers['X-CSRFToken'] = csrf;
+            headers['X-CSRF-Token'] = csrf;
+        }
+
+        fetch('/documento/' + docId + '/vincular', {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({ venda_id: vendaId })
+        })
+            .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+            .then(function(resp) {
+                var data = resp.data || {};
+                if (resp.ok && (data.ok || data.sucesso)) {
+                    hideModal();
+                    var card = document.getElementById('doc-' + docId);
+                    if (card) {
+                        card.remove();
+                    }
+                    if (typeof showToast === 'function') {
+                        showToast(data.mensagem || 'Documento vinculado com sucesso.', 'success');
+                    } else {
+                        alert(data.mensagem || 'Documento vinculado com sucesso.');
+                    }
+                    verificarSelecaoMassa();
+
+                    // Se a fila esvaziou, mostra mensagem de vazio sem recarregar a página
+                    var listaDocs = document.querySelectorAll('#lista-documentos [id^="doc-"]');
+                    var container = document.getElementById('lista-documentos');
+                    if (container && listaDocs.length === 0) {
+                        container.innerHTML = '<p class="text-gray-500 dark:text-gray-400 py-6 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-center">Nenhum documento pendente. Nada precisa da sua atenção no momento.</p>';
+                    }
+                } else {
+                    var msg = data.mensagem || 'Erro ao vincular documento.';
+                    if (typeof showToast === 'function') {
+                        showToast(msg, 'error');
+                    } else {
+                        alert(msg);
+                    }
+                }
+            })
+            .catch(function() {
+                if (typeof showToast === 'function') {
+                    showToast('Erro de comunicação ao vincular documento.', 'error');
+                } else {
+                    alert('Erro de comunicação ao vincular documento.');
+                }
+            });
     });
 })();
 
