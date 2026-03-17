@@ -651,14 +651,32 @@
                         {% set _ = url_forma_pix.update({'forma_pagto': 'PIX'}) %}
                         {% set url_forma_dinheiro = request.args.to_dict(flat=True) %}
                         {% set _ = url_forma_dinheiro.update({'forma_pagto': 'DINHEIRO'}) %}
-                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap {{ 'text-emerald-600 dark:text-emerald-400 font-bold' if forma_pagto_ativo else 'text-gray-500 dark:text-gray-400' }}">
-                            <select id="filtro-forma-pagto" onchange="if(this.value){window.location.href=this.value;}" class="bg-transparent {{ 'text-emerald-600 dark:text-emerald-400 font-bold' if forma_pagto_ativo else 'text-gray-500 dark:text-gray-400' }} font-medium uppercase cursor-pointer border-none p-0 focus:ring-0 text-xs tracking-wider appearance-none pr-4" style="background-image:url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 20 20%22%3E%3Cpath stroke=%22%236b7280%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%222%22 d=%22m6 8 4 4 4-4%22/%3E%3C/svg%3E');background-repeat:no-repeat;background-position:right 0 center;background-size:14px;">
-                                <option value="{{ url_for('listar_vendas', **url_forma_todas) }}" {{ 'selected' if (forma_pagto or 'TODAS') == 'TODAS' else '' }}>Forma Pagto ▾</option>
-                                <option value="{{ url_for('listar_vendas', **url_forma_boleto) }}" {{ 'selected' if forma_pagto == 'BOLETO' else '' }}>BOLETO</option>
-                                <option value="{{ url_for('listar_vendas', **url_forma_cheque) }}" {{ 'selected' if forma_pagto == 'CHEQUE' else '' }}>CHEQUE</option>
-                                <option value="{{ url_for('listar_vendas', **url_forma_pix) }}" {{ 'selected' if forma_pagto == 'PIX' else '' }}>PIX</option>
-                                <option value="{{ url_for('listar_vendas', **url_forma_dinheiro) }}" {{ 'selected' if forma_pagto == 'DINHEIRO' else '' }}>DINHEIRO</option>
-                            </select>
+                        <th class="relative px-6 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap {{ 'text-emerald-600 dark:text-emerald-400 font-bold' if forma_pagto_ativo else 'text-gray-500 dark:text-gray-400' }}">
+                            <details class="relative inline-block">
+                                <summary class="list-none inline-flex items-center gap-1 cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200 transition-colors">
+                                    Forma Pagto
+                                    <svg class="w-3.5 h-3.5 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                    </svg>
+                                </summary>
+                                <div class="absolute left-0 top-full z-30 mt-2 w-56 overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg normal-case">
+                                    <a href="{{ url_for('listar_vendas', **url_forma_todas) }}" class="block px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition {{ 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 font-medium' if not forma_pagto_ativo else '' }}">
+                                        Todas
+                                    </a>
+                                    <a href="{{ url_for('listar_vendas', **url_forma_boleto) }}" class="block px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition {{ 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 font-medium' if forma_pagto == 'BOLETO' else '' }}">
+                                        BOLETO
+                                    </a>
+                                    <a href="{{ url_for('listar_vendas', **url_forma_cheque) }}" class="block px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition {{ 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 font-medium' if forma_pagto == 'CHEQUE' else '' }}">
+                                        CHEQUE
+                                    </a>
+                                    <a href="{{ url_for('listar_vendas', **url_forma_pix) }}" class="block px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition {{ 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 font-medium' if forma_pagto == 'PIX' else '' }}">
+                                        PIX
+                                    </a>
+                                    <a href="{{ url_for('listar_vendas', **url_forma_dinheiro) }}" class="block px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition {{ 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 font-medium' if forma_pagto == 'DINHEIRO' else '' }}">
+                                        DINHEIRO
+                                    </a>
+                                </div>
+                            </details>
                         </th>
                         <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider min-w-[180px] whitespace-nowrap">AÇÕES</th>
                     </tr>
