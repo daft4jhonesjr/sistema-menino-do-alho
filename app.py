@@ -7442,27 +7442,39 @@ def debug_texto_arquivo(id):
 @app.route('/arquivo/<int:id>/deletar', methods=['POST'])
 @login_required
 def deletar_arquivo_dashboard(id):
-    """Exclui documento do banco e remove arquivo no Cloudinary."""
+    """Exclui documento com tolerância a falhas na remoção física."""
     doc_id = int(id)
     documento = Documento.query.get_or_404(doc_id)
     if not _usuario_pode_gerenciar_documento(documento):
         return jsonify(ok=False, mensagem='Acesso negado.'), 403
 
+    # 1) Tenta remover o arquivo físico (Cloudinary/disco), sem bloquear a exclusão lógica.
     try:
-        if documento.public_id and (os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL')):
-            try:
-                cloudinary.uploader.destroy(documento.public_id, resource_type='raw', timeout=_EXTERNAL_TIMEOUT)
-            except Exception as ex:
-                print(f"Aviso: Falha ao deletar no Cloudinary (pode já ter sido deletado): {ex}")
+        if documento.public_id or documento.url_arquivo:
+            _deletar_cloudinary_seguro(
+                public_id=documento.public_id,
+                url=documento.url_arquivo,
+                resource_type='raw'
+            )
+        caminho_rel = (documento.caminho_arquivo or '').strip()
+        if caminho_rel:
+            base_path = os.path.dirname(os.path.abspath(__file__))
+            caminho_abs = os.path.join(base_path, caminho_rel)
+            if os.path.isfile(caminho_abs):
+                os.remove(caminho_abs)
+    except Exception as e:
+        current_app.logger.warning(f"Não foi possível excluir fisicamente o documento {doc_id}: {e}")
 
+    # 2) Exclui do banco mesmo se a remoção física falhar.
+    try:
         db.session.delete(documento)
         db.session.commit()
         limpar_cache_dashboard()
-        return jsonify(ok=True, mensagem='Arquivo excluído com sucesso.')
+        return jsonify(ok=True, mensagem='Documento removido.')
     except Exception as e:
         db.session.rollback()
-        print(f"Erro ao excluir arquivo {id}: {e}")
-        return jsonify(ok=False, mensagem='Erro ao excluir arquivo.'), 500
+        current_app.logger.error(f"Erro ao excluir documento {doc_id} do banco: {e}")
+        return jsonify(ok=False, mensagem='Erro ao excluir documento no banco de dados.'), 500
 
 
 @app.route('/arquivos/deletar_em_massa', methods=['POST'])
