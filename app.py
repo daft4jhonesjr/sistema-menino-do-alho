@@ -6,6 +6,7 @@ from flask_caching import Cache
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from models import db, Cliente, Produto, ProdutoFoto, Venda, Usuario, Configuracao, Documento, LancamentoCaixa, ContagemGaveta, Fornecedor
+from quotes import frase_do_dia
 from config import Config
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -3377,7 +3378,8 @@ def dashboard():
                          data_lucro=data_lucro,
                          data_caixas=data_caixas,
                          detalhamento_mensal=detalhamento_mensal,
-                         alertas_recompra=alertas_recompra)
+                         alertas_recompra=alertas_recompra,
+                         frase_do_dia=frase_do_dia())
 
 
 # ========== MÓDULO CAIXA (LIVRO CAIXA) ==========
