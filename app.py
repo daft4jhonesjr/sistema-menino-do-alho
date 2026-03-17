@@ -7806,67 +7806,68 @@ def api_bot_upload():
     if not arquivo or not arquivo.filename:
         return jsonify({'erro': 'Nenhum arquivo enviado.'}), 400
 
-    filename = secure_filename(arquivo.filename)
-    if not filename:
+    nome_arquivo = secure_filename(arquivo.filename or '')
+    if not nome_arquivo:
         return jsonify({'erro': 'Nome de arquivo inválido.'}), 400
 
-    extensao = os.path.splitext(filename)[1].lower()
-    if extensao not in {'.pdf', '.png', '.jpg', '.jpeg'}:
-        return jsonify({'erro': 'Extensão não permitida. Use .pdf, .png, .jpg ou .jpeg.'}), 400
+    extensao = os.path.splitext(nome_arquivo)[1].lower()
+    extensoes_permitidas = {'.pdf', '.png', '.jpg', '.jpeg'}
+    mimes_permitidos = {'application/pdf', 'image/png', 'image/jpeg'}
+    mime = (getattr(arquivo, 'mimetype', '') or '').lower()
+    if extensao not in extensoes_permitidas:
+        return jsonify({'erro': 'Extensão de arquivo não permitida.'}), 400
+    if mime not in mimes_permitidos:
+        return jsonify({'erro': 'Tipo MIME inválido para upload.'}), 400
 
-    tipo_bruto = (request.form.get('tipo') or request.form.get('type') or '').strip().lower()
-    if tipo_bruto in ('boleto', 'boletos'):
-        tipo_documento = 'BOLETO'
-    elif tipo_bruto in ('nfe', 'nf', 'nota_fiscal', 'nota fiscal', 'notas_fiscais'):
-        tipo_documento = 'NOTA_FISCAL'
+    tipo = (request.form.get('tipo') or request.form.get('type') or '').strip().lower()
+    if tipo == 'boleto':
+        subpasta = 'boletos'
+    elif tipo == 'nfe':
+        subpasta = 'notas_fiscais'
     else:
-        tipo_documento = 'NOTA_FISCAL' if ('nfe' in filename.lower() or 'nota' in filename.lower()) else 'BOLETO'
+        return jsonify({'erro': "Campo 'tipo' inválido. Use 'boleto' ou 'nfe'."}), 400
 
+    # Bot não autenticado: associa com o primeiro usuário disponível para auditoria.
     primeiro_user = Usuario.query.first()
     user_id = primeiro_user.id if primeiro_user else None
 
     try:
-        url_arquivo = None
-        public_id = None
-        caminho_relativo = None
+        base_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'documentos_entrada')
+        caminho_final = os.path.join(base_dir, subpasta)
+        os.makedirs(caminho_final, exist_ok=True)
+        caminho_completo = os.path.join(caminho_final, nome_arquivo)
 
-        if os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL'):
-            arquivo.stream.seek(0)
-            resultado_nuvem = cloudinary.uploader.upload(arquivo, resource_type='raw', timeout=_EXTERNAL_TIMEOUT)
-            url_arquivo = resultado_nuvem.get('secure_url')
-            public_id = resultado_nuvem.get('public_id')
-
-        if not url_arquivo:
-            pasta = app.config['UPLOAD_FOLDER']
-            os.makedirs(pasta, exist_ok=True)
-            caminho = os.path.join(pasta, filename)
-            arquivo.stream.seek(0)
-            arquivo.save(caminho)
-            caminho_relativo = os.path.relpath(caminho, os.path.dirname(os.path.abspath(__file__)))
-
-        novo_documento = Documento(
-            url_arquivo=url_arquivo,
-            public_id=public_id,
-            caminho_arquivo=caminho_relativo,
-            tipo=tipo_documento,
-            numero_nf=(request.form.get('numero_nf') or request.form.get('nf') or None),
-            razao_social=(request.form.get('razao_social') or request.form.get('pagador') or None),
-            usuario_id=user_id,
-            venda_id=None,
-            data_processamento=date.today()
-        )
-        db.session.add(novo_documento)
-        db.session.commit()
+        # Mantém o mesmo pipeline do upload manual.
+        # Este fluxo executa OCR/extracao (NF/CNPJ/vencimento), vinculação e upload Cloudinary.
+        arquivo.stream.seek(0)
+        arquivo.save(caminho_completo)
+        _processar_documento(caminho_completo, user_id_forcado=user_id)
         limpar_cache_dashboard()
 
-        current_app.logger.info(f"Bot upload: {filename} (doc_id={novo_documento.id}, tipo={tipo_documento})")
+        caminho_relativo = os.path.join('documentos_entrada', subpasta, nome_arquivo).replace('\\', '/')
+        doc_criado = Documento.query.filter_by(caminho_arquivo=caminho_relativo).order_by(Documento.id.desc()).first()
+        if not doc_criado:
+            # Fallback defensivo para nunca perder referência do upload.
+            tipo_doc = 'BOLETO' if subpasta == 'boletos' else 'NOTA_FISCAL'
+            doc_criado = Documento(
+                caminho_arquivo=caminho_relativo,
+                tipo=tipo_doc,
+                usuario_id=user_id,
+                venda_id=None,
+                data_processamento=date.today()
+            )
+            db.session.add(doc_criado)
+            db.session.commit()
 
         return jsonify({
             'status': 'success',
-            'mensagem': 'Arquivo recebido com sucesso.',
-            'documento_id': novo_documento.id,
-            'tipo': tipo_documento,
-            'url_arquivo': novo_documento.url_arquivo
+            'mensagem': 'Arquivo recebido e processado com sucesso.',
+            'documento_id': doc_criado.id if doc_criado else None,
+            'tipo': doc_criado.tipo if doc_criado else ('BOLETO' if subpasta == 'boletos' else 'NOTA_FISCAL'),
+            'numero_nf': getattr(doc_criado, 'numero_nf', None),
+            'cnpj': getattr(doc_criado, 'cnpj', None),
+            'data_vencimento': doc_criado.data_vencimento.strftime('%Y-%m-%d') if getattr(doc_criado, 'data_vencimento', None) else None,
+            'url_arquivo': getattr(doc_criado, 'url_arquivo', None)
         }), 200
 
     except Exception as e:
