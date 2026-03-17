@@ -2459,13 +2459,14 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             db.session.execute(text('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS notifica_boletos BOOLEAN DEFAULT TRUE'))
             db.session.execute(text('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS notifica_radar BOOLEAN DEFAULT TRUE'))
             db.session.execute(text('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS notifica_logistica BOOLEAN DEFAULT TRUE'))
+            db.session.execute(text('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS notifica_frase BOOLEAN DEFAULT TRUE'))
             db.session.commit()
             print("Migração: Colunas de notificação verificadas/adicionadas com sucesso.")
         except Exception as e:
             db.session.rollback()
             # Fallback para SQLite (não suporta IF NOT EXISTS em ADD COLUMN)
             try:
-                for col in ('notifica_boletos', 'notifica_radar', 'notifica_logistica'):
+                for col in ('notifica_boletos', 'notifica_radar', 'notifica_logistica', 'notifica_frase'):
                     db.session.execute(text(f'ALTER TABLE usuarios ADD COLUMN {col} BOOLEAN DEFAULT 1'))
                     db.session.commit()
             except (OperationalError, Exception):
@@ -2695,6 +2696,7 @@ def configuracoes():
         usuario.notifica_boletos = 'notifica_boletos' in request.form
         usuario.notifica_radar = 'notifica_radar' in request.form
         usuario.notifica_logistica = 'notifica_logistica' in request.form
+        usuario.notifica_frase = 'notifica_frase' in request.form
         db.session.commit()
         flash('Configurações de notificação atualizadas com sucesso!', 'success')
         return redirect(url_for('configuracoes'))
@@ -9049,6 +9051,87 @@ def backup_diario_email():
 
     except Exception as e:
         current_app.logger.error(f"Erro no backup diário por e-mail: {e}")
+        return jsonify({'status': 'erro', 'mensagem': str(e)}), 500
+
+
+@app.route('/api/cron/enviar_frase_diaria', methods=['GET', 'POST'])
+def enviar_frase_diaria():
+    """Envia a frase filosófica do dia por e-mail para usuários que optaram por recebê-la.
+
+    Protegido por CRON_SECRET. Projetado para ser disparado diariamente
+    às 6h por um cron job externo (cron-job.org).
+    """
+    if not CRON_SECRET:
+        return jsonify({'erro': 'CRON_SECRET não configurado no ambiente.'}), 503
+
+    token = (
+        request.headers.get('X-CRON-TOKEN')
+        or (request.get_json(silent=True) or {}).get('token')
+        or request.form.get('token')
+        or request.args.get('token')
+    )
+    if token != CRON_SECRET:
+        return jsonify({'erro': 'Acesso negado'}), 403
+
+    if not MAIL_USERNAME or not MAIL_PASSWORD:
+        return jsonify({'erro': 'Credenciais de e-mail não configuradas.'}), 500
+
+    frase = frase_do_dia()
+
+    destinatarios = Usuario.query.filter(
+        Usuario.notifica_frase == True,
+        Usuario.email.isnot(None),
+        Usuario.email != ''
+    ).all()
+
+    if not destinatarios:
+        return jsonify({'status': 'ok', 'mensagem': 'Nenhum usuário optou por receber a frase diária.', 'enviados': 0}), 200
+
+    data_hoje = datetime.now().strftime('%d/%m/%Y')
+
+    try:
+        server = smtplib.SMTP(MAIL_SERVER, MAIL_PORT, timeout=_EXTERNAL_TIMEOUT)
+        server.starttls()
+        server.login(MAIL_USERNAME, MAIL_PASSWORD)
+
+        enviados = 0
+        for user in destinatarios:
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = f"🏛️ Sabedoria do Dia — {frase['autor']} [{data_hoje}]"
+            msg['From'] = MAIL_USERNAME
+            msg['To'] = user.email
+
+            nome = user.nome or user.username or 'colega'
+            corpo_html = f"""
+            <div style="font-family: Georgia, 'Times New Roman', serif; max-width: 520px; margin: 0 auto; padding: 32px 24px;">
+                <p style="color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 24px;">Sabedoria do Dia</p>
+                <blockquote style="margin: 0; padding: 0 0 0 20px; border-left: 3px solid #059669; color: #1f2937; font-size: 18px; line-height: 1.7; font-style: italic;">
+                    &ldquo;{frase['texto']}&rdquo;
+                </blockquote>
+                <p style="text-align: right; color: #6b7280; font-size: 14px; margin-top: 16px; font-weight: 600;">&mdash; {frase['autor']}</p>
+                <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0 16px;">
+                <p style="color: #9ca3af; font-size: 11px;">
+                    Olá, {nome}. Esta mensagem é enviada automaticamente pelo Sistema Menino do Alho.
+                    Para deixar de receber, desative &ldquo;Frase Motivacional Diária&rdquo; nas Configurações.
+                </p>
+            </div>
+            """
+            msg.attach(MIMEText(corpo_html, 'html', 'utf-8'))
+            server.send_message(msg)
+            enviados += 1
+
+        server.quit()
+        current_app.logger.info(f"Frase diária enviada para {enviados} usuário(s).")
+        return jsonify({
+            'status': 'ok',
+            'mensagem': f'Frase diária enviada para {enviados} usuário(s).',
+            'frase': frase['texto'],
+            'autor': frase['autor'],
+            'enviados': enviados
+        }), 200
+
+    except Exception as e:
+        current_app.logger.error(f"Erro ao enviar frase diária: {e}")
         return jsonify({'status': 'erro', 'mensagem': str(e)}), 500
 
 

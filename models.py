@@ -29,6 +29,7 @@ class Usuario(UserMixin, db.Model):
     notifica_boletos = db.Column(db.Boolean, default=True)
     notifica_radar = db.Column(db.Boolean, default=True)
     notifica_logistica = db.Column(db.Boolean, default=True)
+    notifica_frase = db.Column(db.Boolean, default=True)
 
     def is_admin(self):
         """Jhones é sempre admin. Demais seguem role."""

@@ -1494,5 +1494,23 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 });
+
+{% if frase_do_dia %}
+(function() {
+    if (!('Notification' in window)) return;
+    if (Notification.permission !== 'granted') return;
+    if (localStorage.getItem('menino_alho_device_notif') !== 'true') return;
+    var chave = 'frase_notif_' + new Date().toISOString().slice(0, 10);
+    if (sessionStorage.getItem(chave)) return;
+    sessionStorage.setItem(chave, '1');
+    setTimeout(function() {
+        new Notification('Sabedoria do Dia 🏛️', {
+            body: '\"{{ frase_do_dia.texto | e }}\" — {{ frase_do_dia.autor | e }}',
+            icon: '{{ url_for("static", filename="images/logo_menino_do_alho_amarelo1.jpeg") }}',
+            tag: 'frase-diaria'
+        });
+    }, 3000);
+})();
+{% endif %}
 </script>
 {% endblock %}
