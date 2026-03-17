@@ -2967,8 +2967,9 @@ def atualizar_codigo_cadastro():
 def editar_usuario_completo(id):
     u = Usuario.query.get_or_404(id)
     novo_nome = request.form.get('username', '').strip()
-    # Compatível com formulários antigos (password) e novo padrão (nova_senha).
-    nova_senha = (request.form.get('nova_senha') or request.form.get('password') or '').strip()
+    senha_atual = (request.form.get('senha_atual') or '').strip()
+    nova_senha = (request.form.get('nova_senha') or '').strip()
+    confirmar_senha = (request.form.get('confirmar_senha') or '').strip()
     novo_role = request.form.get('role')
     senha_alterada = False
     # Lógica para alterar o Nome de Usuário
@@ -2978,8 +2979,17 @@ def editar_usuario_completo(id):
             flash(f'Erro: O nome {novo_nome} já está em uso por outro usuário.', 'error')
             return redirect(url_for('gerenciar_usuarios'))
         u.username = novo_nome
-    # Atualiza senha apenas se algo for digitado
-    if nova_senha:
+    # Atualiza senha somente com validação rigorosa.
+    if nova_senha or confirmar_senha:
+        if nova_senha != confirmar_senha:
+            flash('As novas senhas não coincidem. Tente novamente.', 'error')
+            return redirect(url_for('gerenciar_usuarios'))
+        if not senha_atual:
+            flash('Para alterar a senha, você deve informar a Senha Atual.', 'error')
+            return redirect(url_for('gerenciar_usuarios'))
+        if not check_password_hash(current_user.password_hash, senha_atual):
+            flash('A Senha Atual está incorreta. Alteração de senha negada.', 'error')
+            return redirect(url_for('gerenciar_usuarios'))
         u.password_hash = generate_password_hash(nova_senha)
         senha_alterada = True
     # Atualiza nível (Proteção para o Jhones não se auto-rebaixar)

@@ -108,8 +108,17 @@
                     <input type="text" name="username" id="modal_username" class="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100" required>
                 </div>
                 <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Senha Atual</label>
+                    <input type="password" name="senha_atual" class="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100" placeholder="Digite para autorizar a mudança">
+                </div>
+                <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nova Senha</label>
-                    <input type="password" name="nova_senha" class="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100" placeholder="Deixe em branco para manter a atual">
+                    <input type="password" name="nova_senha" class="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100" placeholder="Digite a nova senha">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Confirmar Nova Senha</label>
+                    <input type="password" name="confirmar_senha" class="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100" placeholder="Repita a nova senha">
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Deixe os campos em branco se não quiser alterar a senha.</p>
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nível de Acesso</label>
@@ -135,7 +144,9 @@ function abrirModalUsuario(id, username, role) {
     form.action = '/gerenciar_usuarios/editar_completo/' + id;
     document.getElementById('modal_username').value = username || '';
     document.getElementById('modal_role').value = role || 'user';
+    form.querySelector('input[name="senha_atual"]').value = '';
     form.querySelector('input[name="nova_senha"]').value = '';
+    form.querySelector('input[name="confirmar_senha"]').value = '';
     const modal = document.getElementById('modalUsuario');
     modal.classList.remove('hidden');
     modal.classList.add('flex');
