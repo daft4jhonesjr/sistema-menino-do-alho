@@ -35,6 +35,14 @@ from werkzeug.utils import secure_filename
 from werkzeug.exceptions import HTTPException
 from redis import Redis
 from rq import Queue
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+from apscheduler.jobstores.memory import MemoryJobStore
+try:
+    from apscheduler.jobstores.redis import RedisJobStore as _RedisJobStore
+    _HAS_REDIS_JOBSTORE = True
+except ImportError:
+    _HAS_REDIS_JOBSTORE = False
 from werkzeug.security import generate_password_hash, check_password_hash
 import pdfplumber
 import cloudinary
@@ -1945,6 +1953,257 @@ redis_conn = Redis.from_url(redis_url) if redis_url else None
 fila_tarefas = Queue(connection=redis_conn) if redis_conn else None
 
 
+def gerar_arquivo_backup_csv() -> tuple[bytes, str]:
+    """
+    Gera o arquivo CSV de backup das tabelas críticas do sistema.
+
+    Exporta: Vendas (últimas 10 000), Clientes (5 000),
+    Produtos (5 000) e Lançamentos de Caixa (5 000).
+
+    Returns:
+        (csv_bytes, nome_arquivo): bytes do CSV em UTF-8-BOM e o nome sugerido
+        para salvar/anexar (ex: ``backup_menino_do_alho_2026-03-17_23h50.csv``).
+    """
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=';')
+
+    # --- Vendas ---
+    writer.writerow(["=== VENDAS ==="])
+    writer.writerow([
+        "ID", "Data", "Cliente", "Produto", "Qtd", "Preço Unit.",
+        "Valor Total", "Custo Total", "Lucro", "Situação",
+        "Forma Pagto", "Empresa", "Vencimento", "Status Entrega",
+    ])
+    vendas = (
+        Venda.query
+        .options(joinedload(Venda.cliente), joinedload(Venda.produto))
+        .order_by(Venda.data_venda.desc())
+        .limit(10000).all()
+    )
+    for v in vendas:
+        nome_cli = v.cliente.nome_cliente if v.cliente else "Desconhecido"
+        dt       = v.data_venda.strftime('%d/%m/%Y') if v.data_venda else ""
+        venc     = v.data_vencimento.strftime('%d/%m/%Y') if v.data_vencimento else ""
+        total    = float(v.calcular_total())
+        lucro    = float(v.calcular_lucro())
+        writer.writerow([
+            v.id, dt, nome_cli,
+            v.produto.nome_produto if v.produto else "-",
+            v.quantidade_venda or 0,
+            float(v.preco_venda or 0),
+            total, total - lucro, lucro,
+            v.situacao or "", v.forma_pagamento or "",
+            v.empresa_faturadora or "", venc,
+            v.status_entrega or "",
+        ])
+
+    # --- Clientes ---
+    writer.writerow([])
+    writer.writerow(["=== CLIENTES ==="])
+    writer.writerow(["ID", "Nome", "Razão Social", "CNPJ", "Cidade", "Endereço", "Ativo"])
+    for c in Cliente.query.order_by(Cliente.nome_cliente).limit(5000).all():
+        writer.writerow([
+            c.id, c.nome_cliente or "", c.razao_social or "",
+            c.cnpj or "", c.cidade or "", c.endereco or "",
+            "Sim" if c.ativo else "Não",
+        ])
+
+    # --- Produtos ---
+    writer.writerow([])
+    writer.writerow(["=== ESTOQUE / PRODUTOS ==="])
+    writer.writerow([
+        "ID", "Nome", "Tipo", "Fornecedor", "Marca",
+        "Preço Custo", "Qtd Entrada", "Estoque Atual", "Data Chegada",
+    ])
+    for p in Produto.query.order_by(Produto.data_chegada.desc()).limit(5000).all():
+        dc = p.data_chegada.strftime('%d/%m/%Y') if p.data_chegada else ""
+        writer.writerow([
+            p.id, p.nome_produto or "", p.tipo or "", p.fornecedor or "",
+            p.marca or "", float(p.preco_custo or 0),
+            p.quantidade_entrada or 0, p.estoque_atual or 0, dc,
+        ])
+
+    # --- Caixa ---
+    writer.writerow([])
+    writer.writerow(["=== CAIXA (últimos 5 000 lançamentos) ==="])
+    writer.writerow(["ID", "Data", "Descrição", "Categoria", "Tipo", "Valor", "Forma Pagamento", "Setor"])
+    for lc in LancamentoCaixa.query.order_by(LancamentoCaixa.data.desc()).limit(5000).all():
+        dl = lc.data.strftime('%d/%m/%Y') if lc.data else ""
+        writer.writerow([
+            lc.id, dl, lc.descricao or "", lc.categoria or "",
+            lc.tipo or "", float(lc.valor or 0),
+            lc.forma_pagamento or "", lc.setor or "",
+        ])
+
+    csv_bytes = output.getvalue().encode('utf-8-sig')
+    output.close()
+
+    timestamp   = datetime.now().strftime('%Y-%m-%d_%Hh%M')
+    nome_arquivo = f"backup_menino_do_alho_{timestamp}.csv"
+    return csv_bytes, nome_arquivo
+
+
+def _enviar_backup_por_email(csv_bytes: bytes, nome_arquivo: str) -> int:
+    """
+    Envia o arquivo de backup CSV como anexo de e-mail para os destinatários
+    configurados.  Retorna o número de destinatários que receberam o e-mail.
+
+    Variáveis de ambiente necessárias:
+        MAIL_USERNAME, MAIL_PASSWORD — credenciais do remetente
+        MAIL_SERVER / MAIL_PORT     — servidor SMTP (padrão: smtp.gmail.com:587)
+        BACKUP_DEST_EMAIL           — (opcional) destinatário fixo; se ausente,
+                                      envia para todos os admins com e-mail.
+
+    Raises:
+        RuntimeError: se credenciais ausentes ou nenhum destinatário encontrado.
+    """
+    if not MAIL_USERNAME or not MAIL_PASSWORD:
+        raise RuntimeError("Credenciais de e-mail não configuradas (MAIL_USERNAME / MAIL_PASSWORD).")
+
+    dest_fixo = os.environ.get('BACKUP_DEST_EMAIL', '').strip()
+    if dest_fixo:
+        destinatarios = [dest_fixo]
+    else:
+        admins = Usuario.query.filter(
+            Usuario.role == 'admin',
+            Usuario.email.isnot(None),
+            Usuario.email != '',
+        ).all()
+        destinatarios = [a.email for a in admins if a.email]
+
+    if not destinatarios:
+        raise RuntimeError("Nenhum destinatário de backup encontrado. Configure BACKUP_DEST_EMAIL.")
+
+    data_hoje = datetime.now().strftime('%d/%m/%Y')
+    server = smtplib.SMTP(MAIL_SERVER, MAIL_PORT, timeout=_EXTERNAL_TIMEOUT)
+    server.starttls()
+    server.login(MAIL_USERNAME, MAIL_PASSWORD)
+
+    enviados = 0
+    for email_dest in destinatarios:
+        msg             = MIMEMultipart()
+        msg['Subject']  = f"📦 Backup Diário - Sistema Menino do Alho [{data_hoje}]"
+        msg['From']     = MAIL_USERNAME
+        msg['To']       = email_dest
+
+        corpo = MIMEText(
+            f"Olá,\n\n"
+            f"Segue em anexo o backup automático do Sistema Menino do Alho "
+            f"gerado em {data_hoje}.\n\n"
+            f"Conteúdo do arquivo:\n"
+            f"  • Vendas (até 10.000 registros)\n"
+            f"  • Clientes (até 5.000 registros)\n"
+            f"  • Estoque / Produtos (até 5.000 registros)\n"
+            f"  • Caixa — Lançamentos (até 5.000 registros)\n\n"
+            f"Arquivo: {nome_arquivo}\n\n"
+            f"Este e-mail é enviado automaticamente pelo agendador interno.\n"
+            f"Não responda.\n\n— Sistema Menino do Alho",
+            'plain', 'utf-8',
+        )
+        msg.attach(corpo)
+
+        anexo = MIMEBase('application', 'octet-stream')
+        anexo.set_payload(csv_bytes)
+        encoders.encode_base64(anexo)
+        anexo.add_header('Content-Disposition', f'attachment; filename="{nome_arquivo}"')
+        msg.attach(anexo)
+
+        server.send_message(msg)
+        enviados += 1
+
+    server.quit()
+    return enviados
+
+
+def _executar_backup_diario_job() -> None:
+    """
+    Tarefa agendada: gera o CSV de backup e tenta entregá-lo via SMTP.
+
+    Fluxo de entrega:
+        1. (Primário) Envia por e-mail como anexo via SMTP.
+        2. (Fallback) Se SMTP falhar, faz upload para Cloudinary (pasta
+           ``menino_do_alho/backups``) e envia a URL segura como Web Push
+           para todos os administradores inscritos, se as chaves VAPID
+           estiverem configuradas.
+
+    Deve ser executada dentro de um Flask app_context (o scheduler garante
+    isso através do wrapper ``_job_com_contexto``).
+    """
+    import logging as _logging
+    _log = _logging.getLogger('backup_scheduler')
+
+    try:
+        csv_bytes, nome_arquivo = gerar_arquivo_backup_csv()
+        _log.info(f"[backup] CSV gerado: {nome_arquivo} ({len(csv_bytes)} bytes)")
+    except Exception as e:
+        _log.error(f"[backup] Falha ao gerar CSV: {e}")
+        return
+
+    # --- Tentativa 1: E-mail ---
+    try:
+        enviados = _enviar_backup_por_email(csv_bytes, nome_arquivo)
+        _log.info(f"[backup] ✅ E-mail enviado para {enviados} destinatário(s).")
+        return  # Sucesso — não precisa de fallback.
+    except Exception as e_smtp:
+        _log.warning(f"[backup] SMTP falhou ({e_smtp}). Tentando fallback Cloudinary+Push...")
+
+    # --- Fallback: Cloudinary + Web Push ---
+    url_cloudinary = None
+    try:
+        _cloudinary_configured = (
+            os.environ.get('CLOUDINARY_URL')
+            or (os.environ.get('CLOUDINARY_CLOUD_NAME')
+                and os.environ.get('CLOUDINARY_API_KEY'))
+        )
+        if not _cloudinary_configured:
+            raise RuntimeError("Cloudinary não configurado.")
+
+        upload_result = cloudinary.uploader.upload(
+            io.BytesIO(csv_bytes),
+            public_id=f"menino_do_alho/backups/{nome_arquivo}",
+            resource_type='raw',
+            timeout=_EXTERNAL_TIMEOUT,
+        )
+        url_cloudinary = upload_result.get('secure_url', '')
+        _log.info(f"[backup] Arquivo enviado ao Cloudinary: {url_cloudinary}")
+    except Exception as e_cloud:
+        _log.error(f"[backup] Cloudinary também falhou: {e_cloud}. Backup perdido neste ciclo.")
+        return
+
+    # Enviar URL via Web Push para admins inscritos
+    if url_cloudinary and VAPID_PRIVATE_KEY and VAPID_PUBLIC_KEY:
+        try:
+            from pywebpush import webpush, WebPushException
+            subscriptions = (
+                PushSubscription.query
+                .join(Usuario, PushSubscription.user_id == Usuario.id)
+                .filter(Usuario.role == 'admin')
+                .all()
+            )
+            payload = json.dumps({
+                'title': '📦 Backup Diário Disponível',
+                'body': f'O backup de hoje foi salvo na nuvem. Acesse para baixar.',
+                'url': url_cloudinary,
+            })
+            for sub in subscriptions:
+                try:
+                    webpush(
+                        subscription_info={
+                            'endpoint': sub.endpoint,
+                            'keys': {'p256dh': sub.p256dh, 'auth': sub.auth},
+                        },
+                        data=payload,
+                        vapid_private_key=pad_base64(VAPID_PRIVATE_KEY),
+                        vapid_claims={'sub': VAPID_CLAIM_EMAIL},
+                    )
+                except WebPushException as wpe:
+                    if wpe.response and wpe.response.status_code in (404, 410):
+                        db.session.delete(sub)
+                        db.session.commit()
+        except Exception as e_push:
+            _log.warning(f"[backup] Web Push falhou: {e_push}")
+
+
 def background_organizar_tudo(usuario_id):
     """Trabalho pesado executado pelo Worker do RQ em segundo plano."""
     from app import app, db, _reprocessar_boletos_atualizar_extracao, organizar_arquivos, _processar_documentos_pendentes
@@ -1966,6 +2225,96 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 # Backup SQLite removido: sistema usa PostgreSQL em produção (DATABASE_URL)
 
 db.init_app(app)
+
+# ── Agendador de Backup Diário (APScheduler) ─────────────────────────────────
+# Proteção multi-worker Gunicorn: o Gunicorn cria N workers (fork). Sem
+# proteção cada worker iniciaria seu próprio scheduler e o backup seria
+# enviado N vezes.  A solução é iniciar o scheduler apenas no processo
+# principal usando a variável WERKZEUG_RUN_MAIN (dev server) OU verificando
+# se não somos um worker forked (Gunicorn define `SERVER_SOFTWARE` e lança
+# os workers com argparse; o processo pai não herda `_SCHEDULER_STARTED`).
+_scheduler: BackgroundScheduler | None = None
+_SCHEDULER_ENV_FLAG = '_MENINO_ALHO_SCHEDULER_PID'
+
+def _iniciar_scheduler() -> None:
+    """
+    Inicializa o BackgroundScheduler com proteção para evitar execuções
+    duplicadas em ambientes multi-worker (Gunicorn).
+
+    Usa RedisJobStore quando Redis estiver disponível (distribui o lock entre
+    workers), caso contrário cai para MemoryJobStore.
+
+    O job ``backup_diario`` dispara todo dia às 23h50 (fuso de Brasília/Recife).
+    """
+    global _scheduler
+
+    # Evitar inicialização duplicada dentro do mesmo processo
+    if _scheduler is not None and _scheduler.running:
+        return
+
+    # Gunicorn: cada worker fork herda o ambiente do pai. Registramos o PID
+    # do primeiro processo que chegou aqui; workers forked terão PIDs diferentes
+    # mas a variável já estará setada no ambiente compartilhado (via os.environ).
+    # Como cada worker tem seu próprio espaço de memória, usamos um arquivo de
+    # lock simples no sistema de arquivos efêmero (válido apenas enquanto o pod
+    # estiver vivo — o que é suficiente para evitar duplicatas na mesma sessão).
+    lock_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.scheduler.lock')
+    try:
+        # Verifica se outro processo deste pod já iniciou o scheduler
+        if os.path.exists(lock_file):
+            with open(lock_file) as fh:
+                pid_existente = int(fh.read().strip() or '0')
+            # Se o processo ainda existe, não inicialize de novo
+            try:
+                os.kill(pid_existente, 0)
+                app.logger.info(f"[scheduler] Já ativo no pid {pid_existente}. Pulando.")
+                return
+            except (ProcessLookupError, OSError):
+                pass  # Processo morreu; recriar o scheduler
+        with open(lock_file, 'w') as fh:
+            fh.write(str(os.getpid()))
+    except Exception:
+        pass  # Não travar a inicialização do app por falha no lock
+
+    # Configurar jobstore: Redis (distribuído) ou Memory (local)
+    jobstores = {}
+    if _HAS_REDIS_JOBSTORE and redis_url:
+        try:
+            jobstores['default'] = _RedisJobStore(jobs_key='menino_alho.scheduler.jobs',
+                                                   run_times_key='menino_alho.scheduler.run_times',
+                                                   url=redis_url)
+            app.logger.info("[scheduler] Usando RedisJobStore (distribuído).")
+        except Exception:
+            jobstores['default'] = MemoryJobStore()
+    else:
+        jobstores['default'] = MemoryJobStore()
+
+    _scheduler = BackgroundScheduler(
+        jobstores=jobstores,
+        job_defaults={'coalesce': True, 'max_instances': 1, 'misfire_grace_time': 3600},
+        timezone='America/Recife',
+    )
+
+    def _job_com_contexto():
+        """Wrapper que garante app_context antes de executar o job de backup."""
+        with app.app_context():
+            _executar_backup_diario_job()
+
+    _scheduler.add_job(
+        _job_com_contexto,
+        trigger=CronTrigger(hour=23, minute=50, timezone='America/Recife'),
+        id='backup_diario',
+        replace_existing=True,
+    )
+    _scheduler.start()
+    app.logger.info(f"[scheduler] BackgroundScheduler iniciado (pid {os.getpid()}). Backup às 23h50 (Recife).")
+
+
+# Inicializar somente fora do processo de reloader do Flask dev server
+# e somente quando o módulo for importado como __main__ ou por Gunicorn.
+if not os.environ.get('WERKZEUG_RUN_MAIN'):
+    _iniciar_scheduler()
+# ─────────────────────────────────────────────────────────────────────────────
 
 # Cloudinary: configurar com variáveis de ambiente ou app.config (para fotos de produtos, documentos, etc.)
 _cloudinary_url = os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL')
@@ -9186,124 +9535,17 @@ def backup_diario_email():
         return jsonify({'erro': 'Credenciais de e-mail não configuradas (MAIL_USERNAME / MAIL_PASSWORD).'}), 500
 
     try:
-        output = io.StringIO()
-        writer = csv.writer(output, delimiter=';')
-
-        writer.writerow(["=== VENDAS ==="])
-        writer.writerow(["ID", "Data", "Cliente", "Produto", "Qtd", "Preço Unit.",
-                         "Valor Total", "Custo Total", "Lucro", "Situação",
-                         "Forma Pagto", "Empresa", "Vencimento"])
-        vendas = (Venda.query
-                  .options(joinedload(Venda.cliente), joinedload(Venda.produto))
-                  .order_by(Venda.data_venda.desc())
-                  .limit(10000).all())
-        for v in vendas:
-            nome_cli = v.cliente.nome_cliente if v.cliente else "Desconhecido"
-            dt = v.data_venda.strftime('%d/%m/%Y') if v.data_venda else ""
-            qtd = v.quantidade_venda or 0
-            preco = float(v.preco_venda or 0)
-            total = float(v.calcular_total())
-            lucro = float(v.calcular_lucro())
-            custo = total - lucro
-            prod = v.produto.nome_produto if v.produto else "-"
-            venc = v.data_vencimento.strftime('%d/%m/%Y') if v.data_vencimento else ""
-            writer.writerow([v.id, dt, nome_cli, prod, qtd, preco, total, custo,
-                             lucro, v.situacao or "", v.forma_pagamento or "",
-                             v.empresa_faturadora or "", venc])
-
-        writer.writerow([])
-        writer.writerow(["=== CLIENTES ==="])
-        writer.writerow(["ID", "Nome", "Razão Social", "CNPJ", "Cidade", "Endereço"])
-        for c in Cliente.query.order_by(Cliente.nome_cliente).limit(5000).all():
-            writer.writerow([c.id, c.nome_cliente or "", c.razao_social or "",
-                             c.cnpj or "", c.cidade or "", c.endereco or ""])
-
-        writer.writerow([])
-        writer.writerow(["=== ESTOQUE / PRODUTOS ==="])
-        writer.writerow(["ID", "Nome", "Tipo", "Fornecedor", "Marca",
-                         "Preço Custo", "Estoque Atual", "Data Chegada"])
-        for p in Produto.query.order_by(Produto.data_chegada.desc()).limit(5000).all():
-            dc = p.data_chegada.strftime('%d/%m/%Y') if p.data_chegada else ""
-            writer.writerow([p.id, p.nome_produto or "", p.tipo or "",
-                             p.fornecedor or "", p.marca or "",
-                             float(p.preco_custo or 0), p.estoque_atual or 0, dc])
-
-        writer.writerow([])
-        writer.writerow(["=== CAIXA (Últimos 5000 lançamentos) ==="])
-        writer.writerow(["ID", "Data", "Descrição", "Categoria", "Tipo",
-                         "Valor", "Forma Pagamento"])
-        for lc in LancamentoCaixa.query.order_by(LancamentoCaixa.data.desc()).limit(5000).all():
-            dl = lc.data.strftime('%d/%m/%Y') if lc.data else ""
-            writer.writerow([lc.id, dl, lc.descricao or "", lc.categoria or "",
-                             lc.tipo or "", float(lc.valor or 0),
-                             lc.forma_pagamento or ""])
-
-        csv_bytes = output.getvalue().encode('utf-8-sig')
-        output.close()
-
-        data_hoje = datetime.now().strftime('%d/%m/%Y')
-        data_arquivo = datetime.now().strftime('%Y-%m-%d_%Hh%M')
-        nome_arquivo = f"backup_menino_do_alho_{data_arquivo}.csv"
-
-        dest_fixo = os.environ.get('BACKUP_DEST_EMAIL', '').strip()
-        if dest_fixo:
-            destinatarios = [dest_fixo]
-        else:
-            admins = Usuario.query.filter(
-                Usuario.role == 'admin',
-                Usuario.email.isnot(None),
-                Usuario.email != ''
-            ).all()
-            destinatarios = [a.email for a in admins if a.email]
-
-        if not destinatarios:
-            return jsonify({'erro': 'Nenhum destinatário de backup encontrado.'}), 404
-
-        server = smtplib.SMTP(MAIL_SERVER, MAIL_PORT, timeout=_EXTERNAL_TIMEOUT)
-        server.starttls()
-        server.login(MAIL_USERNAME, MAIL_PASSWORD)
-
-        enviados = 0
-        for email_dest in destinatarios:
-            msg = MIMEMultipart()
-            msg['Subject'] = f"📦 Backup Diário - Sistema Menino do Alho [{data_hoje}]"
-            msg['From'] = MAIL_USERNAME
-            msg['To'] = email_dest
-
-            corpo = MIMEText(
-                f"Olá,\n\n"
-                f"Segue em anexo o backup automático do sistema Menino do Alho "
-                f"gerado em {data_hoje}.\n\n"
-                f"Conteúdo:\n"
-                f"  • Vendas (até 10.000 registros)\n"
-                f"  • Clientes (até 5.000 registros)\n"
-                f"  • Estoque / Produtos (até 5.000 registros)\n"
-                f"  • Caixa - Lançamentos (até 5.000 registros)\n\n"
-                f"Este e-mail é enviado automaticamente. Não responda.\n\n"
-                f"— Sistema Menino do Alho",
-                'plain', 'utf-8'
-            )
-            msg.attach(corpo)
-
-            anexo = MIMEBase('application', 'octet-stream')
-            anexo.set_payload(csv_bytes)
-            encoders.encode_base64(anexo)
-            anexo.add_header('Content-Disposition', f'attachment; filename="{nome_arquivo}"')
-            msg.attach(anexo)
-
-            server.send_message(msg)
-            enviados += 1
-
-        server.quit()
-
-        current_app.logger.info(f"Backup diário enviado para {enviados} destinatário(s).")
+        csv_bytes, nome_arquivo = gerar_arquivo_backup_csv()
+        enviados = _enviar_backup_por_email(csv_bytes, nome_arquivo)
+        current_app.logger.info(f"Backup diário (via HTTP) enviado para {enviados} destinatário(s).")
         return jsonify({
             'status': 'sucesso',
             'mensagem': f'Backup enviado com sucesso para {enviados} destinatário(s).',
             'arquivo': nome_arquivo,
-            'destinatarios': enviados
+            'destinatarios': enviados,
         }), 200
-
+    except RuntimeError as e:
+        return jsonify({'erro': str(e)}), 404
     except Exception as e:
         current_app.logger.error(f"Erro no backup diário por e-mail: {e}")
         return jsonify({'status': 'erro', 'mensagem': str(e)}), 500
@@ -9677,52 +9919,13 @@ def enviar_frase_diaria():
 @app.route('/api/backup/excel')
 @login_required
 def backup_excel():
-    """Cofre de Dados: exporta Vendas, Clientes e Produtos para CSV."""
-    output = io.StringIO()
-    writer = csv.writer(output, delimiter=';')
-
-    # Seção 1: Vendas
-    writer.writerow(["=== VENDAS ==="])
-    writer.writerow(["ID", "Data", "Cliente", "Produto", "Qtd", "Preço Unit.", "Valor Total", "Custo Total", "Lucro", "Situação", "Status Entrega"])
-    vendas = Venda.query.options(joinedload(Venda.cliente), joinedload(Venda.produto)).order_by(Venda.data_venda.desc()).limit(10000).all()
-    for v in vendas:
-        cliente = v.cliente
-        nome_cliente = cliente.nome_cliente if cliente else "Desconhecido"
-        data_venda = v.data_venda.strftime('%d/%m/%Y') if v.data_venda else ""
-        qtd = v.quantidade_venda or 0
-        preco_unit = float(v.preco_venda or 0)
-        valor_total = float(v.calcular_total())
-        lucro = float(v.calcular_lucro())
-        custo_total = valor_total - lucro
-        produto_nome = v.produto.nome_produto if v.produto else "-"
-        writer.writerow([v.id, data_venda, nome_cliente, produto_nome, qtd, preco_unit, valor_total, custo_total, lucro, v.situacao or "", v.status_entrega or ""])
-
-    # Seção 2: Clientes
-    writer.writerow([])
-    writer.writerow(["=== CLIENTES ==="])
-    writer.writerow(["ID", "Nome", "Razão Social", "CNPJ", "Cidade", "Endereço"])
-    clientes = Cliente.query.order_by(Cliente.nome_cliente).limit(5000).all()
-    for c in clientes:
-        writer.writerow([c.id, c.nome_cliente or "", c.razao_social or "", c.cnpj or "", c.cidade or "", c.endereco or ""])
-
-    # Seção 3: Estoque/Produtos
-    writer.writerow([])
-    writer.writerow(["=== ESTOQUE ==="])
-    writer.writerow(["ID", "Nome", "Tipo", "Fornecedor", "Nacionalidade", "Tamanho", "Marca", "Preço Custo", "Qtd Entrada", "Estoque Atual", "Data Chegada"])
-    produtos = Produto.query.order_by(Produto.data_chegada.desc()).limit(5000).all()
-    for p in produtos:
-        data_chegada = p.data_chegada.strftime('%d/%m/%Y') if p.data_chegada else ""
-        writer.writerow([p.id, p.nome_produto or "", p.tipo or "", p.fornecedor or "", p.nacionalidade or "", p.tamanho or "", p.marca or "", float(p.preco_custo or 0), p.quantidade_entrada or 0, p.estoque_atual or 0, data_chegada])
-
-    csv_data = output.getvalue()
-    output.close()
-    data_atual = datetime.now().strftime('%Y-%m-%d_%Hh%M')
-    nome_arquivo = f"backup_menino_do_alho_{data_atual}.csv"
+    """Cofre de Dados: exporta Vendas, Clientes, Produtos e Caixa para download CSV."""
+    csv_bytes, nome_arquivo = gerar_arquivo_backup_csv()
     return send_file(
-        io.BytesIO(csv_data.encode('utf-8-sig')),
+        io.BytesIO(csv_bytes),
         download_name=nome_arquivo,
         as_attachment=True,
-        mimetype='text/csv'
+        mimetype='text/csv',
     )
 
 
