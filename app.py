@@ -1393,24 +1393,22 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                         print(f"DEBUG: ✅ VÍNCULO AUTOMÁTICO FORÇADO (SOBRESCRITA): NF '{nf_limpa}' → Venda {venda_id} (Cliente: {cliente_nome})")
                         # FORÇAR vínculo: não há retorno prematuro, vai direto para o commit
                     elif len(vendas_validas) > 1:
-                        # Verificar se todas as vendas são do mesmo cliente
-                        clientes_unicos = set(v.cliente_id for v in vendas_validas)
-                        if len(clientes_unicos) == 1:
-                            # Todas as vendas são do mesmo cliente → vincular automaticamente em todas
-                            _log_detalhado(f"⚠️ MÚLTIPLAS VENDAS ENCONTRADAS ({len(vendas_validas)}) mas todas do mesmo cliente → VINCULANDO AUTOMATICAMENTE")
-                            venda_match = vendas_validas[0]  # Usar a primeira como referência
-                            venda_id = vendas_validas[0].id
-                            cliente_nome = venda_match.cliente.nome_cliente
-                            _log_detalhado(f"✅ VINCULANDO EM TODAS AS {len(vendas_validas)} VENDAS DO CLIENTE '{cliente_nome}'")
-                            # Continuar com o fluxo normal de vínculo (será vinculado em todas as vendas do pedido abaixo)
-                        else:
-                            # Segurança: múltiplas vendas com mesma NF para clientes diferentes → requer seleção manual
-                            _log_detalhado(f"⚠️ MÚLTIPLAS VENDAS ENCONTRADAS ({len(vendas_validas)}) para CLIENTES DIFERENTES: Requer seleção manual")
-                            clientes_lista = [v.cliente.nome_cliente for v in vendas_validas[:3]]
-                            mensagem_diag = f"Achei {len(vendas_validas)} vendas com a NF {nf_str}. Por segurança, escolha manualmente em qual delas devo 'pendurar' este {tipo.lower()}."
-                            _log_detalhado(f"DEBUG: ⚠️ AMBIGUIDADE: {mensagem_diag}")
-                            resultado['mensagens'].append(f"⚠️ {mensagem_diag} Clientes: {', '.join(clientes_lista)}{'...' if len(vendas_validas) > 3 else ''}")
-                            venda_match = None  # Não vincular automaticamente
+                        # Regra de negócio (1-para-1): com múltiplas vendas para a mesma NF
+                        # nunca vincula automaticamente. Exige decisão manual no Dashboard.
+                        _log_detalhado(
+                            f"⚠️ MÚLTIPLAS VENDAS ENCONTRADAS ({len(vendas_validas)}) para a NF '{nf_limpa}': requer seleção manual."
+                        )
+                        clientes_lista = [v.cliente.nome_cliente for v in vendas_validas[:3]]
+                        mensagem_diag = (
+                            f"Achei {len(vendas_validas)} vendas com a NF {nf_str}. "
+                            f"Por segurança, escolha manualmente em qual delas devo vincular este {tipo.lower()}."
+                        )
+                        _log_detalhado(f"DEBUG: ⚠️ AMBIGUIDADE: {mensagem_diag}")
+                        resultado['mensagens'].append(
+                            f"⚠️ {mensagem_diag} Clientes: {', '.join(clientes_lista)}{'...' if len(vendas_validas) > 3 else ''}"
+                        )
+                        venda_match = None
+                        venda_id = None
                     else:
                         _log_detalhado(f"❌ NENHUMA VENDA VÁLIDA ENCONTRADA para NF '{nf_limpa}'")
                         # Verificar se há vendas com documento já vinculado
