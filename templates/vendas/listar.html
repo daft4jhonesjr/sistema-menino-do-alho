@@ -144,18 +144,31 @@
         <h2 class="text-3xl font-bold text-emerald-700 dark:text-emerald-400 mb-2">Vendas</h2>
         <p class="text-gray-600 dark:text-gray-400">Gerenciar vendas realizadas</p>
     </div>
-    <div class="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-        <button id="btn-toggle-nova-venda" type="button" class="bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2 px-4 rounded-lg transition-colors flex items-center gap-2 w-full sm:w-auto justify-center">
-            <i class="fas fa-plus"></i> Nova Venda
-        </button>
-        <button type="button" onclick="abrirModalRelatorioVendas()" class="w-full sm:w-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 px-5 py-2.5 rounded-xl shadow-sm dark:shadow-none hover:bg-emerald-50 dark:hover:bg-gray-700 hover:border-emerald-200 dark:hover:border-emerald-600 hover:text-emerald-700 dark:hover:text-emerald-400 transition flex items-center justify-center font-medium">
-            <i data-lucide="file-down" class="w-4 h-4 mr-2"></i>Gerar Relatorio
-        </button>
-        {% if current_user.is_authenticated and current_user.is_admin() %}
-        <a href="{{ url_for('importar_vendas') }}" class="hidden lg:flex w-full sm:w-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 px-5 py-2.5 rounded-xl shadow-sm dark:shadow-none hover:bg-emerald-50 dark:hover:bg-gray-700 hover:border-emerald-200 dark:hover:border-emerald-600 hover:text-emerald-700 dark:hover:text-emerald-400 transition items-center justify-center font-medium">
-            <i data-lucide="upload" class="w-4 h-4 mr-2"></i>Importar Lista
-        </a>
-        {% endif %}
+    <div class="w-full sm:w-auto">
+        <div class="relative inline-block text-left w-full sm:w-auto">
+            <button id="btn-dropdown-acoes" class="inline-flex justify-center w-full rounded-md border border-transparent shadow-sm px-4 py-2 bg-emerald-600 text-base font-medium text-white hover:bg-emerald-700 focus:outline-none transition sm:text-sm items-center gap-2">
+                Nova Venda
+                <i class="fas fa-chevron-down text-xs"></i>
+            </button>
+
+            <div id="menu-dropdown-acoes" class="hidden origin-top-right absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 divide-y divide-gray-100 dark:divide-gray-700 focus:outline-none z-50">
+                <div class="py-1">
+                    <a href="#" id="btn-toggle-nova-venda" class="group flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-emerald-50 dark:hover:bg-emerald-900 hover:text-emerald-700 dark:hover:text-emerald-300">
+                        <i class="fas fa-cart-plus mr-3"></i> Lançar Venda
+                    </a>
+                </div>
+                <div class="py-1">
+                    <a href="#" id="btn-menu-relatorio" class="group flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
+                        <i class="fas fa-file-pdf mr-3"></i> Gerar Relatório
+                    </a>
+                    {% if current_user.is_authenticated and current_user.is_admin() %}
+                    <a href="{{ url_for('importar_vendas') }}" id="btn-menu-importar" class="group flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
+                        <i class="fas fa-file-upload mr-3"></i> Importar Lista
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -2601,21 +2614,42 @@ document.addEventListener('DOMContentLoaded', function() {
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const btnDropdown = document.getElementById('btn-dropdown-acoes');
+    const menuDropdown = document.getElementById('menu-dropdown-acoes');
     const btnToggle = document.getElementById('btn-toggle-nova-venda');
+    const btnMenuRelatorio = document.getElementById('btn-menu-relatorio');
     const containerVenda = document.getElementById('container-nova-venda');
 
-    if (btnToggle && containerVenda) {
-        btnToggle.addEventListener('click', function() {
-            containerVenda.classList.toggle('hidden');
+    // Toggle do menu dropdown
+    if (btnDropdown && menuDropdown) {
+        btnDropdown.addEventListener('click', function(event) {
+            event.stopPropagation();
+            menuDropdown.classList.toggle('hidden');
+        });
 
-            if (containerVenda.classList.contains('hidden')) {
-                btnToggle.innerHTML = '<i class="fas fa-plus"></i> Nova Venda';
-                btnToggle.classList.remove('bg-emerald-700');
-                btnToggle.classList.add('bg-emerald-600');
-            } else {
-                btnToggle.innerHTML = '<i class="fas fa-times"></i> Fechar Painel';
-                btnToggle.classList.remove('bg-emerald-600');
-                btnToggle.classList.add('bg-emerald-700');
+        document.addEventListener('click', function(event) {
+            if (!btnDropdown.contains(event.target) && !menuDropdown.contains(event.target)) {
+                menuDropdown.classList.add('hidden');
+            }
+        });
+    }
+
+    // Opção "Lançar Venda" no dropdown
+    if (btnToggle && containerVenda) {
+        btnToggle.addEventListener('click', function(e) {
+            e.preventDefault();
+            containerVenda.classList.toggle('hidden');
+            if (menuDropdown) menuDropdown.classList.add('hidden');
+        });
+    }
+
+    // Opção "Gerar Relatório" no dropdown
+    if (btnMenuRelatorio) {
+        btnMenuRelatorio.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (menuDropdown) menuDropdown.classList.add('hidden');
+            if (typeof abrirModalRelatorioVendas === 'function') {
+                abrirModalRelatorioVendas();
             }
         });
     }
