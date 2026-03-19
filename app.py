@@ -3629,57 +3629,103 @@ def _categoria_produto(nome_produto_bruto):
 
 
 def get_radar_recompra():
-    """Calcula alertas de recompra baseado no consumo diário real (caixas/dia).
-    Fórmula: consumo_diario = qtd_consumida_historico / dias_corridos
-             duracao_estimada = qtd_ultima_compra / consumo_diario
-             data_prevista = data_ultima_compra + duracao_estimada"""
+    """Calcula alertas de recompra com fórmula histórica robusta.
+
+    Algoritmo:
+    1. Busca vendas dos últimos 365 dias (janela suficiente para capturar padrão
+       sem misturar histórico muito antigo que distorce a taxa).
+    2. Agrega por DIA por cliente+categoria — se o cliente comprou 3 itens no mesmo
+       dia eles são somados numa única entrada, eliminando o pico artificial de
+       "delta_days = 0" entre linhas do mesmo dia.
+    3. Exige pelo menos 2 datas de compra distintas E um intervalo mínimo de
+       JANELA_MINIMA_DIAS entre elas. Clientes com histórico muito curto ficam
+       fora do radar até acumularem dados confiáveis.
+    4. Calcula consumo_diario EXCLUINDO a última compra do numerador:
+           consumo_diario = sum(qtd dias anteriores) / delta_dias_total
+       Isso evita que uma compra grande e recente infle a taxa.
+    5. Duração = qtd_ultima_compra / consumo_diario.
+    """
     hoje = datetime.now().date()
     alertas = []
 
-    vendas_all = Venda.query.options(
-        joinedload(Venda.cliente), joinedload(Venda.produto)
-    ).join(Produto, Venda.produto_id == Produto.id).join(
-        Cliente, Venda.cliente_id == Cliente.id
-    ).filter(
-        ~Produto.tipo.ilike('%BACALHAU%'),
-        ~Produto.nome_produto.ilike('%BACALHAU%'),
-        Cliente.ativo == True
-    ).order_by(Venda.cliente_id, Venda.data_venda.asc()).all()
+    # Janela de 365 dias — captura sazonalidade sem histórico excessivamente velho.
+    janela_inicio = hoje - timedelta(days=365)
+    # Exige pelo menos este intervalo entre primeira e última compra para confiar na média.
+    JANELA_MINIMA_DIAS = 14
 
-    grupos = {}
+    vendas_all = (
+        Venda.query
+        .options(joinedload(Venda.cliente), joinedload(Venda.produto))
+        .join(Produto, Venda.produto_id == Produto.id)
+        .join(Cliente, Venda.cliente_id == Cliente.id)
+        .filter(
+            ~Produto.tipo.ilike('%BACALHAU%'),
+            ~Produto.nome_produto.ilike('%BACALHAU%'),
+            Cliente.ativo.is_(True),
+            Venda.data_venda >= janela_inicio,
+        )
+        .order_by(Venda.cliente_id, Venda.data_venda.asc())
+        .all()
+    )
+
+    # Agrupa por (cliente_id, categoria_produto).
+    grupos: dict = {}
     for v in vendas_all:
-        nome_prod = v.produto.nome_produto if v.produto else 'Desconhecido'
-        cat = _categoria_produto(nome_prod)
+        if not v.produto:
+            continue
+        cat = _categoria_produto(v.produto.nome_produto)
         if cat == 'BACALHAU':
             continue
         key = (v.cliente_id, cat)
         if key not in grupos:
-            grupos[key] = {'cliente_nome': v.cliente.nome_cliente, 'categoria': cat, 'vendas': []}
-        grupos[key]['vendas'].append(v)
+            grupos[key] = {
+                'cliente_nome': v.cliente.nome_cliente,
+                'categoria': cat,
+                'por_dia': {},  # {date: qtd_total_no_dia}
+            }
+        # Normaliza para date (Venda.data_venda pode ser date ou datetime).
+        data_compra = v.data_venda.date() if hasattr(v.data_venda, 'date') else v.data_venda
+        grupos[key]['por_dia'][data_compra] = (
+            grupos[key]['por_dia'].get(data_compra, 0.0) + float(v.quantidade_venda or 0)
+        )
 
-    for (cliente_id, cat), grupo in grupos.items():
-        vendas_hist = grupo['vendas']
+    for (_cliente_id, cat), grupo in grupos.items():
         cliente_nome = grupo['cliente_nome']
+        por_dia = grupo['por_dia']
 
-        if len(vendas_hist) < 2:
+        # Precisa de ao menos 2 datas de compra distintas.
+        datas = sorted(por_dia.keys())
+        if len(datas) < 2:
             continue
 
-        primeira = vendas_hist[0]
-        ultima = vendas_hist[-1]
-        dias_corridos = (ultima.data_venda - primeira.data_venda).days
-        if dias_corridos <= 0:
+        data_primeira = datas[0]
+        data_ultima = datas[-1]
+        delta_total = (data_ultima - data_primeira).days
+
+        # Intervalo histórico insuficiente — consumo/dia seria pouco confiável.
+        if delta_total < JANELA_MINIMA_DIAS:
             continue
 
-        qtd_consumida = sum(v.quantidade_venda for v in vendas_hist[:-1])
-        if qtd_consumida <= 0:
+        # Quantidade da última compra (usada para estimar a duração).
+        qtd_ultima = por_dia[data_ultima]
+        if qtd_ultima <= 0:
             continue
 
-        consumo_diario = qtd_consumida / dias_corridos
-        qtd_ultima = ultima.quantidade_venda
+        # Consumo histórico = soma de TODAS as compras EXCETO a última.
+        # Excluir a última evita que uma compra recente grande infle a taxa.
+        qtd_historica = sum(por_dia[d] for d in datas[:-1])
+        if qtd_historica <= 0:
+            continue
+
+        consumo_diario = qtd_historica / float(delta_total)
+        if consumo_diario <= 0:
+            continue
+
         duracao_estimada = qtd_ultima / consumo_diario
-        data_prevista = ultima.data_venda + timedelta(days=int(round(duracao_estimada)))
+        data_prevista = data_ultima + timedelta(days=int(round(duracao_estimada)))
         dias_restantes = (data_prevista - hoje).days
 
+        # Exibe apenas alertas que estão a ≤ 4 dias ou já vencidos.
         if dias_restantes > 4:
             continue
 
@@ -3696,13 +3742,13 @@ def get_radar_recompra():
         alertas.append({
             'cliente_nome': cliente_nome,
             'produto': cat,
-            'ultima_venda': ultima.data_venda.strftime('%d/%m/%Y'),
+            'ultima_venda': data_ultima.strftime('%d/%m/%Y'),
             'duracao_dias': round(duracao_estimada),
             'consumo_dia': round(consumo_diario, 2),
             'qtd_ultima': qtd_ultima,
             'status': status,
             'cor': cor,
-            'dias_restantes': dias_restantes
+            'dias_restantes': dias_restantes,
         })
 
     alertas.sort(key=lambda x: x['dias_restantes'])
