@@ -513,6 +513,16 @@ function toggleDropdownNovoCliente(event) {
     var btnsFecharAbater = document.querySelectorAll('.modal-abater-lote-fechar');
     var actionBaseAbater = formAbater && formAbater.getAttribute('data-action-base');
     var nomeAbater = document.getElementById('modal-abater-cliente-nome');
+    var inputValorAbater = document.getElementById('abater_valor_recebido');
+
+    function formatarMoedaBRLInput(valor) {
+        var apenasDigitos = String(valor || '').replace(/\D/g, '');
+        if (!apenasDigitos) return '';
+        var numero = (parseInt(apenasDigitos, 10) / 100).toFixed(2);
+        var partes = numero.split('.');
+        var inteiro = partes[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        return inteiro + ',' + partes[1];
+    }
 
     function abrirModalAbater(btn) {
         var id = btn.getAttribute('data-id');
@@ -542,6 +552,19 @@ function toggleDropdownNovoCliente(event) {
     btnsFecharAbater.forEach(function(btn) {
         btn.addEventListener('click', fecharModalAbater);
     });
+    if (inputValorAbater) {
+        inputValorAbater.addEventListener('input', function(e) {
+            e.target.value = formatarMoedaBRLInput(e.target.value);
+        });
+    }
+    if (formAbater) {
+        formAbater.addEventListener('submit', function() {
+            if (!inputValorAbater) return;
+            // Garante envio no formato esperado pelo backend (ex: 1.000,00),
+            // que já normaliza para Decimal via replace('.', '').replace(',', '.').
+            inputValorAbater.value = formatarMoedaBRLInput(inputValorAbater.value);
+        });
+    }
     if (overlay) overlay.addEventListener('click', fecharModal);
     btnsFechar.forEach(function(btn) { btn.addEventListener('click', fecharModal); });
 
