@@ -145,8 +145,8 @@
         <p class="text-gray-600 dark:text-gray-400">Gerenciar vendas realizadas</p>
     </div>
     <div class="w-full sm:w-auto">
-        <div class="inline-flex rounded-md shadow-sm w-full sm:w-auto">
-            <button type="button" id="btn-toggle-nova-venda" class="inline-flex items-center px-6 py-3 rounded-l-md border border-transparent bg-emerald-700 text-lg font-medium text-white hover:bg-emerald-800 transition-colors">
+        <div class="flex w-full sm:w-auto sm:inline-flex rounded-md shadow-sm">
+            <button type="button" id="btn-toggle-nova-venda" class="flex-1 justify-center inline-flex items-center px-6 py-3 rounded-l-md border border-transparent bg-emerald-700 text-lg font-medium text-white hover:bg-emerald-800 transition-colors">
                 💰 Nova Venda
             </button>
 
@@ -284,20 +284,8 @@
 <div id="venda-erro" class="hidden mb-4 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl text-red-800 dark:text-red-300 text-sm shadow-sm"></div>
 
 <div id="container-nova-venda" class="hidden transition-all duration-300 ease-in-out">
-<div class="md:hidden mb-4">
-    <button
-        type="button"
-        onclick="toggleFormularioVenda(event)"
-        class="w-full flex justify-between items-center bg-white dark:bg-slate-800 p-4 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold"
-    >
-        <span class="flex items-center gap-2">📝 Preencher Nova Venda</span>
-        <svg id="icone-toggle-venda" class="w-5 h-5 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-        </svg>
-    </button>
-</div>
 <!-- Linha de inserção: campos alinhados com a tabela -->
-<div id="container-formulario-venda" class="hidden md:block mb-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-hidden">
+<div id="container-formulario-venda" class="mb-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-hidden">
         <form id="form-nova-venda-inline" action="{{ url_for('add_venda') }}" method="POST" class="p-4" novalidate>
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         <div class="venda-input-group flex flex-col gap-5 w-full">
@@ -2668,26 +2656,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
-
-function toggleFormularioVenda(event) {
-    if (event) {
-        event.preventDefault();
-        event.stopPropagation();
-    }
-
-    const container = document.getElementById('container-formulario-venda');
-    const icone = document.getElementById('icone-toggle-venda');
-
-    if (container) {
-        if (container.classList.contains('!hidden') || container.classList.contains('hidden')) {
-            container.classList.remove('!hidden', 'hidden');
-            if (icone) icone.classList.add('rotate-180');
-        } else {
-            container.classList.add('!hidden', 'hidden');
-            if (icone) icone.classList.remove('rotate-180');
-        }
-    }
-}
 
 function toggleAnaliseVendas(event) {
     if (event) {
