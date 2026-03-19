@@ -1363,6 +1363,12 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                                 print(f"DEBUG: NF idêntica encontrada. Substituindo vínculo antigo: {caminho_existente} → {caminho_relativo}")
                             elif caminho_existente and not documento_existe:
                                 print(f"DEBUG: Limpando vínculo órfão e vinculando novo documento: {caminho_relativo}")
+
+                    # Deduplicação defensiva:
+                    # 1) por ID da venda (joins podem repetir a mesma linha)
+                    # 2) por pedido lógico (cliente + NF), evitando "visão dupla"
+                    #    em pedidos com múltiplos itens.
+                    vendas_validas = _deduplicar_vendas_por_pedido(vendas_validas)
                     
                     # REGRA ÚNICA: Se houver EXATAMENTE UMA venda válida, vincular IMEDIATAMENTE (SOBRESCRITA AUTOMÁTICA)
                     _log_detalhado(f"\n--- Resultado da Filtragem: {len(vendas_validas)} venda(s) válida(s) encontrada(s) ---")
@@ -1642,6 +1648,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                 v for v in vendas_com_nf_cache
                 if _nf_match(nf_doc_norm, _normalizar_nf(str(v.nf)))
             ]
+            vendas_validas_p2 = _deduplicar_vendas_por_pedido(vendas_validas_p2)
             if len(vendas_validas_p2) != 1:
                 continue  # Ambiguidade ou não encontrado → triagem manual
 
@@ -1782,6 +1789,34 @@ def _reprocessar_vencimentos_vendas():
     return resultado
 
 
+def _deduplicar_vendas_por_id(vendas):
+    """Remove duplicidades de objetos Venda mantendo IDs únicos.
+
+    Em alguns cenários com joins, a mesma venda pode aparecer repetida na lista.
+    """
+    unicas = {}
+    for venda in vendas or []:
+        venda_id = getattr(venda, 'id', None)
+        if venda_id is None:
+            continue
+        unicas[int(venda_id)] = venda
+    return list(unicas.values())
+
+
+def _deduplicar_vendas_por_pedido(vendas):
+    """Deduplica vendas por pedido lógico (cliente + NF normalizada).
+
+    Isso evita falsa ambiguidade quando um mesmo pedido possui múltiplos itens
+    e cada item vira uma linha na tabela de vendas.
+    """
+    unicas = {}
+    for venda in _deduplicar_vendas_por_id(vendas):
+        chave_nf = _normalizar_nf(str(getattr(venda, 'nf', '') or '').strip())
+        chave = (getattr(venda, 'cliente_id', None), chave_nf)
+        unicas[chave] = venda
+    return list(unicas.values())
+
+
 def _diagnosticar_vinculo_falhou(doc):
     """Diagnostica por que um documento não foi vinculado automaticamente.
     Lógica simplificada: compara APENAS NF (normalizada, sem zeros à esquerda).
@@ -1815,6 +1850,7 @@ def _diagnosticar_vinculo_falhou(doc):
         nf_venda_norm = _normalizar_nf(str(v.nf))
         if _nf_match(nf_limpa, nf_venda_norm):
             vendas_validas.append(v)
+    vendas_validas = _deduplicar_vendas_por_pedido(vendas_validas)
     
     if len(vendas_validas) == 0:
         return {
@@ -1941,15 +1977,15 @@ def _auto_vincular_documentos_pendentes_por_nf(user_id=None):
             if not nf_doc or nf_doc in ('S/N', '0'):
                 continue
 
-            venda_match = None
+            vendas_candidatas = []
             for venda in vendas_com_nf:
                 nf_venda = _normalizar_nf(str(venda.nf or '').strip())
                 if _nf_match(nf_doc, nf_venda):
-                    venda_match = venda
-                    break
-
-            if not venda_match:
+                    vendas_candidatas.append(venda)
+            vendas_candidatas = _deduplicar_vendas_por_pedido(vendas_candidatas)
+            if len(vendas_candidatas) != 1:
                 continue
+            venda_match = vendas_candidatas[0]
 
             # Sem bloqueios adicionais: apenas vincula este documento à venda encontrada.
             doc.venda_id = venda_match.id
