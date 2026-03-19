@@ -145,6 +145,9 @@
         <p class="text-gray-600 dark:text-gray-400">Gerenciar vendas realizadas</p>
     </div>
     <div class="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+        <button id="btn-toggle-nova-venda" type="button" class="bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2 px-4 rounded-lg transition-colors flex items-center gap-2 w-full sm:w-auto justify-center">
+            <i class="fas fa-plus"></i> Nova Venda
+        </button>
         <button type="button" onclick="abrirModalRelatorioVendas()" class="w-full sm:w-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 px-5 py-2.5 rounded-xl shadow-sm dark:shadow-none hover:bg-emerald-50 dark:hover:bg-gray-700 hover:border-emerald-200 dark:hover:border-emerald-600 hover:text-emerald-700 dark:hover:text-emerald-400 transition flex items-center justify-center font-medium">
             <i data-lucide="file-down" class="w-4 h-4 mr-2"></i>Gerar Relatorio
         </button>
@@ -264,6 +267,7 @@
 <!-- Alerta de erro (discreto, acima dos campos) -->
 <div id="venda-erro" class="hidden mb-4 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl text-red-800 dark:text-red-300 text-sm shadow-sm"></div>
 
+<div id="container-nova-venda" class="hidden transition-all duration-300 ease-in-out">
 <div class="md:hidden mb-4">
     <button
         type="button"
@@ -276,7 +280,6 @@
         </svg>
     </button>
 </div>
-
 <!-- Linha de inserção: campos alinhados com a tabela -->
 <div id="container-formulario-venda" class="hidden md:block mb-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-hidden">
         <form id="form-nova-venda-inline" action="{{ url_for('add_venda') }}" method="POST" class="p-4" novalidate>
@@ -420,6 +423,7 @@
             </button>
         </div>
     </div>
+</div>
 </div>
 
 <!-- Análise Geral de Vendas (Gráficos Doughnut) -->
@@ -2596,6 +2600,27 @@ document.addEventListener('DOMContentLoaded', function() {
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
+document.addEventListener('DOMContentLoaded', function() {
+    const btnToggle = document.getElementById('btn-toggle-nova-venda');
+    const containerVenda = document.getElementById('container-nova-venda');
+
+    if (btnToggle && containerVenda) {
+        btnToggle.addEventListener('click', function() {
+            containerVenda.classList.toggle('hidden');
+
+            if (containerVenda.classList.contains('hidden')) {
+                btnToggle.innerHTML = '<i class="fas fa-plus"></i> Nova Venda';
+                btnToggle.classList.remove('bg-emerald-700');
+                btnToggle.classList.add('bg-emerald-600');
+            } else {
+                btnToggle.innerHTML = '<i class="fas fa-times"></i> Fechar Painel';
+                btnToggle.classList.remove('bg-emerald-600');
+                btnToggle.classList.add('bg-emerald-700');
+            }
+        });
+    }
+});
+
 function toggleFormularioVenda(event) {
     if (event) {
         event.preventDefault();
