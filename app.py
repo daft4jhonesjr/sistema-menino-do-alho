@@ -9,7 +9,7 @@ from models import db, Cliente, Produto, ProdutoFoto, Venda, Usuario, Configurac
 from quotes import frase_do_dia
 from config import Config
 from datetime import date, datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
 import pytz
@@ -1817,7 +1817,7 @@ def _deduplicar_vendas_por_pedido(vendas):
     return list(unicas.values())
 
 
-def _diagnosticar_vinculo_falhou(doc):
+def _diagnosticar_vinculo_falhou(doc, vendas_com_nf_cache=None):
     """Diagnostica por que um documento não foi vinculado automaticamente.
     Lógica simplificada: compara APENAS NF (normalizada, sem zeros à esquerda).
     Retorna dict com: cenario ('A', 'B', 'C' ou None), mensagem, cliente_id, cliente_nome, nf_tentada."""
@@ -1843,9 +1843,11 @@ def _diagnosticar_vinculo_falhou(doc):
         }
     # Buscar vendas com NF preenchida (evita carregar tabela inteira)
     vendas_validas = []
-    vendas_com_nf = Venda.query.filter(
-        Venda.nf.isnot(None), Venda.nf != ''
-    ).options(joinedload(Venda.cliente)).limit(5000).all()
+    vendas_com_nf = vendas_com_nf_cache
+    if vendas_com_nf is None:
+        vendas_com_nf = Venda.query.filter(
+            Venda.nf.isnot(None), Venda.nf != ''
+        ).options(joinedload(Venda.cliente)).limit(5000).all()
     for v in vendas_com_nf:
         nf_venda_norm = _normalizar_nf(str(v.nf))
         if _nf_match(nf_limpa, nf_venda_norm):
@@ -1906,10 +1908,15 @@ def _listar_documentos_recem_chegados():
     )
     # Para o Dashboard, documentos órfãos devem ser visíveis independentemente de ownership.
     # Mantemos o parâmetro user_id por compatibilidade, mas sem restringir esta listagem.
-    docs = query.order_by(Documento.id.desc()).all()
+    # Limite defensivo para evitar timeout de worker em bases grandes.
+    docs = query.order_by(Documento.id.desc()).limit(300).all()
+    # Cache da consulta de vendas por NF nesta mesma request (evita N x 5000 scans).
+    vendas_com_nf_cache = Venda.query.filter(
+        Venda.nf.isnot(None), Venda.nf != ''
+    ).options(joinedload(Venda.cliente)).limit(5000).all()
     documentos = []
     for doc in docs:
-        diag = _diagnosticar_vinculo_falhou(doc)
+        diag = _diagnosticar_vinculo_falhou(doc, vendas_com_nf_cache=vendas_com_nf_cache)
 
         # ── AUTO-LINK: cenário A = 1 venda única encontrada ───────────────────
         # O diagnóstico já fez a busca e conhece o venda_id correto. Em vez de
@@ -9510,8 +9517,16 @@ def service_worker():
 @login_required
 def receber_lote_cliente(id):
     """Abatimento Inteligente: recebe valor em lote e abate nas vendas pendentes mais antigas."""
-    valor_str = (request.form.get('valor_recebido') or '0').replace('.', '').replace(',', '.')
-    valor_recebido = Decimal(valor_str) if valor_str else Decimal('0.00')
+    valor_raw = (request.form.get('valor_recebido') or '').strip()
+    valor_str = valor_raw.replace('.', '').replace(',', '.')
+    try:
+        valor_recebido = Decimal(valor_str) if valor_str else Decimal('0.00')
+    except (InvalidOperation, ValueError):
+        flash('Valor recebido inválido. Use o formato 1.000,00.', 'error')
+        return redirect(url_for('listar_clientes'))
+    if valor_recebido <= Decimal('0.00'):
+        flash('Informe um valor recebido maior que zero.', 'error')
+        return redirect(url_for('listar_clientes'))
     forma_pgto = request.form.get('forma_pagamento', 'Dinheiro')
 
     cliente = Cliente.query.get_or_404(id)
