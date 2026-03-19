@@ -2,6 +2,10 @@
 
 {% block title %}Caixa Diário - Menino do Alho{% endblock %}
 
+{% block head_extras %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+{% endblock %}
+
 {% block content %}
 <div class="mb-6 flex flex-col md:flex-row justify-between items-end gap-4">
     <div>
@@ -637,7 +641,7 @@ function atualizarBarraMassa() {
     });
 }
 function confirmarExclusaoUnica(id) {
-    if (confirm('Tem certeza que deseja apagar este lançamento? O saldo será recalculado.')) {
+    var executarExclusao = function() {
         var form = document.createElement('form');
         form.method = 'POST';
         form.action = window.CAIXA_DELETE_URL + id;
@@ -648,7 +652,32 @@ function confirmarExclusaoUnica(id) {
         form.appendChild(csrfInput);
         document.body.appendChild(form);
         form.submit();
+    };
+
+    if (typeof Swal === 'undefined') {
+        if (confirm('Tem certeza que deseja apagar este lançamento? O saldo será recalculado.')) {
+            executarExclusao();
+        }
+        return;
     }
+
+    var dark = document.documentElement.classList.contains('dark');
+    Swal.fire({
+        title: 'Excluir Lançamento?',
+        text: 'Tem certeza que deseja apagar este lançamento? O saldo será recalculado.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#DC2626',
+        cancelButtonColor: '#6B7280',
+        confirmButtonText: 'Sim, excluir!',
+        cancelButtonText: 'Cancelar',
+        background: dark ? '#1F2937' : '#FFFFFF',
+        color: dark ? '#F9FAFB' : '#111827'
+    }).then(function(result) {
+        if (result.isConfirmed) {
+            executarExclusao();
+        }
+    });
 }
 function confirmarExclusaoMassa() {
     var qtd = document.querySelectorAll('.check-item-caixa:checked').length;
