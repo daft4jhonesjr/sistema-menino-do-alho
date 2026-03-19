@@ -49,16 +49,16 @@
                     <div class="py-1">
                         {% if current_user.is_authenticated and current_user.is_admin() %}
                         <a href="{{ url_for('importar_produtos') }}" class="group flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700" onclick="fecharDropdownEntrada()">
-                            <i class="fas fa-file-upload mr-3"></i> Importar Lista
+                            📥&nbsp;Importar Lista
                         </a>
                         {% endif %}
 
                         <button type="button" onclick="fecharDropdownEntrada();document.getElementById('modal-novo-fornecedor').classList.remove('hidden');travarFundo();" class="group flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
-                            <i class="fas fa-building mr-3"></i> Novo Fornecedor
+                            🚚&nbsp;Novo Fornecedor
                         </button>
 
                         <button type="button" onclick="fecharDropdownEntrada();document.getElementById('modal-lista-fornecedores').classList.remove('hidden');travarFundo();" class="group flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
-                            <i class="fas fa-list mr-3"></i> Fornecedores Cadastrados
+                            📋&nbsp;Fornecedores Cadastrados
                         </button>
                     </div>
                 </div>
