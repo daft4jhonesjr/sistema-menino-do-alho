@@ -1272,10 +1272,34 @@ function loadingBotaoEditarVenda(formElement) {
                 return;
             }
             e.preventDefault();
-            if (!confirm('Tem certeza que deseja alterar essa venda?')) return;
-            loadingBotaoEditarVenda(form);
-            form.setAttribute('data-submitting', '1');
-            form.submit();
+
+            // Fallback defensivo se SweetAlert2 não carregar por algum motivo.
+            if (typeof Swal === 'undefined') {
+                if (!confirm('Tem certeza que deseja salvar as alterações desta venda?')) return;
+                loadingBotaoEditarVenda(form);
+                form.setAttribute('data-submitting', '1');
+                form.submit();
+                return;
+            }
+
+            var dark = document.documentElement.classList.contains('dark');
+            Swal.fire({
+                title: 'Confirmar Alteração?',
+                text: 'Tem certeza que deseja salvar as alterações desta venda?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#059669',
+                cancelButtonColor: '#6B7280',
+                confirmButtonText: 'Sim, salvar!',
+                cancelButtonText: 'Cancelar',
+                background: dark ? '#1F2937' : '#FFFFFF',
+                color: dark ? '#F9FAFB' : '#111827'
+            }).then(function(result) {
+                if (!result.isConfirmed) return;
+                loadingBotaoEditarVenda(form);
+                form.setAttribute('data-submitting', '1');
+                form.submit();
+            });
         });
     }
 })();
@@ -2049,6 +2073,7 @@ document.addEventListener('DOMContentLoaded', function() {
 })();
 </script>
 
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
 <script>
 (function() {
