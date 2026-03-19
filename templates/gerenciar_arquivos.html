@@ -100,13 +100,26 @@
 </form>
 {% endblock %}
 
+{% endblock %}
+
+{% block head_extras %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+{% endblock %}
+
 {% block scripts %}
 <script>
+/* ── Helpers SweetAlert2 (paleta Menino do Alho) ──────────────────────── */
+function _swal() {
+    var dark = document.documentElement.classList.contains('dark');
+    return { background: dark ? '#1F2937' : '#FFFFFF', color: dark ? '#F9FAFB' : '#111827' };
+}
+
+/* ── Seleção em massa + exclusão ──────────────────────────────────────── */
 (function() {
-    var cbMestre = document.getElementById('cb-mestre');
-    var cbItems = document.querySelectorAll('.cb-item');
+    var cbMestre  = document.getElementById('cb-mestre');
+    var cbItems   = document.querySelectorAll('.cb-item');
     var btnExcluir = document.getElementById('btn-excluir');
-    var form = document.getElementById('form-deletar-massa');
+    var form      = document.getElementById('form-deletar-massa');
 
     if (cbMestre && cbItems.length) {
         cbMestre.addEventListener('change', function() {
@@ -117,10 +130,10 @@
 
     cbItems.forEach(function(cb) {
         cb.addEventListener('change', function() {
-            var todos = Array.from(cbItems).every(function(c) { return c.checked; });
+            var todos  = Array.from(cbItems).every(function(c) { return c.checked; });
             var nenhum = Array.from(cbItems).every(function(c) { return !c.checked; });
             if (cbMestre) {
-                cbMestre.checked = todos;
+                cbMestre.checked       = todos;
                 cbMestre.indeterminate = !todos && !nenhum;
             }
             atualizarBtnExcluir();
@@ -135,27 +148,37 @@
     if (form) {
         form.addEventListener('submit', function(e) {
             var qtd = Array.from(cbItems).filter(function(c) { return c.checked; }).length;
-            if (qtd === 0) {
-                e.preventDefault();
-                return false;
-            }
-            if (!confirm('Tem certeza que deseja excluir ' + qtd + ' documento(s)? Esta ação não pode ser desfeita.')) {
-                e.preventDefault();
-                return false;
-            }
-            btnExcluir.disabled = true;
-            btnExcluir.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>Excluindo...';
-            if (typeof lucide !== 'undefined') lucide.createIcons();
+            if (qtd === 0) { e.preventDefault(); return; }
+            if (form.dataset.swalConfirmed === '1') return; // já confirmado, deixar submeter
+
+            e.preventDefault();
+            Swal.fire(Object.assign(_swal(), {
+                title:             'Excluir documentos?',
+                text:              'Tem certeza que deseja excluir ' + qtd + ' documento(s)? Esta ação não pode ser desfeita.',
+                icon:              'warning',
+                showCancelButton:  true,
+                confirmButtonColor: '#DC2626',
+                cancelButtonColor:  '#6B7280',
+                confirmButtonText: 'Sim, excluir!',
+                cancelButtonText:  'Cancelar',
+            })).then(function(result) {
+                if (!result.isConfirmed) return;
+                btnExcluir.disabled  = true;
+                btnExcluir.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>Excluindo...';
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+                form.dataset.swalConfirmed = '1';
+                form.submit();
+            });
         });
     }
 
     atualizarBtnExcluir();
 })();
 
+/* ── Upload em massa ──────────────────────────────────────────────────── */
 (function() {
     var inputUpload = document.getElementById('input-upload-massa');
-    var btnUpload = document.getElementById('btn-upload-massa');
-
+    var btnUpload   = document.getElementById('btn-upload-massa');
     if (!inputUpload || !btnUpload) return;
 
     inputUpload.addEventListener('change', async function(e) {
@@ -163,7 +186,13 @@
         if (!arquivos || arquivos.length === 0) return;
 
         if (arquivos.length > 20) {
-            alert('Por favor, selecione no máximo 20 arquivos por vez para garantir o upload rápido.');
+            Swal.fire(Object.assign(_swal(), {
+                icon:              'warning',
+                title:             'Limite excedido',
+                text:              'Selecione no máximo 20 arquivos por vez para garantir o upload rápido.',
+                confirmButtonColor: '#059669',
+                confirmButtonText: 'Entendi',
+            }));
             inputUpload.value = '';
             return;
         }
@@ -175,31 +204,49 @@
 
         var textoOriginal = btnUpload.innerHTML;
         btnUpload.innerHTML = '⏳ Enviando ' + arquivos.length + ' arquivo(s)...';
-        btnUpload.disabled = true;
+        btnUpload.disabled  = true;
         btnUpload.classList.add('opacity-75', 'cursor-not-allowed');
 
         try {
             var response = await fetch('/arquivos/upload_massa', {
-                method: 'POST',
+                method:  'POST',
                 headers: Object.assign({ 'X-Requested-With': 'XMLHttpRequest' }, window.getCsrfHeaders ? window.getCsrfHeaders() : {}),
-                body: formData
+                body:    formData,
             });
             var data = await response.json();
 
             if (data.success) {
-                alert(data.mensagem || 'Arquivos enviados com sucesso!');
+                await Swal.fire(Object.assign(_swal(), {
+                    icon:              'success',
+                    title:             'Upload concluído!',
+                    text:              data.mensagem || 'Arquivo(s) importado(s) e enviados para extração automática.',
+                    confirmButtonColor: '#059669',
+                    confirmButtonText: 'Ok',
+                }));
                 window.location.reload();
             } else {
-                alert(data.error || 'Erro ao enviar os arquivos.');
+                Swal.fire(Object.assign(_swal(), {
+                    icon:              'error',
+                    title:             'Falha no upload',
+                    text:              data.error || 'Erro ao enviar os arquivos.',
+                    confirmButtonColor: '#059669',
+                    confirmButtonText: 'Fechar',
+                }));
             }
         } catch (error) {
             console.error(error);
-            alert('Erro de conexão ao tentar enviar os arquivos.');
+            Swal.fire(Object.assign(_swal(), {
+                icon:              'error',
+                title:             'Erro de conexão',
+                text:              'Não foi possível enviar os arquivos. Verifique sua conexão e tente novamente.',
+                confirmButtonColor: '#059669',
+                confirmButtonText: 'Fechar',
+            }));
         } finally {
             btnUpload.innerHTML = textoOriginal;
-            btnUpload.disabled = false;
+            btnUpload.disabled  = false;
             btnUpload.classList.remove('opacity-75', 'cursor-not-allowed');
-            inputUpload.value = '';
+            inputUpload.value   = '';
         }
     });
 })();

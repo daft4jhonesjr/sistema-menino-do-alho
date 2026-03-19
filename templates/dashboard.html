@@ -207,6 +207,12 @@
                 <span class="text-red-600">{{ erros }} com erro</span>
                 {% endif %}
             </div>
+            <button type="button" id="btn-atualizar-fila" class="inline-flex items-center gap-2 rounded-lg border border-emerald-300 dark:border-emerald-800 bg-white dark:bg-gray-800 px-4 py-2 text-sm font-semibold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition">
+                <i data-lucide="rotate-cw" class="w-4 h-4"></i>Atualizar Fila
+            </button>
+            <span id="badge-fila-novos" class="hidden text-xs font-semibold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 px-3 py-1 rounded-full">
+                Novos documentos disponíveis
+            </span>
             <form action="{{ url_for('organizar_e_vincular') }}" method="post" class="inline" id="form-organizar-vincular">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <button type="submit" id="btn-organizar" class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2.5 text-base font-semibold text-white shadow-md hover:bg-emerald-700 hover:shadow-lg transition focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2">
@@ -227,9 +233,9 @@
             </div>
         </div>
     </div>
-    <div id="lista-documentos" class="overflow-visible">
+    <div id="lista-documentos" class="overflow-visible" data-doc-total="{{ (documentos_pendentes|length) if documentos_pendentes else 0 }}">
     {% if documentos_pendentes and documentos_pendentes|length > 0 %}
-    <div class="space-y-4">
+    <div class="space-y-4" id="lista-documentos-cards">
         {% for item in documentos_pendentes %}
         {% set doc = item.doc %}
         {% set nome = item.nome_arquivo %}
@@ -312,7 +318,7 @@
         {% endfor %}
     </div>
     {% else %}
-    <p class="text-gray-500 dark:text-gray-400 py-6 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-center">Nenhum documento pendente. Nada precisa da sua atenção no momento.</p>
+    <p id="documentos-empty-state" class="text-gray-500 dark:text-gray-400 py-6 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-center">Nenhum documento pendente. Nada precisa da sua atenção no momento.</p>
     {% endif %}
     </div>
 </section>
@@ -1040,13 +1046,7 @@
                         alert(data.mensagem || 'Documento vinculado com sucesso.');
                     }
                     verificarSelecaoMassa();
-
-                    // Se a fila esvaziou, mostra mensagem de vazio sem recarregar a página
-                    var listaDocs = document.querySelectorAll('#lista-documentos [id^="doc-"]');
-                    var container = document.getElementById('lista-documentos');
-                    if (container && listaDocs.length === 0) {
-                        container.innerHTML = '<p class="text-gray-500 dark:text-gray-400 py-6 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-center">Nenhum documento pendente. Nada precisa da sua atenção no momento.</p>';
-                    }
+                    garantirEmptyStateDocumentos();
                 } else {
                     var msg = data.mensagem || 'Erro ao vincular documento.';
                     if (typeof showToast === 'function') {
@@ -1110,6 +1110,29 @@ function toggleLoadingDocumentos(mostrar) {
     }
 }
 
+function totalCardsDocumentos() {
+    return document.querySelectorAll('#lista-documentos [id^="doc-"]').length;
+}
+
+function atualizarContadorLocalDocumentos() {
+    var lista = document.getElementById('lista-documentos');
+    if (!lista) return;
+    lista.dataset.docTotal = String(totalCardsDocumentos());
+}
+
+function garantirEmptyStateDocumentos() {
+    var lista = document.getElementById('lista-documentos');
+    if (!lista) return;
+    var total = totalCardsDocumentos();
+    var empty = document.getElementById('documentos-empty-state');
+    if (total === 0 && !empty) {
+        lista.innerHTML = '<p id="documentos-empty-state" class="text-gray-500 dark:text-gray-400 py-6 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-center">Nenhum documento pendente. Nada precisa da sua atenção no momento.</p>';
+    } else if (total > 0 && empty) {
+        empty.remove();
+    }
+    atualizarContadorLocalDocumentos();
+}
+
 function confirmarExclusaoArquivo(id, botaoEl) {
     if (!id) return;
     var confirmado = confirm('Tem certeza que deseja excluir este arquivo? Esta ação remove o registro e o PDF no Cloudinary.');
@@ -1148,7 +1171,19 @@ function confirmarExclusaoArquivo(id, botaoEl) {
     })
     .then(function(data) {
         if (typeof showToast === 'function') showToast('Arquivo excluído com sucesso.', 'success');
-        window.location.reload();
+        var card = document.getElementById('doc-' + id);
+        if (card) {
+            card.remove();
+        }
+        garantirEmptyStateDocumentos();
+        verificarSelecaoMassa();
+        toggleLoadingDocumentos(false);
+        exclusaoDocumentoEmAndamento = false;
+        if (botao) {
+            botao.disabled = false;
+            botao.classList.remove('opacity-60', 'cursor-not-allowed');
+            botao.innerHTML = htmlOriginal;
+        }
     })
     .catch(function(error) {
         toggleLoadingDocumentos(false);
@@ -1228,7 +1263,25 @@ async function deletarDocumentosSelecionados() {
             throw new Error(data.mensagem || 'Erro ao excluir documentos em massa.');
         }
 
-        window.location.reload();
+        ids.forEach(function(id) {
+            var card = document.getElementById('doc-' + id);
+            if (card) {
+                card.remove();
+            }
+        });
+        garantirEmptyStateDocumentos();
+        verificarSelecaoMassa();
+        toggleLoadingDocumentos(false);
+        exclusaoMassaEmAndamento = false;
+        if (btnMassa) {
+            btnMassa.disabled = false;
+            btnMassa.classList.add('hidden');
+            btnMassa.classList.remove('opacity-60', 'cursor-not-allowed');
+            btnMassa.innerHTML = textoOriginalBtn || 'Deletar Selecionados (<span id="countMassa">0</span>)';
+        }
+        if (typeof showToast === 'function') {
+            showToast(data.mensagem || 'Documento(s) excluído(s) com sucesso.', 'success');
+        }
     } catch (error) {
         toggleLoadingDocumentos(false);
         exclusaoMassaEmAndamento = false;
@@ -1246,6 +1299,49 @@ async function deletarDocumentosSelecionados() {
         }
     }
 }
+
+// Polling leve da fila de documentos (evita stale data no dashboard)
+(function() {
+    var btnAtualizarFila = document.getElementById('btn-atualizar-fila');
+    var badgeNovos = document.getElementById('badge-fila-novos');
+    var lista = document.getElementById('lista-documentos');
+    if (!lista) return;
+
+    function localTotal() {
+        return totalCardsDocumentos();
+    }
+
+    async function checarFilaSilencioso() {
+        try {
+            var resp = await fetch('/api/dashboard/documentos_pendentes/resumo?t=' + Date.now(), {
+                headers: { 'Accept': 'application/json', 'Cache-Control': 'no-cache' }
+            });
+            if (!resp.ok) return;
+            var data = await resp.json();
+            if (!data || !data.ok) return;
+            var totalServidor = Number(data.total || 0);
+            var totalLocal = localTotal();
+            if (totalServidor > totalLocal) {
+                if (badgeNovos) badgeNovos.classList.remove('hidden');
+            } else if (badgeNovos) {
+                badgeNovos.classList.add('hidden');
+            }
+        } catch (_) {
+            // Silencioso para não poluir UX com erro intermitente de rede.
+        }
+    }
+
+    if (btnAtualizarFila) {
+        btnAtualizarFila.addEventListener('click', function() {
+            btnAtualizarFila.disabled = true;
+            btnAtualizarFila.classList.add('opacity-70', 'cursor-not-allowed');
+            window.location.href = window.location.pathname + '?refresh_docs=' + Date.now();
+        });
+    }
+
+    setInterval(checarFilaSilencioso, 30000);
+    checarFilaSilencioso();
+})();
 
 // Modal de Detalhes Mensais
 function abrirDetalhesMes(ano, mes) {

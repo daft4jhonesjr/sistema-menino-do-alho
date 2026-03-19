@@ -1608,6 +1608,10 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
     # Se estiver capturando logs em memória, adicionar ao resultado
     if capturar_logs_memoria:
         resultado['logs'] = logs_memoria
+
+    # Invalida cache do dashboard quando houver mutação de documentos/vínculos.
+    if resultado.get('processados', 0) > 0 or resultado.get('vinculos_novos', 0) > 0:
+        limpar_cache_dashboard()
     
     return resultado
 
@@ -1857,6 +1861,8 @@ def _auto_vincular_documentos_pendentes_por_nf(user_id=None):
 
     try:
         db.session.commit()
+        if resultado.get('vinculados', 0) > 0:
+            limpar_cache_dashboard()
     except Exception as e:
         db.session.rollback()
         print(f"[auto_vinculo_nf] Erro no commit: {e}")
@@ -2394,9 +2400,17 @@ def add_cache_control_static(response):
 
 
 def limpar_cache_dashboard():
-    """Limpa o cache do dashboard quando há mudanças em vendas ou produtos."""
+    """Invalida o cache do dashboard de forma imediata e consistente.
+
+    Como o dashboard usa ``@cache.cached`` com key_prefix dinâmico, deletar
+    apenas uma chave fixa não é suficiente. Esta função usa versionamento de
+    chave: ao atualizar ``dashboard_cache_version``, todas as chaves antigas
+    deixam de ser reutilizadas instantaneamente.
+    """
     try:
-        # Limpa o cache específico da rota dashboard
+        nova_versao = str(int(datetime.utcnow().timestamp() * 1000))
+        cache.set('dashboard_cache_version', nova_versao, timeout=0)
+        # Compatibilidade retroativa com implementações anteriores.
         cache.delete('view//dashboard')
     except Exception:
         # Se houver erro, limpa todo o cache como fallback
@@ -2404,6 +2418,19 @@ def limpar_cache_dashboard():
             cache.clear()
         except Exception:
             pass  # Ignora erros de cache
+
+
+def _dashboard_cache_version() -> str:
+    """Retorna a versão atual da chave de cache do dashboard."""
+    try:
+        versao = cache.get('dashboard_cache_version')
+        if not versao:
+            versao = str(int(datetime.utcnow().timestamp() * 1000))
+            cache.set('dashboard_cache_version', versao, timeout=0)
+        return str(versao)
+    except Exception:
+        # Em caso de indisponibilidade do backend de cache, evita quebrar a view.
+        return 'no-cache'
 
 
 @login_manager.user_loader
@@ -3543,7 +3570,7 @@ def get_radar_recompra():
 
 @app.route('/dashboard')
 @login_required
-@cache.cached(timeout=300, key_prefix=lambda: f"dashboard:{getattr(current_user, 'id', 'anon')}:{session.get('csrf_token', 'no-csrf')}")  # Cache por 5 minutos, isolado por usuário/sessão CSRF
+@cache.cached(timeout=300, key_prefix=lambda: f"dashboard:v{_dashboard_cache_version()}:{getattr(current_user, 'id', 'anon')}")
 def dashboard():
     # Obter ano ativo da sessão
     ano_ativo = session.get('ano_ativo', datetime.now().year)
@@ -6125,6 +6152,30 @@ def api_dashboard_detalhes(filtro):
         import traceback
         traceback.print_exc()
         return jsonify({'erro': str(e)}), 500
+
+
+@app.route('/api/dashboard/documentos_pendentes/resumo', methods=['GET'])
+@login_required
+def api_dashboard_documentos_pendentes_resumo():
+    """Retorna resumo leve da fila de documentos pendentes para polling do dashboard."""
+    try:
+        base_query = Documento.query.filter(Documento.venda_id.is_(None))
+        total = base_query.count()
+        ultimo = base_query.with_entities(Documento.id).order_by(Documento.id.desc()).first()
+        ultimo_id = int(ultimo[0]) if ultimo else None
+        response = jsonify({
+            'ok': True,
+            'total': int(total),
+            'ultimo_id': ultimo_id,
+        })
+        # Sempre sem cache para refletir estado real da fila.
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
+    except Exception as e:
+        current_app.logger.error(f'Erro ao consultar resumo de documentos pendentes: {e}')
+        return jsonify({'ok': False, 'mensagem': 'Falha ao consultar documentos pendentes.'}), 500
 
 
 @app.route('/api/cliente/ultimo_pagamento', methods=['GET'])
@@ -8723,6 +8774,7 @@ def vincular_documento_venda(id):
             else:
                 vv.caminho_nf = path
         db.session.commit()
+        limpar_cache_dashboard()
     except Exception as e:
         db.session.rollback()
         print(f"[vincular_documento_venda] Erro ao vincular documento ID {id} na venda {venda_id}: {e}")
