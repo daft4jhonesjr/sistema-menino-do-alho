@@ -213,12 +213,6 @@
             <span id="badge-fila-novos" class="hidden text-xs font-semibold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 px-3 py-1 rounded-full">
                 Novos documentos disponíveis
             </span>
-            <form action="{{ url_for('organizar_e_vincular') }}" method="post" class="inline" id="form-organizar-vincular">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                <button type="submit" id="btn-organizar" class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2.5 text-base font-semibold text-white shadow-md hover:bg-emerald-700 hover:shadow-lg transition focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2">
-                    <i data-lucide="refresh-cw" class="w-5 h-5"></i>Organizar e Vincular Tudo
-                </button>
-            </form>
             <button type="button" id="btnDeletarMassa" onclick="deletarDocumentosSelecionados()" class="hidden bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded shadow transition-all duration-200">
                 Deletar Selecionados (<span id="countMassa">0</span>)
             </button>
@@ -1590,24 +1584,8 @@ function formatoMoeda(valor) {
     return 'R$ ' + (valor || 0).toFixed(2).replace('.', ',');
 }
 
-// Barra de progresso e loading do botão "Organizar e Vincular Tudo"
+// Inicialização de comportamentos do dashboard (drag and drop no desktop)
 document.addEventListener('DOMContentLoaded', function() {
-    var btnOrganizar = document.getElementById('btn-organizar');
-    var formOrganizar = document.getElementById('form-organizar-vincular');
-    var loadingContainer = document.getElementById('loading-container');
-    // Mantém o token CSRF original renderizado no form (input hidden),
-    // evitando sobrescrita por script que pode gerar mismatch.
-
-    if (btnOrganizar && loadingContainer) {
-        btnOrganizar.addEventListener('click', function() {
-            loadingContainer.classList.remove('hidden');
-            btnOrganizar.innerHTML = '<i data-lucide="loader-2" class="w-5 h-5 animate-spin"></i> Processando...';
-            btnOrganizar.style.pointerEvents = 'none';
-            btnOrganizar.classList.add('opacity-50');
-            if (typeof lucide !== 'undefined') lucide.createIcons();
-        });
-    }
-
     // SortableJS: Drag and Drop nos cartões do Dashboard (apenas Desktop)
     var isDesktop = window.innerWidth >= 1024;
     var grids = document.querySelectorAll('.sortable-grid');

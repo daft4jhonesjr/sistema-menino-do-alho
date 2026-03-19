@@ -2357,21 +2357,6 @@ def _executar_backup_diario_job() -> None:
             _log.warning(f"[backup] Web Push falhou: {e_push}")
 
 
-def background_organizar_tudo(usuario_id):
-    """Trabalho pesado executado pelo Worker do RQ em segundo plano."""
-    from app import app, db, _reprocessar_boletos_atualizar_extracao, organizar_arquivos, _processar_documentos_pendentes
-    with app.app_context():
-        try:
-            print("🤖 [WORKER] Iniciando leitura pesada de PDFs...")
-            _reprocessar_boletos_atualizar_extracao()
-            organizar_arquivos()
-            _processar_documentos_pendentes(user_id_forcado=usuario_id)
-            print("🤖 [WORKER] PDFs lidos, vinculados e enviados para a nuvem com sucesso!")
-        except Exception as e:
-            db.session.rollback()
-            print(f"🤖 [WORKER] ERRO FATAL: {str(e)}")
-
-
 # Criar pasta de uploads se não existir
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
@@ -8846,26 +8831,6 @@ def admin_reprocessar_vencimentos():
     </div>
 </body>
 </html>'''
-
-
-@app.route('/organizar_e_vincular', methods=['POST'])
-@login_required
-def organizar_e_vincular():
-    """Terceiriza o processamento para o robô de background."""
-    resultado_vinculo = _auto_vincular_documentos_pendentes_por_nf(user_id=current_user.id)
-    if resultado_vinculo.get('vinculados', 0) > 0:
-        flash(f"✅ {resultado_vinculo['vinculados']} documento(s) pendente(s) vinculado(s) por NF.", 'success')
-    if resultado_vinculo.get('erros', 0) > 0:
-        flash(f"⚠️ {resultado_vinculo['erros']} documento(s) não puderam ser vinculados automaticamente.", 'warning')
-
-    if fila_tarefas:
-        fila_tarefas.enqueue(background_organizar_tudo, current_user.id)
-        flash("⏳ O robô começou a ler os PDFs nos bastidores! Pode continuar navegando, os links aparecerão em breve.", 'info')
-    else:
-        # Fallback de segurança se o Redis falhar
-        background_organizar_tudo(current_user.id)
-        flash("Sucesso! Documentos processados.", 'success')
-    return redirect(url_for('dashboard'))
 
 
 @app.route('/documento/<int:id>/vincular', methods=['POST'])
