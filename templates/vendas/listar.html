@@ -157,12 +157,15 @@
 
                 <div id="menu-dropdown-acoes" class="hidden origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 z-50">
                     <div class="py-1">
+                        <a href="#" id="btn-menu-lancar-venda" class="group flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
+                            🛒&nbsp;Lançar Venda
+                        </a>
                         <a href="#" id="btn-menu-relatorio" class="group flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
-                            <i class="fas fa-file-pdf mr-3"></i> Gerar Relatório
+                            📄&nbsp;Gerar Relatório
                         </a>
                         {% if current_user.is_authenticated and current_user.is_admin() %}
                         <a href="{{ url_for('importar_vendas') }}" id="btn-menu-importar" class="group flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
-                            <i class="fas fa-file-upload mr-3"></i> Importar Lista
+                            📥&nbsp;Importar Lista
                         </a>
                         {% endif %}
                     </div>
@@ -2617,6 +2620,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const btnToggleForm = document.getElementById('btn-toggle-nova-venda');
     const btnDropdownSeta = document.getElementById('btn-dropdown-vendas');
     const menuDropdown = document.getElementById('menu-dropdown-acoes');
+    const btnMenuLancarVenda = document.getElementById('btn-menu-lancar-venda');
     const btnMenuRelatorio = document.getElementById('btn-menu-relatorio');
     const containerVenda = document.getElementById('container-nova-venda');
 
@@ -2641,6 +2645,15 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!btnDropdownSeta.contains(event.target) && !menuDropdown.contains(event.target)) {
                 menuDropdown.classList.add('hidden');
             }
+        });
+    }
+
+    // Opção "Lançar Venda" no dropdown
+    if (btnMenuLancarVenda && btnToggleForm) {
+        btnMenuLancarVenda.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (menuDropdown) menuDropdown.classList.add('hidden');
+            btnToggleForm.click();
         });
     }
 
