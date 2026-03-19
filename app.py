@@ -1605,6 +1605,75 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
     # #endregion
     _log_detalhado(f"DEBUG: Processamento finalizado: {resultado['processados']} processados, {resultado['vinculos_novos']} vinculados, {resultado['erros']} erros")
     
+    # ── PASSAGEM 2: documentos no BD sem arquivo local (URL-only / Cloudinary) ──
+    # _processar_documentos_pendentes itera apenas sobre arquivos físicos em disco.
+    # Documentos criados via bot com URL do Cloudinary (sem cópia local) nunca são
+    # alcançados pelo loop acima. Esta segunda passagem resolve o vínculo pendente
+    # usando apenas os metadados já extraídos (numero_nf, cnpj, etc.) no banco.
+    try:
+        docs_sem_arquivo = Documento.query.filter(
+            Documento.venda_id.is_(None),
+            Documento.numero_nf.isnot(None),
+            Documento.numero_nf != '',
+        ).all()
+
+        vendas_com_nf_cache = Venda.query.filter(
+            Venda.nf.isnot(None), Venda.nf != ''
+        ).options(joinedload(Venda.cliente)).limit(5000).all()
+
+        for doc_pendente in docs_sem_arquivo:
+            # Pular se existe localmente (já foi processado no loop acima)
+            if doc_pendente.caminho_arquivo:
+                pasta_tipo = 'boletos' if (doc_pendente.tipo or '').upper() == 'BOLETO' else 'notas_fiscais'
+                caminho_abs = os.path.join(
+                    os.path.dirname(os.path.abspath(__file__)),
+                    'documentos_entrada', pasta_tipo,
+                    os.path.basename(doc_pendente.caminho_arquivo or '')
+                )
+                if os.path.isfile(caminho_abs):
+                    continue  # Arquivo local existe; loop principal já tratou
+
+            nf_doc_raw = (doc_pendente.nf_extraida or doc_pendente.numero_nf or '').strip()
+            nf_doc_norm = _normalizar_nf(nf_doc_raw)
+            if not nf_doc_norm or nf_doc_norm in ('S/N', '0', ''):
+                continue
+
+            vendas_validas_p2 = [
+                v for v in vendas_com_nf_cache
+                if _nf_match(nf_doc_norm, _normalizar_nf(str(v.nf)))
+            ]
+            if len(vendas_validas_p2) != 1:
+                continue  # Ambiguidade ou não encontrado → triagem manual
+
+            venda_p2 = vendas_validas_p2[0]
+            try:
+                doc_pendente.venda_id = venda_p2.id
+                path_rel = (doc_pendente.caminho_arquivo or '').strip()
+                if path_rel:
+                    for vv in _vendas_do_pedido(venda_p2):
+                        if (doc_pendente.tipo or '').upper() == 'BOLETO':
+                            vv.caminho_boleto = path_rel
+                            if doc_pendente.data_vencimento:
+                                vv.data_vencimento = doc_pendente.data_vencimento
+                        else:
+                            vv.caminho_nf = path_rel
+                db.session.commit()
+                resultado['vinculos_novos'] += 1
+                resultado['mensagens'].append(
+                    f"✅ [P2] Doc ID {doc_pendente.id} (NF {nf_doc_raw}) vinculado à venda {venda_p2.id}."
+                )
+                _log_detalhado(
+                    f"[P2-url-only] Doc ID {doc_pendente.id} (NF {nf_doc_raw}) "
+                    f"→ Venda {venda_p2.id} (Cliente: {venda_p2.cliente.nome_cliente})."
+                )
+            except Exception as e_p2:
+                db.session.rollback()
+                _log_detalhado(f"[P2-url-only] ERRO ao vincular doc ID {doc_pendente.id}: {e_p2}")
+    except Exception as e_p2_outer:
+        db.session.rollback()
+        _log_detalhado(f"[P2-url-only] ERRO na passagem 2: {e_p2_outer}")
+    # ─────────────────────────────────────────────────────────────────────────
+
     # Se estiver capturando logs em memória, adicionar ao resultado
     if capturar_logs_memoria:
         resultado['logs'] = logs_memoria
@@ -1787,6 +1856,13 @@ def _listar_documentos_recem_chegados():
 
     Regra de negócio da fila "Documentos Recém-Chegados":
     - exibir apenas documentos sem vínculo com venda (``venda_id IS NULL``)
+
+    AUTO-LINK:
+    Quando ``_diagnosticar_vinculo_falhou`` retorna cenário 'A' (exatamente uma
+    venda correspondente à NF), o vínculo é gravado imediatamente — o documento
+    nunca fica preso na fila exibindo a mensagem azul "NF encontrada" sem ser
+    resolvido automaticamente.  Isso cobre documentos sem arquivo local (uploads
+    via bot/Cloudinary) que o ``_processar_documentos_pendentes`` nunca alcança.
     """
     resultado_processamento = {"sucesso": 0, "falha": 0, "erros": [], "vinculos_novos": 0, "processados": 0}
     query = Documento.query.filter(
@@ -1798,6 +1874,43 @@ def _listar_documentos_recem_chegados():
     documentos = []
     for doc in docs:
         diag = _diagnosticar_vinculo_falhou(doc)
+
+        # ── AUTO-LINK: cenário A = 1 venda única encontrada ───────────────────
+        # O diagnóstico já fez a busca e conhece o venda_id correto. Em vez de
+        # apenas exibir a mensagem azul esperando clique manual, efetuar o
+        # commit aqui mesmo garante que o documento saia da fila imediatamente.
+        if diag and diag.get('cenario') == 'A':
+            venda_id_diag = diag.get('venda_id')
+            if venda_id_diag:
+                try:
+                    doc.venda_id = venda_id_diag
+                    venda_alvo = db.session.get(Venda, venda_id_diag)
+                    if venda_alvo and doc.caminho_arquivo:
+                        path_rel = doc.caminho_arquivo
+                        for vv in _vendas_do_pedido(venda_alvo):
+                            if (doc.tipo or '').upper() == 'BOLETO':
+                                vv.caminho_boleto = path_rel
+                                if doc.data_vencimento:
+                                    vv.data_vencimento = doc.data_vencimento
+                            else:
+                                vv.caminho_nf = path_rel
+                    db.session.commit()
+                    resultado_processamento['vinculos_novos'] += 1
+                    current_app.logger.info(
+                        f"[auto-link-dashboard] Documento ID {doc.id} "
+                        f"(NF {doc.numero_nf}) vinculado à venda {venda_id_diag}."
+                    )
+                    # Documento agora tem venda_id → NÃO entra na fila pendente.
+                    continue
+                except Exception as exc:
+                    db.session.rollback()
+                    current_app.logger.warning(
+                        f"[auto-link-dashboard] Falha ao vincular doc ID {doc.id} "
+                        f"→ venda {venda_id_diag}: {exc}"
+                    )
+                    # Em caso de falha, o documento cai na fila normalmente.
+        # ─────────────────────────────────────────────────────────────────────
+
         nf_nao = diag is not None and diag.get('cenario') == 'C' and 'não localizada' in (diag.get('mensagem') or '')
         documentos.append({
                 'doc': doc,
