@@ -2,6 +2,10 @@
 
 {% block title %}Logística - Menino do Alho{% endblock %}
 
+{% block head_extras %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+{% endblock %}
+
 {% block content %}
 <div class="w-full px-4 sm:px-6 lg:px-8 pb-6">
 
@@ -72,7 +76,10 @@
                     </td>
                     <td class="px-6 py-4 text-sm font-semibold text-emerald-600 dark:text-emerald-400 text-right">{{ e.total | formato_moeda }}</td>
                     <td class="px-6 py-4 text-center">
-                        <form method="post" action="{{ url_for('toggle_entrega', venda_id=e.ids[0], status=filtro_status) }}" class="inline" onsubmit="return confirm('{% if filtro_status == 'PENDENTE' %}Tem certeza que deseja marcar este pedido como ENTREGUE?{% else %}Tem certeza que deseja desfazer e voltar o pedido para PENDENTE?{% endif %}');">
+                        <form method="post" action="{{ url_for('toggle_entrega', venda_id=e.ids[0], status=filtro_status) }}" class="inline form-swal-confirm"
+                              data-title="{% if filtro_status == 'PENDENTE' %}Confirmar Entrega{% else %}Desfazer Entrega{% endif %}"
+                              data-message="{% if filtro_status == 'PENDENTE' %}Deseja marcar este pedido como ENTREGUE?{% else %}Deseja reverter este pedido para PENDENTE?{% endif %}"
+                              data-confirm-text="{% if filtro_status == 'PENDENTE' %}Sim, marcar como entregue{% else %}Sim, reverter{% endif %}">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                             <input type="hidden" name="ids" value="{{ e.ids|join(',') }}"/>
                             {% if filtro_status == 'PENDENTE' %}
@@ -148,9 +155,11 @@
         var acaoClasse = filtroStatusAtual === 'PENDENTE'
             ? 'text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300'
             : 'text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300';
-        var confirmarMsg = filtroStatusAtual === 'PENDENTE'
-            ? 'Tem certeza que deseja marcar este pedido como ENTREGUE?'
-            : 'Tem certeza que deseja desfazer e voltar o pedido para PENDENTE?';
+        var confirmarTitle = filtroStatusAtual === 'PENDENTE' ? 'Confirmar Entrega' : 'Desfazer Entrega';
+        var confirmarMsg   = filtroStatusAtual === 'PENDENTE'
+            ? 'Deseja marcar este pedido como ENTREGUE?'
+            : 'Deseja reverter este pedido para PENDENTE?';
+        var confirmarBtnTxt = filtroStatusAtual === 'PENDENTE' ? 'Sim, marcar como entregue' : 'Sim, reverter';
 
         var idsLista = Array.isArray(e.ids) ? e.ids : [];
         var idsRaw = idsLista.map(function(v) { return String(v); }).join(',');
@@ -168,7 +177,7 @@
             + '<td class="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">' + produtosHtml + '</td>'
             + '<td class="px-6 py-4 text-sm font-semibold text-emerald-600 dark:text-emerald-400 text-right">' + formatMoeda(e.total) + '</td>'
             + '<td class="px-6 py-4 text-center">'
-            + '  <form method="post" action="/logistica/toggle/' + encodeURIComponent(vendaRef) + '?status=' + encodeURIComponent(filtroStatusAtual) + '" class="inline" onsubmit="return confirm(\'' + confirmarMsg + '\');">'
+            + '  <form method="post" action="/logistica/toggle/' + encodeURIComponent(vendaRef) + '?status=' + encodeURIComponent(filtroStatusAtual) + '" class="inline form-swal-confirm" data-title="' + escapeHtml(confirmarTitle) + '" data-message="' + escapeHtml(confirmarMsg) + '" data-confirm-text="' + escapeHtml(confirmarBtnTxt) + '">'
             + '    <input type="hidden" name="csrf_token" value="' + escapeHtml(csrfToken) + '"/>'
             + '    <input type="hidden" name="ids" value="' + escapeHtml(idsRaw) + '"/>'
             + '    <button type="submit" class="' + acaoClasse + ' text-sm font-medium">' + acaoTexto + '</button>'
@@ -245,14 +254,67 @@
     if (typeof lucide !== 'undefined') lucide.createIcons();
 })();
 
+/* ── Helpers SweetAlert2 ──────────────────────────────────────────────── */
+function _swalBase() {
+    const dark = document.documentElement.classList.contains('dark');
+    return {
+        background: dark ? '#1F2937' : '#FFFFFF',
+        color:      dark ? '#F9FAFB' : '#111827',
+        confirmButtonColor: '#059669',
+        cancelButtonColor:  '#6B7280',
+    };
+}
+
+function _swalAviso(texto) {
+    Swal.fire(Object.assign(_swalBase(), {
+        icon: 'warning',
+        title: 'Atenção',
+        text: texto,
+        confirmButtonText: 'Ok',
+    }));
+}
+
+function _swalErro(texto) {
+    Swal.fire(Object.assign(_swalBase(), {
+        icon: 'error',
+        title: 'Erro',
+        text: texto,
+        confirmButtonText: 'Fechar',
+    }));
+}
+
+/* ── Handler delegado para forms com class="form-swal-confirm" ────────── */
+document.addEventListener('submit', function(e) {
+    const form = e.target;
+    if (!form.classList.contains('form-swal-confirm')) return;
+    if (form.dataset.swalConfirmed === '1') return; // já confirmado
+
+    e.preventDefault();
+
+    const dark = document.documentElement.classList.contains('dark');
+    Swal.fire(Object.assign(_swalBase(), {
+        title:             form.dataset.title   || 'Confirmar?',
+        text:              form.dataset.message || 'Deseja continuar?',
+        icon:              'question',
+        showCancelButton:  true,
+        confirmButtonText: form.dataset.confirmText || 'Confirmar',
+        cancelButtonText:  'Cancelar',
+    })).then(function(result) {
+        if (result.isConfirmed) {
+            form.dataset.swalConfirmed = '1';
+            form.submit();
+        }
+    });
+});
+
+/* ── Rota no Maps ─────────────────────────────────────────────────────── */
 function gerarRotaMaps() {
     const selecionados = document.querySelectorAll('.check-entrega:checked');
     const enderecos = [];
-
     const vistos = new Set();
+
     selecionados.forEach(cb => {
         const end = cb.dataset.endereco;
-        // Evita duplicidade se o cliente tiver 2 pedidos
         if (end && end.trim() !== '' && !vistos.has(end.trim())) {
             vistos.add(end.trim());
             enderecos.push(encodeURIComponent(end));
@@ -260,63 +322,68 @@ function gerarRotaMaps() {
     });
 
     if (enderecos.length === 0) {
-        alert('Selecione pelo menos um pedido com endereço válido para gerar a rota!');
+        _swalAviso('Selecione pelo menos um pedido com endereço válido para gerar a rota!');
         return;
     }
 
-    // URL base oficial para rotas (Directions)
-    let url = "https://www.google.com/maps/dir/?api=1&travelmode=driving";
-    // Remove o último item do array para ser o destino final
+    let url = 'https://www.google.com/maps/dir/?api=1&travelmode=driving';
     const destination = enderecos.pop();
-    url += "&destination=" + destination;
-
-    // Se sobrar endereços, adiciona como paradas (waypoints) separadas por | (%7C)
+    url += '&destination=' + destination;
     if (enderecos.length > 0) {
-        const waypoints = enderecos.join('%7C');
-        url += "&waypoints=" + waypoints;
+        url += '&waypoints=' + enderecos.join('%7C');
     }
-
     window.open(url, '_blank');
 }
 
+/* ── Atualizar em massa ───────────────────────────────────────────────── */
 function atualizarStatusMassa(novoStatus) {
     const selecionados = document.querySelectorAll('.check-entrega:checked');
     const idsSet = new Set();
     selecionados.forEach(function(cb) {
-        var raw = cb.getAttribute('data-ids') || cb.value || '';
+        const raw = cb.getAttribute('data-ids') || cb.value || '';
         raw.split(',').forEach(function(idTxt) {
-            var id = parseInt((idTxt || '').trim(), 10);
+            const id = parseInt((idTxt || '').trim(), 10);
             if (!isNaN(id)) idsSet.add(id);
         });
     });
     const ids = Array.from(idsSet);
 
     if (ids.length === 0) {
-        alert('Selecione pelo menos um pedido!');
+        _swalAviso('Selecione pelo menos um pedido!');
         return;
     }
 
-    const textoAcao = novoStatus === 'ENTREGUE' ? 'marcar como ENTREGUE' : 'voltar para PENDENTE';
-    if (!confirm(`Tem certeza que deseja ${textoAcao} os ${ids.length} pedidos selecionados?`)) {
-        return;
-    }
+    const ehEntrega   = novoStatus === 'ENTREGUE';
+    const textoAcao   = ehEntrega ? 'marcar como ENTREGUES' : 'voltar para PENDENTE';
+    const btnTexto    = ehEntrega ? 'Sim, marcar como entregues!' : 'Sim, reverter para pendente!';
+    const bulkUrl     = "{{ url_for('logistica_bulk_update') }}";
 
-    fetch("{{ url_for('logistica_bulk_update') }}", {
-        method: 'POST',
-        headers: Object.assign({ 'Content-Type': 'application/json' }, window.getCsrfHeaders ? window.getCsrfHeaders() : {}),
-        body: JSON.stringify({ ids: ids, status: novoStatus })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            window.location.reload();
-        } else {
-            alert('Erro: ' + data.message);
-        }
-    })
-    .catch(error => {
-        console.error('Erro:', error);
-        alert('Erro ao processar a solicitação no servidor.');
+    Swal.fire(Object.assign(_swalBase(), {
+        title:             'Confirmar ' + (ehEntrega ? 'Entregas' : 'Reversão') + '?',
+        text:              `Tem certeza que deseja ${textoAcao} os ${ids.length} pedido(s) selecionado(s)?`,
+        icon:              'question',
+        showCancelButton:  true,
+        confirmButtonText: btnTexto,
+        cancelButtonText:  'Cancelar',
+    })).then(function(result) {
+        if (!result.isConfirmed) return;
+
+        fetch(bulkUrl, {
+            method:  'POST',
+            headers: Object.assign({ 'Content-Type': 'application/json' }, window.getCsrfHeaders ? window.getCsrfHeaders() : {}),
+            body:    JSON.stringify({ ids: ids, status: novoStatus }),
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                window.location.reload();
+            } else {
+                _swalErro('Erro: ' + (data.message || 'Resposta inválida do servidor.'));
+            }
+        })
+        .catch(function() {
+            _swalErro('Erro de conexão ao processar a solicitação. Tente novamente.');
+        });
     });
 }
 </script>
