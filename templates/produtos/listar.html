@@ -32,9 +32,6 @@
         <button type="button" id="bulk-delete-btn" class="hidden bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-xl transition duration-200 ease-in-out flex items-center justify-center w-full sm:w-auto" data-endpoint="{{ url_for('bulk_delete_produtos') }}" data-redirect="{{ url_for('listar_produtos', ordem_data=ordem_data) }}">
             <i data-lucide="trash-2" class="w-4 h-4 mr-2"></i>Excluir Selecionados
         </button>
-        <button type="button" onclick="abrirModalRelatorioProdutos()" class="w-full sm:w-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 px-4 py-2 rounded-md font-semibold text-sm hover:bg-emerald-50 dark:hover:bg-gray-700 transition-colors flex items-center justify-center gap-2">
-            <i data-lucide="file-down" class="w-4 h-4"></i>Gerar Relatorio
-        </button>
         <div class="inline-flex rounded-md shadow-sm" id="grupo-botoes-entrada">
             <button type="button" id="btn-toggle-nova-entrada" class="inline-flex items-center px-6 py-3 rounded-l-md border border-transparent bg-emerald-700 text-lg font-medium text-white hover:bg-emerald-800 transition-colors">
                 📦 Nova Entrada
@@ -47,6 +44,9 @@
 
                 <div id="dropdown-entrada" class="hidden origin-top-right absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 z-50">
                     <div class="py-1">
+                        <button type="button" onclick="fecharDropdownEntrada();abrirModalRelatorioProdutos();" class="group flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
+                            📄&nbsp;Gerar Relatorio
+                        </button>
                         {% if current_user.is_authenticated and current_user.is_admin() %}
                         <a href="{{ url_for('importar_produtos') }}" class="group flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700" onclick="fecharDropdownEntrada()">
                             📥&nbsp;Importar Lista
