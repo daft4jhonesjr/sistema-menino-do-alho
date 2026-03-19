@@ -145,27 +145,27 @@
         <p class="text-gray-600 dark:text-gray-400">Gerenciar vendas realizadas</p>
     </div>
     <div class="w-full sm:w-auto">
-        <div class="relative inline-block text-left w-full sm:w-auto">
-            <button id="btn-dropdown-acoes" class="inline-flex justify-center w-full rounded-md border border-transparent shadow-sm px-4 py-2 bg-emerald-600 text-base font-medium text-white hover:bg-emerald-700 focus:outline-none transition sm:text-sm items-center gap-2">
-                Nova Venda
-                <i class="fas fa-chevron-down text-xs"></i>
+        <div class="inline-flex rounded-md shadow-sm w-full sm:w-auto">
+            <button type="button" id="btn-toggle-nova-venda" class="relative inline-flex items-center px-4 py-2 rounded-l-md border border-transparent bg-emerald-600 text-sm font-medium text-white hover:bg-emerald-700 focus:z-10 focus:outline-none transition-colors w-full sm:w-auto justify-center">
+                <i class="fas fa-plus mr-2"></i> Nova Venda
             </button>
 
-            <div id="menu-dropdown-acoes" class="hidden origin-top-right absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 divide-y divide-gray-100 dark:divide-gray-700 focus:outline-none z-50">
-                <div class="py-1">
-                    <a href="#" id="btn-toggle-nova-venda" class="group flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-emerald-50 dark:hover:bg-emerald-900 hover:text-emerald-700 dark:hover:text-emerald-300">
-                        <i class="fas fa-cart-plus mr-3"></i> Lançar Venda
-                    </a>
-                </div>
-                <div class="py-1">
-                    <a href="#" id="btn-menu-relatorio" class="group flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
-                        <i class="fas fa-file-pdf mr-3"></i> Gerar Relatório
-                    </a>
-                    {% if current_user.is_authenticated and current_user.is_admin() %}
-                    <a href="{{ url_for('importar_vendas') }}" id="btn-menu-importar" class="group flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
-                        <i class="fas fa-file-upload mr-3"></i> Importar Lista
-                    </a>
-                    {% endif %}
+            <div class="relative block">
+                <button type="button" id="btn-dropdown-seta" class="relative inline-flex items-center px-3 py-2 rounded-r-md border-l border-emerald-700 bg-emerald-600 text-sm font-medium text-white hover:bg-emerald-700 focus:z-10 focus:outline-none transition-colors h-full">
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+
+                <div id="menu-dropdown-acoes" class="hidden origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 z-50">
+                    <div class="py-1">
+                        <a href="#" id="btn-menu-relatorio" class="group flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
+                            <i class="fas fa-file-pdf mr-3"></i> Gerar Relatório
+                        </a>
+                        {% if current_user.is_authenticated and current_user.is_admin() %}
+                        <a href="{{ url_for('importar_vendas') }}" id="btn-menu-importar" class="group flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
+                            <i class="fas fa-file-upload mr-3"></i> Importar Lista
+                        </a>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
         </div>
@@ -2614,32 +2614,33 @@ document.addEventListener('DOMContentLoaded', function() {
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const btnDropdown = document.getElementById('btn-dropdown-acoes');
+    const btnToggleForm = document.getElementById('btn-toggle-nova-venda');
+    const btnDropdownSeta = document.getElementById('btn-dropdown-seta');
     const menuDropdown = document.getElementById('menu-dropdown-acoes');
-    const btnToggle = document.getElementById('btn-toggle-nova-venda');
     const btnMenuRelatorio = document.getElementById('btn-menu-relatorio');
     const containerVenda = document.getElementById('container-nova-venda');
 
-    // Toggle do menu dropdown
-    if (btnDropdown && menuDropdown) {
-        btnDropdown.addEventListener('click', function(event) {
+    // 1) Botão principal: mostrar/esconder formulário + carrinho
+    if (btnToggleForm && containerVenda) {
+        btnToggleForm.addEventListener('click', function(e) {
+            e.preventDefault();
+            containerVenda.classList.toggle('hidden');
+            if (menuDropdown) menuDropdown.classList.add('hidden');
+        });
+    }
+
+    // 2) Setinha: abrir/fechar dropdown de ações
+    if (btnDropdownSeta && menuDropdown) {
+        btnDropdownSeta.addEventListener('click', function(event) {
             event.stopPropagation();
             menuDropdown.classList.toggle('hidden');
         });
 
+        // Fechar ao clicar fora
         document.addEventListener('click', function(event) {
-            if (!btnDropdown.contains(event.target) && !menuDropdown.contains(event.target)) {
+            if (!btnDropdownSeta.contains(event.target) && !menuDropdown.contains(event.target)) {
                 menuDropdown.classList.add('hidden');
             }
-        });
-    }
-
-    // Opção "Lançar Venda" no dropdown
-    if (btnToggle && containerVenda) {
-        btnToggle.addEventListener('click', function(e) {
-            e.preventDefault();
-            containerVenda.classList.toggle('hidden');
-            if (menuDropdown) menuDropdown.classList.add('hidden');
         });
     }
 
