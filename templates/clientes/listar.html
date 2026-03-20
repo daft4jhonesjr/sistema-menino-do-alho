@@ -16,8 +16,8 @@
         <button type="button" id="bulk-delete-btn" class="hidden bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-xl transition duration-200 ease-in-out flex items-center" data-endpoint="{{ url_for('bulk_delete_clientes') }}" data-redirect="{{ url_for('listar_clientes') }}">
             <i data-lucide="trash-2" class="w-4 h-4 mr-2"></i>Excluir Selecionados
         </button>
-        <div id="dropdown-novo-cliente-wrap" class="inline-flex rounded-md shadow-sm">
-            <button type="button" id="btn-abrir-modal-novo-cliente" class="inline-flex items-center px-6 py-3 rounded-l-md border border-transparent bg-emerald-700 text-lg font-medium text-white hover:bg-emerald-800 transition-colors">
+        <div id="dropdown-novo-cliente-wrap" class="flex w-full sm:w-auto sm:inline-flex rounded-md shadow-sm">
+            <button type="button" id="btn-abrir-modal-novo-cliente" class="flex-1 justify-center inline-flex items-center px-6 py-3 rounded-l-md border border-transparent bg-emerald-700 text-lg font-medium text-white hover:bg-emerald-800 transition-colors">
                 👤 Novo Cliente
             </button>
 
