@@ -53,3 +53,7 @@ node_modules/
 # Environment
 .env
 .env.local
+
+# Logs (gerados em runtime — não versionar os arquivos, mas manter a pasta)
+logs/*.log
+logs/*.log.*

@@ -2037,17 +2037,17 @@ _logs_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
 if not os.path.exists(_logs_dir):
     os.mkdir(_logs_dir)
 
-_logs_file = os.path.join(_logs_dir, 'erros.log')
-file_handler = RotatingFileHandler(_logs_file, maxBytes=1024000, backupCount=1)
+_logs_file = os.path.join(_logs_dir, 'erros_sistema.log')
+file_handler = RotatingFileHandler(_logs_file, maxBytes=1_048_576, backupCount=5)
 file_handler.setFormatter(logging.Formatter(
-    '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'
+    '%(asctime)s %(levelname)-8s: %(message)s [%(pathname)s:%(lineno)d]'
 ))
-file_handler.setLevel(logging.ERROR)
+file_handler.setLevel(logging.INFO)
 
 if not any(isinstance(h, RotatingFileHandler) and getattr(h, 'baseFilename', '') == _logs_file for h in app.logger.handlers):
     app.logger.addHandler(file_handler)
-app.logger.setLevel(logging.ERROR)
-app.logger.info('Sistema de Logs Iniciado')
+app.logger.setLevel(logging.INFO)
+app.logger.info('Sistema Menino do Alho inicializado.')
 
 # Sessão e "Lembrar-me": persistir por 30 dias
 app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=30)
@@ -3607,15 +3607,42 @@ def handle_exception(e):
     """Interceptador global de exceções para registrar falhas não tratadas."""
     if isinstance(e, HTTPException):
         return e
-    app.logger.error(f"Erro Crítico não Tratado: {str(e)}\n{traceback.format_exc()}")
-    return "Ocorreu um erro interno no servidor. A equipe técnica foi notificada nos logs.", 500
+
+    try:
+        user_info = current_user.username if current_user.is_authenticated else 'Anonimo'
+    except Exception:
+        user_info = 'Desconhecido'
+
+    try:
+        url_info = request.url
+        method_info = request.method
+    except Exception:
+        url_info = '(sem contexto de requisição)'
+        method_info = ''
+
+    app.logger.error(
+        f"ERRO 500 | Usuário: {user_info} | {method_info} {url_info}\n"
+        f"{traceback.format_exc()}",
+        exc_info=False,
+    )
+
+    if request.accept_mimetypes.accept_json and not request.accept_mimetypes.accept_html:
+        return jsonify({'erro': 'Erro interno no servidor.'}), 500
+
+    try:
+        return render_template('500.html'), 500
+    except Exception:
+        return "Ocorreu um erro interno. A equipe técnica foi notificada nos logs.", 500
 
 
 @app.errorhandler(500)
 def erro_interno(e):
-    """Página amigável para erros 500. Evita exibir traceback no navegador."""
-    current_app.logger.error(f"Erro interno: {e}")
-    return render_template('500.html'), 500
+    """Handler explícito de 500 — cobre erros levantados diretamente pelo Flask."""
+    try:
+        app.logger.error(f"Erro 500 explícito: {e}", exc_info=True)
+        return render_template('500.html'), 500
+    except Exception:
+        return "Erro interno no servidor.", 500
 
 
 @app.route('/')
