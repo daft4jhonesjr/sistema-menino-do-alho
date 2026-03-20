@@ -143,6 +143,22 @@
             </div>
             <textarea id="logMonitor" readonly class="w-full h-64 bg-slate-900 text-emerald-400 font-mono text-xs p-4 rounded outline-none resize-none" placeholder="Carregando logs..."></textarea>
         </div>
+
+        <div class="mb-6 border border-red-300 dark:border-red-800 rounded-lg p-4 bg-red-50 dark:bg-red-950/30">
+            <div class="flex items-center justify-between mb-3">
+                <div>
+                    <h4 class="font-bold text-red-700 dark:text-red-400">🚨 Histórico de Erros Críticos <span class="font-normal text-xs text-red-500 dark:text-red-500 ml-1">(erros_sistema.log — snapshot do carregamento)</span></h4>
+                    <p class="text-xs text-red-500 dark:text-red-500 mt-0.5">Exibe as últimas 100 linhas registradas no momento em que a página foi carregada. Use o monitor acima para atualizar em tempo real.</p>
+                </div>
+                <button type="button" id="btnLimparErrosCriticos"
+                    class="bg-red-700 hover:bg-red-800 text-white text-sm font-bold py-2 px-3 rounded transition-colors whitespace-nowrap ml-4">
+                    🗑️ Limpar
+                </button>
+            </div>
+            <textarea id="logErrosCriticos" readonly
+                class="w-full h-72 bg-slate-950 text-amber-400 font-mono text-xs p-4 rounded outline-none resize-none"
+                placeholder="Nenhum erro crítico registrado ainda.">{{ erros_log_content | default('Nenhum erro crítico registrado ainda.') }}</textarea>
+        </div>
         {% endif %}
     </div>
 </div>
@@ -405,6 +421,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 throw new Error((data && data.mensagem) || 'Erro ao limpar logs.');
             }
             monitor.value = 'Nenhum erro registrado ainda.';
+            // Também limpa o bloco server-side para manter consistência visual
+            var errosCriticos = document.getElementById('logErrosCriticos');
+            if (errosCriticos) errosCriticos.value = 'Nenhum erro crítico registrado ainda.';
             if (typeof showToast === 'function') showToast('Logs limpos com sucesso.', 'success');
         } catch (err) {
             if (typeof showToast === 'function') {
@@ -415,10 +434,52 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    async function limparErrosCriticos() {
+        var errosCriticos = document.getElementById('logErrosCriticos');
+        if (!confirm('Tem certeza que deseja limpar o histórico de erros críticos?')) return;
+        try {
+            var headers = {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            };
+            if (typeof getCsrfHeaders === 'function') {
+                var csrfHeaders = getCsrfHeaders();
+                for (var k in csrfHeaders) headers[k] = csrfHeaders[k];
+            }
+            var response = await fetch('/api/logs/limpar', {
+                method: 'POST',
+                headers: headers
+            });
+            var data = await response.json();
+            if (!response.ok || (data && data.status === 'erro')) {
+                throw new Error((data && data.mensagem) || 'Erro ao limpar logs.');
+            }
+            if (errosCriticos) errosCriticos.value = 'Nenhum erro crítico registrado ainda.';
+            // Também limpa o monitor AJAX para manter consistência visual
+            var monitor = document.getElementById('logMonitor');
+            if (monitor) monitor.value = 'Nenhum erro registrado ainda.';
+            if (typeof showToast === 'function') showToast('Histórico de erros limpo com sucesso.', 'success');
+        } catch (err) {
+            if (typeof showToast === 'function') {
+                showToast((err && err.message) ? err.message : 'Erro ao limpar.', 'error');
+            } else {
+                alert((err && err.message) ? err.message : 'Erro ao limpar.');
+            }
+        }
+    }
+
     var btnAtualizarLogs = document.getElementById('btnAtualizarLogs');
     var btnLimparLogs = document.getElementById('btnLimparLogs');
+    var btnLimparErrosCriticos = document.getElementById('btnLimparErrosCriticos');
     if (btnAtualizarLogs) btnAtualizarLogs.addEventListener('click', carregarLogs);
     if (btnLimparLogs) btnLimparLogs.addEventListener('click', limparLogs);
+    if (btnLimparErrosCriticos) btnLimparErrosCriticos.addEventListener('click', limparErrosCriticos);
+
+    // Scroll automático para o final do bloco de erros críticos ao carregar
+    var errosCriticosEl = document.getElementById('logErrosCriticos');
+    if (errosCriticosEl && errosCriticosEl.value.trim() && errosCriticosEl.value.trim() !== 'Nenhum erro crítico registrado ainda.') {
+        errosCriticosEl.scrollTop = errosCriticosEl.scrollHeight;
+    }
     if (document.getElementById('logMonitor')) carregarLogs();
 
     // Botão de teste de Push Notification

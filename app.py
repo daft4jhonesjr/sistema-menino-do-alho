@@ -3195,7 +3195,19 @@ def configuracoes():
         db.session.commit()
         flash('Configurações de notificação atualizadas com sucesso!', 'success')
         return redirect(url_for('configuracoes'))
-    return render_template('configuracoes.html', usuario=usuario)
+
+    # Lê as últimas 100 linhas do log de erros críticos para exibição server-side
+    erros_log_content = 'Nenhum erro crítico registrado ainda.'
+    if current_user.is_admin():
+        try:
+            if os.path.exists(_logs_file):
+                with open(_logs_file, 'r', encoding='utf-8') as f:
+                    linhas = f.readlines()
+                erros_log_content = ''.join(linhas[-100:]) if linhas else 'Log de erros vazio.'
+        except Exception as e:
+            erros_log_content = f'Não foi possível ler o log de erros: {str(e)}'
+
+    return render_template('configuracoes.html', usuario=usuario, erros_log_content=erros_log_content)
 
 
 @app.route('/api/logs/erros', methods=['GET'])
@@ -3221,7 +3233,9 @@ def limpar_logs_erros():
     if not current_user.is_admin():
         return jsonify({'status': 'erro', 'mensagem': 'Acesso negado.'}), 403
     try:
-        open(_logs_file, 'w', encoding='utf-8').close()
+        # Trunca o log de erros críticos (erros_sistema.log)
+        with open(_logs_file, 'w', encoding='utf-8') as f:
+            pass
         return jsonify({'status': 'sucesso'})
     except Exception as e:
         app.logger.error(f"Erro ao limpar logs: {str(e)}\n{traceback.format_exc()}")
