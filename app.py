@@ -63,28 +63,16 @@ def get_hoje_brasil():
         return date.today()
 
 
-# #region agent log
-_log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.cursor')
-DEBUG_LOG_PATH = os.path.join(_log_dir, 'debug.log')
-def _debug_sanitize(obj):
-    if obj is None or isinstance(obj, (bool, int, float, str)):
-        return obj
-    if isinstance(obj, (list, tuple)):
-        return [_debug_sanitize(x) for x in obj]
-    if isinstance(obj, dict):
-        return {str(k): _debug_sanitize(v) for k, v in obj.items()}
-    return str(obj)
-def _debug_log(location, message, data, hypothesis_id, run_id="run1"):
-    try:
-        os.makedirs(_log_dir, exist_ok=True)
-        safe = _debug_sanitize(data) if data is not None else {}
-        payload = {"location": location, "message": message, "data": safe, "hypothesisId": hypothesis_id, "timestamp": int(__import__("time").time() * 1000), "sessionId": "debug-session", "runId": run_id}
-        with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
-            f.write(json.dumps(payload, ensure_ascii=False) + "\n")
-            f.flush()
-    except Exception as e:
-        print(f"DEBUG LOG ERROR: {e}")
-# #endregion
+# Extensões aceitas para upload de imagens (perfil, produto, cheque)
+_ALLOWED_IMAGE_EXT = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+
+def _arquivo_imagem_permitido(filename: str) -> bool:
+    """Retorna True se a extensão do arquivo é uma imagem permitida."""
+    return (
+        bool(filename)
+        and '.' in filename
+        and filename.rsplit('.', 1)[1].lower() in _ALLOWED_IMAGE_EXT
+    )
 
 
 def registrar_log(acao: str, modulo: str, descricao: str) -> None:
@@ -1100,30 +1088,11 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
     # Lista para capturar logs em memória (usado pelo endpoint de debug)
     logs_memoria = []
     
-    # Arquivo de log detalhado para análise (usando diretório raiz do projeto com permissão de escrita)
-    base_path = os.path.dirname(os.path.abspath(__file__))
-    log_detalhado_path = os.path.join(base_path, 'vinculo_detalhado.log')
-    try:
-        # Criar arquivo vazio se não existir
-        if not os.path.exists(log_detalhado_path):
-            with open(log_detalhado_path, 'w', encoding='utf-8') as f:
-                f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - === INÍCIO DO LOG DE VÍNCULO DETALHADO ===\n")
-    except Exception as e:
-        print(f"ERRO ao criar arquivo de log: {e}")
-        import traceback
-        traceback.print_exc()
-    
     def _log_detalhado(msg):
-        """Escreve log detalhado tanto no console quanto no arquivo, e opcionalmente em memória"""
+        """Imprime no console e captura em memória quando solicitado; sem I/O de arquivo."""
         print(msg)
         if capturar_logs_memoria:
             logs_memoria.append(msg)
-        try:
-            with open(log_detalhado_path, 'a', encoding='utf-8') as f:
-                f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - {msg}\n")
-                f.flush()  # Forçar escrita imediata
-        except Exception as e:
-            print(f"ERRO ao escrever no log: {e}")
     
     # Log inicial para confirmar execução
     try:
@@ -1134,7 +1103,6 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
         _log_detalhado(f"{'='*80}\n")
     except Exception as e:
         print(f"ERRO no log inicial: {e}")
-        import traceback
         traceback.print_exc()
     
     base_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'documentos_entrada')
@@ -1145,9 +1113,6 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
     
     resultado = {'processados': 0, 'erros': 0, 'vinculos_novos': 0, 'mensagens': []}
     
-    # #region agent log
-    _debug_log("app.py:570", "Iniciando processamento de documentos pendentes", {"resultado_inicial": resultado}, "ALL")
-    # #endregion
     
     for tipo, pasta in pastas.items():
         if not os.path.exists(pasta):
@@ -1156,9 +1121,6 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
         
         # Lista todos os PDFs na pasta
         arquivos_pdf = [f for f in os.listdir(pasta) if f.lower().endswith('.pdf')]
-        # #region agent log
-        _debug_log("app.py:588", "Arquivos PDF encontrados na pasta", {"tipo": tipo, "pasta": pasta, "total_arquivos": len(arquivos_pdf)}, "ALL")
-        # #endregion
         print(f"DEBUG: Processando {len(arquivos_pdf)} arquivo(s) do tipo {tipo}")
         
         for arquivo in arquivos_pdf:
@@ -1195,20 +1157,11 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
             
             # Verifica se já foi processado E vinculado (permite re-processar documentos não vinculados)
             doc_existente = Documento.query.filter_by(caminho_arquivo=caminho_relativo).first()
-            # #region agent log
-            _debug_log("app.py:602", "Verificando se arquivo já foi processado", {"arquivo": arquivo, "doc_existente": doc_existente is not None, "doc_id": doc_existente.id if doc_existente else None, "doc_venda_id": doc_existente.venda_id if doc_existente else None}, "F")
-            # #endregion
             # CORREÇÃO: Só pular se documento existe E está vinculado. Permite re-processar documentos não vinculados.
             if doc_existente and doc_existente.venda_id is not None:
-                # #region agent log
-                _debug_log("app.py:605", "Arquivo já processado E vinculado, pulando", {"arquivo": arquivo, "doc_id": doc_existente.id, "venda_id": doc_existente.venda_id}, "F")
-                # #endregion
                 print(f"DEBUG: Arquivo {arquivo} já processado e vinculado (Venda ID {doc_existente.venda_id}), pulando")
                 continue
             elif doc_existente and doc_existente.venda_id is None:
-                # #region agent log
-                _debug_log("app.py:612", "Documento existe mas não vinculado, re-processando", {"arquivo": arquivo, "doc_id": doc_existente.id}, "F")
-                # #endregion
                 print(f"DEBUG: Documento ID {doc_existente.id} existe mas não está vinculado. Re-processando para tentar vincular.")
                 documento = doc_existente
                 if not documento.url_arquivo and (os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL')):
@@ -1223,9 +1176,6 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                 nf_cached = (nf_cached or '').strip() or None
                 if nf_cached:
                     # Cache OCR: usar nf_extraida/numero_nf armazenado, não rodar OCR de novo
-                    # #region agent log
-                    _debug_log("app.py:ocr-cache", "OCR skip: usando nf_extraida", {"arquivo": arquivo, "doc_id": doc_existente.id, "nf_extraida": nf_cached, "tipo": tipo}, "H2")
-                    # #endregion
                     dados_extraidos = {
                         'numero_nf': nf_cached,
                         'cnpj': doc_existente.cnpj,
@@ -1234,9 +1184,6 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                     }
                 else:
                     dados_extraidos = _processar_pdf(caminho_completo, tipo)
-                    # #region agent log
-                    _debug_log("app.py:ocr-run", "OCR executado (reprocess doc existente)", {"arquivo": arquivo, "doc_id": doc_existente.id, "tipo": tipo}, "H2")
-                    # #endregion
                     if dados_extraidos is None:
                         resultado['erros'] += 1
                         resultado['mensagens'].append(f"Erro ao re-processar {arquivo}")
@@ -1253,11 +1200,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
             else:
                 # Documento não existe, processar PDF normalmente (sempre roda OCR)
                 dados_extraidos = _processar_pdf(caminho_completo, tipo)
-                # #region agent log
-                _debug_log("app.py:ocr-run-new", "OCR executado (documento novo)", {"arquivo": arquivo, "tipo": tipo}, "H2")
-                # #endregion
                 if dados_extraidos is None:
-                    _debug_log("app.py:640", "Erro ao processar PDF", {"arquivo": arquivo, "tipo": tipo}, "A")
                     resultado['erros'] += 1
                     resultado['mensagens'].append(f"Erro ao processar {arquivo}")
                     continue
@@ -1267,9 +1210,6 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
             venda_id = None
             venda_match = None
             nf = dados_extraidos.get('numero_nf')
-            # #region agent log
-            _debug_log("app.py:660", "NF extraída do documento", {"arquivo": arquivo, "nf": nf, "tipo": tipo}, "D")
-            # #endregion
             # LOG DETALHADO: Início da análise
             _log_detalhado(f"\n{'='*80}")
             _log_detalhado(f"--- Analisando Documento: {arquivo} (NF Extraída: '{nf}') ---")
@@ -1304,9 +1244,6 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                             variants.append('NF-' + z)
                     variants = list(dict.fromkeys(variants))
                     _log_detalhado(f"Variantes tentadas na busca: {variants[:10]}... (total: {len(variants)})")
-                    # #region agent log
-                    _debug_log("app.py:677", "Vendas encontradas no banco", {"nf_limpa": nf_limpa, "nf_str": nf_str, "variants": variants[:5], "total_candidatas": len(vendas_candidatas), "ids_candidatas": [v.id for v in vendas_candidatas[:10]]}, "D")
-                    # #endregion
                     # LOG DETALHADO: Quantidade de vendas encontradas
                     _log_detalhado(f"Vendas localizadas com NF '{nf_limpa}': {len(vendas_candidatas)}")
                     _log_detalhado(f"DEBUG: Vendas encontradas no banco: {[v.id for v in vendas_candidatas]} (NF normalizada: '{nf_limpa}')")
@@ -1383,9 +1320,6 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                         empresa_doc_bool = dados_extraidos.get('empresa_destak', False)
                         empresa_doc_nome = 'DESTAK' if empresa_doc_bool else 'PATY'
                         empresa_venda = venda_match.empresa_faturadora
-                        # #region agent log
-                        _debug_log("app.py:732", "Verificação de empresa", {"venda_id": venda_id, "empresa_doc": empresa_doc_nome, "empresa_venda": empresa_venda, "nf": nf_str}, "C")
-                        # #endregion
                         if empresa_venda:
                             empresa_venda_upper = empresa_venda.upper()
                             empresa_doc_upper = empresa_doc_nome.upper()
@@ -1478,9 +1412,6 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                     )
                     db.session.add(documento)
                     db.session.flush()
-                # #region agent log
-                _debug_log("app.py:800", "DEPOIS de criar/atualizar documento", {"documento_id": documento.id, "venda_id": venda_id, "venda_match_exists": venda_match is not None}, "E")
-                # #endregion
                 _log_detalhado(f"DEBUG: Documento {'atualizado' if doc_existente else 'criado'}: ID={documento.id}, venda_id={venda_id}, venda_match={venda_match is not None}")
                 
                 # FORÇAR VÍNCULO: Se encontrou exatamente 1 venda válida, vincular IMEDIATAMENTE
@@ -1501,9 +1432,6 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                     # Prioridade: preenchemos apenas o campo do tipo atual (caminho_boleto ou caminho_nf).
                     # NF sozinha ou boleto sozinho já vincula; se boleto chegar depois, ADICIONA sem alterar caminho_nf.
                     field_set = 'caminho_boleto' if tipo == 'BOLETO' else 'caminho_nf'
-                    # #region agent log
-                    _debug_log("app.py:link-field", "Vínculo: campo gravado", {"tipo": tipo, "arquivo": arquivo, "venda_id": venda_id, "field_set": field_set}, "H4")
-                    # #endregion
                     dv = dados_extraidos.get('data_vencimento')
                     for vv in vendas_pedido:
                         caminho_antigo = None
@@ -1525,18 +1453,12 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                     # COMMIT IMEDIATO após vínculo (FORÇAR VÍNCULO ÚNICO)
                     _log_detalhado(f"\n--- Tentativa de Vínculo: Venda ID {venda_id} com Documento ID {documento.id} ---")
                     try:
-                        # #region agent log
-                        _debug_log("app.py:836", "ANTES do commit", {"venda_id": venda_id, "documento_id": documento.id, "nf": nf_doc, "processados_antes": resultado['processados']}, "B")
-                        # #endregion
                         _log_detalhado(f"DEBUG: Tentando gravar vínculo Venda ID {venda_id} com Documento ID {documento.id}")
                         _log_detalhado("DEBUG: Estado antes do commit:")
                         _log_detalhado(f"  - Documento.venda_id = {documento.venda_id}")
                         _log_detalhado(f"  - Venda.caminho_boleto = {venda_match.caminho_boleto if tipo == 'BOLETO' else 'N/A'}")
                         _log_detalhado(f"  - Venda.caminho_nf = {venda_match.caminho_nf if tipo == 'NOTA_FISCAL' else 'N/A'}")
                         db.session.commit()
-                        # #region agent log
-                        _debug_log("app.py:843", "DEPOIS do commit (sucesso)", {"venda_id": venda_id, "documento_id": documento.id, "nf": nf_doc, "processados_depois": resultado['processados']+1}, "B")
-                        # #endregion
                         _log_detalhado(f"DEBUG: ✅ COMMIT EXECUTADO COM SUCESSO: NF {nf_doc} vinculada à Venda {venda_id} (Cliente: {cliente_nome})")
                         if documento.url_arquivo and os.path.exists(caminho_completo):
                             try:
@@ -1548,10 +1470,6 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                         rotulo = "Nota Fiscal" if tipo == 'NOTA_FISCAL' else "Boleto"
                         resultado['mensagens'].append(f"✅ Sucesso: {rotulo} {nf_doc} vinculada(o) automaticamente ao cliente {cliente_nome}.")
                     except Exception as commit_error:
-                        import traceback
-                        # #region agent log
-                        _debug_log("app.py:853", "ERRO detectado na gravação", {"venda_id": venda_id, "documento_id": documento.id, "nf": nf_doc, "erro": str(commit_error), "traceback": traceback.format_exc()[:500]}, "B")
-                        # #endregion
                         db.session.rollback()
                         # LOG DETALHADO: Erro exato do banco de dados
                         erro_completo = traceback.format_exc()
@@ -1581,9 +1499,6 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                         resultado['mensagens'].append(f"❌ {mensagem_erro}")
                 else:
                     # Sem vínculo automático (múltiplas vendas ou não encontrada)
-                    # #region agent log
-                    _debug_log("app.py:864", "Sem vínculo automático", {"arquivo": arquivo, "venda_id": venda_id, "venda_match_exists": venda_match is not None, "nf": dados_extraidos.get('numero_nf')}, "E")
-                    # #endregion
                     print(f"DEBUG: Sem vínculo automático: venda_id={venda_id}, venda_match={venda_match is not None}")
                     db.session.commit()
                     if documento.url_arquivo and os.path.exists(caminho_completo):
@@ -1595,20 +1510,13 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                     resultado['mensagens'].append(f"Processado: {arquivo}")
             except Exception as e:
                 db.session.rollback()
-                import traceback
                 nf_doc = dados_extraidos.get('numero_nf') if dados_extraidos else 'N/A'
-                # #region agent log
-                _debug_log("app.py:870", "EXCEÇÃO no nível superior do loop", {"arquivo": arquivo, "nf": nf_doc, "erro": str(e), "traceback": traceback.format_exc()[:1000]}, "A")
-                # #endregion
                 mensagem_erro = f"Falha técnica ao vincular NF {nf_doc}: {str(e)}"
                 print(f"DEBUG: ❌ ERRO ao processar {arquivo}: {mensagem_erro}")
                 print(f"DEBUG: Traceback: {traceback.format_exc()}")
                 resultado['erros'] += 1
                 resultado['mensagens'].append(f"❌ {mensagem_erro}")
     
-    # #region agent log
-    _debug_log("app.py:877", "FINAL do processamento", {"resultado_final": resultado}, "ALL")
-    # #endregion
     _log_detalhado(f"DEBUG: Processamento finalizado: {resultado['processados']} processados, {resultado['vinculos_novos']} vinculados, {resultado['erros']} erros")
     
     # ── PASSAGEM 2: documentos no BD sem arquivo local (URL-only / Cloudinary) ──
@@ -3233,32 +3141,8 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             u = Usuario(username='Jhones', password_hash=generate_password_hash(admin_pass), role='admin')
             db.session.add(u)
             db.session.commit()
-        try:
-            _debug_log("app.py:bootstrap", "App started, debug.log active", {"path": DEBUG_LOG_PATH}, "ALL", run_id="bootstrap")
-        except Exception:
-            pass
 
 
-@app.before_request
-def _log_vendas_login_hits():
-    # #region agent log
-    path = getattr(request, "path", None) or ""
-    method = getattr(request, "method", None) or ""
-    if path not in ("/", "/login", "/dashboard", "/vendas"):
-        return
-    try:
-        _debug_log("app.py:before_request", "request hit", {"path": path, "method": method}, "H3")
-    except Exception:
-        try:
-            import time as _t
-            os.makedirs(_log_dir, exist_ok=True)
-            line = json.dumps({"location": "app.py:before_request", "message": "before_request_error", "data": {"error": "debug_log_failed"}, "hypothesisId": "H3", "timestamp": int(_t.time() * 1000), "sessionId": "debug-session", "runId": "run1"}, ensure_ascii=False) + "\n"
-            with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
-                f.write(line)
-                f.flush()
-        except Exception as fallback_err:
-            print("[DEBUG] Falha ao registrar log de fallback: " + str(fallback_err))
-    # #endregion
 
 
 # ========== AUTENTICAÇÃO ==========
@@ -3288,12 +3172,6 @@ def login():
             return render_template('auth/login.html')
         remember = True if request.form.get('remember') else False
         login_user(user, remember=remember)
-        # #region agent log
-        try:
-            _debug_log("app.py:login", "login success", {"user": user.username}, "H3")
-        except Exception:
-            pass
-        # #endregion
         next_url = request.form.get('next') or request.args.get('next')
         if not _is_safe_next_url(next_url):
             next_url = url_for('dashboard')
@@ -3383,7 +3261,9 @@ def perfil():
                 flash('Nome de usuário atualizado!', 'success')
         # Atualizar Foto de Perfil (Upload para Cloudinary)
         if imagem and imagem.filename != '':
-            if os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL'):
+            if not _arquivo_imagem_permitido(imagem.filename):
+                flash('Tipo de arquivo não permitido. Use PNG, JPG, JPEG, GIF ou WEBP.', 'error')
+            elif os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL'):
                 try:
                     upload_result = cloudinary.uploader.upload(
                         imagem,
@@ -4326,6 +4206,9 @@ def upload_imagem_cheque():
     if not file or not getattr(file, 'filename', None):
         return jsonify({'error': 'Arquivo inválido'}), 400
 
+    if not _arquivo_imagem_permitido(file.filename):
+        return jsonify({'error': 'Tipo de arquivo não permitido. Use PNG, JPG, JPEG, GIF ou WEBP.'}), 400
+
     try:
         upload_result = cloudinary.uploader.upload(file, folder='cheques_gaveta', timeout=_EXTERNAL_TIMEOUT)
         return jsonify({'url': upload_result.get('secure_url')}), 200
@@ -4807,7 +4690,7 @@ def novo_cliente():
     """
     if request.method == 'POST':
         try:
-            cnpj = request.form.get('cnpj', '').strip() or None
+            cnpj = re.sub(r'\D', '', request.form.get('cnpj', '').strip()) or None
             if cnpj:
                 cliente_existente = Cliente.query.filter_by(cnpj=cnpj).first()
                 if cliente_existente:
@@ -5031,7 +4914,6 @@ def importar_clientes():
             return render_template('clientes/importar.html', erros_detalhados=['Cole a lista (TAB) no campo de texto ou selecione um arquivo.'], sucesso=0, erros=1)
         filepath = None
         try:
-            _debug_log("app.py:importar_clientes", "import start", {"route": "importar_clientes", "lista_raw_len": len(lista_raw), "tem_arquivo": tem_arquivo}, "H1")
             sucesso = 0
             erros = 0
             erros_detalhados = []
@@ -5071,7 +4953,6 @@ def importar_clientes():
                     first_iter = True
                     for idx, row in df.iterrows():
                         if first_iter:
-                            _debug_log("app.py:importar_clientes", "first row idx", {"type_idx": type(idx).__name__, "idx_repr": repr(idx)}, "H1")
                             first_iter = False
                         linha_num = idx + 2
                         nome = _strip_quotes(row.get('nome_cliente', row.get('nome', '')))
@@ -5130,7 +5011,6 @@ def importar_clientes():
                     os.remove(filepath)
                 except Exception:
                     pass
-            _debug_log("app.py:importar_clientes", "outer except", {"route": "importar_clientes", "exc_type": type(e).__name__, "exc_msg": str(e), "tb": traceback.format_exc()}, "H1")
             return render_template('clientes/importar.html', erros_detalhados=[f'Erro ao processar: {str(e)}'], sucesso=0, erros=1)
     return render_template('clientes/importar.html')
 
@@ -5794,6 +5674,9 @@ def novo_produto():
             fotos = request.files.getlist('fotos')
             for foto in fotos[:5]:
                 if foto and foto.filename:
+                    if not _arquivo_imagem_permitido(foto.filename):
+                        print(f"Upload de foto ignorado (extensão inválida): {foto.filename}")
+                        continue
                     try:
                         upload_result = cloudinary.uploader.upload(foto, folder="menino_do_alho/produtos", timeout=_EXTERNAL_TIMEOUT)
                         url_segura = upload_result.get('secure_url')
@@ -5902,6 +5785,9 @@ def editar_produto(id):
             fotos = request.files.getlist('fotos')
             for foto in fotos[:slots_disponiveis]:
                 if foto and foto.filename:
+                    if not _arquivo_imagem_permitido(foto.filename):
+                        print(f"Upload de foto ignorado (extensão inválida): {foto.filename}")
+                        continue
                     try:
                         upload_result = cloudinary.uploader.upload(foto, folder="menino_do_alho/produtos", timeout=_EXTERNAL_TIMEOUT)
                         url_segura = upload_result.get('secure_url')
@@ -6249,9 +6135,6 @@ def importar_produtos():
             return redirect(url_for('listar_produtos'))
         except Exception as e:
             db.session.rollback()
-            # #region agent log
-            _debug_log("app.py:importar_produtos", "outer except", {"route": "importar_produtos", "exc_type": type(e).__name__, "exc_msg": str(e), "tb": traceback.format_exc()}, "H1")
-            # #endregion
             if filepath and os.path.exists(filepath):
                 try:
                     os.remove(filepath)
@@ -6432,7 +6315,6 @@ def api_dashboard_detalhes(filtro):
         return jsonify({'vendas': vendas_lista})
     except Exception as e:
         db.session.rollback()
-        import traceback
         traceback.print_exc()
         return jsonify({'erro': str(e)}), 500
 
@@ -6596,7 +6478,6 @@ def api_detalhes_mes(ano, mes):
         
     except Exception as e:
         db.session.rollback()
-        import traceback
         traceback.print_exc()
         return jsonify({'erro': f'Erro ao processar dados do mês: {str(e)}'}), 500
 
@@ -6613,9 +6494,6 @@ def listar_vendas():
     Returns:
         render_template: Página de vendas com pedidos agrupados.
     """
-    # #region agent log
-    _debug_log("app.py:listar-vendas", "listar_vendas entered", {"route": "/vendas"}, "H3")
-    # #endregion
     # Aceitar filtros via query string
     produto_id = request.args.get('produto_id', type=int)
     cliente_id = request.args.get('cliente_id', type=int)
@@ -6768,9 +6646,6 @@ def listar_vendas():
     
     # Caminhos de boleto/NF: usar qualquer venda do pedido que tenha
     # Verificar se os documentos realmente existem no banco
-    # #region agent log
-    _debug_log("app.py:listar-pedidos-built", "Pedidos built", {"total_pedidos": len(pedidos_agrupados)}, "H3")
-    # #endregion
     # Pré-carregar documentos por venda para indicar anexos mesmo quando caminho_nf/caminho_boleto não estiverem preenchidos.
     docs_por_venda = {}
     all_venda_ids = [vv.id for pedido in pedidos_agrupados for vv in pedido.get('vendas', [])]
@@ -6874,17 +6749,10 @@ def listar_vendas():
             dv is not None and
             dv < hoje
         )
-        # #region agent log
         listar_pedido_sample += 1
-        if listar_pedido_sample <= 8:
-            _debug_log("app.py:listar-pedido", "Pedido caminho_nf/doc_nf", {"pedido_key": str(pedido.get('key')), "cn_set": cn is not None, "doc_nf_found": doc_nf is not None, "cb_set": cb is not None}, "H3")
-        # #endregion
-    
-    # #region agent log
+
     n_nf = sum(1 for p in pedidos_agrupados if (p.get('caminho_nf') or '').strip())
     n_boleto = sum(1 for p in pedidos_agrupados if (p.get('caminho_boleto') or '').strip())
-    _debug_log("app.py:listar-summary", "Pedidos com NF/boleto", {"total_pedidos": len(pedidos_agrupados), "com_nf": n_nf, "com_boleto": n_boleto}, "H3")
-    # #endregion
     
     # Ordenação por coluna clicável (situacao, forma_pagamento), por cliente ou por vencimento
     # Situacao e forma_pagamento usam data_venda desc como critério secundário
@@ -7327,16 +7195,15 @@ def logistica_bulk_update():
     if novo_status not in ('PENDENTE', 'ENTREGUE'):
         return jsonify({'success': False, 'message': 'Status inválido.'}), 400
 
-    if not current_user.is_admin():
-        venda_ref = Venda.query.get(ids[0]) if ids else None
-        if not venda_ref or not _usuario_pode_gerenciar_venda(venda_ref):
-            return jsonify({'success': False, 'message': 'Sem permissão para alterar estas vendas.'}), 403
-
     try:
-        Venda.query.filter(Venda.id.in_(ids)).update({'status_entrega': novo_status}, synchronize_session=False)
+        query = Venda.query.filter(Venda.id.in_(ids))
+        if not current_user.is_admin():
+            # Filtro de ownership aplicado direto no banco: IDs alheios são silenciosamente ignorados.
+            query = query.filter(Venda.usuario_id == current_user.id)
+        atualizados = query.update({'status_entrega': novo_status}, synchronize_session=False)
         db.session.commit()
-        flash(f'{len(ids)} pedidos atualizados com sucesso!', 'success')
-        return jsonify({'success': True})
+        flash(f'{atualizados} pedido(s) atualizado(s) com sucesso!', 'success')
+        return jsonify({'success': True, 'atualizados': atualizados})
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'message': str(e)}), 500
@@ -8546,17 +8413,6 @@ def upload_documento():
             db.session.add(doc_criado)
             db.session.commit()
             limpar_cache_dashboard()
-        _debug_log(
-            "app.py:upload_documento",
-            "Upload manual processado",
-            {
-                "origem": "manual_upload",
-                "nome_arquivo": nome_arquivo,
-                "documento_id": doc_criado.id if doc_criado else None,
-                "user_id": uid
-            },
-            "UPLOAD_SYNC"
-        )
         return jsonify({'mensagem': 'Sucesso'}), 200
     except Exception as e:
         db.session.rollback()
@@ -8642,19 +8498,6 @@ def api_receber_automatico():
         db.session.add(novo_documento)
         db.session.commit()
         limpar_cache_dashboard()
-        _debug_log(
-            "app.py:api_receber_automatico",
-            "Upload API processado",
-            {
-                "origem": "api_receber_automatico",
-                "nome_arquivo": filename,
-                "documento_id": novo_documento.id,
-                "user_id": user_id,
-                "cloudinary": bool(url_arquivo)
-            },
-            "UPLOAD_SYNC"
-        )
-
         return jsonify({
             'status': 'success',
             'mensagem': 'Arquivo recebido',
@@ -8873,19 +8716,6 @@ def upload_massa_arquivos():
         if erros_processamento:
             msg += f' {len(erros_processamento)} arquivo(s) com falha foram ignorados.'
         limpar_cache_dashboard()
-        _debug_log(
-            "app.py:upload_massa_arquivos",
-            "Upload em massa processado",
-            {
-                "origem": "upload_massa",
-                "documentos_ids": documentos_ids,
-                "arquivos_processados": arquivos_processados,
-                "arquivos_salvos": arquivos_salvos,
-                "erros": len(erros_processamento),
-                "user_id": current_user.id
-            },
-            "UPLOAD_SYNC"
-        )
         return jsonify({'success': True, 'mensagem': msg, 'erros': erros_processamento})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -9162,35 +8992,7 @@ def vendas_deletar_massa():
         return jsonify({'ok': False, 'mensagem': str(e)}), 500
 
 
-@app.route('/bulk_delete_vendas', methods=['POST'])
-@login_required
-def bulk_delete_vendas():
-    data = request.get_json(silent=True) or {}
-    ids = data.get('ids', [])
-    if not ids:
-        return jsonify({'ok': False, 'mensagem': 'Nenhum ID informado.'}), 400
-    try:
-        logs = []
-        vendas_para_remocao = []
-        for id_ in ids:
-            venda = Venda.query.get(id_)
-            if venda:
-                vendas_para_remocao.append(venda)
-                produto = _produto_com_lock(venda.produto_id) if venda.produto_id else None
-                quantidade_venda = venda.quantidade_venda
-                if produto:
-                    produto.estoque_atual += quantidade_venda
-                logs.append(f"Venda deletada: {quantidade_venda} unidades devolvidas ao produto [{produto.nome_produto if produto else 'Desconhecido'}].")
-                db.session.delete(venda)
-        lancamentos_removidos = _apagar_lancamentos_caixa_por_vendas(vendas_para_remocao)
-        db.session.commit()
-        limpar_cache_dashboard()  # Limpar cache após exclusão em massa de vendas
-        for msg in logs:
-            print(msg)
-        return jsonify({'ok': True, 'mensagem': f'{len(ids)} venda(s) excluída(s) com sucesso. Estoque restaurado e {lancamentos_removidos} lançamento(s) de caixa removido(s).', 'excluidos': len(ids)})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'ok': False, 'mensagem': str(e)}), 500
+# Rota /bulk_delete_vendas removida — use /vendas/deletar_massa (mais segura e com controle de ownership).
 
 
 # Mapeamento posicional para importação de vendas em formato TSV/raw (sem cabeçalho). Index 4 = Valor Total (ignorado).
@@ -9285,9 +9087,6 @@ def importar_vendas():
             return render_template('vendas/importar.html', erros_detalhados=['Nenhum arquivo selecionado. Escolha um arquivo e tente novamente.'], sucesso=0, erros=1)
         filepath = None
         try:
-            # #region agent log
-            _debug_log("app.py:importar_vendas", "import start", {"route": "importar_vendas"}, "H1")
-            # #endregion
             filename = secure_filename(arquivo.filename)
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             arquivo.save(filepath)
@@ -9308,11 +9107,8 @@ def importar_vendas():
             _produtos_por_nome_normalizado = {_normalizar_nome_busca(p.nome_produto): p for p in Produto.query.limit(5000).all()}
             first_iter = True
             for idx, row in df.iterrows():
-                # #region agent log
                 if first_iter:
-                    _debug_log("app.py:importar_vendas", "first row idx", {"type_idx": type(idx).__name__, "idx_repr": repr(idx)}, "H1")
                     first_iter = False
-                # #endregion
                 linha_num = (idx + 1) if is_raw else (idx + 2)
                 nome_cliente = _strip_quotes(row.get('cliente', row.get('nome_cliente', '')))
                 nome_produto = _strip_quotes(row.get('produto', row.get('nome_produto', '')))
@@ -9453,9 +9249,6 @@ def importar_vendas():
             return redirect(url_for('listar_vendas'))
         except Exception as e:
             db.session.rollback()
-            # #region agent log
-            _debug_log("app.py:importar_vendas", "outer except", {"route": "importar_vendas", "exc_type": type(e).__name__, "exc_msg": str(e), "tb": traceback.format_exc()}, "H1")
-            # #endregion
             if filepath and os.path.exists(filepath):
                 try:
                     os.remove(filepath)
@@ -9675,7 +9468,6 @@ def debug_testar_log():
     """Endpoint de debug para testar criação de arquivo de log"""
     if not current_user.is_admin():
         return jsonify({'sucesso': False, 'erro': 'Acesso negado.'}), 403
-    import traceback
     try:
         log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'vinculo_detalhado.log')
         with open(log_path, 'w', encoding='utf-8') as f:
@@ -10296,7 +10088,6 @@ def backup_excel():
 @admin_required
 def debug_vincular():
     """Endpoint de debug para diagnóstico de vínculos - retorna todos os logs em JSON"""
-    import traceback
     try:
         # Executar processamento com captura de logs em memória
         resultado = _processar_documentos_pendentes(capturar_logs_memoria=True)
@@ -10317,7 +10108,6 @@ def debug_vincular():
         return jsonify(resposta)
     except Exception as e:
         db.session.rollback()
-        import traceback
         return jsonify({
             'sucesso': False,
             'erro': str(e),
