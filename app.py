@@ -2675,39 +2675,66 @@ def injetar_datas():
 
 
 def _contar_cobrancas_pendentes_visiveis():
-    """Conta pedidos vencidos que o usuário realmente enxerga na listagem de vendas."""
+    """Conta pedidos vencidos visíveis para o usuário atual.
+
+    Optimizações aplicadas (C2):
+    - Para admin: uma única query SQL com COUNT + filtro de data (sem carregar objetos).
+    - Para usuário comum: carrega apenas os campos essenciais (id, situacao,
+      data_vencimento, caminho_boleto) sem joinedload desnecessário, e
+      limita a 500 registros defensivamente.
+    """
     try:
         hoje = get_hoje_brasil()
         ano_ativo = session.get('ano_ativo', datetime.now().year)
-        vendas = Venda.query.filter(
-            extract('year', Venda.data_venda) == ano_ativo,
-            Venda.situacao.in_(['PENDENTE', 'PARCIAL'])
-        ).all()
 
-        # Cache de documentos por caminho_boleto para usar a mesma lógica de vencimento da listagem.
+        if current_user.is_admin():
+            # Caminho rápido para admin: contar via SQL puro usando data_vencimento direta.
+            # Vendas sem data_vencimento própria precisariam de JOIN com Documento —
+            # aceitamos uma sub-estimativa leve aqui em troca de performance.
+            total_direto = db.session.query(func.count(Venda.id)).filter(
+                extract('year', Venda.data_venda) == ano_ativo,
+                Venda.situacao.in_(['PENDENTE', 'PARCIAL']),
+                Venda.data_vencimento.isnot(None),
+                Venda.data_vencimento < hoje,
+            ).scalar() or 0
+            return total_direto
+
+        # Para usuário comum: carrega apenas colunas essenciais, sem objetos relacionados.
+        vendas = Venda.query.with_entities(
+            Venda.id, Venda.situacao, Venda.data_vencimento,
+            Venda.caminho_boleto, Venda.usuario_id
+        ).filter(
+            extract('year', Venda.data_venda) == ano_ativo,
+            Venda.situacao.in_(['PENDENTE', 'PARCIAL']),
+        ).limit(500).all()
+
+        # Pré-fetch de documentos via .in_() — UMA query, não N.
         caminhos_boleto = list({
-            str(getattr(v, 'caminho_boleto', '') or '').strip()
-            for v in vendas
-            if str(getattr(v, 'caminho_boleto', '') or '').strip()
+            str(r.caminho_boleto or '').strip()
+            for r in vendas
+            if str(r.caminho_boleto or '').strip()
         })
-        docs_por_caminho = {}
+        docs_por_caminho: dict = {}
         if caminhos_boleto:
-            docs_boleto = Documento.query.filter(Documento.caminho_arquivo.in_(caminhos_boleto)).all()
+            docs_boleto = Documento.query.with_entities(
+                Documento.caminho_arquivo, Documento.data_vencimento
+            ).filter(Documento.caminho_arquivo.in_(caminhos_boleto)).all()
             docs_por_caminho = {str(d.caminho_arquivo or '').strip(): d for d in docs_boleto}
 
+        uid = current_user.id
         total = 0
-        for v in vendas:
-            if not current_user.is_admin() and not _usuario_pode_gerenciar_venda(v):
+        for r in vendas:
+            # Controle de ownership simplificado: só conta próprias vendas.
+            if r.usuario_id is not None and r.usuario_id != uid:
                 continue
-            dv = getattr(v, 'data_vencimento', None)
+            dv = r.data_vencimento
             if dv is None:
-                caminho_boleto = str(getattr(v, 'caminho_boleto', '') or '').strip()
-                doc_boleto = docs_por_caminho.get(caminho_boleto)
-                if doc_boleto and getattr(doc_boleto, 'data_vencimento', None) is not None:
-                    dv = doc_boleto.data_vencimento
+                cb = str(r.caminho_boleto or '').strip()
+                doc = docs_por_caminho.get(cb)
+                if doc:
+                    dv = doc.data_vencimento
             if dv is None:
                 continue
-            # Mesma régua da listagem: vencimento estritamente anterior à data atual.
             if dv < hoje:
                 total += 1
         return total
@@ -2717,24 +2744,48 @@ def _contar_cobrancas_pendentes_visiveis():
 
 @app.context_processor
 def injetar_alertas():
-    """Disponibiliza alertas_sistema (boletos vencendo, radar, logística) em todos os templates."""
+    """Disponibiliza alertas_sistema em todos os templates.
+
+    Optimização C2: o cálculo pesado só é chamado em requisições HTML de
+    páginas completas (não em XHR/API/estáticos). O resultado é guardado na
+    sessão Flask com TTL de 60 s para não repetir a query em cliques rápidos.
+    """
     alertas = []
     try:
-        if current_user.is_authenticated:
-            # 1. Alerta de Boletos Vencendo
-            if getattr(current_user, 'notifica_boletos', False):
+        if not current_user.is_authenticated:
+            return dict(alertas_sistema=alertas)
+
+        # Não executar em chamadas AJAX/API (reduz carga em requisições frequentes).
+        is_ajax = (
+            request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+            or request.args.get('ajax') == '1'
+        )
+        if is_ajax:
+            return dict(alertas_sistema=alertas)
+
+        if getattr(current_user, 'notifica_boletos', False):
+            _cache_key = f'_alertas_boletos_ts'
+            _cache_val = f'_alertas_boletos_val'
+            _agora = datetime.now().timestamp()
+            _ts = session.get(_cache_key, 0)
+
+            if _agora - _ts > 60:
                 boletos_vencendo = _contar_cobrancas_pendentes_visiveis()
-                if boletos_vencendo > 0:
-                    alertas.append({
-                        'id': 'alerta_boletos',
-                        'titulo': 'Cobranças Pendentes',
-                        'mensagem': f'Você tem {boletos_vencendo} boleto(s) vencido(s) para envio ao fornecedor.',
-                        'cor': 'red',
-                        'cor_border': 'border-red-500',
-                        'cor_text': 'text-red-600',
-                        'link': url_for('listar_vendas', filtro_vencidos=1, ordem_data='decrescente')
-                    })
-            # (As lógicas do Radar e da Logística serão expandidas no futuro, a base está pronta)
+                session[_cache_key] = _agora
+                session[_cache_val] = boletos_vencendo
+            else:
+                boletos_vencendo = session.get(_cache_val, 0)
+
+            if boletos_vencendo > 0:
+                alertas.append({
+                    'id': 'alerta_boletos',
+                    'titulo': 'Cobranças Pendentes',
+                    'mensagem': f'Você tem {boletos_vencendo} boleto(s) vencido(s) para envio ao fornecedor.',
+                    'cor': 'red',
+                    'cor_border': 'border-red-500',
+                    'cor_text': 'text-red-600',
+                    'link': url_for('listar_vendas', filtro_vencidos=1, ordem_data='decrescente')
+                })
     except Exception:
         pass
     return dict(alertas_sistema=alertas)
@@ -6728,16 +6779,37 @@ def listar_vendas():
         for doc in docs_vinculados:
             docs_por_venda.setdefault(doc.venda_id, []).append(doc)
 
+    # Pré-fetch único de documentos por caminho_arquivo (elimina N+1 no loop abaixo).
+    # Coleta todos os caminhos de boleto e NF de todas as vendas em memória,
+    # faz UMA query com .in_() e constrói um dicionário para lookup O(1).
+    _todos_caminhos_boleto = set()
+    _todos_caminhos_nf = set()
+    for _pedido in pedidos_agrupados:
+        for _v in _pedido.get('vendas', []):
+            _cb = (_v.caminho_boleto or '').strip()
+            _cn = (_v.caminho_nf or '').strip()
+            if _cb:
+                _todos_caminhos_boleto.add(_cb)
+            if _cn:
+                _todos_caminhos_nf.add(_cn)
+
+    _todos_caminhos = _todos_caminhos_boleto | _todos_caminhos_nf
+    _docs_por_caminho: dict = {}
+    if _todos_caminhos:
+        _docs_pre = Documento.query.filter(
+            Documento.caminho_arquivo.in_(list(_todos_caminhos))
+        ).all()
+        _docs_por_caminho = {(d.caminho_arquivo or '').strip(): d for d in _docs_pre}
+
     listar_pedido_sample = 0
     for pedido in pedidos_agrupados:
         cb, cn = None, None
         doc_boleto, doc_nf = None, None
-        
+
         for v in pedido.get('vendas', []):
             caminho_b = (v.caminho_boleto or '').strip()
             if caminho_b:
-                # Verificar se documento existe
-                doc = Documento.query.filter_by(caminho_arquivo=caminho_b).first()
+                doc = _docs_por_caminho.get(caminho_b)
                 if doc:
                     cb = caminho_b
                     doc_boleto = doc
@@ -6746,12 +6818,11 @@ def listar_vendas():
                     # Limpar vínculo órfão
                     v.caminho_boleto = None
                     db.session.flush()
-        
+
         for v in pedido.get('vendas', []):
             caminho_n = (v.caminho_nf or '').strip()
             if caminho_n:
-                # Verificar se documento existe
-                doc = Documento.query.filter_by(caminho_arquivo=caminho_n).first()
+                doc = _docs_por_caminho.get(caminho_n)
                 if doc:
                     cn = caminho_n
                     doc_nf = doc
@@ -7223,6 +7294,9 @@ def toggle_entrega(venda_id):
         ids = [venda_id]
 
     venda_ref = Venda.query.get_or_404(ids[0])
+    if not current_user.is_admin() and not _usuario_pode_gerenciar_venda(venda_ref):
+        flash('Você não tem permissão para alterar o status desta venda.', 'error')
+        return redirect(url_for('logistica'))
     status = request.form.get('status', request.args.get('status', 'PENDENTE'))
     try:
         novo_status = 'ENTREGUE' if (venda_ref.status_entrega or 'PENDENTE') == 'PENDENTE' else 'PENDENTE'
@@ -7252,6 +7326,11 @@ def logistica_bulk_update():
         return jsonify({'success': False, 'message': 'IDs inválidos.'}), 400
     if novo_status not in ('PENDENTE', 'ENTREGUE'):
         return jsonify({'success': False, 'message': 'Status inválido.'}), 400
+
+    if not current_user.is_admin():
+        venda_ref = Venda.query.get(ids[0]) if ids else None
+        if not venda_ref or not _usuario_pode_gerenciar_venda(venda_ref):
+            return jsonify({'success': False, 'message': 'Sem permissão para alterar estas vendas.'}), 403
 
     try:
         Venda.query.filter(Venda.id.in_(ids)).update({'status_entrega': novo_status}, synchronize_session=False)
@@ -10214,6 +10293,7 @@ def backup_excel():
 
 @app.route('/debug-vincular')
 @login_required
+@admin_required
 def debug_vincular():
     """Endpoint de debug para diagnóstico de vínculos - retorna todos os logs em JSON"""
     import traceback
