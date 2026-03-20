@@ -59,8 +59,9 @@ class Cliente(db.Model):
     endereco = db.Column(db.String(255))
     ativo = db.Column(db.Boolean, default=True, nullable=False, server_default='1', index=True)
 
-    # Relacionamento com vendas
-    vendas = db.relationship('Venda', backref='cliente', lazy=True, cascade='all, delete-orphan')
+    # Relacionamento com vendas — sem cascade intencional: excluir um cliente
+    # deve falhar via FK constraint se houver vendas vinculadas, preservando o histórico financeiro.
+    vendas = db.relationship('Venda', backref='cliente', lazy=True)
     
     def __repr__(self):
         return f'<Cliente {self.nome_cliente}>'

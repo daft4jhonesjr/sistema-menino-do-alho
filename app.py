@@ -2607,10 +2607,11 @@ def _contar_cobrancas_pendentes_visiveis():
             ).scalar() or 0
             return total_direto
 
-        # Para usuário comum: carrega apenas colunas essenciais, sem objetos relacionados.
+        # Para usuário comum: carrega colunas essenciais (sem usuario_id — coluna inexistente em Venda).
+        # Conta todas as cobranças vencidas do período; o badge é informativo para todos os usuários.
         vendas = Venda.query.with_entities(
             Venda.id, Venda.situacao, Venda.data_vencimento,
-            Venda.caminho_boleto, Venda.usuario_id
+            Venda.caminho_boleto
         ).filter(
             extract('year', Venda.data_venda) == ano_ativo,
             Venda.situacao.in_(['PENDENTE', 'PARCIAL']),
@@ -2629,12 +2630,8 @@ def _contar_cobrancas_pendentes_visiveis():
             ).filter(Documento.caminho_arquivo.in_(caminhos_boleto)).all()
             docs_por_caminho = {str(d.caminho_arquivo or '').strip(): d for d in docs_boleto}
 
-        uid = current_user.id
         total = 0
         for r in vendas:
-            # Controle de ownership simplificado: só conta próprias vendas.
-            if r.usuario_id is not None and r.usuario_id != uid:
-                continue
             dv = r.data_vencimento
             if dv is None:
                 cb = str(r.caminho_boleto or '').strip()
@@ -6676,7 +6673,6 @@ def listar_vendas():
         ).all()
         _docs_por_caminho = {(d.caminho_arquivo or '').strip(): d for d in _docs_pre}
 
-    listar_pedido_sample = 0
     for pedido in pedidos_agrupados:
         cb, cn = None, None
         doc_boleto, doc_nf = None, None
@@ -6749,7 +6745,6 @@ def listar_vendas():
             dv is not None and
             dv < hoje
         )
-        listar_pedido_sample += 1
 
     n_nf = sum(1 for p in pedidos_agrupados if (p.get('caminho_nf') or '').strip())
     n_boleto = sum(1 for p in pedidos_agrupados if (p.get('caminho_boleto') or '').strip())
@@ -7196,11 +7191,24 @@ def logistica_bulk_update():
         return jsonify({'success': False, 'message': 'Status inválido.'}), 400
 
     try:
-        query = Venda.query.filter(Venda.id.in_(ids))
-        if not current_user.is_admin():
-            # Filtro de ownership aplicado direto no banco: IDs alheios são silenciosamente ignorados.
-            query = query.filter(Venda.usuario_id == current_user.id)
-        atualizados = query.update({'status_entrega': novo_status}, synchronize_session=False)
+        vendas_solicitadas = Venda.query.filter(Venda.id.in_(ids)).all()
+
+        # Verificação de ownership em memória — Venda não possui usuario_id direto;
+        # o controle é feito via _usuario_pode_gerenciar_venda() que inspeciona os Documentos vinculados.
+        if current_user.is_admin():
+            ids_permitidos = [v.id for v in vendas_solicitadas]
+        else:
+            ids_permitidos = [
+                v.id for v in vendas_solicitadas
+                if _usuario_pode_gerenciar_venda(v)
+            ]
+
+        if not ids_permitidos:
+            return jsonify({'success': False, 'message': 'Sem permissão para alterar estas vendas.'}), 403
+
+        atualizados = Venda.query.filter(Venda.id.in_(ids_permitidos)).update(
+            {'status_entrega': novo_status}, synchronize_session=False
+        )
         db.session.commit()
         flash(f'{atualizados} pedido(s) atualizado(s) com sucesso!', 'success')
         return jsonify({'success': True, 'atualizados': atualizados})
@@ -9140,7 +9148,7 @@ def importar_vendas():
                         erros_detalhados.append(_msg_linha(linha_num, contexto, f"A quantidade está vazia ou inválida ({qtd_raw}). Use um número inteiro (ex: 5)", True))
                         erros += 1
                         continue
-                    produto = Produto.query.filter(Produto.id == produto_cache.id).with_for_update().first()
+                    produto = _produto_com_lock(produto_cache.id)
                     if produto.estoque_atual < quantidade_venda:
                         erros_detalhados.append(_msg_linha(linha_num, nome_produto, f"Estoque insuficiente. Disponível: {produto.estoque_atual} unidades, solicitado: {quantidade_venda}. Ajuste a quantidade ou o estoque", True))
                         erros += 1
