@@ -6923,6 +6923,15 @@ def exportar_relatorio_vendas():
     filtro_empresa = (request.form.get('filtro_empresa') or 'TODAS').strip().upper()
     filtro_situacao = (request.form.get('filtro_situacao') or 'TODAS').strip().upper()
     filtro_forma_pagamento = (request.form.get('filtro_forma_pagamento') or 'TODAS').strip().upper()
+    filtro_mes_raw = (request.form.get('filtro_mes') or '').strip()
+    filtro_mes = None
+    if filtro_mes_raw:
+        try:
+            mes_int = int(filtro_mes_raw)
+            if 1 <= mes_int <= 12:
+                filtro_mes = mes_int
+        except (TypeError, ValueError):
+            filtro_mes = None
     colunas_solicitadas = request.form.getlist('colunas')
 
     colunas_disponiveis = {
@@ -6960,6 +6969,8 @@ def exportar_relatorio_vendas():
         query = query.filter(func.upper(func.coalesce(Venda.situacao, '')) == filtro_situacao)
     if filtro_forma_pagamento != 'TODAS':
         query = query.filter(func.upper(func.coalesce(Venda.forma_pagamento, '')) == filtro_forma_pagamento)
+    if filtro_mes is not None:
+        query = query.filter(extract('month', Venda.data_venda) == filtro_mes)
 
     vendas = query.order_by(Venda.data_venda.desc(), Venda.id.desc()).all()
     if not current_user.is_admin():
@@ -7056,6 +7067,8 @@ def exportar_relatorio_vendas():
         partes_nome.append(_normalizar_nome_arquivo(filtro_situacao))
     if filtro_forma_pagamento and filtro_forma_pagamento != 'TODAS':
         partes_nome.append(_normalizar_nome_arquivo(filtro_forma_pagamento))
+    if filtro_mes is not None:
+        partes_nome.append(f"MES_{filtro_mes:02d}")
     
     nome_arquivo = f"{'_'.join([p for p in partes_nome if p])}.csv"
 

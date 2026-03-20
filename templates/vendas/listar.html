@@ -191,7 +191,7 @@
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="mb-6">
                     <h4 class="text-sm font-bold uppercase tracking-wide text-gray-600 dark:text-gray-300 mb-3">Filtros</h4>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div>
                             <label for="filtro_empresa" class="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Empresa Faturadora</label>
                             <select id="filtro_empresa" name="filtro_empresa" class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm px-3 py-2 focus:ring-2 focus:ring-emerald-500">
@@ -219,6 +219,24 @@
                                 <option value="DINHEIRO">Dinheiro</option>
                                 <option value="PIX">Pix</option>
                                 <option value="CHEQUE">Cheque</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="filtro_mes" class="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Mes</label>
+                            <select id="filtro_mes" name="filtro_mes" class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm px-3 py-2 focus:ring-2 focus:ring-emerald-500">
+                                <option value="">Todos</option>
+                                <option value="1">Janeiro</option>
+                                <option value="2">Fevereiro</option>
+                                <option value="3">Marco</option>
+                                <option value="4">Abril</option>
+                                <option value="5">Maio</option>
+                                <option value="6">Junho</option>
+                                <option value="7">Julho</option>
+                                <option value="8">Agosto</option>
+                                <option value="9">Setembro</option>
+                                <option value="10">Outubro</option>
+                                <option value="11">Novembro</option>
+                                <option value="12">Dezembro</option>
                             </select>
                         </div>
                     </div>
