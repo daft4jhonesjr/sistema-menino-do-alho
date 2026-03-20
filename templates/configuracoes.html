@@ -144,20 +144,20 @@
             <textarea id="logMonitor" readonly class="w-full h-64 bg-slate-900 text-emerald-400 font-mono text-xs p-4 rounded outline-none resize-none" placeholder="Carregando logs..."></textarea>
         </div>
 
-        <div class="mb-6 border border-red-300 dark:border-red-800 rounded-lg p-4 bg-red-50 dark:bg-red-950/30">
+        <div class="mb-6 border border-red-900/60 rounded-lg p-4" style="background-color:#1a0a0a;">
             <div class="flex items-center justify-between mb-3">
                 <div>
-                    <h4 class="font-bold text-red-700 dark:text-red-400">🚨 Histórico de Erros Críticos <span class="font-normal text-xs text-red-500 dark:text-red-500 ml-1">(erros_sistema.log — snapshot do carregamento)</span></h4>
-                    <p class="text-xs text-red-500 dark:text-red-500 mt-0.5">Exibe as últimas 100 linhas registradas no momento em que a página foi carregada. Use o monitor acima para atualizar em tempo real.</p>
+                    <h4 class="font-bold text-red-400">🚨 Histórico de Erros Críticos <span class="font-normal text-xs text-red-600 ml-1">(erros_sistema.log — snapshot do carregamento)</span></h4>
+                    <p class="text-xs text-red-700 mt-0.5">Registra apenas erros de nível ERROR/CRITICAL. Vazio = sistema saudável. Use o monitor acima para logs gerais.</p>
                 </div>
                 <button type="button" id="btnLimparErrosCriticos"
-                    class="bg-red-700 hover:bg-red-800 text-white text-sm font-bold py-2 px-3 rounded transition-colors whitespace-nowrap ml-4">
+                    class="bg-red-800 hover:bg-red-900 text-red-200 text-sm font-bold py-2 px-3 rounded transition-colors whitespace-nowrap ml-4 border border-red-700">
                     🗑️ Limpar
                 </button>
             </div>
-            <textarea id="logErrosCriticos" readonly
-                class="w-full h-72 bg-slate-950 text-amber-400 font-mono text-xs p-4 rounded outline-none resize-none"
-                placeholder="Nenhum erro crítico registrado ainda.">{{ erros_log_content | default('Nenhum erro crítico registrado ainda.') }}</textarea>
+            <pre id="logErrosCriticos"
+                class="w-full h-72 overflow-y-auto bg-gray-950 text-red-400 font-mono text-xs p-4 rounded-md border border-red-900/50 shadow-inner whitespace-pre-wrap break-words"
+                style="background-color:#030712; color:#f87171;">{{ erros_log_content | default('Nenhum erro crítico registrado ainda.') | e }}</pre>
         </div>
         {% endif %}
     </div>
@@ -423,7 +423,7 @@ document.addEventListener('DOMContentLoaded', function() {
             monitor.value = 'Nenhum erro registrado ainda.';
             // Também limpa o bloco server-side para manter consistência visual
             var errosCriticos = document.getElementById('logErrosCriticos');
-            if (errosCriticos) errosCriticos.value = 'Nenhum erro crítico registrado ainda.';
+            if (errosCriticos) errosCriticos.textContent = 'Nenhum erro crítico registrado ainda.';
             if (typeof showToast === 'function') showToast('Logs limpos com sucesso.', 'success');
         } catch (err) {
             if (typeof showToast === 'function') {
@@ -454,7 +454,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!response.ok || (data && data.status === 'erro')) {
                 throw new Error((data && data.mensagem) || 'Erro ao limpar logs.');
             }
-            if (errosCriticos) errosCriticos.value = 'Nenhum erro crítico registrado ainda.';
+            if (errosCriticos) errosCriticos.textContent = 'Nenhum erro crítico registrado ainda.';
             // Também limpa o monitor AJAX para manter consistência visual
             var monitor = document.getElementById('logMonitor');
             if (monitor) monitor.value = 'Nenhum erro registrado ainda.';
@@ -475,9 +475,9 @@ document.addEventListener('DOMContentLoaded', function() {
     if (btnLimparLogs) btnLimparLogs.addEventListener('click', limparLogs);
     if (btnLimparErrosCriticos) btnLimparErrosCriticos.addEventListener('click', limparErrosCriticos);
 
-    // Scroll automático para o final do bloco de erros críticos ao carregar
+    // Scroll automático para o final do bloco de erros críticos ao carregar (usa textContent pois é <pre>)
     var errosCriticosEl = document.getElementById('logErrosCriticos');
-    if (errosCriticosEl && errosCriticosEl.value.trim() && errosCriticosEl.value.trim() !== 'Nenhum erro crítico registrado ainda.') {
+    if (errosCriticosEl && errosCriticosEl.textContent.trim() && errosCriticosEl.textContent.trim() !== 'Nenhum erro crítico registrado ainda.') {
         errosCriticosEl.scrollTop = errosCriticosEl.scrollHeight;
     }
     if (document.getElementById('logMonitor')) carregarLogs();

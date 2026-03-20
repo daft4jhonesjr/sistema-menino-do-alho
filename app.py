@@ -1950,12 +1950,12 @@ file_handler = RotatingFileHandler(_logs_file, maxBytes=1_048_576, backupCount=5
 file_handler.setFormatter(logging.Formatter(
     '%(asctime)s %(levelname)-8s: %(message)s [%(pathname)s:%(lineno)d]'
 ))
-file_handler.setLevel(logging.INFO)
+# Apenas erros reais (ERROR e CRITICAL) são gravados no arquivo de erros críticos
+file_handler.setLevel(logging.ERROR)
 
 if not any(isinstance(h, RotatingFileHandler) and getattr(h, 'baseFilename', '') == _logs_file for h in app.logger.handlers):
     app.logger.addHandler(file_handler)
 app.logger.setLevel(logging.INFO)
-app.logger.info('Sistema Menino do Alho inicializado.')
 
 # Sessão e "Lembrar-me": persistir por 30 dias
 app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=30)
