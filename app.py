@@ -3897,6 +3897,17 @@ def dashboard():
     # KPI 8: Margem de Lucro (%) = (total_lucro / total_vendas) * 100
     # Proteção contra divisão por zero: total_vendas 0 ou negativo → margem = 0
     margem_porcentagem = (float(total_lucro) / float(total_vendas) * 100) if total_vendas and float(total_vendas) > 0 else 0
+
+    # KPI 8b: Média de Lucro Mensal
+    # Se o ano ativo é o ano atual, divide pelo mês corrente; ano passado → 12; futuro → 1
+    _ano_atual = datetime.now().year
+    if int(ano_ativo) == _ano_atual:
+        _meses_divisao = datetime.now().month
+    elif int(ano_ativo) < _ano_atual:
+        _meses_divisao = 12
+    else:
+        _meses_divisao = 1
+    media_lucro_mensal = float(total_lucro) / _meses_divisao if _meses_divisao > 0 else 0
     
     # KPI 9: Total de Pedidos - FILTRADO POR ANO
     total_pedidos = db.session.query(
@@ -4001,6 +4012,7 @@ def dashboard():
                          total_pendente=float(total_pendente),
                          total_pago=float(total_pago),
                          total_lucro=float(total_lucro),
+                         media_lucro_mensal=float(media_lucro_mensal),
                          total_prejuizo=float(total_prejuizo),
                          qtd_caixas_prejuizo=int(qtd_caixas_prejuizo),
                          detalhes_prejuizo=detalhes_prejuizo,

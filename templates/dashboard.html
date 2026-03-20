@@ -76,6 +76,11 @@
             <div>
                 <p class="text-gray-600 dark:text-gray-400 text-sm font-medium">Lucro Total do Período</p>
                 <p class="text-3xl font-bold mt-2 valor-financeiro {% if total_lucro >= 0 %}text-emerald-600{% else %}text-red-600{% endif %}">{{ total_lucro|formato_moeda }}</p>
+                <div class="mt-2 flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                    <span>Média mensal:</span>
+                    <span class="font-semibold valor-financeiro {% if media_lucro_mensal >= 0 %}text-emerald-600 dark:text-emerald-400{% else %}text-red-500 dark:text-red-400{% endif %}">{{ media_lucro_mensal|formato_moeda }}</span>
+                    <span class="text-gray-400 dark:text-gray-500">/ mês</span>
+                </div>
             </div>
             <i data-lucide="trending-up" class="w-10 h-10 {% if total_lucro >= 0 %}text-emerald-500{% else %}text-red-500{% endif %}"></i>
         </div>
