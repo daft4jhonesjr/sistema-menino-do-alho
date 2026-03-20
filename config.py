@@ -1,9 +1,10 @@
 import os
 
 class Config:
-    # Secret key forte gerada com secrets.token_urlsafe
-    # Em produção, defina SECRET_KEY como variável de ambiente
-    SECRET_KEY = os.environ.get('SECRET_KEY') or '-vCohb0GSb3IEtEiotaxZ0_45Dtfu5Uq49llGXFQdOEy8AxcvvQj7Ft2uDeuCbeAGyKzUbN1P9QeQkDIfo-tVA'
+    # Em produção, defina SECRET_KEY como variável de ambiente obrigatória.
+    # O fallback com os.urandom garante que cada reinício gere uma chave nova
+    # (sessões são invalidadas), mas é infinitamente mais seguro que chave fixa.
+    SECRET_KEY = os.environ.get('SECRET_KEY') or os.urandom(24).hex()
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or 'sqlite:///menino_do_alho.db'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     # Cloudinary (uploads em nuvem)

@@ -3169,7 +3169,17 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
         # Jhones sempre admin; criar se não existir
         u = Usuario.query.filter_by(username='Jhones').first()
         if not u:
-            u = Usuario(username='Jhones', password_hash=generate_password_hash('admin123'), role='admin')
+            import secrets as _secrets
+            admin_pass = os.environ.get('ADMIN_INITIAL_PASS')
+            if not admin_pass:
+                admin_pass = _secrets.token_urlsafe(12)
+                print(f"\n{'='*60}")
+                print(f"  ATENÇÃO: Senha do admin gerada automaticamente:")
+                print(f"  Usuário: Jhones")
+                print(f"  Senha:   {admin_pass}")
+                print(f"  Altere imediatamente em Configurações > Usuários.")
+                print(f"{'='*60}\n")
+            u = Usuario(username='Jhones', password_hash=generate_password_hash(admin_pass), role='admin')
             db.session.add(u)
             db.session.commit()
         try:
@@ -3774,7 +3784,14 @@ def dashboard():
     vinculos_novos = resultado_processamento.get('vinculos_novos', 0)
     pendentes = len(documentos_pendentes)
     processados = resultado_processamento.get('processados', 0)
-    erros = resultado_processamento.get('erros', [])  # erros é uma lista, não um número
+    erros_raw = resultado_processamento.get('erros', [])
+    # Guarda defensiva: erros pode ser lista (esperado) ou int (compatibilidade)
+    if isinstance(erros_raw, list):
+        erros = erros_raw
+    elif isinstance(erros_raw, int):
+        erros = list(range(erros_raw))  # converte contador em lista equivalente para len()
+    else:
+        erros = []
     
     # Estatísticas de saúde do sistema de documentos
     total_documentos = Documento.query.count()
@@ -4517,6 +4534,7 @@ def deletar_caixa(id):
 
 @app.route('/caixa/deletar_massa', methods=['POST'])
 @login_required
+@admin_required
 def deletar_massa_caixa():
     deletar_tudo = request.form.get('deletar_tudo') == '1'
     ids = request.form.getlist('lancamento_ids')
