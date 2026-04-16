@@ -787,7 +787,8 @@
                     data-empresa="{{ v0.empresa_faturadora or '' }}"
                     data-situacao="{{ v0.situacao or 'PENDENTE' }}"
                     data-lucro-perc="{{ v0.lucro_percentual if v0.lucro_percentual is not none else '' }}"
-                    data-forma-pagamento="{{ v0.forma_pagamento or '' }}">
+                    data-forma-pagamento="{{ v0.forma_pagamento or '' }}"
+                    data-tipo-operacao="{{ v0.tipo_operacao or 'VENDA' }}">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
                 </button>
                 {% endif %}
@@ -884,6 +885,7 @@
         <div class="p-8">
             <form id="form-editar-venda" method="POST" action="" data-action-base="{{ url_for('editar_venda', id=0) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <input type="hidden" name="tipo_operacao" id="edit_tipo_operacao" value="VENDA"/>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="mb-4">
                         <label for="edit_cliente_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Cliente <span class="text-red-500">*</span></label>
@@ -1258,6 +1260,7 @@ function loadingBotaoEditarVenda(formElement) {
         var situacao = limparValor(btn.getAttribute('data-situacao')) || 'PENDENTE';
         var formaPagamento = limparValor(btn.getAttribute('data-forma-pagamento'));
         var lucroPerc = limparValor(btn.getAttribute('data-lucro-perc'));
+        var tipoOperacao = (limparValor(btn.getAttribute('data-tipo-operacao')) || 'VENDA').toUpperCase();
 
         form.action = actionBase.replace(/\/0$/, '/') + id;
         document.getElementById('edit_cliente_id').value = clienteId;
@@ -1272,8 +1275,21 @@ function loadingBotaoEditarVenda(formElement) {
         if (inputLucroPerc) {
             inputLucroPerc.value = (lucroPerc && lucroPerc !== 'None') ? lucroPerc : '';
         }
+        var editTipoOp = document.getElementById('edit_tipo_operacao');
+        if (editTipoOp) editTipoOp.value = tipoOperacao;
         var editFormaPag = document.getElementById('edit_forma_pagamento');
-        if (editFormaPag) editFormaPag.value = formaPagamento;
+        if (editFormaPag) {
+            if (tipoOperacao === 'PERDA') {
+                editFormaPag.value = '';
+                editFormaPag.disabled = true;
+                editFormaPag.removeAttribute('required');
+                editFormaPag.classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                editFormaPag.value = formaPagamento;
+                editFormaPag.disabled = false;
+                editFormaPag.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+        }
 
         wrap.classList.remove('hidden');
         travarFundo();
@@ -1696,12 +1712,21 @@ document.addEventListener('DOMContentLoaded', function() {
             precoInput.removeAttribute('min');
             precoInput.classList.add('bg-red-50', 'text-red-600', 'dark:bg-red-900/20', 'dark:text-red-300');
             if (situacaoSelect) situacaoSelect.value = 'PAGO';
-            if (formaPagamentoSelect) formaPagamentoSelect.value = '';
+            if (formaPagamentoSelect) {
+                formaPagamentoSelect.value = '';
+                formaPagamentoSelect.disabled = true;
+                formaPagamentoSelect.removeAttribute('required');
+                formaPagamentoSelect.classList.add('opacity-50', 'cursor-not-allowed');
+            }
         } else {
             precoInput.readOnly = false;
             precoInput.setAttribute('required', 'required');
             precoInput.setAttribute('min', '0.01');
             precoInput.classList.remove('bg-red-50', 'text-red-600', 'dark:bg-red-900/20', 'dark:text-red-300');
+            if (formaPagamentoSelect) {
+                formaPagamentoSelect.disabled = false;
+                formaPagamentoSelect.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
             if (!precoInput.value || parsePreco(precoInput.value) === 0) {
                 var opt = produtoSelect && produtoSelect.options[produtoSelect.selectedIndex];
                 if (opt) {
