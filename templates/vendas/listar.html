@@ -2619,6 +2619,7 @@ document.addEventListener('DOMContentLoaded', function() {
         var situacao = limparValor(btn.getAttribute('data-situacao')) || 'PENDENTE';
         var formaPagamento = limparValor(btn.getAttribute('data-forma-pagamento'));
         var lucroPerc = limparValor(btn.getAttribute('data-lucro-perc'));
+        var tipoOperacao = (limparValor(btn.getAttribute('data-tipo-operacao')) || 'VENDA').toUpperCase();
 
         form.action = actionBase.replace(/\/0$/, '/') + id;
         document.getElementById('edit_cliente_id').value = clienteId;
@@ -2633,8 +2634,21 @@ document.addEventListener('DOMContentLoaded', function() {
         if (inputLucroPerc) {
             inputLucroPerc.value = (lucroPerc && lucroPerc !== 'None') ? lucroPerc : '';
         }
+        var editTipoOp = document.getElementById('edit_tipo_operacao');
+        if (editTipoOp) editTipoOp.value = tipoOperacao;
         var editFormaPag = document.getElementById('edit_forma_pagamento');
-        if (editFormaPag) editFormaPag.value = formaPagamento;
+        if (editFormaPag) {
+            if (tipoOperacao === 'PERDA') {
+                editFormaPag.value = '';
+                editFormaPag.disabled = true;
+                editFormaPag.removeAttribute('required');
+                editFormaPag.classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                editFormaPag.value = formaPagamento;
+                editFormaPag.disabled = false;
+                editFormaPag.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+        }
 
         wrap.classList.remove('hidden');
         travarFundo();

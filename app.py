@@ -7316,6 +7316,14 @@ def nova_venda():
         tipo_operacao = (request.form.get('tipo_operacao') or 'VENDA').strip().upper()
         if tipo_operacao not in ('VENDA', 'PERDA'):
             tipo_operacao = 'VENDA'
+        if tipo_operacao != 'PERDA' and not forma_pagamento:
+            msg = 'Selecione a forma de pagamento.'
+            if _is_ajax():
+                return jsonify(ok=False, mensagem=msg), 400
+            flash(msg, 'error')
+            clientes = Cliente.query.filter(Cliente.ativo.is_(True)).order_by(Cliente.nome_cliente).limit(1000).all()
+            produtos = Produto.query.filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
+            return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
         lucro_percentual_raw = (request.form.get('lucro_percentual') or '').strip()
         lucro_percentual = None
         if lucro_percentual_raw:
@@ -7727,6 +7735,9 @@ def editar_venda(id):
             tipo_operacao = (_clean_nullable_text(request.form.get('tipo_operacao')) or venda.tipo_operacao or 'VENDA').strip().upper()
             if tipo_operacao not in ('VENDA', 'PERDA'):
                 tipo_operacao = 'VENDA'
+            if tipo_operacao != 'PERDA' and not forma_pagamento_nova:
+                flash('Selecione a forma de pagamento.', 'error')
+                return redirect(request.referrer or url_for('listar_vendas'))
             venda.tipo_operacao = tipo_operacao
             venda.lucro_percentual = lucro_percentual if (lucro_percentual is not None and lucro_percentual > 0) else None
             if tipo_operacao == 'PERDA':
