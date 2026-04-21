@@ -1647,6 +1647,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var processarUrl = carrinhoWrap ? carrinhoWrap.getAttribute('data-processar-url') : '/processar_carrinho';
 
     var carrinho = [];
+    var editIndex = null;
     var precoCustoSugerido = 0;
     var precoProgrammatic = false;
 
@@ -1886,9 +1887,91 @@ document.addEventListener('DOMContentLoaded', function() {
         };
     }
 
+    function _parseNumeroEdicao(valor) {
+        if (valor === null || valor === undefined) return 0;
+        var txt = String(valor).trim();
+        if (!txt) return 0;
+        return parseFloat(txt.replace(',', '.'));
+    }
+
+    function _escAttr(valor) {
+        return String(valor || '')
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    }
+
+    function editarItemCarrinho(index) {
+        if (isNaN(index) || index < 0 || index >= carrinho.length) return;
+        editIndex = index;
+        hideErro();
+        renderCart();
+    }
+
+    function salvarEdicaoCarrinho(index) {
+        if (isNaN(index) || index < 0 || index >= carrinho.length) return;
+        var linha = carrinhoTbody ? carrinhoTbody.querySelector('tr[data-cart-index="' + index + '"]') : null;
+        if (!linha) return;
+
+        var itemAtual = carrinho[index];
+        var nfInput = linha.querySelector('.edit-nf');
+        var qtdInput = linha.querySelector('.edit-qtd');
+        var precoInputEdicao = linha.querySelector('.edit-preco');
+        var lucroInput = linha.querySelector('.edit-lucro');
+
+        var nf = nfInput ? String(nfInput.value || '').trim() : '';
+        var qtd = parseInt(qtdInput && qtdInput.value ? qtdInput.value : '0', 10);
+        if (isNaN(qtd) || qtd < 1) {
+            showErro('Quantidade inválida. Informe um valor maior ou igual a 1.');
+            return;
+        }
+
+        var tipoOperacao = String(itemAtual.tipo_operacao || 'VENDA').toUpperCase();
+        var preco = _parseNumeroEdicao(precoInputEdicao ? precoInputEdicao.value : '0');
+        if (tipoOperacao === 'PERDA') {
+            preco = 0;
+        }
+        if (tipoOperacao === 'VENDA' && (isNaN(preco) || preco <= 0)) {
+            showErro('Preço inválido. Informe um preço maior que zero para venda.');
+            return;
+        }
+
+        var lucroPercentual = _parseNumeroEdicao(lucroInput ? lucroInput.value : '');
+        if (isNaN(lucroPercentual) || lucroPercentual < 0) {
+            lucroPercentual = 0;
+        }
+
+        var total = preco * qtd;
+        var precoCusto = parseFloat(itemAtual.preco_custo || 0);
+        var lucro = 0;
+        if (tipoOperacao === 'PERDA') {
+            lucro = -(precoCusto * qtd);
+            lucroPercentual = 0;
+        } else if (lucroPercentual > 0) {
+            lucro = total * (lucroPercentual / 100);
+        } else {
+            lucro = (preco - precoCusto) * qtd;
+        }
+
+        carrinho[index] = Object.assign({}, itemAtual, {
+            nf: nf || null,
+            quantidade_venda: qtd,
+            preco_venda: preco,
+            total: total,
+            lucro: lucro,
+            lucro_percentual: lucroPercentual > 0 ? lucroPercentual : null
+        });
+
+        editIndex = null;
+        hideErro();
+        renderCart();
+    }
+
     function renderCart() {
         if (!carrinhoTbody) return;
         if (carrinho.length === 0) {
+            editIndex = null;
             if (carrinhoVazio) carrinhoVazio.classList.remove('hidden');
             if (carrinhoTabelaWrap) carrinhoTabelaWrap.classList.add('hidden');
             if (carrinhoAcoes) carrinhoAcoes.classList.add('hidden');
@@ -1907,22 +1990,40 @@ document.addEventListener('DOMContentLoaded', function() {
             lucroTotal += typeof it.lucro === 'number' ? it.lucro : 0;
             var tr = document.createElement('tr');
             tr.className = 'hover:bg-emerald-50/60 dark:hover:bg-emerald-900/30 transition';
+            tr.setAttribute('data-cart-index', String(i));
+            var isEditing = editIndex === i;
             var precoStr = formatoMoeda(it.preco_venda);
             var totalStr = formatoMoeda(it.total);
             var lucro = typeof it.lucro === 'number' ? it.lucro : 0;
             var lucroStr = formatoMoeda(lucro);
+            var lucroPercentualStr = (typeof it.lucro_percentual === 'number' && it.lucro_percentual > 0) ? String(it.lucro_percentual).replace('.', ',') : '';
             var lucroClass = lucro > 0 ? 'text-emerald-600 dark:text-emerald-400 font-medium' : (lucro < 0 ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-amber-600 dark:text-amber-400 font-medium');
             var formaPagStr = (it.forma_pagamento && it.forma_pagamento.trim()) ? it.forma_pagamento : '-';
+            var nfCell = isEditing
+                ? '<input type="text" class="edit-nf w-full rounded border border-gray-300 dark:border-gray-600 px-2 py-1 text-xs dark:bg-gray-700 dark:text-gray-100" value="' + _escAttr(it.nf || '') + '" />'
+                : (it.nf || '-');
+            var qtdCell = isEditing
+                ? '<input type="number" min="1" class="edit-qtd w-20 rounded border border-gray-300 dark:border-gray-600 px-2 py-1 text-xs text-right dark:bg-gray-700 dark:text-gray-100" value="' + it.quantidade_venda + '" />'
+                : it.quantidade_venda;
+            var precoCell = isEditing
+                ? '<input type="number" min="0" step="0.01" class="edit-preco w-24 rounded border border-gray-300 dark:border-gray-600 px-2 py-1 text-xs text-right dark:bg-gray-700 dark:text-gray-100" value="' + (Number(it.preco_venda || 0).toFixed(2)) + '"' + (String(it.tipo_operacao || 'VENDA').toUpperCase() === 'PERDA' ? ' readonly' : '') + ' />'
+                : precoStr;
+            var lucroCell = isEditing
+                ? '<input type="number" min="0" step="0.01" class="edit-lucro w-20 rounded border border-gray-300 dark:border-gray-600 px-2 py-1 text-xs text-right dark:bg-gray-700 dark:text-gray-100" placeholder="%" value="' + lucroPercentualStr + '" />'
+                : lucroStr;
+            var editarOuSalvarBtn = isEditing
+                ? '<button type="button" class="carrinho-salvar text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 inline-flex p-1 rounded hover:bg-emerald-50 dark:hover:bg-emerald-900/30" data-index="' + i + '" title="Salvar edição"><i data-lucide="check" class="w-4 h-4"></i></button>'
+                : '<button type="button" class="carrinho-editar text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 inline-flex p-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/30" data-index="' + i + '" title="Editar item"><i data-lucide="pencil" class="w-4 h-4"></i></button>';
             tr.innerHTML =
                 '<td class="px-4 py-2 text-sm font-medium text-gray-900 dark:text-gray-100">' + (it.cliente_nome || '-') + '</td>' +
                 '<td class="px-4 py-2 text-sm text-gray-900 dark:text-gray-100">' + (it.produto_nome || '-') + '</td>' +
-                '<td class="px-4 py-2 text-sm text-gray-900 dark:text-gray-100">' + (it.nf || '-') + '</td>' +
-                '<td class="px-4 py-2 text-sm text-gray-900 dark:text-gray-100 text-right">' + it.quantidade_venda + '</td>' +
-                '<td class="px-4 py-2 text-sm text-gray-900 dark:text-gray-100 text-right">' + precoStr + '</td>' +
-                '<td class="px-4 py-2 text-sm text-right ' + lucroClass + '">' + lucroStr + '</td>' +
+                '<td class="px-4 py-2 text-sm text-gray-900 dark:text-gray-100">' + nfCell + '</td>' +
+                '<td class="px-4 py-2 text-sm text-gray-900 dark:text-gray-100 text-right">' + qtdCell + '</td>' +
+                '<td class="px-4 py-2 text-sm text-gray-900 dark:text-gray-100 text-right">' + precoCell + '</td>' +
+                '<td class="px-4 py-2 text-sm text-right ' + lucroClass + '">' + lucroCell + '</td>' +
                 '<td class="px-4 py-2 text-sm font-bold text-gray-900 dark:text-gray-100 text-right">' + totalStr + '</td>' +
                 '<td class="px-4 py-2 text-sm text-gray-900 dark:text-gray-100"><span class="px-2 py-0.5 text-xs rounded ' + (formaPagStr !== '-' ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300' : 'text-gray-400 dark:text-gray-500') + '">' + formaPagStr + '</span></td>' +
-                '<td class="px-4 py-2 text-right"><button type="button" class="carrinho-remover text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 inline-flex p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/30" data-index="' + i + '" title="Remover do carrinho"><i data-lucide="trash-2" class="w-4 h-4"></i></button></td>';
+                '<td class="px-4 py-2 text-right"><div class="inline-flex items-center gap-1">' + editarOuSalvarBtn + '<button type="button" class="carrinho-remover text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 inline-flex p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/30" data-index="' + i + '" title="Remover do carrinho"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div></td>';
             carrinhoTbody.appendChild(tr);
         }
         var brutoEl = document.getElementById('carrinho-total-bruto');
@@ -1940,7 +2041,28 @@ document.addEventListener('DOMContentLoaded', function() {
                 var idx = parseInt(this.getAttribute('data-index'), 10);
                 if (isNaN(idx) || idx < 0 || idx >= carrinho.length) return;
                 carrinho.splice(idx, 1);
+                if (editIndex === idx) {
+                    editIndex = null;
+                } else if (editIndex !== null && idx < editIndex) {
+                    editIndex -= 1;
+                }
                 renderCart();
+            });
+        }
+
+        var edits = carrinhoTbody.querySelectorAll('.carrinho-editar');
+        for (var e = 0; e < edits.length; e++) {
+            edits[e].addEventListener('click', function() {
+                var idx = parseInt(this.getAttribute('data-index'), 10);
+                editarItemCarrinho(idx);
+            });
+        }
+
+        var saves = carrinhoTbody.querySelectorAll('.carrinho-salvar');
+        for (var s = 0; s < saves.length; s++) {
+            saves[s].addEventListener('click', function() {
+                var idx = parseInt(this.getAttribute('data-index'), 10);
+                salvarEdicaoCarrinho(idx);
             });
         }
     }
