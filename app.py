@@ -5058,8 +5058,25 @@ def _normalizar_tipo_ui(s):
     return 'OUTROS'
 
 
+def _is_placeholder_nome(valor):
+    """Retorna True se o valor é vazio ou placeholder não desejado no nome."""
+    txt = str(valor or '').strip().upper()
+    return txt in {'', 'S/N', 'N/A', 'NA', 'NENHUMA'}
+
+
+def _montar_nome_produto(*partes):
+    """Monta nome do produto ignorando placeholders e espaços extras."""
+    partes_validas = []
+    for parte in partes:
+        txt = str(parte or '').strip()
+        if _is_placeholder_nome(txt):
+            continue
+        partes_validas.append(txt)
+    return " ".join(partes_validas)
+
+
 def gerar_nome_produto(tipo, nacionalidade, marca, data_chegada, tamanho):
-    """Gera o nome do produto automaticamente no formato: {tipo} {nacionalidade} {marca} {data} {tamanho}"""
+    """Gera nome do produto ignorando placeholders como N/A e S/N."""
     # Formatar data como dd/mm/yy
     if isinstance(data_chegada, date):
         data_formatada = data_chegada.strftime('%d/%m/%y')
@@ -5071,16 +5088,12 @@ def gerar_nome_produto(tipo, nacionalidade, marca, data_chegada, tamanho):
             data_formatada = date.today().strftime('%d/%m/%y')
     else:
         data_formatada = date.today().strftime('%d/%m/%y')
-    
-    # SACOLA: nacionalidade N/A (não capitalizar)
-    if (tipo or '').upper() == 'SACOLA' or (nacionalidade or '').upper() == 'N/A':
-        nacionalidade_capitalizada = 'N/A'
-    else:
-        nacionalidade_capitalizada = (nacionalidade or '').capitalize()
-    
-    marca_capitalizada = (marca or '').capitalize()
-    
-    return f"{tipo} {nacionalidade_capitalizada} {marca_capitalizada} {data_formatada} {tamanho}"
+
+    tipo_txt = str(tipo or '').strip().upper()
+    nacionalidade_txt = str(nacionalidade or '').strip().upper()
+    marca_txt = str(marca or '').strip().upper()
+    tamanho_txt = str(tamanho or '').strip().upper()
+    return _montar_nome_produto(tipo_txt, nacionalidade_txt, marca_txt, data_formatada, tamanho_txt)
 
 
 def _validar_sacola(tipo, nacionalidade, marca, tamanho):
@@ -5707,7 +5720,7 @@ def novo_produto():
             return render_template('produtos/formulario.html', produto=None)
 
         if tipo_upper == 'BACALHAU':
-            nome_produto = f"{tipo_upper} {(marca or 'NORGY').strip().upper()} {tamanho}".strip()
+            nome_produto = _montar_nome_produto(tipo_upper, (marca or 'NORGY').strip().upper(), tamanho)
         else:
             nome_produto = gerar_nome_produto(tipo_upper, nacionalidade, marca, data_chegada, tamanho)
         produto = Produto(
@@ -5824,7 +5837,7 @@ def editar_produto(id):
         
         # EDIÇÃO MANUAL: Sempre gerar nome_produto automaticamente via concatenação
         if tipo_upper == 'BACALHAU':
-            nome_produto = f"{tipo_upper} {(marca or 'NORGY').strip().upper()} {tamanho}".strip()
+            nome_produto = _montar_nome_produto(tipo_upper, (marca or 'NORGY').strip().upper(), tamanho)
         else:
             nome_produto = gerar_nome_produto(tipo_upper, nacionalidade, marca, data_chegada, tamanho)
         

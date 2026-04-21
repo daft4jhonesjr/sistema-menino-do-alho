@@ -218,7 +218,7 @@
                                 <td colspan="100%" class="px-6 py-3">
                                     <div class="flex items-center gap-3">
                                         <svg class="icone-seta w-4 h-4 text-red-700 dark:text-red-300 transition-transform duration-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
-                                        <span class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ produto.nome_produto }}</span>
+                                        <span class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ (' ' ~ (produto.nome_produto or '') ~ ' ') | replace(' S/N ', ' ') | replace(' s/n ', ' ') | replace(' N/A ', ' ') | replace(' n/a ', ' ') | replace(' NENHUMA ', ' ') | replace(' nenhuma ', ' ') | replace('  ', ' ') | replace('  ', ' ') | trim }}</span>
                                         <span class="bg-red-100 dark:bg-red-900/60 text-red-800 dark:text-red-300 text-xs font-bold px-2.5 py-0.5 rounded-full ml-auto">Esgotado</span>
                                     </div>
                                 </td>
@@ -231,7 +231,7 @@
                                 <td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap min-w-[260px]">
                                 <button type="button" onclick="abrirModalVendas('produto', {{ produto.id }})"
                                         class="text-emerald-700 dark:text-emerald-400 hover:underline font-bold transition text-left cursor-pointer">
-                                    {{ produto.nome_produto }}
+                                    {{ (' ' ~ (produto.nome_produto or '') ~ ' ') | replace(' S/N ', ' ') | replace(' s/n ', ' ') | replace(' N/A ', ' ') | replace(' n/a ', ' ') | replace(' NENHUMA ', ' ') | replace(' nenhuma ', ' ') | replace('  ', ' ') | replace('  ', ' ') | trim }}
                                 </button>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 text-right">{{ produto.preco_custo | formato_moeda }}</td>
