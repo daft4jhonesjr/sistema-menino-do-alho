@@ -5,7 +5,7 @@ from flask_compress import Compress
 from flask_caching import Cache
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from models import db, Cliente, Produto, ProdutoFoto, Venda, Usuario, Configuracao, Documento, LancamentoCaixa, ContagemGaveta, Fornecedor, PushSubscription, LogAtividade
+from models import db, Cliente, Produto, ProdutoFoto, Venda, Usuario, Configuracao, Documento, LancamentoCaixa, ContagemGaveta, Fornecedor, TipoProduto, PushSubscription, LogAtividade
 from quotes import frase_do_dia
 from config import Config
 from datetime import date, datetime, timedelta
@@ -5317,6 +5317,7 @@ def listar_produtos():
         return jsonify({'html': html_linhas, 'has_next': pagination.has_next, 'page': page})
 
     fornecedores = Fornecedor.query.order_by(Fornecedor.nome).all()
+    tipos_produto = TipoProduto.query.order_by(TipoProduto.nome).all()
 
     return render_template(
         'produtos/listar.html',
@@ -5326,6 +5327,7 @@ def listar_produtos():
         produtos=produtos_paginados,
         produtos_outros=produtos_outros,
         fornecedores=fornecedores,
+        tipos_produto=tipos_produto,
         ordem_data=ordem_data,
         totais_por_tipo=totais_por_tipo,
         pagination=pagination,
@@ -5513,6 +5515,29 @@ def novo_fornecedor():
     except Exception:
         db.session.rollback()
         flash('Erro ao cadastrar fornecedor.', 'error')
+    return redirect(url_for('listar_produtos'))
+
+
+@app.route('/tipos/novo', methods=['POST'])
+@login_required
+def novo_tipo_produto():
+    nome = str(request.form.get('nome') or '').strip().upper()
+
+    if not nome:
+        flash('Nome do tipo é obrigatório.', 'error')
+        return redirect(url_for('listar_produtos'))
+
+    if TipoProduto.query.filter(func.upper(TipoProduto.nome) == nome).first():
+        flash('Tipo já cadastrado.', 'warning')
+        return redirect(url_for('listar_produtos'))
+
+    try:
+        db.session.add(TipoProduto(nome=nome))
+        db.session.commit()
+        flash('Tipo cadastrado com sucesso!', 'success')
+    except Exception:
+        db.session.rollback()
+        flash('Erro ao cadastrar tipo.', 'error')
     return redirect(url_for('listar_produtos'))
 
 

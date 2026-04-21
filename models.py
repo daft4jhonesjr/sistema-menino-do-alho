@@ -151,6 +151,17 @@ class Fornecedor(db.Model):
         return f'<Fornecedor {self.nome}>'
 
 
+class TipoProduto(db.Model):
+    """Tipo simples de produto para seleção no cadastro de entrada."""
+    __tablename__ = "tipos_produto"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    nome = db.Column(db.String(100), nullable=False, unique=True, index=True)
+
+    def __repr__(self):
+        return f'<TipoProduto {self.nome}>'
+
+
 class ProdutoFoto(db.Model):
     """Fotos do produto (até 5 por produto)."""
     __tablename__ = 'produto_fotos'
