@@ -5328,6 +5328,7 @@ def listar_produtos():
         produtos_outros=produtos_outros,
         fornecedores=fornecedores,
         tipos_produto=tipos_produto,
+        tipos=tipos_produto,
         ordem_data=ordem_data,
         totais_por_tipo=totais_por_tipo,
         pagination=pagination,
@@ -5538,6 +5539,21 @@ def novo_tipo_produto():
     except Exception:
         db.session.rollback()
         flash('Erro ao cadastrar tipo.', 'error')
+    return redirect(url_for('listar_produtos'))
+
+
+@app.route('/tipos/deletar/<int:id>', methods=['POST'])
+@login_required
+@admin_required
+def deletar_tipo(id):
+    tipo = TipoProduto.query.get_or_404(id)
+    try:
+        db.session.delete(tipo)
+        db.session.commit()
+        flash('Tipo removido com sucesso!', 'success')
+    except Exception:
+        db.session.rollback()
+        flash('Erro ao remover tipo.', 'error')
     return redirect(url_for('listar_produtos'))
 
 
