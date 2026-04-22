@@ -53,10 +53,7 @@
                         </a>
                         {% endif %}
 
-                        <a href="#" data-bs-toggle="modal" data-bs-target="#modalNovoTipo" onclick="event.preventDefault();fecharDropdownEntrada();document.getElementById('modalNovoTipo').classList.remove('hidden');travarFundo();" class="group flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
-                            🏷️&nbsp;Novo Tipo
-                        </a>
-                        <a href="#" data-bs-toggle="modal" data-bs-target="#modalTiposCadastrados" onclick="event.preventDefault();fecharDropdownEntrada();document.getElementById('modalTiposCadastrados').classList.remove('hidden');travarFundo();" class="group flex items-center px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 pl-8">
+                        <a href="#" data-bs-toggle="modal" data-bs-target="#modalTiposCadastrados" onclick="event.preventDefault();fecharDropdownEntrada();document.getElementById('modalTiposCadastrados').classList.remove('hidden');travarFundo();" class="group flex items-center px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
                             📂&nbsp;Tipos Cadastrados
                         </a>
 
@@ -487,6 +484,9 @@
             <button type="button" onclick="document.getElementById('modalTiposCadastrados').classList.add('hidden');liberarFundo();" class="hover:text-slate-300 text-xl font-bold">✖</button>
         </div>
         <div class="p-6 overflow-y-auto">
+            <button type="button" data-bs-dismiss="modal" data-bs-toggle="modal" data-bs-target="#modalNovoTipo" onclick="document.getElementById('modalTiposCadastrados').classList.add('hidden');document.getElementById('modalNovoTipo').classList.remove('hidden');travarFundo();" class="mb-3 w-full sm:w-auto inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none">
+                <i class="fas fa-plus mr-2"></i> Novo Tipo
+            </button>
             <ul class="divide-y divide-gray-200 dark:divide-gray-700">
                 {% for tipo in tipos %}
                 <li class="flex justify-between items-center py-3">
