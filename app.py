@@ -5560,6 +5560,11 @@ def novo_tipo_produto():
 @admin_required
 def deletar_tipo(id):
     tipo = TipoProduto.query.get_or_404(id)
+    tipo_nome = str(tipo.nome or '').strip().upper()
+    em_uso = Produto.query.filter(func.upper(func.coalesce(Produto.tipo, '')) == tipo_nome).first()
+    if em_uso:
+        flash('Este tipo está em uso e não pode ser apagado', 'error')
+        return redirect(url_for('listar_produtos'))
     try:
         db.session.delete(tipo)
         db.session.commit()
@@ -5567,6 +5572,35 @@ def deletar_tipo(id):
     except Exception:
         db.session.rollback()
         flash('Erro ao remover tipo.', 'error')
+    return redirect(url_for('listar_produtos'))
+
+
+@app.route('/tipos/editar/<int:id>', methods=['POST'])
+@login_required
+@admin_required
+def editar_tipo(id):
+    tipo = TipoProduto.query.get_or_404(id)
+    novo_nome = str(request.form.get('novo_nome') or '').strip().upper()
+
+    if not novo_nome:
+        flash('Nome do tipo é obrigatório.', 'error')
+        return redirect(url_for('listar_produtos'))
+
+    duplicado = TipoProduto.query.filter(
+        func.upper(TipoProduto.nome) == novo_nome,
+        TipoProduto.id != tipo.id
+    ).first()
+    if duplicado:
+        flash('Já existe outro tipo com este nome.', 'warning')
+        return redirect(url_for('listar_produtos'))
+
+    try:
+        tipo.nome = novo_nome
+        db.session.commit()
+        flash('Tipo atualizado com sucesso!', 'success')
+    except Exception:
+        db.session.rollback()
+        flash('Erro ao atualizar tipo.', 'error')
     return redirect(url_for('listar_produtos'))
 
 
