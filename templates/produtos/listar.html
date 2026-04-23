@@ -1037,6 +1037,9 @@ function editarTipoCadastrado(id, nomeAtual) {
         aplicarModoCafe();
         aplicarModoBacalhau();
         aplicarVisibilidadeNacTam();
+        if (tipoSelect) {
+            tipoSelect.dispatchEvent(new Event('change'));
+        }
         if (typeof lucide !== 'undefined') lucide.createIcons();
     }
     function fechar() {
@@ -1747,6 +1750,12 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!option) return false;
         return option.style.display !== 'none' && !option.hidden;
     }
+    function setOptionVisibilidade(option, mostrar) {
+        if (!option) return;
+        option.hidden = !mostrar;
+        option.disabled = !mostrar;
+        option.style.display = mostrar ? '' : 'none';
+    }
     function filtrarFornecedoresPorTipo() {
         if (!tipoSelectNovaEntrada || !fornecedorSelectNovaEntrada) return;
         var tipoSelecionado = String(tipoSelectNovaEntrada.value || '').trim().toUpperCase();
@@ -1754,8 +1763,7 @@ document.addEventListener('DOMContentLoaded', function() {
         var manterSelecionado = false;
         Array.prototype.forEach.call(fornecedorSelectNovaEntrada.options, function(option, idx) {
             if (idx === 0) {
-                option.hidden = false;
-                option.style.display = '';
+                setOptionVisibilidade(option, true);
                 return;
             }
             var tiposAttr = String(option.getAttribute('data-tipos') || '').trim().toUpperCase();
@@ -1769,8 +1777,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     mostrar = true;
                 }
             }
-            option.hidden = !mostrar;
-            option.style.display = mostrar ? '' : 'none';
+            setOptionVisibilidade(option, mostrar);
             if (mostrar && option.value === valorAtualFornecedor) {
                 manterSelecionado = true;
             }
@@ -1788,8 +1795,7 @@ document.addEventListener('DOMContentLoaded', function() {
         var tiposPermitidos = parseTiposPermitidos(optionSelecionada ? optionSelecionada.getAttribute('data-tipos') : '');
         Array.prototype.forEach.call(tipoSelectNovaEntrada.options, function(option, idx) {
             if (idx === 0 || String(option.value || '') === '') {
-                option.hidden = false;
-                option.style.display = '';
+                setOptionVisibilidade(option, true);
                 return;
             }
             var tipoOpt = String(option.value || option.text || '').trim().toUpperCase();
@@ -1802,8 +1808,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     mostrar = true;
                 }
             }
-            option.hidden = !mostrar;
-            option.style.display = mostrar ? '' : 'none';
+            setOptionVisibilidade(option, mostrar);
             if (mostrar && option.value === valorAtualTipo) {
                 manterSelecionado = true;
             }
@@ -1835,8 +1840,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
         });
-        filtrarFornecedoresPorTipo();
-        filtrarTiposPorFornecedor();
+        tipoSelectNovaEntrada.dispatchEvent(new Event('change'));
     }
 });
 
