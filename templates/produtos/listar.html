@@ -1737,6 +1737,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
     var tipoSelectNovaEntrada = document.getElementById('tipo');
     var fornecedorSelectNovaEntrada = document.getElementById('fornecedor');
+    function parseTiposPermitidos(value) {
+        return String(value || '')
+            .toUpperCase()
+            .split(',')
+            .map(function(s) { return s.trim(); })
+            .filter(Boolean);
+    }
+    function isOptionVisivel(option) {
+        if (!option) return false;
+        return option.style.display !== 'none' && !option.hidden;
+    }
     function filtrarFornecedoresPorTipo() {
         if (!tipoSelectNovaEntrada || !fornecedorSelectNovaEntrada) return;
         var tipoSelecionado = String(tipoSelectNovaEntrada.value || '').trim().toUpperCase();
@@ -1752,7 +1763,7 @@ document.addEventListener('DOMContentLoaded', function() {
             var mostrar = true;
             if (tipoSelecionado) {
                 if (tiposAttr) {
-                    var tiposPermitidos = tiposAttr.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+                    var tiposPermitidos = parseTiposPermitidos(tiposAttr);
                     mostrar = tiposPermitidos.indexOf(tipoSelecionado) !== -1;
                 } else {
                     // Legado: fornecedores sem vínculo explícito permanecem visíveis.
@@ -1769,9 +1780,64 @@ document.addEventListener('DOMContentLoaded', function() {
             fornecedorSelectNovaEntrada.value = '';
         }
     }
+    function filtrarTiposPorFornecedor() {
+        if (!tipoSelectNovaEntrada || !fornecedorSelectNovaEntrada) return;
+        var optionSelecionada = fornecedorSelectNovaEntrada.options[fornecedorSelectNovaEntrada.selectedIndex];
+        var valorAtualTipo = tipoSelectNovaEntrada.value;
+        var manterSelecionado = false;
+        var fornecedorSelecionado = String(fornecedorSelectNovaEntrada.value || '').trim();
+        var tiposPermitidos = parseTiposPermitidos(optionSelecionada ? optionSelecionada.getAttribute('data-tipos') : '');
+        Array.prototype.forEach.call(tipoSelectNovaEntrada.options, function(option, idx) {
+            if (idx === 0 || String(option.value || '') === '') {
+                option.hidden = false;
+                option.style.display = '';
+                return;
+            }
+            var tipoOpt = String(option.value || option.text || '').trim().toUpperCase();
+            var mostrar = true;
+            if (fornecedorSelecionado) {
+                if (tiposPermitidos.length) {
+                    mostrar = tiposPermitidos.indexOf(tipoOpt) !== -1;
+                } else {
+                    // Legado: fornecedor sem vínculo explícito mantém todos os tipos visíveis.
+                    mostrar = true;
+                }
+            }
+            option.hidden = !mostrar;
+            option.style.display = mostrar ? '' : 'none';
+            if (mostrar && option.value === valorAtualTipo) {
+                manterSelecionado = true;
+            }
+        });
+        if (!manterSelecionado) {
+            tipoSelectNovaEntrada.value = '';
+        }
+    }
     if (tipoSelectNovaEntrada && fornecedorSelectNovaEntrada) {
-        tipoSelectNovaEntrada.addEventListener('change', filtrarFornecedoresPorTipo);
+        tipoSelectNovaEntrada.addEventListener('change', function() {
+            filtrarFornecedoresPorTipo();
+            if (fornecedorSelectNovaEntrada.value) {
+                filtrarTiposPorFornecedor();
+                var fornecedorSelecionado = fornecedorSelectNovaEntrada.options[fornecedorSelectNovaEntrada.selectedIndex];
+                if (!isOptionVisivel(fornecedorSelecionado)) {
+                    fornecedorSelectNovaEntrada.value = '';
+                    filtrarTiposPorFornecedor();
+                }
+            }
+        });
+        fornecedorSelectNovaEntrada.addEventListener('change', function() {
+            filtrarTiposPorFornecedor();
+            if (tipoSelectNovaEntrada.value) {
+                filtrarFornecedoresPorTipo();
+                var tipoSelecionado = tipoSelectNovaEntrada.options[tipoSelectNovaEntrada.selectedIndex];
+                if (!isOptionVisivel(tipoSelecionado)) {
+                    tipoSelectNovaEntrada.value = '';
+                    filtrarFornecedoresPorTipo();
+                }
+            }
+        });
         filtrarFornecedoresPorTipo();
+        filtrarTiposPorFornecedor();
     }
 });
 
