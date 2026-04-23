@@ -179,10 +179,10 @@
                                     <input type="checkbox" class="bulk-select-all mx-auto rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" title="Selecionar todos" data-tipo="{{ tipo }}">
                                 </th>
                                 <th class="px-6 py-3 text-left text-xs font-semibold text-gray-200 uppercase tracking-wider whitespace-nowrap min-w-[260px]">Produto</th>
+                                <th class="px-6 py-3 text-right text-xs font-semibold text-gray-200 uppercase tracking-wider whitespace-nowrap min-w-[130px]">Estoque Atual</th>
                                 <th class="px-6 py-3 text-right text-xs font-semibold text-gray-200 uppercase tracking-wider whitespace-nowrap min-w-[130px]">PREÇO</th>
                                 <th class="px-6 py-3 text-right text-xs font-semibold text-gray-200 uppercase tracking-wider whitespace-nowrap min-w-[130px]">Qtd Entrada</th>
                                 <th class="px-6 py-3 text-right text-xs font-semibold text-gray-200 uppercase tracking-wider whitespace-nowrap min-w-[150px]">VALOR TOTAL</th>
-                                <th class="px-6 py-3 text-right text-xs font-semibold text-gray-200 uppercase tracking-wider whitespace-nowrap min-w-[130px]">Estoque Atual</th>
                                 <th class="px-6 py-3 text-right text-xs font-semibold text-gray-200 uppercase tracking-wider whitespace-nowrap min-w-[150px]">Lucro Realizado</th>
                                 {% set url_th_data = request.args.to_dict(flat=True) %}
                                 {% set proxima_ordem_data = 'crescente' if ordem_data == 'decrescente' else 'decrescente' %}
@@ -231,14 +231,14 @@
                                     {{ (' ' ~ (produto.nome_produto or '') ~ ' ') | replace(' S/N ', ' ') | replace(' s/n ', ' ') | replace(' N/A ', ' ') | replace(' n/a ', ' ') | replace(' NENHUMA ', ' ') | replace(' nenhuma ', ' ') | replace('  ', ' ') | replace('  ', ' ') | trim }}
                                 </button>
                             </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-bold {% if produto.estoque_atual <= 0 %}text-red-600 dark:text-red-400{% elif produto.estoque_atual < 10 %}text-amber-600 dark:text-amber-400{% else %}text-emerald-600 dark:text-emerald-400{% endif %} text-right">
+                                {{ produto.estoque_atual }}
+                            </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 text-right">{{ produto.preco_custo | formato_moeda }}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400 text-right">
                                 {{ item.quantidade_entrada_exibicao }}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 text-right font-medium">{{ (produto.preco_custo * item.quantidade_entrada_exibicao) | formato_moeda }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-bold {% if produto.estoque_atual <= 0 %}text-red-600 dark:text-red-400{% elif produto.estoque_atual < 10 %}text-amber-600 dark:text-amber-400{% else %}text-emerald-600 dark:text-emerald-400{% endif %} text-right">
-                                {{ produto.estoque_atual }}
-                            </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-right {% if produto.lucro_realizado() > 0 %}text-emerald-600 dark:text-emerald-400{% elif produto.lucro_realizado() < 0 %}text-red-600 dark:text-red-400{% else %}text-amber-600 dark:text-amber-400{% endif %}" title="{% if produto.quantidade_vendida() > 0 %}Lucro de {{ produto.lucro_medio_por_unidade() | formato_moeda }} por unidade{% else %}Nenhuma venda{% endif %}">
                                 {{ produto.lucro_realizado() | formato_moeda }}
                             </td>
