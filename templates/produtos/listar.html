@@ -293,6 +293,7 @@
                         <div class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-emerald-100 dark:border-emerald-800 shadow-sm dark:shadow-none">
                             <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-0.5">Estoque Atual</p>
                             <p class="text-lg font-bold text-gray-900 dark:text-gray-100">{{ totais.get('total_estoque_atual', 0)|int }} un</p>
+                            <p class="text-sm font-medium text-emerald-600 dark:text-emerald-400 mt-1">{{ totais.get('total_valor_estoque_atual', 0)|formato_moeda }}</p>
                         </div>
                         <div class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-emerald-100 dark:border-emerald-800 shadow-sm dark:shadow-none">
                             <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-0.5">Lucro Realizado</p>

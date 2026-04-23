@@ -5245,6 +5245,10 @@ def listar_produtos():
             'investimento_destak': investimento_destak,
             'total_qtd_entrada': sum(it['quantidade_entrada_exibicao'] for it in itens),
             'total_estoque_atual': sum(it['produto'].estoque_atual for it in itens),
+            'total_valor_estoque_atual': sum(
+                float(it['produto'].preco_custo) * float(it['produto'].estoque_atual or 0)
+                for it in itens
+            ),
             'total_lucro_realizado': sum(lucro_realizado_por_produto.get(it['produto'].id, 0.0) for it in itens),
         }
     
