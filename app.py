@@ -5513,6 +5513,14 @@ def novo_fornecedor():
     razao_social = str(request.form.get('razao_social') or '').strip().upper() or None
     cnpj = str(request.form.get('cnpj') or '').strip() or None
     endereco = str(request.form.get('endereco') or '').strip() or None
+    tipos_ids_raw = request.form.getlist('tipos_produtos')
+    tipos_ids = []
+    for tid in tipos_ids_raw:
+        try:
+            tipos_ids.append(int(tid))
+        except (TypeError, ValueError):
+            continue
+    tipos_selecionados = TipoProduto.query.filter(TipoProduto.id.in_(tipos_ids)).all() if tipos_ids else []
 
     if not nome:
         flash('Nome do fornecedor é obrigatório.', 'error')
@@ -5523,7 +5531,9 @@ def novo_fornecedor():
         return redirect(url_for('listar_produtos'))
 
     try:
-        db.session.add(Fornecedor(nome=nome, razao_social=razao_social, cnpj=cnpj, endereco=endereco))
+        fornecedor = Fornecedor(nome=nome, razao_social=razao_social, cnpj=cnpj, endereco=endereco)
+        fornecedor.tipos_produtos = tipos_selecionados
+        db.session.add(fornecedor)
         db.session.commit()
         flash('Fornecedor cadastrado com sucesso!', 'success')
     except Exception:
@@ -5612,6 +5622,14 @@ def editar_fornecedor(id):
     razao_social = str(request.form.get('razao_social') or '').strip().upper() or None
     cnpj = str(request.form.get('cnpj') or '').strip() or None
     endereco = str(request.form.get('endereco') or '').strip() or None
+    tipos_ids_raw = request.form.getlist('tipos_produtos')
+    tipos_ids = []
+    for tid in tipos_ids_raw:
+        try:
+            tipos_ids.append(int(tid))
+        except (TypeError, ValueError):
+            continue
+    tipos_selecionados = TipoProduto.query.filter(TipoProduto.id.in_(tipos_ids)).all() if tipos_ids else []
 
     if not nome:
         flash('Nome do fornecedor é obrigatório.', 'error')
@@ -5630,6 +5648,7 @@ def editar_fornecedor(id):
         fornecedor.razao_social = razao_social
         fornecedor.cnpj = cnpj
         fornecedor.endereco = endereco
+        fornecedor.tipos_produtos = tipos_selecionados
         db.session.commit()
         flash('Fornecedor atualizado com sucesso!', 'success')
     except Exception:
@@ -5647,6 +5666,14 @@ def editar_fornecedor_ajax(id):
         novo_nome = str(request.form.get('nome') or '').strip().upper()
         nova_razao = str(request.form.get('razao_social') or '').strip().upper() or None
         novo_cnpj = str(request.form.get('cnpj') or '').strip() or None
+        tipos_ids_raw = request.form.getlist('tipos_produtos')
+        tipos_ids = []
+        for tid in tipos_ids_raw:
+            try:
+                tipos_ids.append(int(tid))
+            except (TypeError, ValueError):
+                continue
+        tipos_selecionados = TipoProduto.query.filter(TipoProduto.id.in_(tipos_ids)).all() if tipos_ids else []
 
         if not novo_nome:
             return jsonify({'success': False, 'error': 'O Nome Fantasia é obrigatório.'}), 400
@@ -5661,8 +5688,9 @@ def editar_fornecedor_ajax(id):
         fornecedor.nome = novo_nome
         fornecedor.razao_social = nova_razao
         fornecedor.cnpj = novo_cnpj
+        fornecedor.tipos_produtos = tipos_selecionados
         db.session.commit()
-        return jsonify({'success': True})
+        return jsonify({'success': True, 'tipos': [t.nome for t in tipos_selecionados]})
     except Exception:
         db.session.rollback()
         return jsonify({'success': False, 'error': 'Erro no banco de dados. Verifique se o nome já existe.'}), 500

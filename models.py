@@ -5,6 +5,12 @@ from decimal import Decimal
 
 db = SQLAlchemy()
 
+fornecedor_tipo_assoc = db.Table(
+    'fornecedor_tipo_assoc',
+    db.Column('fornecedor_id', db.Integer, db.ForeignKey('fornecedores.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('tipo_id', db.Integer, db.ForeignKey('tipos_produto.id', ondelete='CASCADE'), primary_key=True),
+)
+
 
 class Usuario(UserMixin, db.Model):
     """
@@ -146,6 +152,7 @@ class Fornecedor(db.Model):
     razao_social = db.Column(db.String(150), nullable=True)
     cnpj = db.Column(db.String(20), nullable=True)
     endereco = db.Column(db.String(255), nullable=True)
+    tipos_produtos = db.relationship('TipoProduto', secondary=fornecedor_tipo_assoc, backref='fornecedores')
 
     def __repr__(self):
         return f'<Fornecedor {self.nome}>'
