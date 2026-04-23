@@ -57,10 +57,6 @@
                             📂&nbsp;Tipos Cadastrados
                         </a>
 
-                        <button type="button" onclick="fecharDropdownEntrada();document.getElementById('modal-novo-fornecedor').classList.remove('hidden');travarFundo();" class="group flex items-center w-full px-4 py-3 sm:py-2 text-base sm:text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
-                            🚚&nbsp;Novo Fornecedor
-                        </button>
-
                         <button type="button" onclick="fecharDropdownEntrada();document.getElementById('modal-lista-fornecedores').classList.remove('hidden');travarFundo();" class="group flex items-center w-full px-4 py-3 sm:py-2 text-base sm:text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
                             📋&nbsp;Fornecedores Cadastrados
                         </button>
@@ -559,6 +555,9 @@ function editarTipoCadastrado(id, nomeAtual) {
         </div>
 
         <div class="p-6 overflow-y-auto">
+            <button type="button" data-bs-dismiss="modal" data-bs-toggle="modal" data-bs-target="#modalNovoFornecedor" onclick="document.getElementById('modal-lista-fornecedores').classList.add('hidden');document.getElementById('modal-novo-fornecedor').classList.remove('hidden');travarFundo();" class="mb-3 w-full sm:w-auto inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none">
+                <i class="fas fa-plus mr-2"></i> Novo Fornecedor
+            </button>
             <table class="w-full text-sm text-left border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
                 <thead class="text-xs text-slate-500 uppercase bg-slate-100 dark:bg-slate-900 dark:text-slate-400">
                     <tr>
