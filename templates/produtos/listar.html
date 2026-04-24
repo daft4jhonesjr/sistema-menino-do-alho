@@ -501,16 +501,14 @@
                 {% for tipo in tipos %}
                 <li class="flex justify-between items-center py-3">
                     <span class="text-sm font-medium text-gray-900 dark:text-white">{{ tipo.nome }}</span>
-                    <div class="inline-flex items-center gap-2">
-                        <button type="button" class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded" title="Editar tipo" onclick="editarTipoCadastrado({{ tipo.id }}, {{ tipo.nome|tojson }})">
-                            <i class="fas fa-edit" aria-hidden="true"></i>
-                            <span>Editar</span>
+                    <div class="inline-flex items-center gap-3">
+                        <button type="button" class="text-gray-500 hover:text-amber-500 transition-colors" title="Editar tipo" aria-label="Editar tipo" onclick="editarTipoCadastrado({{ tipo.id }}, {{ tipo.nome|tojson }})">
+                            <i class="fas fa-pencil-alt" aria-hidden="true"></i>
                         </button>
                         <form action="{{ url_for('deletar_tipo', id=tipo.id) }}" method="POST" class="inline" onsubmit="return confirm('Tem certeza que deseja apagar este tipo?');">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                            <button type="submit" class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded" title="Excluir tipo">
+                            <button type="submit" class="text-gray-500 hover:text-red-500 transition-colors" title="Excluir tipo" aria-label="Excluir tipo">
                                 <i class="fas fa-trash-alt" aria-hidden="true"></i>
-                                <span>Excluir</span>
                             </button>
                         </form>
                     </div>
