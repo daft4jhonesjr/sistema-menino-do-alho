@@ -2234,8 +2234,21 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (x.json.ok) {
                         carrinho = [];
                         renderCart();
-                        alert(x.json.mensagem || 'Vendas registradas com sucesso.');
-                        window.location.reload();
+                        var msgSucesso = x.json.mensagem || 'Vendas registradas com sucesso.';
+                        if (typeof Swal !== 'undefined') {
+                            Swal.fire({
+                                title: 'Sucesso!',
+                                text: msgSucesso,
+                                icon: 'success',
+                                confirmButtonColor: '#059669',
+                                confirmButtonText: 'OK'
+                            }).then(function() {
+                                window.location.reload();
+                            });
+                        } else {
+                            alert(msgSucesso);
+                            window.location.reload();
+                        }
                         return;
                     }
                     showErro(x.json.mensagem || 'Erro ao processar carrinho.');
