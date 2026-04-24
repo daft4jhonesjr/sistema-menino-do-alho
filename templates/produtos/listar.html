@@ -499,16 +499,18 @@
             </button>
             <ul class="divide-y divide-gray-200 dark:divide-gray-700">
                 {% for tipo in tipos %}
-                <li class="flex justify-between items-center py-3">
+                <li class="py-3 flex justify-between items-center w-full border-b border-gray-100 dark:border-gray-700 last:border-0">
                     <span class="text-sm font-medium text-gray-900 dark:text-white">{{ tipo.nome }}</span>
-                    <div class="inline-flex items-center gap-3">
-                        <button type="button" class="text-gray-500 hover:text-amber-500 transition-colors" title="Editar tipo" aria-label="Editar tipo" onclick="editarTipoCadastrado({{ tipo.id }}, {{ tipo.nome|tojson }})">
-                            <i class="fas fa-pencil-alt" aria-hidden="true"></i>
+
+                    <div class="flex items-center gap-4">
+                        <button type="button" onclick="editarTipoCadastrado({{ tipo.id }}, '{{ tipo.nome }}')" class="text-gray-400 hover:text-amber-500 transition-colors focus:outline-none" title="Editar">
+                            <i class="fas fa-pencil-alt text-lg"></i>
                         </button>
-                        <form action="{{ url_for('deletar_tipo', id=tipo.id) }}" method="POST" class="inline" onsubmit="return confirm('Tem certeza que deseja apagar este tipo?');">
+
+                        <form action="{{ url_for('deletar_tipo', id=tipo.id) }}" method="POST" class="inline m-0 p-0 flex items-center" onsubmit="return confirm('Tem certeza que deseja apagar o tipo {{ tipo.nome }}?');">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                            <button type="submit" class="text-gray-500 hover:text-red-500 transition-colors" title="Excluir tipo" aria-label="Excluir tipo">
-                                <i class="fas fa-trash-alt" aria-hidden="true"></i>
+                            <button type="submit" class="text-gray-400 hover:text-red-500 transition-colors focus:outline-none" title="Excluir">
+                                <i class="fas fa-trash-alt text-lg"></i>
                             </button>
                         </form>
                     </div>
