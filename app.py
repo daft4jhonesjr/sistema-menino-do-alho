@@ -3702,15 +3702,81 @@ def _checar_gestao_usuario_permitida(usuario_alvo):
     return True, None
 
 
-@app.route('/gerenciar_usuarios')
+@app.route('/gerenciar_usuarios', methods=['GET', 'POST'])
 @login_required
 @tenant_required
 @admin_required
 def gerenciar_usuarios():
-    # DONO ve apenas usuarios do proprio tenant. Jhones (admin legado sem
-    # perfil MASTER) continua vendo apenas sua empresa tambem.
+    # Auto-correcao de seguranca: se 'Jhones' ficou orfao (empresa_id=None),
+    # religa automaticamente a Empresa Matriz (id=1) como DONO/admin.
+    # Conservador: so age sobre Jhones e so se Empresa id=1 ja existir.
+    if current_user.username == 'Jhones' and current_user.empresa_id is None:
+        empresa_matriz = Empresa.query.filter_by(id=1).first()
+        if empresa_matriz is not None:
+            current_user.empresa_id = 1
+            current_user.perfil = PERFIL_DONO
+            current_user.role = 'admin'
+            _safe_db_commit()
+
+    # POST: cadastro de nova Empresa + Dono (SaaS). Apenas Jhones ou MASTER.
+    if request.method == 'POST' and request.form.get('acao') == 'cadastrar_empresa':
+        if not (current_user.username == 'Jhones' or current_user.perfil == PERFIL_MASTER):
+            flash('Acesso negado: apenas o administrador principal pode cadastrar empresas.', 'error')
+            return redirect(url_for('gerenciar_usuarios'))
+
+        nome_fantasia = (request.form.get('nome_fantasia') or '').strip()
+        username_dono = (request.form.get('username_dono') or '').strip()
+        senha_provisoria = request.form.get('senha_provisoria') or ''
+
+        if not nome_fantasia:
+            flash('Informe o Nome Fantasia da empresa.', 'error')
+            return redirect(url_for('gerenciar_usuarios'))
+        if not username_dono:
+            flash('Informe o Username do Dono.', 'error')
+            return redirect(url_for('gerenciar_usuarios'))
+        if len(senha_provisoria) < 6:
+            flash('A senha provisória deve ter no mínimo 6 caracteres.', 'error')
+            return redirect(url_for('gerenciar_usuarios'))
+        if Usuario.query.filter_by(username=username_dono).first():
+            flash(f'O usuário "{username_dono}" já está em uso.', 'error')
+            return redirect(url_for('gerenciar_usuarios'))
+        if Empresa.query.filter(func.lower(Empresa.nome_fantasia) == nome_fantasia.lower()).first():
+            flash(f'Já existe uma empresa cadastrada com o nome "{nome_fantasia}".', 'error')
+            return redirect(url_for('gerenciar_usuarios'))
+
+        try:
+            nova_empresa = Empresa(
+                nome_fantasia=nome_fantasia,
+                ativo=True,
+                data_cadastro=datetime.utcnow(),
+            )
+            db.session.add(nova_empresa)
+            db.session.flush()
+
+            novo_dono = Usuario(
+                username=username_dono,
+                password_hash=generate_password_hash(senha_provisoria),
+                role='admin',
+                perfil=PERFIL_DONO,
+                empresa_id=nova_empresa.id,
+            )
+            db.session.add(novo_dono)
+            ok, err = _safe_db_commit()
+            if not ok:
+                flash(err or 'Erro ao cadastrar empresa.', 'error')
+                return redirect(url_for('gerenciar_usuarios'))
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Erro ao cadastrar empresa: {e}', 'error')
+            return redirect(url_for('gerenciar_usuarios'))
+
+        flash(f'Empresa "{nome_fantasia}" e Dono "{username_dono}" criados com sucesso.', 'success')
+        return redirect(url_for('gerenciar_usuarios'))
+
+    # GET: lista usuarios do tenant atual com empresa em eager loading.
     usuarios = (
         Usuario.query
+        .options(joinedload(Usuario.empresa))
         .filter_by(empresa_id=empresa_id_atual())
         .order_by(Usuario.username)
         .all()
