@@ -6858,14 +6858,37 @@ def listar_vendas():
             docs_do_pedido.extend(docs_por_venda.get(vv.id, []))
         pedido['tem_documentos'] = bool(docs_do_pedido or doc_boleto or doc_nf or cb or cn)
         pedido['primeiro_documento_id'] = docs_do_pedido[0].id if docs_do_pedido else (doc_nf.id if doc_nf else (doc_boleto.id if doc_boleto else None))
-        # Situação: pior entre as vendas (PENDENTE > PARCIAL > PAGO)
-        situacoes = [str(v.situacao or '').strip().upper() for v in pedido.get('vendas', [])]
-        if any(s == 'PENDENTE' for s in situacoes):
-            pedido['situacao'] = 'PENDENTE'
-        elif any(s == 'PARCIAL' for s in situacoes):
-            pedido['situacao'] = 'PARCIAL'
+        # Hierarquia de status em carrinho misto:
+        # - Se total_valor > 0: pedido é financeiro. Situação agregada olha apenas linhas
+        #   tipo_operacao != 'PERDA' (linhas PERDA mantêm situacao='PERDA' individual mas
+        #   não influenciam o status do pedido).
+        # - Se total_valor == 0 e existe item PERDA: pedido 100% de perda.
+        vendas_do_pedido = pedido.get('vendas', [])
+        pedido['tem_item_perda'] = any(
+            str(getattr(v, 'tipo_operacao', 'VENDA') or 'VENDA').upper() == 'PERDA'
+            for v in vendas_do_pedido
+        )
+        pedido['tem_item_venda'] = any(
+            str(getattr(v, 'tipo_operacao', 'VENDA') or 'VENDA').upper() != 'PERDA'
+            for v in vendas_do_pedido
+        )
+        total_valor_pedido = float(pedido.get('total_valor') or 0)
+        if total_valor_pedido <= 0 and pedido['tem_item_perda']:
+            pedido['situacao'] = 'PERDA'
         else:
-            pedido['situacao'] = 'PAGO'
+            situacoes_financeiras = [
+                str(v.situacao or '').strip().upper()
+                for v in vendas_do_pedido
+                if str(getattr(v, 'tipo_operacao', 'VENDA') or 'VENDA').upper() != 'PERDA'
+            ]
+            if not situacoes_financeiras:
+                situacoes_financeiras = [str(v.situacao or '').strip().upper() for v in vendas_do_pedido]
+            if any(s == 'PENDENTE' for s in situacoes_financeiras):
+                pedido['situacao'] = 'PENDENTE'
+            elif any(s == 'PARCIAL' for s in situacoes_financeiras):
+                pedido['situacao'] = 'PARCIAL'
+            else:
+                pedido['situacao'] = 'PAGO'
         # total_valor_pago já acumulado no loop anterior
         if 'total_valor_pago' not in pedido:
             pedido['total_valor_pago'] = sum(float(getattr(v, 'valor_pago', None) or 0) for v in pedido.get('vendas', []))
@@ -7837,8 +7860,15 @@ def editar_venda(id):
                 if data_venda_nova:
                     v_pedido.data_venda = data_venda_nova
                 v_pedido.empresa_faturadora = empresa_nova
-                v_pedido.situacao = situacao_nova
-                v_pedido.forma_pagamento = forma_pagamento_nova
+                # Linhas com tipo_operacao=PERDA preservam situacao='PERDA' e forma_pagamento=None,
+                # independentemente do status/forma aplicado ao pedido (ex.: marcar pedido como PAGO
+                # não deve afetar linhas de bonificação/quebra).
+                if str(getattr(v_pedido, 'tipo_operacao', 'VENDA') or 'VENDA').upper() == 'PERDA':
+                    v_pedido.situacao = 'PERDA'
+                    v_pedido.forma_pagamento = None
+                else:
+                    v_pedido.situacao = situacao_nova
+                    v_pedido.forma_pagamento = forma_pagamento_nova
 
             # Atualizar dados do item específico (venda selecionada)
             venda.produto_id = produto_id
@@ -8112,15 +8142,22 @@ def atualizar_status_venda(id_venda):
         return _resposta_sem_permissao()
     _assumir_ownership_venda_orfa(venda)
     vendas_do_pedido = _vendas_do_pedido(venda)
-    if any(str(getattr(v, 'tipo_operacao', 'VENDA') or 'VENDA').upper() == 'PERDA' for v in vendas_do_pedido):
+    # Separa linhas financeiras (VENDA) das de PERDA. Linhas PERDA nunca mudam de
+    # situação via toggle do pedido; elas continuam com situacao='PERDA'.
+    vendas_financeiras = [
+        v for v in vendas_do_pedido
+        if str(getattr(v, 'tipo_operacao', 'VENDA') or 'VENDA').upper() != 'PERDA'
+    ]
+    valor_total_financeiro = sum(float(v.calcular_total()) for v in vendas_financeiras)
+    if not vendas_financeiras or valor_total_financeiro <= 0:
         msg_perda = 'Pedidos de PERDA/QUEBRA não geram cobrança nem movimentação no caixa.'
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.is_json:
             return jsonify(ok=False, mensagem=msg_perda), 400
         flash(msg_perda, 'warning')
         return redirect(url_for('listar_vendas'))
-    atual = vendas_do_pedido[0].situacao if vendas_do_pedido else 'PENDENTE'
+    atual = vendas_financeiras[0].situacao if vendas_financeiras else 'PENDENTE'
     novo = 'PAGO' if atual == 'PENDENTE' else 'PENDENTE'
-    for v in vendas_do_pedido:
+    for v in vendas_financeiras:
         v.situacao = novo
     # --- INÍCIO DA INTEGRAÇÃO COM CAIXA (PILOTO AUTOMÁTICO V4) ---
     lancamentos_existentes = LancamentoCaixa.query.filter(
@@ -8138,10 +8175,11 @@ def atualizar_status_venda(id_venda):
         cliente = Cliente.query.get(venda.cliente_id)
         nome_cliente = cliente.nome_cliente if cliente else "Cliente Avulso"
         forma_pgto = request.form.get('forma_pagamento') or (request.get_json(silent=True) or {}).get('forma_pagamento', 'Dinheiro') or 'Dinheiro'
-        valor_pedido = sum(float(v.calcular_total()) for v in vendas_do_pedido)
+        # Lançamento do caixa considera apenas linhas financeiras; linhas PERDA somam 0.
+        valor_pedido = valor_total_financeiro
         forma_pgto_upper = str(forma_pgto or '').upper()
         data_venc = None
-        for v in vendas_do_pedido:
+        for v in vendas_financeiras:
             dv = getattr(v, 'data_vencimento', None)
             if dv:
                 data_venc = dv

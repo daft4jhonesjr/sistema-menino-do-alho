@@ -48,7 +48,9 @@
     </td>
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ pedido.empresa_faturadora }}</td>
     <td class="px-6 py-4 whitespace-nowrap text-center">
-        {% set pedido_eh_perda = pedido.vendas|selectattr('tipo_operacao', 'equalto', 'PERDA')|list|length > 0 %}
+        {% set pedido_tem_perda = pedido.vendas|selectattr('tipo_operacao', 'equalto', 'PERDA')|list|length > 0 %}
+        {% set pedido_total_valor = pedido.total_valor or 0 %}
+        {% set pedido_eh_perda = pedido_tem_perda and pedido_total_valor <= 0 %}
         {% if pedido_eh_perda %}
         <span class="inline-block px-3 py-1 text-xs font-semibold rounded-full bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-300 uppercase">📉 PERDA</span>
         {% elif pedido.situacao == 'PENDENTE' %}
@@ -144,7 +146,8 @@
                                     data-empresa="{{ venda.empresa_faturadora or '' }}"
                                     data-situacao="{{ venda.situacao or 'PENDENTE' }}"
                                     data-lucro-perc="{{ venda.lucro_percentual if venda.lucro_percentual is not none else '' }}"
-                                    data-forma-pagamento="{{ venda.forma_pagamento or '' }}">
+                                    data-forma-pagamento="{{ venda.forma_pagamento or '' }}"
+                                    data-tipo-operacao="{{ venda.tipo_operacao or 'VENDA' }}">
                                     <i data-lucide="pencil" class="w-4 h-4"></i>
                                 </button>
                                 <button type="button" class="btn-excluir-item-venda p-2 md:p-1 text-red-400 hover:text-red-600 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors inline-flex bg-transparent border-none cursor-pointer" title="Remover este produto do pedido" data-venda-id="{{ venda.id }}" data-produto-nome="{{ venda.produto.nome_produto if venda.produto else 'item' }}">
