@@ -379,7 +379,7 @@
                         <select id="tipo" name="tipo" required class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                             <option value="">Selecione...</option>
                             {% for tipo in tipos_produto %}
-                            <option value="{{ tipo.nome }}">{{ tipo.nome }}</option>
+                            <option value="{{ tipo.nome }}" data-id="{{ tipo.id }}">{{ tipo.nome }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -419,8 +419,8 @@
                         <input type="hidden" id="marca_hidden" value="SOPACK">
                         <input type="text" id="marca" name="marca" required placeholder="Ex: IMPORFOZ" autocapitalize="words" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                     </div>
-                    <div class="mb-4">
-                        <label for="caminhoneiro" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Caminhoneiro <span class="text-red-500">*</span></label>
+                    <div class="mb-4" id="container_caminhoneiro">
+                        <label for="caminhoneiro" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Caminhoneiro <span class="text-red-500" id="caminhoneiro-asterisco">*</span></label>
                         <input type="text" id="caminhoneiro" name="caminhoneiro" required placeholder="Ex: ALEXANDRE" autocapitalize="words" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                     </div>
                     <div class="col-span-2 mb-4">
@@ -487,21 +487,74 @@
     </div>
 </div>
 
-<!-- Modal Novo Tipo -->
-<div id="modalNovoTipo" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onclick="if(event.target===this){this.classList.add('hidden');liberarFundo();}">
-    <div class="bg-white dark:bg-slate-800 rounded-xl shadow-lg w-full max-w-lg overflow-hidden" onclick="event.stopPropagation()">
-        <div class="flex justify-between items-center px-6 py-4 bg-emerald-700 text-white">
-            <h3 class="font-bold text-lg">🏷️ Novo Tipo</h3>
-            <button type="button" onclick="document.getElementById('modalNovoTipo').classList.add('hidden');liberarFundo();" class="hover:text-slate-200">✖</button>
+<!-- Modal Gerenciar Tipo (criar e editar) -->
+<div id="modalTipo" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onclick="if(event.target===this){fecharModalTipo();}">
+    <div class="bg-white dark:bg-slate-800 rounded-xl shadow-lg w-full max-w-xl overflow-hidden max-h-[90vh] flex flex-col" onclick="event.stopPropagation()">
+        <div class="flex justify-between items-center px-6 py-4 bg-emerald-700 text-white flex-shrink-0">
+            <h3 class="font-bold text-lg"><span id="modalTipo-titulo">🏷️ Novo Tipo</span></h3>
+            <button type="button" onclick="fecharModalTipo()" class="hover:text-slate-200 text-xl font-bold">✖</button>
         </div>
-        <form action="{{ url_for('novo_tipo_produto') }}" method="POST" class="p-6 space-y-4">
+        <form id="formModalTipo" method="POST" class="p-6 space-y-4 overflow-y-auto">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <div>
                 <label class="text-xs font-semibold text-slate-600 dark:text-slate-400">Nome do Tipo *</label>
-                <input type="text" name="nome" required placeholder="Ex: CAFE, BACALHAU, EMBALAGEM" class="w-full rounded-md border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white px-3 py-2 text-sm focus:border-emerald-500 uppercase">
+                <input type="text" id="modalTipo-nome" name="nome" required placeholder="Ex: CAFE, BACALHAU, EMBALAGEM" class="w-full rounded-md border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white px-3 py-2 text-sm focus:border-emerald-500 uppercase">
+                <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Usado para agrupar produtos e definir quais campos aparecem na Entrada.</p>
             </div>
-            <div class="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-700">
-                <button type="button" onclick="document.getElementById('modalNovoTipo').classList.add('hidden');liberarFundo();" class="px-4 py-2 bg-slate-200 text-slate-700 rounded-md text-sm font-semibold hover:bg-slate-300">Cancelar</button>
+
+            <!-- Campo oculto para editar: nome antigo quando modo edit -->
+            <input type="hidden" name="novo_nome" id="modalTipo-novo-nome"/>
+
+            <fieldset class="border border-slate-200 dark:border-slate-700 rounded-lg p-4 space-y-3">
+                <legend class="text-xs font-semibold text-slate-600 dark:text-slate-400 px-2">Campos que este tipo pede</legend>
+
+                <label class="flex items-start gap-3 cursor-pointer">
+                    <input type="checkbox" name="usa_nacionalidade" id="cfg-usa-nacionalidade" value="1" class="mt-1 h-4 w-4 text-emerald-600 rounded focus:ring-emerald-500">
+                    <span class="text-sm text-slate-700 dark:text-slate-300">
+                        <strong>Pede Nacionalidade?</strong>
+                        <span class="block text-xs text-slate-500 dark:text-slate-400">Ex.: ALHO, CAFÉ, BACALHAU (nacional/importado).</span>
+                    </span>
+                </label>
+
+                <label class="flex items-start gap-3 cursor-pointer">
+                    <input type="checkbox" name="usa_caminhoneiro" id="cfg-usa-caminhoneiro" value="1" class="mt-1 h-4 w-4 text-emerald-600 rounded focus:ring-emerald-500">
+                    <span class="text-sm text-slate-700 dark:text-slate-300">
+                        <strong>Pede Caminhoneiro?</strong>
+                        <span class="block text-xs text-slate-500 dark:text-slate-400">Ex.: ALHO (quem trouxe o carregamento).</span>
+                    </span>
+                </label>
+
+                <div>
+                    <label class="flex items-start gap-3 cursor-pointer">
+                        <input type="checkbox" name="usa_tamanho" id="cfg-usa-tamanho" value="1" class="mt-1 h-4 w-4 text-emerald-600 rounded focus:ring-emerald-500" onchange="toggleInputListaTipo('tamanhos_opcoes')">
+                        <span class="text-sm text-slate-700 dark:text-slate-300">
+                            <strong>Pede Tamanho?</strong>
+                            <span class="block text-xs text-slate-500 dark:text-slate-400">Ex.: 4-10 (ALHO), P/M/G (SACOLA), 7/9-DESFIADO (BACALHAU).</span>
+                        </span>
+                    </label>
+                    <div id="wrap-tamanhos_opcoes" class="mt-2 ml-7 hidden">
+                        <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Opções (separadas por vírgula) *</label>
+                        <input type="text" name="tamanhos_opcoes" id="cfg-tamanhos-opcoes" placeholder="Ex: 4,5,6,7,8,9,10  ou  P,M,G,S/N" class="w-full rounded-md border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white px-3 py-2 text-sm focus:border-emerald-500">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="flex items-start gap-3 cursor-pointer">
+                        <input type="checkbox" name="usa_marca" id="cfg-usa-marca" value="1" class="mt-1 h-4 w-4 text-emerald-600 rounded focus:ring-emerald-500" onchange="toggleInputListaTipo('marcas_opcoes')">
+                        <span class="text-sm text-slate-700 dark:text-slate-300">
+                            <strong>Pede Marca?</strong>
+                            <span class="block text-xs text-slate-500 dark:text-slate-400">Deixe em branco para permitir marca livre; preencha para restringir.</span>
+                        </span>
+                    </label>
+                    <div id="wrap-marcas_opcoes" class="mt-2 ml-7 hidden">
+                        <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Opções (separadas por vírgula — opcional)</label>
+                        <input type="text" name="marcas_opcoes" id="cfg-marcas-opcoes" placeholder="Ex: SOPACK,DESTAK (vazio = marca livre)" class="w-full rounded-md border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white px-3 py-2 text-sm focus:border-emerald-500">
+                    </div>
+                </div>
+            </fieldset>
+
+            <div class="flex justify-end gap-3 pt-2 border-t border-slate-100 dark:border-slate-700">
+                <button type="button" onclick="fecharModalTipo()" class="px-4 py-2 bg-slate-200 text-slate-700 rounded-md text-sm font-semibold hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-200">Cancelar</button>
                 <button type="submit" class="px-4 py-2 bg-emerald-700 text-white rounded-md text-sm font-semibold hover:bg-emerald-800">✓ Salvar</button>
             </div>
         </form>
@@ -516,7 +569,7 @@
             <button type="button" onclick="document.getElementById('modalTiposCadastrados').classList.add('hidden');liberarFundo();" class="hover:text-slate-300 text-xl font-bold">✖</button>
         </div>
         <div class="p-6 overflow-y-auto">
-            <button type="button" data-bs-dismiss="modal" data-bs-toggle="modal" data-bs-target="#modalNovoTipo" onclick="document.getElementById('modalTiposCadastrados').classList.add('hidden');document.getElementById('modalNovoTipo').classList.remove('hidden');travarFundo();" class="mb-3 w-full sm:w-auto inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none">
+            <button type="button" onclick="document.getElementById('modalTiposCadastrados').classList.add('hidden');abrirModalTipo('novo');" class="mb-3 w-full sm:w-auto inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none">
                 <i data-lucide="plus" class="w-4 h-4 mr-2"></i> Novo Tipo
             </button>
             <ul class="divide-y divide-gray-200 dark:divide-gray-700">
@@ -548,10 +601,6 @@
                 <li class="py-3 text-sm text-gray-500 dark:text-gray-400">Nenhum tipo cadastrado.</li>
                 {% endfor %}
             </ul>
-            <form id="form-editar-tipo-modal" method="POST" class="hidden">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                <input type="hidden" name="novo_nome" id="input-editar-tipo-nome"/>
-            </form>
         </div>
         <div class="flex justify-end px-6 py-4 border-t border-slate-100 dark:border-slate-700">
             <button type="button" onclick="document.getElementById('modalTiposCadastrados').classList.add('hidden');liberarFundo();" class="px-4 py-2 bg-slate-200 text-slate-700 rounded-md text-sm font-semibold hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600">Fechar</button>
@@ -559,20 +608,87 @@
     </div>
 </div>
 <script>
-function editarTipoCadastrado(id, nomeAtual) {
-    var novoNome = window.prompt('Editar nome do tipo:', String(nomeAtual || ''));
-    if (novoNome === null) return;
-    novoNome = String(novoNome).trim();
-    if (!novoNome) {
-        alert('Nome do tipo é obrigatório.');
-        return;
+// Config de atributos por tipo (id -> { usa_nacionalidade, tamanhos_opcoes, ... })
+// Fonte de verdade dos formulários dinâmicos.
+window.TIPOS_CONFIG_MAP = {{ tipos_config_map|tojson }};
+
+function toggleInputListaTipo(campo) {
+    var chk = document.getElementById(campo === 'tamanhos_opcoes' ? 'cfg-usa-tamanho' : 'cfg-usa-marca');
+    var wrap = document.getElementById('wrap-' + campo);
+    if (!chk || !wrap) return;
+    if (chk.checked) wrap.classList.remove('hidden');
+    else wrap.classList.add('hidden');
+}
+
+function fecharModalTipo() {
+    var m = document.getElementById('modalTipo');
+    if (!m) return;
+    m.classList.add('hidden');
+    if (typeof liberarFundo === 'function') liberarFundo();
+}
+
+function abrirModalTipo(modo, tipoId, tipoNome) {
+    var modal = document.getElementById('modalTipo');
+    var form = document.getElementById('formModalTipo');
+    var titulo = document.getElementById('modalTipo-titulo');
+    var inputNome = document.getElementById('modalTipo-nome');
+    var inputNovoNome = document.getElementById('modalTipo-novo-nome');
+    if (!modal || !form || !inputNome) return;
+
+    // Reset
+    form.reset();
+    document.getElementById('cfg-usa-nacionalidade').checked = false;
+    document.getElementById('cfg-usa-caminhoneiro').checked = false;
+    document.getElementById('cfg-usa-tamanho').checked = false;
+    document.getElementById('cfg-usa-marca').checked = false;
+    document.getElementById('cfg-tamanhos-opcoes').value = '';
+    document.getElementById('cfg-marcas-opcoes').value = '';
+    toggleInputListaTipo('tamanhos_opcoes');
+    toggleInputListaTipo('marcas_opcoes');
+
+    if (modo === 'editar' && tipoId) {
+        titulo.textContent = '✏️ Editar Tipo';
+        form.action = '/tipos/editar/' + encodeURIComponent(tipoId);
+        // No backend, edição usa 'novo_nome' como chave. Para preservar
+        // compatibilidade, preenchemos AMBOS (nome e novo_nome) - o backend
+        // de editar_tipo lê 'novo_nome'.
+        inputNome.value = String(tipoNome || '').toUpperCase();
+        inputNome.name = 'nome_ignorado'; // não é usado por editar_tipo
+        inputNovoNome.value = String(tipoNome || '').toUpperCase();
+
+        // Pré-popula config
+        var cfg = (window.TIPOS_CONFIG_MAP || {})[String(tipoId)] || {};
+        document.getElementById('cfg-usa-nacionalidade').checked = !!cfg.usa_nacionalidade;
+        document.getElementById('cfg-usa-caminhoneiro').checked = !!cfg.usa_caminhoneiro;
+        document.getElementById('cfg-usa-tamanho').checked = !!cfg.usa_tamanho;
+        document.getElementById('cfg-usa-marca').checked = !!cfg.usa_marca;
+        document.getElementById('cfg-tamanhos-opcoes').value = (cfg.tamanhos_opcoes || []).join(', ');
+        document.getElementById('cfg-marcas-opcoes').value = (cfg.marcas_opcoes || []).join(', ');
+
+        // Mantém inputNome em sync com novo_nome enquanto o usuário digita
+        inputNome.addEventListener('input', function handler() {
+            inputNovoNome.value = inputNome.value.toUpperCase();
+        });
+    } else {
+        titulo.textContent = '🏷️ Novo Tipo';
+        form.action = '{{ url_for("novo_tipo_produto") }}';
+        inputNome.value = '';
+        inputNome.name = 'nome';
+        inputNovoNome.value = '';
     }
-    var form = document.getElementById('form-editar-tipo-modal');
-    var inputNome = document.getElementById('input-editar-tipo-nome');
-    if (!form || !inputNome) return;
-    inputNome.value = novoNome;
-    form.action = '/tipos/editar/' + encodeURIComponent(id);
-    form.submit();
+
+    toggleInputListaTipo('tamanhos_opcoes');
+    toggleInputListaTipo('marcas_opcoes');
+
+    modal.classList.remove('hidden');
+    if (typeof travarFundo === 'function') travarFundo();
+}
+
+function editarTipoCadastrado(id, nomeAtual) {
+    // Fecha o modal de listagem e abre o modal unificado em modo editar.
+    var lista = document.getElementById('modalTiposCadastrados');
+    if (lista) lista.classList.add('hidden');
+    abrirModalTipo('editar', id, nomeAtual);
 }
 </script>
 
@@ -786,7 +902,7 @@ function editarTipoCadastrado(id, nomeAtual) {
                         <select id="edit_tipo" name="tipo" required class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                             <option value="">Selecione...</option>
                             {% for t in tipos_produto %}
-                            <option value="{{ (t.nome or '')|upper }}">{{ (t.nome or '')|upper }}</option>
+                            <option value="{{ (t.nome or '')|upper }}" data-id="{{ t.id }}">{{ (t.nome or '')|upper }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -799,8 +915,8 @@ function editarTipoCadastrado(id, nomeAtual) {
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="mb-4">
-                        <label for="edit_nacionalidade" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Nacionalidade <span class="text-red-500">*</span></label>
+                    <div class="mb-4" id="edit_container_nacionalidade">
+                        <label for="edit_nacionalidade" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Nacionalidade <span class="text-red-500" id="edit-nacionalidade-asterisco">*</span></label>
                         <select id="edit_nacionalidade" name="nacionalidade" required class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                             <option value="">Selecione...</option>
                             <option value="N/A">N/A (Não se aplica)</option>
@@ -810,8 +926,8 @@ function editarTipoCadastrado(id, nomeAtual) {
                             <option value="CHINES">CHINES</option>
                         </select>
                     </div>
-                    <div class="mb-4">
-                        <label for="edit_tamanho" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tamanho <span class="text-red-500">*</span></label>
+                    <div class="mb-4" id="edit_container_tamanho">
+                        <label for="edit_tamanho" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tamanho <span class="text-red-500" id="edit-tamanho-asterisco">*</span></label>
                         <select id="edit_tamanho" name="tamanho" required class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                             <option value="">Selecione...</option>
                             {% for tam in ['4', '5', '6', '7', '8', '9', '10'] %}
@@ -819,12 +935,12 @@ function editarTipoCadastrado(id, nomeAtual) {
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="mb-4">
-                        <label for="edit_marca" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Marca <span class="text-red-500">*</span></label>
+                    <div class="mb-4" id="edit_container_marca">
+                        <label for="edit_marca" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Marca <span class="text-red-500" id="edit-marca-asterisco">*</span></label>
                         <input type="text" id="edit_marca" name="marca" required placeholder="Ex: IMPORFOZ" autocapitalize="words" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                     </div>
-                    <div class="mb-4">
-                        <label for="edit_caminhoneiro" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Caminhoneiro <span class="text-red-500">*</span></label>
+                    <div class="mb-4" id="edit_container_caminhoneiro">
+                        <label for="edit_caminhoneiro" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Caminhoneiro <span class="text-red-500" id="edit-caminhoneiro-asterisco">*</span></label>
                         <input type="text" id="edit_caminhoneiro" name="caminhoneiro" required placeholder="Ex: João" autocapitalize="words" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                     </div>
                     <div class="col-span-2 mb-4">
@@ -915,17 +1031,75 @@ function editarTipoCadastrado(id, nomeAtual) {
     if (!actionBase) actionBase = '';
     var editTipo = document.getElementById('edit_tipo');
     var editTamanho = document.getElementById('edit_tamanho');
-    var OPCOES_NUMERICAS = ['4', '5', '6', '7', '8', '9', '10'];
-    var OPCOES_SACOLA = ['P', 'M', 'G', 'S/N'];
+    var editNacionalidade = document.getElementById('edit_nacionalidade');
+    var editMarca = document.getElementById('edit_marca');
+    var editCaminhoneiro = document.getElementById('edit_caminhoneiro');
+    var editContainerNac = document.getElementById('edit_container_nacionalidade');
+    var editContainerTam = document.getElementById('edit_container_tamanho');
+    var editContainerMarca = document.getElementById('edit_container_marca');
+    var editContainerCam = document.getElementById('edit_container_caminhoneiro');
+    var editNacAsterisco = document.getElementById('edit-nacionalidade-asterisco');
+    var editTamAsterisco = document.getElementById('edit-tamanho-asterisco');
+    var editMarcaAsterisco = document.getElementById('edit-marca-asterisco');
+    var editCamAsterisco = document.getElementById('edit-caminhoneiro-asterisco');
 
-    function atualizarTamanhoOptions() {
-        var tipo = editTipo && editTipo.value;
-        var opts = (tipo === 'SACOLA') ? OPCOES_SACOLA : OPCOES_NUMERICAS;
-        var valAtual = editTamanho && editTamanho.value;
-        editTamanho.innerHTML = '<option value="">Selecione...</option>' + opts.map(function(t) {
-            return '<option value="' + t + '"' + (t === valAtual ? ' selected' : '') + '>' + t + '</option>';
-        }).join('');
-        if (valAtual && opts.indexOf(valAtual) >= 0) editTamanho.value = valAtual;
+    function aplicarRegrasEdicao(tamanhoAtual, marcaAtual) {
+        var cfg = window.getTipoConfigPorSelect(editTipo);
+        var usaNac = cfg ? !!cfg.usa_nacionalidade : false;
+        var usaCam = cfg ? !!cfg.usa_caminhoneiro : false;
+        var usaTam = cfg ? !!cfg.usa_tamanho : false;
+        var usaMarca = cfg ? !!cfg.usa_marca : false;
+        var tamanhosOpts = (cfg && cfg.tamanhos_opcoes) ? cfg.tamanhos_opcoes : [];
+        var marcasOpts = (cfg && cfg.marcas_opcoes) ? cfg.marcas_opcoes : [];
+
+        if (editContainerNac) editContainerNac.style.display = usaNac ? 'block' : 'none';
+        if (editNacionalidade) {
+            editNacionalidade.required = usaNac;
+            if (editNacAsterisco) editNacAsterisco.classList.toggle('hidden', !usaNac);
+        }
+
+        if (editContainerCam) editContainerCam.style.display = usaCam ? 'block' : 'none';
+        if (editCaminhoneiro) {
+            editCaminhoneiro.required = usaCam;
+            if (editCamAsterisco) editCamAsterisco.classList.toggle('hidden', !usaCam);
+        }
+
+        if (editContainerTam) editContainerTam.style.display = usaTam ? 'block' : 'none';
+        if (editTamanho) {
+            editTamanho.required = usaTam;
+            if (editTamAsterisco) editTamAsterisco.classList.toggle('hidden', !usaTam);
+            if (usaTam) {
+                var val = tamanhoAtual != null ? tamanhoAtual : editTamanho.value;
+                editTamanho.innerHTML = '<option value="">Selecione...</option>' + tamanhosOpts.map(function(t) {
+                    return '<option value="' + t + '"' + (t === val ? ' selected' : '') + '>' + t + '</option>';
+                }).join('');
+                // Se o valor atual não está na lista, adicionar como legado.
+                if (val && tamanhosOpts.indexOf(val) < 0) {
+                    var opt = document.createElement('option');
+                    opt.value = val; opt.textContent = val + ' (legado)'; opt.selected = true;
+                    editTamanho.appendChild(opt);
+                }
+            }
+        }
+
+        if (editContainerMarca) editContainerMarca.style.display = usaMarca ? 'block' : 'none';
+        if (editMarca) {
+            editMarca.required = usaMarca;
+            if (editMarcaAsterisco) editMarcaAsterisco.classList.toggle('hidden', !usaMarca);
+            if (usaMarca && marcasOpts.length > 0) {
+                var listId = 'marcas-opts-lista-edit';
+                var dl = document.getElementById(listId);
+                if (!dl) {
+                    dl = document.createElement('datalist');
+                    dl.id = listId;
+                    document.body.appendChild(dl);
+                }
+                dl.innerHTML = marcasOpts.map(function(m) { return '<option value="' + m + '"></option>'; }).join('');
+                editMarca.setAttribute('list', listId);
+            } else {
+                editMarca.removeAttribute('list');
+            }
+        }
     }
 
     function abrirModalEditarProduto(btn) {
@@ -939,31 +1113,17 @@ function editarTipoCadastrado(id, nomeAtual) {
         var tamanho = btn.getAttribute('data-tamanho') || '';
         var marca = btn.getAttribute('data-marca') || '';
         var caminhoneiro = btn.getAttribute('data-caminhoneiro') || '';
-        if (tipo === 'SACOLA') { nacionalidade = 'N/A'; marca = marca || 'SOPACK'; }
 
         form.action = actionBase.replace(/\/0$/, '/') + id;
 
         document.getElementById('edit_preco_custo').value = precoCusto;
         document.getElementById('edit_quantidade_entrada').value = quantidadeEntrada;
         document.getElementById('edit_data_chegada').value = dataChegada;
-        document.getElementById('edit_marca').value = marca;
-        document.getElementById('edit_caminhoneiro').value = caminhoneiro;
+        if (editMarca) editMarca.value = marca;
+        if (editCaminhoneiro) editCaminhoneiro.value = caminhoneiro;
 
         if (editTipo) editTipo.value = tipo;
-        if (editTamanho) {
-            var opts = (tipo === 'SACOLA') ? OPCOES_SACOLA : OPCOES_NUMERICAS;
-            editTamanho.innerHTML = '<option value="">Selecione...</option>' + opts.map(function(t) {
-                return '<option value="' + t + '"' + (t === tamanho ? ' selected' : '') + '>' + t + '</option>';
-            }).join('');
-            if (tamanho && opts.indexOf(tamanho) >= 0) editTamanho.value = tamanho;
-            else if (tamanho) {
-                var opt = document.createElement('option');
-                opt.value = tamanho;
-                opt.textContent = tamanho;
-                opt.selected = true;
-                editTamanho.appendChild(opt);
-            }
-        }
+        aplicarRegrasEdicao(tamanho, marca);
 
         var editFornecedor = document.getElementById('edit_fornecedor');
         if (editFornecedor) {
@@ -977,7 +1137,6 @@ function editarTipoCadastrado(id, nomeAtual) {
             editFornecedor.value = fornecedor;
         }
 
-        var editNacionalidade = document.getElementById('edit_nacionalidade');
         if (editNacionalidade) {
             var temOpcao = [].some.call(editNacionalidade.options, function(o) { return o.value === nacionalidade; });
             if (!temOpcao && nacionalidade) {
@@ -1004,7 +1163,7 @@ function editarTipoCadastrado(id, nomeAtual) {
     if (overlay) overlay.addEventListener('click', fecharModalEditarProduto);
     btnsFechar.forEach(function(b) { b.addEventListener('click', fecharModalEditarProduto); });
 
-    if (editTipo) editTipo.addEventListener('change', atualizarTamanhoOptions);
+    if (editTipo) editTipo.addEventListener('change', function() { aplicarRegrasEdicao(); });
 
     if (form) {
         form.addEventListener('submit', function(e) {
@@ -1014,6 +1173,19 @@ function editarTipoCadastrado(id, nomeAtual) {
         });
     }
 })();
+
+// ============================================================================
+// Helpers globais de config_atributos por TipoProduto (data-driven).
+// Substituem o antigo hard-coding de ALHO/SACOLA/BACALHAU/CAFE.
+// ============================================================================
+window.getTipoConfigPorSelect = function(selectEl) {
+    if (!selectEl) return null;
+    var opt = selectEl.options[selectEl.selectedIndex];
+    if (!opt) return null;
+    var id = opt.getAttribute('data-id');
+    if (!id) return null;
+    return (window.TIPOS_CONFIG_MAP || {})[String(id)] || null;
+};
 
 (function() {
     var wrap = document.getElementById('modal-nova-entrada-wrap');
@@ -1029,20 +1201,20 @@ function editarTipoCadastrado(id, nomeAtual) {
     var tipoSelect = document.getElementById('tipo');
     var containerNac = document.getElementById('container_nacionalidade');
     var containerTam = document.getElementById('container_tamanho');
+    var containerCam = document.getElementById('container_caminhoneiro');
+    var containerMarca = document.getElementById('marca-wrap');
     var nacionalidadeSelect = document.getElementById('nacionalidade');
     var nacionalidadeHidden = document.getElementById('nacionalidade_hidden');
     var nacionalidadeAsterisco = document.getElementById('nacionalidade-asterisco');
     var nacionalidadeNaMsg = document.getElementById('nacionalidade-na-msg');
     var tamanhoSelect = document.getElementById('tamanho');
     var marcaInput = document.getElementById('marca');
+    var caminhoneiroInput = document.getElementById('caminhoneiro');
+    var caminhoneiroAsterisco = document.getElementById('caminhoneiro-asterisco');
     var precoCustoInput = document.getElementById('preco_custo');
-    var quantidadeEntradaInput = document.getElementById('quantidade_entrada');
     var fornecedorSelect = document.getElementById('fornecedor');
     var marcaHidden = document.getElementById('marca_hidden');
     var marcaAsterisco = document.getElementById('marca-asterisco');
-    var OPCOES_NUMERICAS = ['4', '5', '6', '7', '8', '9', '10'];
-    var OPCOES_SACOLA = ['P', 'M', 'G', 'S/N'];
-    var OPCOES_BACALHAU = ['7/9', '10/12', '13/15', '16/20', 'DESFIADO'];
 
     function resetBtnSalvar() {
         if (!btnSalvar) return;
@@ -1061,13 +1233,8 @@ function editarTipoCadastrado(id, nomeAtual) {
         if (dataChegada && !dataChegada.value) {
             dataChegada.value = new Date().toISOString().split('T')[0];
         }
-        aplicarModoSacola();
-        aplicarModoCafe();
-        aplicarModoBacalhau();
-        aplicarVisibilidadeNacTam();
-        if (tipoSelect) {
-            tipoSelect.dispatchEvent(new Event('change'));
-        }
+        aplicarRegrasDinamicas();
+        aplicarAutoPreenchimentosNegocio();
         if (typeof lucide !== 'undefined') lucide.createIcons();
     }
     function fechar() {
@@ -1080,133 +1247,141 @@ function editarTipoCadastrado(id, nomeAtual) {
         resetBtnSalvar();
     }
 
-    function isSacola() { return tipoSelect && tipoSelect.value === 'SACOLA'; }
-    function isAlho() { return tipoSelect && tipoSelect.value.toUpperCase().includes('ALHO'); }
-    function isBacalhau() { return tipoSelect && tipoSelect.value.toUpperCase().includes('BACALHAU'); }
+    /**
+     * Aplica visibility / required / opções de tamanho / opções de marca
+     * com base em config_atributos do tipo selecionado.
+     * Se o tipo não tiver config, todos os campos ficam ocultos.
+     */
+    function aplicarRegrasDinamicas() {
+        var cfg = window.getTipoConfigPorSelect(tipoSelect);
 
-    function aplicarVisibilidadeNacTam() {
-        var tipo = (tipoSelect && tipoSelect.value) ? tipoSelect.value.toUpperCase() : '';
-        if (isAlho()) {
-            if (containerNac) containerNac.style.display = 'block';
-            if (containerTam) containerTam.style.display = 'block';
-            if (nacionalidadeSelect) { nacionalidadeSelect.required = true; nacionalidadeSelect.setAttribute('name', 'nacionalidade'); if (nacionalidadeHidden) nacionalidadeHidden.removeAttribute('name'); if (nacionalidadeSelect.value === 'NA' || nacionalidadeSelect.value === 'N/A') nacionalidadeSelect.value = ''; }
-            if (tamanhoSelect) { tamanhoSelect.required = true; if (tamanhoSelect.value === 'NA' || tamanhoSelect.value === 'N/A') tamanhoSelect.value = ''; }
-        } else if (isBacalhau()) {
-            if (containerNac) containerNac.style.display = 'none';
-            if (containerTam) containerTam.style.display = 'block';
-            if (nacionalidadeSelect) { nacionalidadeSelect.required = false; nacionalidadeSelect.removeAttribute('name'); if (nacionalidadeHidden) { nacionalidadeHidden.setAttribute('name', 'nacionalidade'); nacionalidadeHidden.value = 'NA'; } }
-            if (tamanhoSelect) { tamanhoSelect.required = true; if (tamanhoSelect.value === 'NA' || tamanhoSelect.value === 'N/A') tamanhoSelect.value = ''; }
-        } else if (isSacola()) {
-            if (containerNac) containerNac.style.display = 'none';
-            if (containerTam) containerTam.style.display = 'block';
-            if (nacionalidadeSelect) { nacionalidadeSelect.required = false; nacionalidadeSelect.removeAttribute('name'); if (nacionalidadeHidden) { nacionalidadeHidden.setAttribute('name', 'nacionalidade'); nacionalidadeHidden.value = 'NA'; } }
-        } else {
-            if (containerNac) containerNac.style.display = 'none';
-            if (containerTam) containerTam.style.display = 'none';
-            if (nacionalidadeSelect) { nacionalidadeSelect.required = false; nacionalidadeSelect.value = 'NA'; nacionalidadeSelect.removeAttribute('name'); if (nacionalidadeHidden) { nacionalidadeHidden.setAttribute('name', 'nacionalidade'); nacionalidadeHidden.value = 'NA'; } }
-            if (tamanhoSelect) { tamanhoSelect.required = false; tamanhoSelect.value = 'NA'; }
-        }
-    }
+        // Defaults quando não há config ou nenhum tipo selecionado: TUDO oculto.
+        var usaNac = cfg ? !!cfg.usa_nacionalidade : false;
+        var usaCam = cfg ? !!cfg.usa_caminhoneiro : false;
+        var usaTam = cfg ? !!cfg.usa_tamanho : false;
+        var usaMarca = cfg ? !!cfg.usa_marca : false;
+        var tamanhosOpts = (cfg && cfg.tamanhos_opcoes) ? cfg.tamanhos_opcoes : [];
+        var marcasOpts = (cfg && cfg.marcas_opcoes) ? cfg.marcas_opcoes : [];
 
-    function aplicarModoSacola() {
-        var initialTamanho = (tamanhoSelect && tamanhoSelect.getAttribute('data-initial')) ? tamanhoSelect.getAttribute('data-initial') : '';
-        var opts = [], keepVal = '';
-        if (!isSacola()) {
-            nacionalidadeSelect.disabled = false;
-            nacionalidadeHidden.removeAttribute('name');
-            nacionalidadeSelect.setAttribute('name', 'nacionalidade');
-            nacionalidadeSelect.required = true;
-            if (nacionalidadeAsterisco) nacionalidadeAsterisco.classList.remove('hidden');
-            if (nacionalidadeNaMsg) nacionalidadeNaMsg.classList.add('hidden');
-            // Limpar valores antigos (compatibilidade com "N/A" e "NA")
-            if (nacionalidadeSelect.value === 'N/A' || nacionalidadeSelect.value === 'NA') {
-                nacionalidadeSelect.value = '';
-            }
-            if (isBacalhau()) {
-                opts = OPCOES_BACALHAU;
-                keepVal = OPCOES_BACALHAU.indexOf(initialTamanho) >= 0 ? initialTamanho : '';
+        // --- Nacionalidade ---
+        if (containerNac) containerNac.style.display = usaNac ? 'block' : 'none';
+        if (nacionalidadeSelect) {
+            if (usaNac) {
+                nacionalidadeSelect.disabled = false;
+                nacionalidadeSelect.required = true;
+                nacionalidadeSelect.setAttribute('name', 'nacionalidade');
+                if (nacionalidadeHidden) nacionalidadeHidden.removeAttribute('name');
+                if (nacionalidadeAsterisco) nacionalidadeAsterisco.classList.remove('hidden');
+                if (nacionalidadeNaMsg) nacionalidadeNaMsg.classList.add('hidden');
+                // Limpa 'NA' herdado
+                if (nacionalidadeSelect.value === 'NA' || nacionalidadeSelect.value === 'N/A') {
+                    nacionalidadeSelect.value = '';
+                }
             } else {
-                opts = OPCOES_NUMERICAS;
-                keepVal = OPCOES_NUMERICAS.indexOf(initialTamanho) >= 0 ? initialTamanho : '';
+                nacionalidadeSelect.required = false;
+                nacionalidadeSelect.disabled = true;
+                nacionalidadeSelect.removeAttribute('name');
+                if (nacionalidadeHidden) {
+                    nacionalidadeHidden.setAttribute('name', 'nacionalidade');
+                    nacionalidadeHidden.value = 'NA';
+                }
+                if (nacionalidadeAsterisco) nacionalidadeAsterisco.classList.add('hidden');
+                if (nacionalidadeNaMsg) nacionalidadeNaMsg.classList.remove('hidden');
             }
-            marcaInput.disabled = false;
-            marcaHidden.removeAttribute('name');
-            marcaInput.setAttribute('name', 'marca');
-            marcaInput.required = true;
-            marcaInput.value = '';
-            if (marcaAsterisco) marcaAsterisco.classList.remove('hidden');
-        } else {
-            nacionalidadeSelect.value = 'NA';
-            nacionalidadeSelect.disabled = true;
-            nacionalidadeSelect.removeAttribute('name');
-            nacionalidadeHidden.setAttribute('name', 'nacionalidade');
-            nacionalidadeHidden.value = 'NA';
-            nacionalidadeSelect.required = false;
-            if (nacionalidadeAsterisco) nacionalidadeAsterisco.classList.add('hidden');
-            if (nacionalidadeNaMsg) nacionalidadeNaMsg.classList.remove('hidden');
-            opts = OPCOES_SACOLA;
-            keepVal = OPCOES_SACOLA.indexOf(initialTamanho) >= 0 ? initialTamanho : '';
-            marcaInput.value = 'SOPACK';
-            marcaInput.disabled = true;
-            marcaInput.removeAttribute('name');
-            marcaHidden.setAttribute('name', 'marca');
-            marcaHidden.value = 'SOPACK';
-            marcaInput.required = false;
-            if (marcaAsterisco) marcaAsterisco.classList.add('hidden');
         }
-        // Construir HTML do select de tamanho
-        var tamanhoHTML = '<option value="">Selecione...</option>';
-        
-        // Regra de negócio: ALHO não permite N/A no tamanho
-        if (!isSacola() && !isAlho() && !isBacalhau()) {
-            tamanhoHTML += '<option value="NA"' + (keepVal === 'NA' ? ' selected' : '') + '>N/A (Não se aplica)</option>';
-        }
-        
-        // Adicionar opções numéricas ou de sacola
-        tamanhoHTML += opts.map(function(t) { 
-            return '<option value="' + t + '"' + (t === keepVal ? ' selected' : '') + '>' + t + '</option>'; 
-        }).join('');
-        
-        tamanhoSelect.innerHTML = tamanhoHTML;
-        if (keepVal) tamanhoSelect.value = keepVal;
-        tamanhoSelect.removeAttribute('data-initial');
-    }
 
-    // Função para aplicar automação de CAFÉ
-    function aplicarModoCafe() {
-        if (tipoSelect && tipoSelect.value && tipoSelect.value.toUpperCase().includes('CAFE')) {
-            // Define Fornecedor Fixo
-            if (fornecedorSelect) {
-                fornecedorSelect.value = 'SERVE BEM';
+        // --- Caminhoneiro ---
+        if (containerCam) containerCam.style.display = usaCam ? 'block' : 'none';
+        if (caminhoneiroInput) {
+            caminhoneiroInput.required = !!usaCam;
+            if (caminhoneiroAsterisco) {
+                if (usaCam) caminhoneiroAsterisco.classList.remove('hidden');
+                else caminhoneiroAsterisco.classList.add('hidden');
             }
-            
-            // Define N/A para campos que não se aplicam
-            if (nacionalidadeSelect) {
-                nacionalidadeSelect.value = 'NA';
-            }
-            if (tamanhoSelect) {
+            if (!usaCam) caminhoneiroInput.value = '';
+        }
+
+        // --- Tamanho ---
+        if (containerTam) containerTam.style.display = usaTam ? 'block' : 'none';
+        if (tamanhoSelect) {
+            if (usaTam) {
+                tamanhoSelect.required = true;
+                var initialTam = tamanhoSelect.getAttribute('data-initial') || tamanhoSelect.value || '';
+                var keepVal = tamanhosOpts.indexOf(initialTam) >= 0 ? initialTam : '';
+                tamanhoSelect.innerHTML = '<option value="">Selecione...</option>' +
+                    tamanhosOpts.map(function(t) {
+                        return '<option value="' + t + '"' + (t === keepVal ? ' selected' : '') + '>' + t + '</option>';
+                    }).join('');
+                if (keepVal) tamanhoSelect.value = keepVal;
+                tamanhoSelect.removeAttribute('data-initial');
+            } else {
+                tamanhoSelect.required = false;
+                tamanhoSelect.value = 'NA';
+                // Mantém um <option> NA para enviar algo válido ao backend
+                if (!Array.prototype.some.call(tamanhoSelect.options, function(o) { return o.value === 'NA'; })) {
+                    var o = document.createElement('option');
+                    o.value = 'NA'; o.textContent = 'N/A'; tamanhoSelect.appendChild(o);
+                }
                 tamanhoSelect.value = 'NA';
             }
-        } else if (tipoSelect && tipoSelect.value && (tipoSelect.value === 'ALHO' || tipoSelect.value === '')) {
-            // Se voltar para ALHO, limpa os campos para obrigar o preenchimento correto
-            if (fornecedorSelect && fornecedorSelect.value === 'SERVE BEM') {
-                fornecedorSelect.value = '';
-            }
-            if (nacionalidadeSelect && nacionalidadeSelect.value === 'NA' && tipoSelect.value !== 'SACOLA') {
-                nacionalidadeSelect.value = '';
-            }
-            if (tamanhoSelect && tamanhoSelect.value === 'NA') {
-                tamanhoSelect.value = '';
+        }
+
+        // --- Marca ---
+        if (containerMarca) containerMarca.style.display = usaMarca ? 'block' : 'none';
+        if (marcaInput) {
+            if (usaMarca) {
+                marcaInput.disabled = false;
+                marcaInput.required = true;
+                marcaInput.setAttribute('name', 'marca');
+                if (marcaHidden) marcaHidden.removeAttribute('name');
+                if (marcaAsterisco) marcaAsterisco.classList.remove('hidden');
+
+                // Se há lista restrita, transformar em datalist (mantendo input livre).
+                if (marcasOpts.length > 0) {
+                    var listId = 'marcas-opts-lista';
+                    var dl = document.getElementById(listId);
+                    if (!dl) {
+                        dl = document.createElement('datalist');
+                        dl.id = listId;
+                        document.body.appendChild(dl);
+                    }
+                    dl.innerHTML = marcasOpts.map(function(m) {
+                        return '<option value="' + m + '"></option>';
+                    }).join('');
+                    marcaInput.setAttribute('list', listId);
+                    // Se há exatamente 1 opção, pré-preenche como conveniência.
+                    if (marcasOpts.length === 1 && !marcaInput.value) marcaInput.value = marcasOpts[0];
+                } else {
+                    marcaInput.removeAttribute('list');
+                }
+            } else {
+                marcaInput.disabled = true;
+                marcaInput.required = false;
+                marcaInput.removeAttribute('name');
+                marcaInput.removeAttribute('list');
+                marcaInput.value = '';
+                if (marcaHidden) {
+                    marcaHidden.setAttribute('name', 'marca');
+                    marcaHidden.value = 'NA';
+                }
+                if (marcaAsterisco) marcaAsterisco.classList.add('hidden');
             }
         }
     }
 
-    function aplicarModoBacalhau() {
+    /**
+     * Auto-preenchimentos de negócio que NÃO são governados por config_atributos
+     * (pois são regras específicas do cliente, não regras de schema):
+     *  - CAFE  -> Fornecedor "SERVE BEM"
+     *  - BACALHAU -> Fornecedor "ARMAZEM LACERDA" (marca é livre, não força mais NORGY)
+     * Mantidos como "smart defaults" que convivem com config_atributos.
+     */
+    function aplicarAutoPreenchimentosNegocio() {
         if (!tipoSelect) return;
-        if (isBacalhau()) {
-            if (marcaInput && marcaInput.getAttribute('name') === 'marca') {
-                marcaInput.value = 'NORGY';
-            }
+        var val = (tipoSelect.value || '').toUpperCase();
+        if (val.indexOf('CAFE') >= 0) {
+            if (fornecedorSelect && !fornecedorSelect.value) fornecedorSelect.value = 'SERVE BEM';
+        } else if (val.indexOf('BACALHAU') >= 0) {
             if (fornecedorSelect) {
                 var alvo = 'ARMAZEM LACERDA';
                 var hasOpt = Array.prototype.some.call(fornecedorSelect.options, function(opt) {
@@ -1214,11 +1389,10 @@ function editarTipoCadastrado(id, nomeAtual) {
                 });
                 if (!hasOpt) {
                     var opt = document.createElement('option');
-                    opt.value = alvo;
-                    opt.textContent = alvo;
+                    opt.value = alvo; opt.textContent = alvo;
                     fornecedorSelect.appendChild(opt);
                 }
-                fornecedorSelect.value = alvo;
+                if (!fornecedorSelect.value) fornecedorSelect.value = alvo;
             }
         }
     }
@@ -1229,17 +1403,11 @@ function editarTipoCadastrado(id, nomeAtual) {
     if (btnCancelar) btnCancelar.addEventListener('click', fechar);
 
     if (tipoSelect) {
-        aplicarModoSacola();
-        aplicarModoCafe();
-        aplicarModoBacalhau();
-        aplicarVisibilidadeNacTam();
+        aplicarRegrasDinamicas();
         tipoSelect.addEventListener('change', function() {
-            tamanhoSelect.setAttribute('data-initial', tamanhoSelect.value || '');
-            if (tipoSelect.value === 'SACOLA' && marcaInput.getAttribute('name') === 'marca') marcaInput.setAttribute('data-initial', marcaInput.value || '');
-            aplicarModoSacola();
-            aplicarModoCafe();
-            aplicarModoBacalhau();
-            aplicarVisibilidadeNacTam();
+            if (tamanhoSelect) tamanhoSelect.setAttribute('data-initial', tamanhoSelect.value || '');
+            aplicarRegrasDinamicas();
+            aplicarAutoPreenchimentosNegocio();
         });
     }
 

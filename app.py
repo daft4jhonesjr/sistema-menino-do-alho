@@ -5841,6 +5841,10 @@ def listar_produtos():
     fornecedores = query_tenant(Fornecedor).order_by(Fornecedor.nome).all()
     tipos_produto = query_tenant(TipoProduto).order_by(TipoProduto.nome).all()
 
+    # Mapeia id -> config_atributos normalizado para o JS do formulário dinâmico.
+    # Chave como string para facilitar lookup no JSON do client (JSON.parse).
+    tipos_config_map = {str(t.id): t.get_config() for t in tipos_produto}
+
     return render_template(
         'produtos/listar.html',
         produtos_agrupados=produtos_agrupados,
@@ -5851,6 +5855,7 @@ def listar_produtos():
         fornecedores=fornecedores,
         tipos_produto=tipos_produto,
         tipos=tipos_produto,
+        tipos_config_map=tipos_config_map,
         ordem_data=ordem_data,
         totais_por_tipo=totais_por_tipo,
         pagination=pagination,
@@ -6053,6 +6058,22 @@ def novo_fornecedor():
     return redirect(url_for('listar_produtos'))
 
 
+def _extrair_config_atributos_form(form):
+    """Lê campos do formulário e devolve dict compatível com TipoProduto.set_config."""
+    def _bool(key):
+        v = form.get(key)
+        return str(v or '').strip().lower() in ('1', 'on', 'true', 'yes', 'sim')
+
+    return {
+        'usa_nacionalidade': _bool('usa_nacionalidade'),
+        'usa_caminhoneiro': _bool('usa_caminhoneiro'),
+        'usa_tamanho': _bool('usa_tamanho'),
+        'tamanhos_opcoes': str(form.get('tamanhos_opcoes') or '').strip(),
+        'usa_marca': _bool('usa_marca'),
+        'marcas_opcoes': str(form.get('marcas_opcoes') or '').strip(),
+    }
+
+
 @app.route('/tipos/novo', methods=['POST'])
 @login_required
 @tenant_required
@@ -6068,7 +6089,9 @@ def novo_tipo_produto():
         return redirect(url_for('listar_produtos'))
 
     try:
-        db.session.add(TipoProduto(nome=nome, empresa_id=empresa_id_atual()))
+        novo = TipoProduto(nome=nome, empresa_id=empresa_id_atual())
+        novo.set_config(_extrair_config_atributos_form(request.form))
+        db.session.add(novo)
         db.session.commit()
         flash('Tipo cadastrado com sucesso!', 'success')
     except Exception:
@@ -6120,6 +6143,11 @@ def editar_tipo(id):
 
     try:
         tipo.nome = novo_nome
+        # Só altera config se o form trouxer os campos novos (permite rotas legadas
+        # que ainda enviam só 'novo_nome' a continuarem funcionando).
+        if 'usa_nacionalidade' in request.form or 'usa_tamanho' in request.form \
+                or 'usa_marca' in request.form or 'usa_caminhoneiro' in request.form:
+            tipo.set_config(_extrair_config_atributos_form(request.form))
         db.session.commit()
         flash('Tipo atualizado com sucesso!', 'success')
     except Exception:

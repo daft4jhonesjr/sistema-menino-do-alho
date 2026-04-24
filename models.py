@@ -1,3 +1,4 @@
+import json
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 from datetime import date, datetime
@@ -275,7 +276,74 @@ class TipoProduto(db.Model):
     # TODO Fase 2: remover unique=True e trocar por UniqueConstraint(empresa_id, nome).
     nome = db.Column(db.String(100), nullable=False, unique=True, index=True)
 
+    # JSON serializado (Text para portabilidade SQLite/Postgres).
+    # Estrutura: {"usa_nacionalidade": bool, "usa_caminhoneiro": bool,
+    #             "usa_tamanho": bool, "tamanhos_opcoes": [str, ...],
+    #             "usa_marca": bool, "marcas_opcoes": [str, ...]}
+    config_atributos = db.Column(db.Text, nullable=True)
+
     empresa = db.relationship('Empresa', backref=db.backref('tipos_produto', lazy='dynamic'))
+
+    # Chaves aceitas em config_atributos (fonte de verdade)
+    _FLAG_KEYS = ('usa_nacionalidade', 'usa_caminhoneiro', 'usa_tamanho', 'usa_marca')
+    _LIST_KEYS = ('tamanhos_opcoes', 'marcas_opcoes')
+
+    @classmethod
+    def default_config(cls):
+        return {
+            'usa_nacionalidade': False,
+            'usa_caminhoneiro': False,
+            'usa_tamanho': False,
+            'tamanhos_opcoes': [],
+            'usa_marca': False,
+            'marcas_opcoes': [],
+        }
+
+    def get_config(self):
+        """Retorna dict normalizado do config_atributos (sempre com todas as chaves)."""
+        base = self.default_config()
+        raw = self.config_atributos
+        if not raw:
+            return base
+        try:
+            data = json.loads(raw) if isinstance(raw, str) else dict(raw)
+        except (ValueError, TypeError):
+            return base
+        if not isinstance(data, dict):
+            return base
+        for k in self._FLAG_KEYS:
+            base[k] = bool(data.get(k, False))
+        for k in self._LIST_KEYS:
+            v = data.get(k) or []
+            if isinstance(v, str):
+                v = [p.strip() for p in v.split(',') if p.strip()]
+            elif isinstance(v, (list, tuple)):
+                v = [str(p).strip() for p in v if str(p).strip()]
+            else:
+                v = []
+            base[k] = v
+        return base
+
+    def set_config(self, data):
+        """Persiste config_atributos a partir de dict/None."""
+        if not data:
+            self.config_atributos = None
+            return
+        normalizado = self.default_config()
+        for k in self._FLAG_KEYS:
+            normalizado[k] = bool(data.get(k, False))
+        for k in self._LIST_KEYS:
+            v = data.get(k) or []
+            if isinstance(v, str):
+                v = [p.strip() for p in v.split(',') if p.strip()]
+            elif isinstance(v, (list, tuple)):
+                v = [str(p).strip() for p in v if str(p).strip()]
+            else:
+                v = []
+            # dedup preservando ordem
+            seen = set()
+            normalizado[k] = [x for x in v if not (x in seen or seen.add(x))]
+        self.config_atributos = json.dumps(normalizado, ensure_ascii=False)
 
     def __repr__(self):
         return f'<TipoProduto {self.nome}>'
