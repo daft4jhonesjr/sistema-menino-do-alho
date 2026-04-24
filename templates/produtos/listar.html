@@ -99,10 +99,9 @@
                             <label for="filtro_tipo" class="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Tipo</label>
                             <select id="filtro_tipo" name="filtro_tipo" class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm px-3 py-2 focus:ring-2 focus:ring-emerald-500">
                                 <option value="TODOS">Todos</option>
-                                <option value="ALHO">ALHO</option>
-                                <option value="SACOLA">SACOLA</option>
-                                <option value="CAFE">CAFE</option>
-                                <option value="BACALHAU">BACALHAU</option>
+                                {% for t in tipos_produto %}
+                                <option value="{{ (t.nome or '')|upper }}">{{ (t.nome or '')|upper }}</option>
+                                {% endfor %}
                                 <option value="OUTROS">OUTROS</option>
                             </select>
                         </div>
@@ -147,8 +146,31 @@
 <div class="relative">
     <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-hidden">
         {% if produtos_agrupados %}
+            {#
+              Paleta cíclica para as barras de categoria. Classes completas
+              escritas como strings literais para o Tailwind JIT detectar
+              durante o build. OUTROS é especial (sempre cinza-slate no fim).
+              Safelist visível: bg-emerald-700 bg-amber-700 bg-blue-700
+              bg-purple-700 bg-pink-700 bg-cyan-700 bg-rose-700 bg-teal-700
+              bg-indigo-700 bg-slate-600
+            #}
+            {% set _cores_tipo = [
+                'bg-emerald-700',
+                'bg-amber-700',
+                'bg-blue-700',
+                'bg-purple-700',
+                'bg-pink-700',
+                'bg-cyan-700',
+                'bg-rose-700',
+                'bg-teal-700',
+                'bg-indigo-700'
+            ] %}
             {% for tipo, produtos in produtos_agrupados.items() %}
-            {% set bg_color = 'bg-emerald-700' if tipo == 'ALHO' else 'bg-gray-600' if tipo == 'SACOLA' else 'bg-amber-700' if tipo == 'CAFE' else 'bg-blue-700' if tipo == 'BACALHAU' else 'bg-slate-600' %}
+            {% if tipo == 'OUTROS' %}
+                {% set bg_color = 'bg-slate-600' %}
+            {% else %}
+                {% set bg_color = _cores_tipo[loop.index0 % (_cores_tipo|length)] %}
+            {% endif %}
             {% set is_open = loop.first %}
             
             <!-- Cabeçalho da Categoria -->
@@ -683,7 +705,7 @@ function editarTipoCadastrado(id, nomeAtual) {
             </button>
         </div>
         <div class="p-6 overflow-y-auto flex-1">
-            <p class="text-gray-600 dark:text-gray-400 text-sm mb-4">Altere o tipo para ALHO, SACOLA, CAFE ou BACALHAU e salve. Os itens sairão do grupo OUTROS.</p>
+            <p class="text-gray-600 dark:text-gray-400 text-sm mb-4">Altere o tipo para um dos tipos cadastrados da sua empresa e salve. Os itens sairão do grupo OUTROS.</p>
             <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
                 <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                     <thead class="bg-gray-50 dark:bg-gray-900/50">
@@ -699,10 +721,9 @@ function editarTipoCadastrado(id, nomeAtual) {
                             <td class="px-4 py-3">
                                 <select class="corrigir-tipo-select w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 dark:bg-gray-700 dark:text-gray-100" data-id="{{ p.id }}">
                                     <option value="">— Manter OUTROS —</option>
-                                    <option value="ALHO">ALHO</option>
-                                    <option value="SACOLA">SACOLA</option>
-                                    <option value="CAFE">CAFE</option>
-                                    <option value="BACALHAU">BACALHAU</option>
+                                    {% for t in tipos_produto %}
+                                    <option value="{{ (t.nome or '')|upper }}">{{ (t.nome or '')|upper }}</option>
+                                    {% endfor %}
                                 </select>
                             </td>
                         </tr>
@@ -757,10 +778,9 @@ function editarTipoCadastrado(id, nomeAtual) {
                         <label for="edit_tipo" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tipo <span class="text-red-500">*</span></label>
                         <select id="edit_tipo" name="tipo" required class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                             <option value="">Selecione...</option>
-                            <option value="ALHO">ALHO</option>
-                            <option value="SACOLA">SACOLA</option>
-                            <option value="CAFE">CAFE</option>
-                            <option value="BACALHAU">BACALHAU</option>
+                            {% for t in tipos_produto %}
+                            <option value="{{ (t.nome or '')|upper }}">{{ (t.nome or '')|upper }}</option>
+                            {% endfor %}
                         </select>
                     </div>
                     <div class="mb-4">
@@ -1294,17 +1314,20 @@ function abrirModalCorrigirCategoria() {
     if (overlay) overlay.addEventListener('click', fechar);
     if (btnFechar) btnFechar.addEventListener('click', fechar);
     if (btnCancelar) btnCancelar.addEventListener('click', fechar);
+    // Lista de tipos válidos injetada dinamicamente a partir do backend (tenant-aware).
+    var TIPOS_VALIDOS_CORRIGIR = {{ (tipos_produto | map(attribute='nome') | map('upper') | list) | tojson }};
     if (btnSalvar && wrap) {
         btnSalvar.addEventListener('click', function() {
             var selects = wrap.querySelectorAll('.corrigir-tipo-select');
             var updates = [];
             selects.forEach(function(s) {
                 var id = parseInt(s.getAttribute('data-id'), 10);
-                var tipo = (s.value || '').trim();
-                if (id && tipo && ['ALHO','SACOLA','CAFE','BACALHAU'].indexOf(tipo) >= 0) { updates.push({ id: id, tipo: tipo }); }
+                var tipo = (s.value || '').trim().toUpperCase();
+                if (id && tipo && TIPOS_VALIDOS_CORRIGIR.indexOf(tipo) >= 0) { updates.push({ id: id, tipo: tipo }); }
             });
             if (!updates.length) {
-                if (erroDiv) { erroDiv.textContent = 'Selecione pelo menos um produto e escolha ALHO, SACOLA, CAFE ou BACALHAU.'; erroDiv.classList.remove('hidden'); }
+                var _lista = TIPOS_VALIDOS_CORRIGIR.length ? TIPOS_VALIDOS_CORRIGIR.join(', ') : 'um tipo cadastrado';
+                if (erroDiv) { erroDiv.textContent = 'Selecione pelo menos um produto e escolha um tipo válido (' + _lista + ').'; erroDiv.classList.remove('hidden'); }
                 return;
             }
             if (erroDiv) { erroDiv.classList.add('hidden'); erroDiv.textContent = ''; }

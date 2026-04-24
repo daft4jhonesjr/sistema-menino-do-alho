@@ -5796,10 +5796,29 @@ def listar_produtos():
             inativos.reverse()
             produtos_por_tipo[tipo] = ativos + inativos
 
-    # Tipos em ordem preferencial (sempre exibe prateleiras padrão, mesmo vazias)
-    preferidos = ['ALHO', 'SACOLA', 'CAFE', 'BACALHAU', 'OUTROS']
-    restantes = sorted(k for k in produtos_por_tipo if k not in preferidos)
-    tipos_ordenados = preferidos + restantes
+    # Ordem dinâmica multi-tenant: primeiro os TipoProduto cadastrados da empresa
+    # (na ordem alfabética do cadastro), depois quaisquer tipos que apareçam em
+    # produtos mas não estejam cadastrados (legado), e por fim "OUTROS" como
+    # categoria especial coringa no final.
+    tipos_cadastrados = [
+        (t.nome or '').strip().upper()
+        for t in query_tenant(TipoProduto).order_by(TipoProduto.nome).all()
+    ]
+    tipos_cadastrados = [t for t in tipos_cadastrados if t]
+
+    tipos_em_produtos = [k for k in produtos_por_tipo.keys() if k]
+    nao_cadastrados = sorted(
+        t for t in tipos_em_produtos
+        if t not in tipos_cadastrados and t != 'OUTROS'
+    )
+
+    tipos_ordenados = []
+    for t in tipos_cadastrados + nao_cadastrados:
+        if t not in tipos_ordenados and t != 'OUTROS':
+            tipos_ordenados.append(t)
+    # Sempre colocar OUTROS no final, mesmo que tenha 0 itens (mantém o botão
+    # "Corrigir Categoria" acessível para higiene de dados).
+    tipos_ordenados.append('OUTROS')
 
     produtos_agrupados = {}
     for tipo in tipos_ordenados:
