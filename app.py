@@ -9707,6 +9707,17 @@ def receber_lote_cliente(id):
         return redirect(url_for('listar_clientes'))
     forma_pgto = request.form.get('forma_pagamento', 'Dinheiro')
 
+    # Data do pagamento (retroativa): usuário pode escolher a data em que o valor entrou no caixa.
+    data_pagamento_raw = (request.form.get('data_pagamento') or '').strip()
+    if data_pagamento_raw:
+        try:
+            data_pagamento = date.fromisoformat(data_pagamento_raw)
+        except ValueError:
+            flash('Data do pagamento inválida. Use o formato AAAA-MM-DD.', 'error')
+            return redirect(url_for('listar_clientes'))
+    else:
+        data_pagamento = date.today()
+
     cliente = Cliente.query.get_or_404(id)
 
     # Busca vendas PENDENTES ou PARCIAIS, da mais velha para a mais nova
@@ -9736,12 +9747,8 @@ def receber_lote_cliente(id):
             venda.situacao = 'PARCIAL'
             valor_restante = 0
 
-        forma_pgto_upper = str(forma_pgto or '').upper()
-        data_venc = getattr(venda, 'data_vencimento', None)
-        if 'BOLETO' in forma_pgto_upper and data_venc:
-            data_lancamento_caixa = data_venc
-        else:
-            data_lancamento_caixa = date.today()
+        # Respeita a data de pagamento informada no modal (permite lançamentos retroativos).
+        data_lancamento_caixa = data_pagamento
         novo_lanc = LancamentoCaixa(
             data=data_lancamento_caixa,
             descricao=f"Venda #{venda.id} - {cliente.nome_cliente} (Abatimento)",

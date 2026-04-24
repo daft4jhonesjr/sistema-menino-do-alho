@@ -232,6 +232,11 @@
                     <label for="abater_valor_recebido" class="block text-sm font-bold mb-2 text-gray-700 dark:text-gray-300">Valor Recebido (R$):</label>
                     <input type="text" id="abater_valor_recebido" name="valor_recebido" placeholder="0,00" inputmode="decimal" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100" required>
                 </div>
+                <div class="mb-4">
+                    <label for="abater_data_pagamento" class="block text-sm font-bold mb-2 text-gray-700 dark:text-gray-300">Data do Pagamento:</label>
+                    <input type="date" id="abater_data_pagamento" name="data_pagamento" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100" required>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">O lançamento no caixa será registrado nesta data.</p>
+                </div>
                 <div class="mb-6">
                     <label for="abater_forma_pagamento" class="block text-sm font-bold mb-2 text-gray-700 dark:text-gray-300">Forma de Pagamento:</label>
                     <select id="abater_forma_pagamento" name="forma_pagamento" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
@@ -517,6 +522,14 @@ function toggleDropdownNovoCliente(event) {
     var actionBaseAbater = formAbater && formAbater.getAttribute('data-action-base');
     var nomeAbater = document.getElementById('modal-abater-cliente-nome');
     var inputValorAbater = document.getElementById('abater_valor_recebido');
+    var inputDataAbater = document.getElementById('abater_data_pagamento');
+
+    function dataHojeISO() {
+        var d = new Date();
+        var offset = d.getTimezoneOffset();
+        var local = new Date(d.getTime() - offset * 60000);
+        return local.toISOString().slice(0, 10);
+    }
 
     function formatarMoedaBRLInput(valor) {
         var apenasDigitos = String(valor || '').replace(/\D/g, '');
@@ -536,6 +549,8 @@ function toggleDropdownNovoCliente(event) {
         if (nomeAbater) {
             nomeAbater.textContent = 'O valor informado irá quitar as dívidas mais antigas de "' + nome + '" primeiro.';
         }
+        if (inputValorAbater) inputValorAbater.value = '';
+        if (inputDataAbater) inputDataAbater.value = dataHojeISO();
         if (wrapAbater) {
             wrapAbater.classList.remove('hidden');
             travarFundo();
