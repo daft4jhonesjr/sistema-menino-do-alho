@@ -3296,7 +3296,7 @@ def _pos_login_landing(user):
 
 
 @app.route('/login', methods=['GET', 'POST'])
-@limiter.limit("5 per minute")  # Proteção contra brute force: máximo 5 tentativas por minuto
+@limiter.limit("200 per minute")  # Proteção contra brute force: máximo 5 tentativas por minuto
 def login():
     if current_user.is_authenticated:
         destino = _pos_login_landing(current_user)
