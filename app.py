@@ -5,7 +5,26 @@ from flask_compress import Compress
 from flask_caching import Cache
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from models import db, Cliente, Produto, ProdutoFoto, Venda, Usuario, Configuracao, Documento, LancamentoCaixa, ContagemGaveta, Fornecedor, TipoProduto, PushSubscription, LogAtividade
+from models import (
+    db,
+    Cliente,
+    Produto,
+    ProdutoFoto,
+    Venda,
+    Usuario,
+    Configuracao,
+    Documento,
+    LancamentoCaixa,
+    ContagemGaveta,
+    Fornecedor,
+    TipoProduto,
+    PushSubscription,
+    LogAtividade,
+    Empresa,
+    PERFIL_MASTER,
+    PERFIL_DONO,
+    PERFIL_FUNCIONARIO,
+)
 from quotes import frase_do_dia
 from config import Config
 from datetime import date, datetime, timedelta
@@ -2083,6 +2102,10 @@ def gerar_arquivo_backup_csv() -> tuple[bytes, str]:
         "ID", "Nome", "Tipo", "Fornecedor", "Marca",
         "Preço Custo", "Qtd Entrada", "Estoque Atual", "Data Chegada",
     ])
+    # TODO Fase 3 (multi-tenant): este backup agrega dados de TODOS os tenants.
+    # Quando houver mais de uma empresa, considerar gerar um CSV por empresa
+    # ou prefixar cada linha com empresa_id. Por ora exportamos tudo porque o
+    # backup eh enviado apenas para o email do admin da plataforma (MASTER).
     for p in Produto.query.order_by(Produto.data_chegada.desc()).limit(5000).all():
         dc = p.data_chegada.strftime('%d/%m/%Y') if p.data_chegada else ""
         writer.writerow([
@@ -2520,9 +2543,21 @@ def format_cnpj(value):
 
 @app.context_processor
 def inject_count_outros():
-    """Disponibiliza count_outros (produtos com tipo OUTROS) em todos os templates."""
+    """Disponibiliza count_outros (produtos com tipo OUTROS) em todos os templates.
+
+    Multi-tenant: restringe a contagem ao tenant atual. Usuarios MASTER ou
+    nao logados recebem 0 (sem badge).
+    """
     try:
-        n = Produto.query.filter(Produto.tipo == 'OUTROS').count()
+        if not current_user.is_authenticated:
+            return {'count_outros': 0}
+        eid = getattr(current_user, 'empresa_id', None)
+        if eid is None:
+            return {'count_outros': 0}
+        n = Produto.query.filter(
+            Produto.empresa_id == eid,
+            Produto.tipo == 'OUTROS',
+        ).count()
         return {'count_outros': n}
     except Exception:
         return {'count_outros': 0}
@@ -2543,19 +2578,28 @@ def inject_ano_ativo():
     anos_disponiveis = set(range(2024, ano_atual + 2))
     
     try:
+        # Multi-tenant: so considera anos com dados do tenant atual.
+        eid = None
+        if current_user.is_authenticated:
+            eid = getattr(current_user, 'empresa_id', None)
+
         # Buscar anos distintos com vendas
-        anos_vendas = db.session.query(
+        q_vendas = db.session.query(
             func.distinct(extract('year', Venda.data_venda))
-        ).filter(Venda.data_venda.isnot(None)).all()
-        for (ano,) in anos_vendas:
+        ).filter(Venda.data_venda.isnot(None))
+        if eid is not None:
+            q_vendas = q_vendas.filter(Venda.empresa_id == eid)
+        for (ano,) in q_vendas.all():
             if ano:
                 anos_disponiveis.add(int(ano))
-        
+
         # Buscar anos distintos com produtos
-        anos_produtos = db.session.query(
+        q_produtos = db.session.query(
             func.distinct(extract('year', Produto.data_chegada))
-        ).filter(Produto.data_chegada.isnot(None)).all()
-        for (ano,) in anos_produtos:
+        ).filter(Produto.data_chegada.isnot(None))
+        if eid is not None:
+            q_produtos = q_produtos.filter(Produto.empresa_id == eid)
+        for (ano,) in q_produtos.all():
             if ano:
                 anos_disponiveis.add(int(ano))
     except Exception:
@@ -2590,16 +2634,23 @@ def _contar_cobrancas_pendentes_visiveis():
     - Para usuário comum: carrega apenas os campos essenciais (id, situacao,
       data_vencimento, caminho_boleto) sem joinedload desnecessário, e
       limita a 500 registros defensivamente.
+
+    Multi-tenant: restringe a contagem ao tenant do usuario atual. Usuarios
+    MASTER (sem empresa_id) nao veem badge de cobrancas, o que eh intencional.
     """
     try:
         hoje = get_hoje_brasil()
         ano_ativo = session.get('ano_ativo', datetime.now().year)
+        eid = empresa_id_atual()
+        if eid is None:
+            return 0
 
         if current_user.is_admin():
             # Caminho rápido para admin: contar via SQL puro usando data_vencimento direta.
             # Vendas sem data_vencimento própria precisariam de JOIN com Documento —
             # aceitamos uma sub-estimativa leve aqui em troca de performance.
             total_direto = db.session.query(func.count(Venda.id)).filter(
+                Venda.empresa_id == eid,
                 extract('year', Venda.data_venda) == ano_ativo,
                 Venda.situacao.in_(['PENDENTE', 'PARCIAL']),
                 Venda.data_vencimento.isnot(None),
@@ -2609,7 +2660,7 @@ def _contar_cobrancas_pendentes_visiveis():
 
         # Para usuário comum: carrega colunas essenciais (sem usuario_id — coluna inexistente em Venda).
         # Conta todas as cobranças vencidas do período; o badge é informativo para todos os usuários.
-        vendas = Venda.query.with_entities(
+        vendas = query_tenant(Venda).with_entities(
             Venda.id, Venda.situacao, Venda.data_vencimento,
             Venda.caminho_boleto
         ).filter(
@@ -2728,6 +2779,91 @@ def admin_required(f):
     return wrapped
 
 
+# ============================================================
+# MULTI-TENANT — Fase 2
+# ============================================================
+# Contrato:
+#   * empresa_id_atual()   -> int | None
+#   * master_required(f)   -> decorator: permite APENAS perfil MASTER
+#   * tenant_required(f)   -> decorator: exige empresa_id no usuario;
+#                              MASTER eh redirecionado para o painel.
+#   * query_tenant(Model)  -> Model.query filtrado por empresa_id do usuario.
+#
+# Regra de UX definida na Fase 2:
+#   MASTER so opera em /master-admin e rotas correlatas. Ao tentar acessar
+#   rotas operacionais (produtos, vendas, caixa, etc.), eh redirecionado
+#   de volta ao painel. DONO e FUNCIONARIO so veem dados do seu tenant.
+
+def empresa_id_atual():
+    """Retorna o empresa_id do usuario logado (ou None).
+
+    NUNCA deve ser chamado por usuario MASTER dentro de rotas operacionais:
+    o decorator tenant_required ja faz essa guarda antes de a query rodar.
+    """
+    if not current_user.is_authenticated:
+        return None
+    return getattr(current_user, 'empresa_id', None)
+
+
+def master_required(f):
+    """Restringe acesso a usuarios com perfil=MASTER (super admin do SaaS)."""
+    @wraps(f)
+    def wrapped(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return redirect(url_for('login'))
+        if not getattr(current_user, 'is_master', lambda: False)():
+            # Nao expomos 404/403 especifico: flash neutro para nao vazar
+            # a existencia do painel master para contas comuns.
+            flash('Acesso restrito.', 'warning')
+            return redirect(url_for('dashboard'))
+        return f(*args, **kwargs)
+    return wrapped
+
+
+def tenant_required(f):
+    """Exige usuario logado com empresa_id definido.
+
+    * Usuario MASTER eh redirecionado para o painel /master-admin
+      (MASTER nao opera rotas comuns).
+    * Usuario sem empresa_id (edge case de dados corrompidos) eh
+      deslogado com flash de erro.
+    """
+    @wraps(f)
+    def wrapped(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return redirect(url_for('login'))
+        if getattr(current_user, 'is_master', lambda: False)():
+            return redirect(url_for('master_admin'))
+        if not getattr(current_user, 'empresa_id', None):
+            flash(
+                'Seu usuario nao esta vinculado a nenhuma empresa. '
+                'Contate o administrador.',
+                'error',
+            )
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return wrapped
+
+
+def query_tenant(model):
+    """Retorna um Query ja filtrado por empresa_id do usuario atual.
+
+    Uso:
+        produtos = query_tenant(Produto).all()
+        cliente = query_tenant(Cliente).filter_by(id=id).first_or_404()
+
+    Deve ser usado SEMPRE em rotas operacionais ao inves de Model.query.
+    Em rotas que ja usam `tenant_required`, o empresa_id eh garantido.
+    """
+    eid = empresa_id_atual()
+    if eid is None:
+        # Com tenant_required aplicado isto nunca ocorre em rotas protegidas;
+        # para scripts/jobs sem request context retornamos None para forcar
+        # erro explicito ao inves de vazar dados.
+        return model.query.filter(db.false())
+    return model.query.filter_by(empresa_id=eid)
+
+
 def _is_safe_next_url(target):
     """Evita open redirect: só permite redirecionamentos internos para o mesmo host."""
     if not target:
@@ -2794,7 +2930,7 @@ def _resposta_sem_permissao():
 
 def _produto_com_lock(produto_id):
     """Busca produto com lock pessimista para evitar corrida de estoque."""
-    return Produto.query.filter(Produto.id == int(produto_id)).with_for_update().first()
+    return query_tenant(Produto).filter(Produto.id == int(produto_id)).with_for_update().first()
 
 
 def _public_id_cloudinary_from_url(url):
@@ -3144,11 +3280,27 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
 
 # ========== AUTENTICAÇÃO ==========
 
+def _pos_login_landing(user):
+    """Define a pagina inicial apos autenticacao segundo o perfil.
+
+    * MASTER         -> /master-admin (nao opera rotas comuns).
+    * DONO/FUNCIONARIO (com empresa_id) -> /dashboard.
+    * Qualquer outro (sem empresa_id) -> login com flash; eh um estado
+      invalido para rotas operacionais.
+    """
+    if getattr(user, 'is_master', lambda: False)():
+        return url_for('master_admin')
+    if not getattr(user, 'empresa_id', None):
+        return None
+    return url_for('dashboard')
+
+
 @app.route('/login', methods=['GET', 'POST'])
 @limiter.limit("5 per minute")  # Proteção contra brute force: máximo 5 tentativas por minuto
 def login():
     if current_user.is_authenticated:
-        return redirect(url_for('dashboard'))
+        destino = _pos_login_landing(current_user)
+        return redirect(destino or url_for('login'))
     if request.method == 'POST':
         username = (request.form.get('username') or '').strip()
         password = request.form.get('password') or ''
@@ -3167,11 +3319,24 @@ def login():
         if not user or not check_password_hash(user.password_hash, password):
             flash('Usuário ou senha inválidos.', 'error')
             return render_template('auth/login.html')
+        # Bloqueia login em tenants suspensos (exceto MASTER, que nao pertence a tenant).
+        if not getattr(user, 'is_master', lambda: False)():
+            empresa = getattr(user, 'empresa', None)
+            if empresa is not None and not empresa.ativo:
+                flash('Empresa suspensa. Contate o administrador do sistema.', 'error')
+                return render_template('auth/login.html')
+            if not getattr(user, 'empresa_id', None):
+                flash('Seu usuário não está vinculado a nenhuma empresa. Contate o administrador.', 'error')
+                return render_template('auth/login.html')
         remember = True if request.form.get('remember') else False
         login_user(user, remember=remember)
+        destino_padrao = _pos_login_landing(user) or url_for('login')
         next_url = request.form.get('next') or request.args.get('next')
         if not _is_safe_next_url(next_url):
-            next_url = url_for('dashboard')
+            next_url = destino_padrao
+        # MASTER NUNCA eh redirecionado para rotas operacionais, mesmo com next=.
+        if getattr(user, 'is_master', lambda: False)():
+            next_url = url_for('master_admin')
         return redirect(next_url)
     return render_template('auth/login.html')
 
@@ -3299,20 +3464,30 @@ def perfil():
     return render_template('auth/perfil.html', user=current_user)
 
 
-def get_config():
-    """
-    Retorna o registro único de Configuracao.
-    Cria com código padrão se a tabela estiver vazia.
+def get_config(empresa_id=None):
+    """Retorna a Configuracao do tenant atual (ou de um empresa_id explicito).
 
-    Returns:
-        Configuracao: Instância única de configuração.
+    Multi-tenant: cada empresa tem sua propria Configuracao (codigo_cadastro,
+    etc.). Se nao existir, cria com valor padrao para aquele tenant.
 
-    Raises:
-        RuntimeError: Se falhar ao criar a configuração inicial.
+    Para chamadas sem request context (ex.: jobs), passe empresa_id explicito.
     """
-    config = Configuracao.query.first()
+    if empresa_id is None:
+        empresa_id = empresa_id_atual()
+
+    if empresa_id is None:
+        # Fallback para contexto sem tenant (ex.: bootstrap legado):
+        # retorna a primeira config qualquer. Isso nao deve ser chamado a
+        # partir de rotas operacionais apos a Fase 2.
+        config = Configuracao.query.first()
+    else:
+        config = Configuracao.query.filter_by(empresa_id=empresa_id).first()
+
     if config is None:
-        config = Configuracao(codigo_cadastro="alho123")
+        config = Configuracao(
+            codigo_cadastro="alho123",
+            empresa_id=empresa_id,
+        )
         db.session.add(config)
         try:
             db.session.commit()
@@ -3323,9 +3498,138 @@ def get_config():
     return config
 
 
+# ============================================================
+# PAINEL SUPER ADMIN (MASTER) — Fase 2
+# ============================================================
+# Acesso restrito a usuarios com perfil=MASTER. Permite criar novas
+# Empresas (tenants) e ja instancia o primeiro Usuario DONO vinculado.
+# Nao expomos cadastro publico de empresas: novos tenants sao criados
+# exclusivamente aqui.
+
+def _master_validar_form_nova_empresa(form):
+    """Valida campos do form de criacao de Empresa+Dono.
+
+    Retorna (dados_validados, erro). Se erro, dados_validados eh None.
+    """
+    nome_fantasia = (form.get('nome_fantasia') or '').strip()
+    cnpj = (form.get('cnpj') or '').strip() or None
+    dono_nome = (form.get('dono_nome') or '').strip() or None
+    dono_username = (form.get('dono_username') or '').strip()
+    dono_email = (form.get('dono_email') or '').strip() or None
+    dono_senha = form.get('dono_senha') or ''
+    dono_senha_confirmar = form.get('dono_senha_confirmar') or ''
+
+    if not nome_fantasia:
+        return None, 'Informe o nome fantasia da empresa.'
+    if not dono_username:
+        return None, 'Informe o login (username) do Dono da empresa.'
+    if not dono_senha:
+        return None, 'Informe a senha inicial do Dono.'
+    if dono_senha != dono_senha_confirmar:
+        return None, 'As senhas nao conferem.'
+    if len(dono_senha) < 6:
+        return None, 'A senha deve ter pelo menos 6 caracteres.'
+    if Usuario.query.filter_by(username=dono_username).first():
+        return None, f'Ja existe um usuario com o login "{dono_username}".'
+    if cnpj and Empresa.query.filter_by(cnpj=cnpj).first():
+        return None, f'Ja existe uma empresa com o CNPJ "{cnpj}".'
+
+    return {
+        'nome_fantasia': nome_fantasia,
+        'cnpj': cnpj,
+        'dono_nome': dono_nome,
+        'dono_username': dono_username,
+        'dono_email': dono_email,
+        'dono_senha': dono_senha,
+    }, None
+
+
+@app.route('/master-admin', methods=['GET', 'POST'])
+@login_required
+@master_required
+def master_admin():
+    """Painel Super Admin: cria novas Empresas + Dono inicial."""
+    if request.method == 'POST':
+        dados, erro = _master_validar_form_nova_empresa(request.form)
+        if erro:
+            flash(erro, 'error')
+            return redirect(url_for('master_admin'))
+
+        try:
+            nova_empresa = Empresa(
+                nome_fantasia=dados['nome_fantasia'],
+                cnpj=dados['cnpj'],
+                ativo=True,
+            )
+            db.session.add(nova_empresa)
+            db.session.flush()  # garante nova_empresa.id
+
+            dono = Usuario(
+                username=dados['dono_username'],
+                password_hash=generate_password_hash(dados['dono_senha']),
+                role='admin',  # legado: dono do tenant eh admin pra rotas que olham is_admin()
+                perfil=PERFIL_DONO,
+                empresa_id=nova_empresa.id,
+                nome=dados['dono_nome'],
+                email=dados['dono_email'],
+            )
+            db.session.add(dono)
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            logging.error('Erro ao criar empresa+dono: %s', e, exc_info=True)
+            flash('Erro ao criar empresa. Tente novamente.', 'error')
+            return redirect(url_for('master_admin'))
+
+        flash(
+            f'Empresa "{nova_empresa.nome_fantasia}" criada com sucesso. '
+            f'Usuario Dono: {dono.username}.',
+            'success',
+        )
+        return redirect(url_for('master_admin'))
+
+    empresas = (
+        db.session.query(
+            Empresa,
+            db.func.count(Usuario.id).label('total_usuarios'),
+        )
+        .outerjoin(Usuario, Usuario.empresa_id == Empresa.id)
+        .group_by(Empresa.id)
+        .order_by(Empresa.data_cadastro.desc())
+        .all()
+    )
+    return render_template('admin_master.html', empresas=empresas)
+
+
+@app.route('/master-admin/empresa/<int:empresa_id>/toggle_ativo', methods=['POST'])
+@login_required
+@master_required
+def master_toggle_empresa_ativo(empresa_id):
+    """Ativa/desativa um tenant (suspensao por inadimplencia, etc.)."""
+    empresa = Empresa.query.get_or_404(empresa_id)
+    empresa.ativo = not bool(empresa.ativo)
+    ok, err = _safe_db_commit()
+    if not ok:
+        flash(err or 'Erro ao atualizar empresa.', 'error')
+    else:
+        estado = 'ativada' if empresa.ativo else 'desativada'
+        flash(f'Empresa "{empresa.nome_fantasia}" {estado}.', 'success')
+    return redirect(url_for('master_admin'))
+
+
 @app.route('/cadastro', methods=['GET', 'POST'])
 @limiter.limit("10 per hour")
 def cadastro():
+    """Cadastro publico de FUNCIONARIO vinculado a um tenant existente.
+
+    Regras multi-tenant (Fase 2):
+    - O codigo de seguranca identifica a empresa: precisa bater com uma
+      Configuracao.codigo_cadastro de alguma empresa ATIVA.
+    - O usuario criado recebe perfil=FUNCIONARIO e empresa_id da empresa
+      cujo codigo foi informado.
+    - Novas EMPRESAS (tenants) NAO sao criadas aqui -- sao criadas apenas
+      pelo painel MASTER (/master-admin).
+    """
     if current_user.is_authenticated:
         return redirect(url_for('dashboard'))
     erro = None
@@ -3334,20 +3638,41 @@ def cadastro():
         senha = request.form.get('password') or ''
         confirmar = request.form.get('confirmar') or ''
         codigo_seguranca = (request.form.get('codigo_seguranca') or '').strip()
-        config = get_config()
+
+        # Identifica a empresa pelo codigo de cadastro informado.
+        empresa_alvo = None
+        if codigo_seguranca:
+            config_match = (
+                Configuracao.query
+                .filter(Configuracao.codigo_cadastro == codigo_seguranca)
+                .filter(Configuracao.empresa_id.isnot(None))
+                .first()
+            )
+            if config_match:
+                empresa_alvo = Empresa.query.filter_by(
+                    id=config_match.empresa_id, ativo=True
+                ).first()
+
         if not username:
             erro = 'Informe o usuário.'
         elif not senha:
             erro = 'Informe a senha.'
         elif senha != confirmar:
             erro = 'As senhas não coincidem.'
-        elif codigo_seguranca != (config.codigo_cadastro or ''):
+        elif not empresa_alvo:
             erro = 'Código de segurança inválido!'
         elif Usuario.query.filter_by(username=username).first():
             erro = 'Este usuário já está em uso.'
         else:
             email_cadastro = (request.form.get('email') or '').strip() or None
-            u = Usuario(username=username, password_hash=generate_password_hash(senha), role='user', email=email_cadastro)
+            u = Usuario(
+                username=username,
+                password_hash=generate_password_hash(senha),
+                role='user',
+                perfil=PERFIL_FUNCIONARIO,
+                empresa_id=empresa_alvo.id,
+                email=email_cadastro,
+            )
             db.session.add(u)
             ok, err = _safe_db_commit()
             if not ok:
@@ -3360,17 +3685,43 @@ def cadastro():
     return render_template('auth/cadastro.html')
 
 
+def _checar_gestao_usuario_permitida(usuario_alvo):
+    """Garante que DONO so gerencia usuarios da propria empresa.
+
+    MASTER nao chega aqui (tenant_required redireciona para master_admin).
+    Retorna (ok, redirect_response).
+    """
+    if usuario_alvo is None:
+        flash('Usuario nao encontrado.', 'error')
+        return False, redirect(url_for('gerenciar_usuarios'))
+    eid_atual = empresa_id_atual()
+    alvo_eid = getattr(usuario_alvo, 'empresa_id', None)
+    if eid_atual and alvo_eid and alvo_eid != eid_atual:
+        flash('Acesso negado: usuario pertence a outra empresa.', 'error')
+        return False, redirect(url_for('gerenciar_usuarios'))
+    return True, None
+
+
 @app.route('/gerenciar_usuarios')
 @login_required
+@tenant_required
 @admin_required
 def gerenciar_usuarios():
-    usuarios = Usuario.query.order_by(Usuario.username).all()
+    # DONO ve apenas usuarios do proprio tenant. Jhones (admin legado sem
+    # perfil MASTER) continua vendo apenas sua empresa tambem.
+    usuarios = (
+        Usuario.query
+        .filter_by(empresa_id=empresa_id_atual())
+        .order_by(Usuario.username)
+        .all()
+    )
     config = get_config()
     return render_template('auth/gerenciar_usuarios.html', usuarios=usuarios, config=config)
 
 
 @app.route('/gerenciar_usuarios/atualizar_codigo', methods=['POST'])
 @login_required
+@tenant_required
 @admin_required
 def atualizar_codigo_cadastro():
     """Atualiza o código de segurança exigido no cadastro de novos usuários."""
@@ -3394,9 +3745,13 @@ def atualizar_codigo_cadastro():
 
 @app.route('/gerenciar_usuarios/editar_completo/<int:id>', methods=['POST'])
 @login_required
+@tenant_required
 @admin_required
 def editar_usuario_completo(id):
     u = Usuario.query.get_or_404(id)
+    ok_perm, resp = _checar_gestao_usuario_permitida(u)
+    if not ok_perm:
+        return resp
     novo_nome = request.form.get('username', '').strip()
     senha_atual = (request.form.get('senha_atual') or '').strip()
     nova_senha = (request.form.get('nova_senha') or '').strip()
@@ -3442,12 +3797,16 @@ def editar_usuario_completo(id):
 
 @app.route('/gerenciar_usuarios/excluir/<int:id>', methods=['POST'])
 @login_required
+@tenant_required
 @admin_required
 def excluir_usuario(id):
     if current_user.id == id:
         flash('Você não pode excluir a sua própria conta!', 'error')
         return redirect(url_for('gerenciar_usuarios'))
     u = Usuario.query.get_or_404(id)
+    ok_perm, resp = _checar_gestao_usuario_permitida(u)
+    if not ok_perm:
+        return resp
     if u.username == 'Jhones':
         flash('O administrador principal (Jhones) não pode ser excluído.', 'warning')
         return redirect(url_for('gerenciar_usuarios'))
@@ -3464,9 +3823,13 @@ def excluir_usuario(id):
 
 @app.route('/gerenciar_usuarios/alterar_role/<int:id>', methods=['POST'])
 @login_required
+@tenant_required
 @admin_required
 def alterar_role_usuario(id):
     u = Usuario.query.get_or_404(id)
+    ok_perm, resp = _checar_gestao_usuario_permitida(u)
+    if not ok_perm:
+        return resp
     novo_role = request.form.get('role')
     if novo_role not in ('admin', 'user'):
         flash('Nível inválido.', 'error')
@@ -3485,10 +3848,14 @@ def alterar_role_usuario(id):
 
 @app.route('/historico')
 @login_required
+@tenant_required
 @admin_required
 def historico_atividades():
     """
     Exibe o log de auditoria de ações do sistema.
+
+    Multi-tenant: LogAtividade nao tem empresa_id proprio; o escopo do tenant
+    eh derivado do usuario_id (apenas logs de usuarios do mesmo tenant).
 
     Parâmetros de URL:
         modulo: Filtrar por módulo (VENDAS, CLIENTES, PRODUTOS, USUARIOS).
@@ -3504,14 +3871,25 @@ def historico_atividades():
     acao_filtro = request.args.get('acao', '')
     usuario_filtro = request.args.get('usuario_id', '', type=str)
 
-    query = LogAtividade.query
+    # Escopo tenant: ids dos usuarios da propria empresa
+    ids_do_tenant = [
+        uid
+        for (uid,) in db.session.query(Usuario.id)
+        .filter(Usuario.empresa_id == empresa_id_atual())
+        .all()
+    ]
+
+    query = LogAtividade.query.filter(LogAtividade.usuario_id.in_(ids_do_tenant or [0]))
 
     if modulo_filtro:
         query = query.filter(LogAtividade.modulo == modulo_filtro)
     if acao_filtro:
         query = query.filter(LogAtividade.acao == acao_filtro)
     if usuario_filtro and usuario_filtro.isdigit():
-        query = query.filter(LogAtividade.usuario_id == int(usuario_filtro))
+        # Restringe tambem ao proprio tenant para evitar vazar outros logs.
+        uid_req = int(usuario_filtro)
+        if uid_req in ids_do_tenant:
+            query = query.filter(LogAtividade.usuario_id == uid_req)
 
     query = query.order_by(LogAtividade.data_hora.desc())
     total = query.count()
@@ -3526,7 +3904,11 @@ def historico_atividades():
             mapa_usuarios[u.id] = u.username
 
     total_paginas = max(1, (total + por_pagina - 1) // por_pagina)
-    todos_usuarios = Usuario.query.order_by(Usuario.username).all()
+    todos_usuarios = (
+        Usuario.query.filter_by(empresa_id=empresa_id_atual())
+        .order_by(Usuario.username)
+        .all()
+    )
 
     return render_template(
         'historico.html',
@@ -3633,7 +4015,7 @@ def get_radar_recompra():
     JANELA_MINIMA_DIAS = 14
 
     vendas_all = (
-        Venda.query
+        query_tenant(Venda)
         .options(joinedload(Venda.cliente), joinedload(Venda.produto))
         .join(Produto, Venda.produto_id == Produto.id)
         .join(Cliente, Venda.cliente_id == Cliente.id)
@@ -3736,11 +4118,14 @@ def get_radar_recompra():
 
 @app.route('/dashboard')
 @login_required
+@tenant_required
 @cache.cached(timeout=300, key_prefix=lambda: f"dashboard:v{_dashboard_cache_version()}:{getattr(current_user, 'id', 'anon')}")
 def dashboard():
     # Obter ano ativo da sessão
     ano_ativo = session.get('ano_ativo', datetime.now().year)
     
+    # Multi-tenant: filtro obrigatorio aplicado em todas as agregacoes abaixo.
+    filtro_tenant_venda = Venda.empresa_id == empresa_id_atual()
     # Filtro base para vendas do ano ativo
     filtro_ano_venda = extract('year', Venda.data_venda) == ano_ativo
     # Excluir BACALHAU de todos os KPIs do dashboard
@@ -3785,7 +4170,7 @@ def dashboard():
         func.sum((Venda.preco_venda - Produto.preco_custo) * Venda.quantidade_venda).label('lucro_total')
     ).join(Venda, Cliente.id == Venda.cliente_id)\
      .join(Produto, Venda.produto_id == Produto.id)\
-     .filter(filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome)\
+     .filter(filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome)\
      .group_by(Cliente.id, Cliente.nome_cliente)\
      .order_by(desc('lucro_total'))\
      .limit(10).all()
@@ -3797,7 +4182,7 @@ def dashboard():
         func.sum(Venda.preco_venda * Venda.quantidade_venda).label('total_vendido'),
         func.sum((Venda.preco_venda - Produto.preco_custo) * Venda.quantidade_venda).label('lucro_total')
     ).join(Venda, Produto.id == Venda.produto_id)\
-     .filter(filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome)\
+     .filter(filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome)\
      .group_by(Produto.id, Produto.nome_produto)\
      .order_by(desc('lucro_total'))\
      .limit(10).all()
@@ -3806,33 +4191,33 @@ def dashboard():
     total_pendente = db.session.query(
         func.sum(Venda.preco_venda * Venda.quantidade_venda)
     ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
-     .filter(Venda.situacao == 'PENDENTE', filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
+     .filter(Venda.situacao == 'PENDENTE', filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
     
     # KPI 4: Financeiro - Pago - FILTRADO POR ANO
     total_pago = db.session.query(
         func.sum(Venda.preco_venda * Venda.quantidade_venda)
     ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
-     .filter(Venda.situacao == 'PAGO', filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
+     .filter(Venda.situacao == 'PAGO', filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
     
     # KPI 5: Lucro total do período - FILTRADO POR ANO
     total_lucro = db.session.query(
         func.sum((Venda.preco_venda - Produto.preco_custo) * Venda.quantidade_venda)
     ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
-     .filter(filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
+     .filter(filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
     
     # KPI 5b: Prejuízo/Perdas - vendas com lucro negativo - FILTRADO POR ANO
     prejuizo_expr = (Venda.preco_venda - Produto.preco_custo) * Venda.quantidade_venda
     total_prejuizo = db.session.query(
         func.sum(func.abs(prejuizo_expr))
     ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
-     .filter(prejuizo_expr < 0, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
+     .filter(prejuizo_expr < 0, filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
     qtd_caixas_prejuizo = db.session.query(
         func.sum(Venda.quantidade_venda)
     ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
-     .filter(prejuizo_expr < 0, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
+     .filter(prejuizo_expr < 0, filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
 
     # Detalhes para o modal de prejuízos (vendas com lucro negativo, ordenadas da mais recente)
-    vendas_com_prejuizo = Venda.query.options(
+    vendas_com_prejuizo = query_tenant(Venda).options(
         joinedload(Venda.cliente), joinedload(Venda.produto)
     ).join(Produto, Venda.produto_id == Produto.id)\
      .filter(prejuizo_expr < 0, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome)\
@@ -3853,36 +4238,37 @@ def dashboard():
     total_paty = db.session.query(
         func.sum(Venda.preco_venda * Venda.quantidade_venda)
     ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
-     .filter(Venda.empresa_faturadora == 'PATY', filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
+     .filter(Venda.empresa_faturadora == 'PATY', filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
     
     total_destak = db.session.query(
         func.sum(Venda.preco_venda * Venda.quantidade_venda)
     ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
-     .filter(Venda.empresa_faturadora == 'DESTAK', filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
+     .filter(Venda.empresa_faturadora == 'DESTAK', filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
     
     # Separação PATY e DESTAK por situação (Pago vs Pendente)
     paty_pago = db.session.query(
         func.sum(Venda.preco_venda * Venda.quantidade_venda)
     ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
-     .filter(Venda.empresa_faturadora == 'PATY', Venda.situacao == 'PAGO', filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
+     .filter(Venda.empresa_faturadora == 'PATY', Venda.situacao == 'PAGO', filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
     paty_pendente = db.session.query(
         func.sum(Venda.preco_venda * Venda.quantidade_venda)
     ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
-     .filter(Venda.empresa_faturadora == 'PATY', Venda.situacao == 'PENDENTE', filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
+     .filter(Venda.empresa_faturadora == 'PATY', Venda.situacao == 'PENDENTE', filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
     destak_pago = db.session.query(
         func.sum(Venda.preco_venda * Venda.quantidade_venda)
     ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
-     .filter(Venda.empresa_faturadora == 'DESTAK', Venda.situacao == 'PAGO', filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
+     .filter(Venda.empresa_faturadora == 'DESTAK', Venda.situacao == 'PAGO', filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
     destak_pendente = db.session.query(
         func.sum(Venda.preco_venda * Venda.quantidade_venda)
     ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
-     .filter(Venda.empresa_faturadora == 'DESTAK', Venda.situacao == 'PENDENTE', filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
+     .filter(Venda.empresa_faturadora == 'DESTAK', Venda.situacao == 'PENDENTE', filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
     
     # Vendas sem empresa (NENHUM ou string vazia) - FILTRADO POR ANO
     total_nenhum = db.session.query(
         func.sum(Venda.preco_venda * Venda.quantidade_venda)
     ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id).filter(
         ~Venda.empresa_faturadora.in_(['PATY', 'DESTAK']),
+        filtro_tenant_venda,
         filtro_ano_venda,
         filtro_sem_bacalhau_tipo,
         filtro_sem_bacalhau_nome
@@ -3892,7 +4278,7 @@ def dashboard():
     total_vendas = db.session.query(
         func.sum(Venda.preco_venda * Venda.quantidade_venda)
     ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
-     .filter(filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
+     .filter(filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
     
     # KPI 8: Margem de Lucro (%) = (total_lucro / total_vendas) * 100
     # Proteção contra divisão por zero: total_vendas 0 ou negativo → margem = 0
@@ -3915,7 +4301,7 @@ def dashboard():
             func.concat(Venda.cliente_id, '-', Venda.nf, '-', func.date(Venda.data_venda))
         ))
     ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
-     .filter(filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
+     .filter(filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
     
     # KPI 10: Ticket Médio = total_vendas / total_pedidos
     # Proteção contra divisão por zero
@@ -3943,7 +4329,7 @@ def dashboard():
         qtd_cafe.label('qtd_cafe'),
         qtd_sacola.label('qtd_sacola')
     ).join(Produto, Venda.produto_id == Produto.id)\
-     .filter(filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome)\
+     .filter(filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome)\
      .group_by(coluna_mes)\
      .order_by(coluna_mes).all()
     
@@ -4051,6 +4437,7 @@ def dashboard():
 
 @app.route('/caixa')
 @login_required
+@tenant_required
 def caixa():
     setor_atual = (request.args.get('setor', 'GERAL') or 'GERAL').strip().upper()
     if setor_atual not in ('GERAL', 'BACALHAU'):
@@ -4058,25 +4445,29 @@ def caixa():
 
     # Totais via agregados (rápido, sem carregar todas as linhas)
     total_entradas = db.session.query(func.coalesce(func.sum(LancamentoCaixa.valor), 0)).filter(
+        LancamentoCaixa.empresa_id == empresa_id_atual(),
         LancamentoCaixa.tipo == 'ENTRADA',
         LancamentoCaixa.setor == setor_atual
     ).scalar() or 0.0
     total_saida_pessoal = db.session.query(func.coalesce(func.sum(LancamentoCaixa.valor), 0)).filter(
+        LancamentoCaixa.empresa_id == empresa_id_atual(),
         LancamentoCaixa.tipo == 'SAIDA', LancamentoCaixa.categoria.like('%Pessoal%'),
         LancamentoCaixa.setor == setor_atual
     ).scalar() or 0.0
     total_saida_fornecedor = db.session.query(func.coalesce(func.sum(LancamentoCaixa.valor), 0)).filter(
+        LancamentoCaixa.empresa_id == empresa_id_atual(),
         LancamentoCaixa.tipo == 'SAIDA', LancamentoCaixa.categoria.like('%Fornecedor%'),
         LancamentoCaixa.setor == setor_atual
     ).scalar() or 0.0
     total_saidas = db.session.query(func.coalesce(func.sum(LancamentoCaixa.valor), 0)).filter(
+        LancamentoCaixa.empresa_id == empresa_id_atual(),
         LancamentoCaixa.tipo == 'SAIDA',
         LancamentoCaixa.setor == setor_atual
     ).scalar() or 0.0
     saldo_atual = Decimal(str(total_entradas or Decimal('0.00'))) - Decimal(str(total_saidas or Decimal('0.00')))
 
     # Limitar a 500 lançamentos mais recentes para exibição (índices em data/tipo/categoria)
-    lancamentos = LancamentoCaixa.query.filter_by(setor=setor_atual).order_by(
+    lancamentos = query_tenant(LancamentoCaixa).filter_by(setor=setor_atual).order_by(
         LancamentoCaixa.data.desc(), LancamentoCaixa.id.desc()
     ).limit(500).all()
     meses_pt = {1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril', 5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto', 9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'}
@@ -4149,7 +4540,7 @@ def caixa():
 
     contagem_gaveta_estado = {'dinheiro': [], 'cheques': []}
     try:
-        registro_gaveta = ContagemGaveta.query.filter_by(
+        registro_gaveta = query_tenant(ContagemGaveta).filter_by(
             usuario_id=current_user.id
         ).order_by(ContagemGaveta.id.desc()).first()
         if registro_gaveta:
@@ -4221,6 +4612,7 @@ def _normalizar_itens_contagem(itens, incluir_nome=False):
 
 @app.route('/upload_imagem_cheque', methods=['POST'])
 @login_required
+@tenant_required
 def upload_imagem_cheque():
     if 'file' not in request.files:
         return jsonify({'error': 'Nenhum arquivo enviado'}), 400
@@ -4242,6 +4634,7 @@ def upload_imagem_cheque():
 @app.route('/caixa/gaveta/salvar', methods=['POST'])
 @app.route('/caixa/salvar_gaveta', methods=['POST'])
 @login_required
+@tenant_required
 def salvar_contagem_gaveta():
     payload = request.get_json(silent=True) or {}
     dinheiro = _normalizar_itens_contagem(payload.get('dinheiro', []), incluir_nome=False)
@@ -4251,7 +4644,7 @@ def salvar_contagem_gaveta():
     hoje = get_hoje_brasil()
 
     try:
-        registro = ContagemGaveta.query.filter_by(usuario_id=current_user.id).order_by(ContagemGaveta.id.desc()).first()
+        registro = query_tenant(ContagemGaveta).filter_by(usuario_id=current_user.id).order_by(ContagemGaveta.id.desc()).first()
         if registro:
             registro.data = hoje
             registro.estado_json = json.dumps(estado, ensure_ascii=False)
@@ -4259,7 +4652,8 @@ def salvar_contagem_gaveta():
             novo = ContagemGaveta(
                 data=hoje,
                 usuario_id=current_user.id,
-                estado_json=json.dumps(estado, ensure_ascii=False)
+                estado_json=json.dumps(estado, ensure_ascii=False),
+                empresa_id=empresa_id_atual()
             )
             db.session.add(novo)
         db.session.commit()
@@ -4272,8 +4666,9 @@ def salvar_contagem_gaveta():
 @app.route('/caixa/gaveta/carregar', methods=['GET'])
 @app.route('/caixa/obter_gaveta', methods=['GET'])
 @login_required
+@tenant_required
 def carregar_contagem_gaveta():
-    registro = ContagemGaveta.query.filter_by(usuario_id=current_user.id).order_by(ContagemGaveta.id.desc()).first()
+    registro = query_tenant(ContagemGaveta).filter_by(usuario_id=current_user.id).order_by(ContagemGaveta.id.desc()).first()
     if not registro:
         return jsonify(ok=True, estado={'dinheiro': [], 'cheques': []})
     try:
@@ -4311,6 +4706,7 @@ def _lancamento_caixa_before_update_status_envio(mapper, connection, target):
 
 @app.route('/caixa/adicionar', methods=['POST'])
 @login_required
+@tenant_required
 def adicionar_caixa():
     nova_data = datetime.strptime(request.form.get('data'), '%Y-%m-%d').date()
     descricao_base = (request.form.get('descricao') or '').strip()
@@ -4340,7 +4736,8 @@ def adicionar_caixa():
                 status_envio=_status_envio_por_forma_pagamento(forma1),
                 valor=valor1,
                 setor=setor,
-                usuario_id=current_user.id
+                usuario_id=current_user.id,
+                empresa_id=empresa_id_atual()
             ))
         if valor2 > 0:
             lancamentos.append(LancamentoCaixa(
@@ -4352,7 +4749,8 @@ def adicionar_caixa():
                 status_envio=_status_envio_por_forma_pagamento(forma2),
                 valor=valor2,
                 setor=setor,
-                usuario_id=current_user.id
+                usuario_id=current_user.id,
+                empresa_id=empresa_id_atual()
             ))
         for lanc in lancamentos:
             db.session.add(lanc)
@@ -4373,7 +4771,8 @@ def adicionar_caixa():
             status_envio=_status_envio_por_forma_pagamento(request.form.get('forma_pagamento')),
             valor=novo_valor,
             setor=setor,
-            usuario_id=current_user.id
+            usuario_id=current_user.id,
+            empresa_id=empresa_id_atual()
         )
         db.session.add(novo_lancamento)
         ok, err = _safe_db_commit()
@@ -4386,9 +4785,10 @@ def adicionar_caixa():
 
 @app.route('/caixa/editar/<int:id>', methods=['POST'])
 @login_required
+@tenant_required
 def editar_lancamento_caixa(id):
     """Atualiza um lançamento existente no caixa."""
-    lancamento = LancamentoCaixa.query.get_or_404(id)
+    lancamento = query_tenant(LancamentoCaixa).filter_by(id=id).first_or_404()
     try:
         lancamento.data = datetime.strptime(request.form.get('data'), '%Y-%m-%d').date()
         lancamento.valor = _limpar_valor_moeda(request.form.get('valor'))
@@ -4412,9 +4812,10 @@ def editar_lancamento_caixa(id):
 
 @app.route('/caixa/cheque/<int:id>/alternar_status', methods=['POST'])
 @login_required
+@tenant_required
 def alternar_status_envio_cheque(id):
     """Alterna status de envio físico do cheque entre 'Não Enviado' e 'Enviado'."""
-    lancamento = LancamentoCaixa.query.get_or_404(id)
+    lancamento = query_tenant(LancamentoCaixa).filter_by(id=id).first_or_404()
     forma = (lancamento.forma_pagamento or '').lower()
     if 'cheque' not in forma:
         flash('Apenas lançamentos em cheque possuem status de envio.', 'warning')
@@ -4433,9 +4834,10 @@ def alternar_status_envio_cheque(id):
 
 @app.route('/caixa/<int:id>/toggle_status_cheque', methods=['POST'])
 @login_required
+@tenant_required
 def toggle_status_cheque(id):
     """Alterna status do cheque via AJAX e retorna JSON."""
-    lancamento = LancamentoCaixa.query.get_or_404(id)
+    lancamento = query_tenant(LancamentoCaixa).filter_by(id=id).first_or_404()
     forma = str(lancamento.forma_pagamento or '').strip().lower()
     if 'cheque' not in forma:
         return jsonify({'success': False, 'message': 'Apenas lançamentos em cheque podem alterar status.'}), 400
@@ -4452,15 +4854,16 @@ def toggle_status_cheque(id):
 
 @app.route('/desfazer_caixa/<int:id>', methods=['POST'])
 @login_required
+@tenant_required
 def desfazer_caixa(id):
     """Rota genérica para desfazer lançamento do caixa (retorna JSON para Undo via Toast)."""
     try:
-        lancamento = LancamentoCaixa.query.get_or_404(id)
+        lancamento = query_tenant(LancamentoCaixa).filter_by(id=id).first_or_404()
         # --- Estorno reverso (Caixa -> Venda) ---
         match = re.search(r'Venda #(\d+)', lancamento.descricao or '')
         if match and lancamento.tipo == 'ENTRADA':
             venda_id = int(match.group(1))
-            venda = Venda.query.get(venda_id)
+            venda = query_tenant(Venda).filter_by(id=venda_id).first()
             if venda:
                 venda.valor_pago = Decimal(str(venda.valor_pago or Decimal('0.00'))) - Decimal(str(lancamento.valor or Decimal('0.00')))
                 if venda.valor_pago <= Decimal('0.01'):
@@ -4482,16 +4885,17 @@ def desfazer_caixa(id):
 
 @app.route('/caixa/deletar/<int:id>', methods=['POST'])
 @login_required
+@tenant_required
 def deletar_caixa(id):
     try:
-        lancamento = LancamentoCaixa.query.get_or_404(id)
+        lancamento = query_tenant(LancamentoCaixa).filter_by(id=id).first_or_404()
 
         # --- INÍCIO DO ESTORNO REVERSO (CAIXA -> VENDA) ---
         match = re.search(r'Venda #(\d+)', lancamento.descricao or '')
 
         if match and lancamento.tipo == 'ENTRADA':
             venda_id = int(match.group(1))
-            venda = Venda.query.get(venda_id)
+            venda = query_tenant(Venda).filter_by(id=venda_id).first()
 
             if venda:
                 venda.valor_pago = Decimal(str(venda.valor_pago or Decimal('0.00'))) - Decimal(str(lancamento.valor or Decimal('0.00')))
@@ -4518,6 +4922,7 @@ def deletar_caixa(id):
 
 @app.route('/caixa/deletar_massa', methods=['POST'])
 @login_required
+@tenant_required
 @admin_required
 def deletar_massa_caixa():
     deletar_tudo = request.form.get('deletar_tudo') == '1'
@@ -4525,7 +4930,7 @@ def deletar_massa_caixa():
 
     if deletar_tudo:
         try:
-            count = LancamentoCaixa.query.delete()
+            count = query_tenant(LancamentoCaixa).delete()
             db.session.commit()
             flash(f'{count} lançamentos apagados com sucesso!', 'success')
         except Exception as e:
@@ -4538,7 +4943,7 @@ def deletar_massa_caixa():
         return redirect(url_for('caixa'))
     try:
         ids_int = [int(x) for x in ids]
-        LancamentoCaixa.query.filter(LancamentoCaixa.id.in_(ids_int)).delete(synchronize_session=False)
+        query_tenant(LancamentoCaixa).filter(LancamentoCaixa.id.in_(ids_int)).delete(synchronize_session=False)
         db.session.commit()
         flash(f'{len(ids_int)} lançamentos apagados com sucesso!', 'success')
     except Exception as e:
@@ -4549,6 +4954,7 @@ def deletar_massa_caixa():
 
 @app.route('/caixa/importar', methods=['POST'])
 @login_required
+@tenant_required
 def importar_caixa():
     if 'arquivo' not in request.files:
         flash('Nenhum arquivo enviado.', 'error')
@@ -4623,7 +5029,7 @@ def importar_caixa():
                             v_str = v_str.replace('.', '')
                     valor = float(v_str) if v_str else 0.0
 
-                    ja_existe = LancamentoCaixa.query.filter_by(
+                    ja_existe = query_tenant(LancamentoCaixa).filter_by(
                         data=data_lanc,
                         descricao=descricao,
                         tipo=tipo_lancamento,
@@ -4644,7 +5050,8 @@ def importar_caixa():
                         categoria=categoria,
                         forma_pagamento=forma_pagamento,
                         valor=abs(valor),
-                        usuario_id=current_user.id
+                        usuario_id=current_user.id,
+                        empresa_id=empresa_id_atual()
                     )
                     db.session.add(novo_lancamento)
                     linhas_sucesso += 1
@@ -4683,14 +5090,15 @@ def importar_caixa():
 
 @app.route('/clientes')
 @login_required
+@tenant_required
 def listar_clientes():
     ordem_param = (request.args.get('ordem') or '').strip().lower()
     if ordem_param in ('desc', 'id_decrescente'):
         ordem = 'id_decrescente'
-        clientes = Cliente.query.order_by(Cliente.id.desc()).limit(500).all()
+        clientes = query_tenant(Cliente).order_by(Cliente.id.desc()).limit(500).all()
     else:
         ordem = 'id_crescente'
-        clientes = Cliente.query.order_by(Cliente.id.asc()).limit(500).all()
+        clientes = query_tenant(Cliente).order_by(Cliente.id.asc()).limit(500).all()
     return render_template('clientes/listar.html', clientes=clientes, ordem=ordem)
 
 
@@ -4700,6 +5108,7 @@ def _is_ajax():
 
 @app.route('/clientes/novo', methods=['GET', 'POST'])
 @login_required
+@tenant_required
 def novo_cliente():
     """
     Cria um novo cliente.
@@ -4715,7 +5124,7 @@ def novo_cliente():
         try:
             cnpj = re.sub(r'\D', '', request.form.get('cnpj', '').strip()) or None
             if cnpj:
-                cliente_existente = Cliente.query.filter_by(cnpj=cnpj).first()
+                cliente_existente = query_tenant(Cliente).filter_by(cnpj=cnpj).first()
                 if cliente_existente:
                     msg = f'CNPJ {cnpj} já está cadastrado para o cliente {cliente_existente.nome_cliente}'
                     if _is_ajax():
@@ -4736,7 +5145,8 @@ def novo_cliente():
                 razao_social=request.form.get('razao_social', ''),
                 cnpj=cnpj,
                 cidade=request.form.get('cidade', ''),
-                endereco=request.form.get('endereco', '') or None
+                endereco=request.form.get('endereco', '') or None,
+                empresa_id=empresa_id_atual(),
             )
             db.session.add(cliente)
             db.session.commit()
@@ -4756,10 +5166,12 @@ def novo_cliente():
 
 @app.route('/clientes/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
+@tenant_required
 def editar_cliente(id):
+    # first_or_404 precisa levantar para o handler do Flask: fica FORA do try
+    # genérico, senão 404 vira 500 e isolamento cross-tenant fica ruidoso.
+    cliente = query_tenant(Cliente).filter_by(id=id).first_or_404()
     try:
-        cliente = Cliente.query.get_or_404(id)
-
         if request.method == 'POST':
             cnpj_raw = request.form.get('cnpj', '').strip() or None
             cnpj = None
@@ -4767,7 +5179,7 @@ def editar_cliente(id):
                 cnpj_limpo = re.sub(r'\D', '', cnpj_raw)
                 cnpj = cnpj_limpo if len(cnpj_limpo) == 14 else None
             if cnpj and cnpj != (cliente.cnpj or ''):
-                cliente_existente = Cliente.query.filter_by(cnpj=cnpj).first()
+                cliente_existente = query_tenant(Cliente).filter_by(cnpj=cnpj).first()
                 if cliente_existente and cliente_existente.id != cliente.id:
                     flash(f'CNPJ já está cadastrado para o cliente {cliente_existente.nome_cliente}', 'error')
                     return render_template('clientes/formulario.html', cliente=cliente)
@@ -4794,8 +5206,9 @@ def editar_cliente(id):
 
 @app.route('/clientes/excluir/<int:id>', methods=['POST'])
 @login_required
+@tenant_required
 def excluir_cliente(id):
-    cliente = Cliente.query.get_or_404(id)
+    cliente = query_tenant(Cliente).filter_by(id=id).first_or_404()
     nome_cliente_del = cliente.nome_cliente
     try:
         db.session.delete(cliente)
@@ -4810,9 +5223,10 @@ def excluir_cliente(id):
 
 @app.route('/cliente/<int:id>/toggle_ativo', methods=['POST'])
 @login_required
+@tenant_required
 def toggle_ativo_cliente(id: int):
     """Alterna o status ativo/inativo de um cliente (soft delete)."""
-    cliente = Cliente.query.get_or_404(id)
+    cliente = query_tenant(Cliente).filter_by(id=id).first_or_404()
     try:
         cliente.ativo = not cliente.ativo
         db.session.commit()
@@ -4833,12 +5247,13 @@ def toggle_ativo_cliente(id: int):
 
 @app.route('/clientes/<int:cliente_id>/extrato')
 @login_required
+@tenant_required
 def extrato_cliente(cliente_id):
     """Extrato de cobrança em PDF: vendas pendentes e parciais do cliente."""
-    cliente = Cliente.query.get_or_404(cliente_id)
+    cliente = query_tenant(Cliente).filter_by(id=cliente_id).first_or_404()
 
     # Filtro: PENDENTE e PARCIAL (saldo devedor); ignora itens de perda/brinde (R$ 0,00)
-    vendas_pendentes = Venda.query.filter(
+    vendas_pendentes = query_tenant(Venda).filter(
         Venda.cliente_id == cliente.id,
         Venda.situacao.in_(['PENDENTE', 'PARCIAL']),
         (Venda.preco_venda * Venda.quantidade_venda) > 0
@@ -4856,6 +5271,7 @@ def extrato_cliente(cliente_id):
 
 @app.route('/bulk_delete_clientes', methods=['POST'])
 @login_required
+@tenant_required
 def bulk_delete_clientes():
     data = request.get_json(silent=True) or {}
     ids = data.get('ids', [])
@@ -4863,7 +5279,7 @@ def bulk_delete_clientes():
         return jsonify({'ok': False, 'mensagem': 'Nenhum ID informado.'}), 400
     try:
         for id_ in ids:
-            cliente = Cliente.query.get(id_)
+            cliente = query_tenant(Cliente).filter_by(id=id_).first()
             if cliente:
                 db.session.delete(cliente)
         db.session.commit()
@@ -4890,7 +5306,7 @@ def _processar_linhas_clientes_upsert(linhas, erros_detalhados, sucesso_ref, err
                 continue
             endereco = (row.get('endereco') or '').strip() or None
             telefone_tsv = (row.get('telefone') or row.get('whatsapp') or '').strip() or None
-            cliente = Cliente.query.filter(func.lower(Cliente.nome_cliente) == nome.lower()).first()
+            cliente = query_tenant(Cliente).filter(func.lower(Cliente.nome_cliente) == nome.lower()).first()
             if cliente:
                 cliente.razao_social = razao_social or None
                 cliente.cnpj = cnpj
@@ -4901,7 +5317,7 @@ def _processar_linhas_clientes_upsert(linhas, erros_detalhados, sucesso_ref, err
                 db.session.commit()
                 sucesso_ref[0] += 1
             else:
-                if cnpj and Cliente.query.filter_by(cnpj=cnpj).first():
+                if cnpj and query_tenant(Cliente).filter_by(cnpj=cnpj).first():
                     erros_detalhados.append(_msg_linha(linha_num, nome, "O CNPJ já está cadastrado para outro cliente. Use um CNPJ único.", True))
                     erros_ref[0] += 1
                     continue
@@ -4911,7 +5327,8 @@ def _processar_linhas_clientes_upsert(linhas, erros_detalhados, sucesso_ref, err
                     razao_social=razao_social or None,
                     cnpj=cnpj,
                     cidade=cidade or None,
-                    endereco=endereco
+                    endereco=endereco,
+                    empresa_id=empresa_id_atual(),
                 )
                 db.session.add(cliente)
                 db.session.commit()
@@ -4928,6 +5345,7 @@ def _processar_linhas_clientes_upsert(linhas, erros_detalhados, sucesso_ref, err
 
 @app.route('/clientes/importar', methods=['GET', 'POST'])
 @login_required
+@tenant_required
 @admin_required
 def importar_clientes():
     if request.method == 'POST':
@@ -4987,13 +5405,13 @@ def importar_clientes():
                                 continue
                             cnpj_raw = _strip_quotes(row.get('cnpj', '')) or None
                             cnpj = _sanitizar_cnpj_importacao(cnpj_raw) if cnpj_raw else None
-                            if cnpj and Cliente.query.filter_by(cnpj=cnpj).first():
-                                existente = Cliente.query.filter_by(cnpj=cnpj).first()
+                            if cnpj and query_tenant(Cliente).filter_by(cnpj=cnpj).first():
+                                existente = query_tenant(Cliente).filter_by(cnpj=cnpj).first()
                                 erros_detalhados.append(_msg_linha(linha_num, nome, f"O CNPJ já está cadastrado para o cliente '{existente.nome_cliente}'. Use um CNPJ único.", True))
                                 erros += 1
                                 continue
                             endereco = _strip_quotes(row.get('endereco', '')) or None
-                            cliente = Cliente.query.filter(func.lower(Cliente.nome_cliente) == nome.lower()).first()
+                            cliente = query_tenant(Cliente).filter(func.lower(Cliente.nome_cliente) == nome.lower()).first()
                             telefone_imp = _strip_quotes(row.get('telefone', row.get('whatsapp', ''))) or None
                             if cliente:
                                 cliente.razao_social = _strip_quotes(row.get('razao_social', row.get('razao', ''))) or nome
@@ -5011,7 +5429,8 @@ def importar_clientes():
                                     razao_social=_strip_quotes(row.get('razao_social', row.get('razao', ''))) or None,
                                     cnpj=cnpj,
                                     cidade=_strip_quotes(row.get('cidade', '')) or None,
-                                    endereco=endereco
+                                    endereco=endereco,
+                                    empresa_id=empresa_id_atual(),
                                 )
                                 db.session.add(cliente)
                                 db.session.commit()
@@ -5130,6 +5549,7 @@ def _validar_sacola(tipo, nacionalidade, marca, tamanho):
 
 @app.route('/produtos')
 @login_required
+@tenant_required
 def listar_produtos():
     """
     Lista produtos do ano ativo com totais por tipo e paginação.
@@ -5150,7 +5570,7 @@ def listar_produtos():
     # selectinload(Produto.fotos) evita N+1 ao exibir galeria de fotos no modal
     # Nota: Não usamos joinedload para vendas aqui porque quantidade_vendida() e lucro_realizado()
     # fazem cálculos que podem ser otimizados separadamente se necessário
-    query_base = Produto.query.options(selectinload(Produto.fotos)).filter(
+    query_base = query_tenant(Produto).options(selectinload(Produto.fotos)).filter(
         extract('year', Produto.data_chegada) == ano_ativo
     )
     
@@ -5333,8 +5753,8 @@ def listar_produtos():
         )
         return jsonify({'html': html_linhas, 'has_next': pagination.has_next, 'page': page})
 
-    fornecedores = Fornecedor.query.order_by(Fornecedor.nome).all()
-    tipos_produto = TipoProduto.query.order_by(TipoProduto.nome).all()
+    fornecedores = query_tenant(Fornecedor).order_by(Fornecedor.nome).all()
+    tipos_produto = query_tenant(TipoProduto).order_by(TipoProduto.nome).all()
 
     return render_template(
         'produtos/listar.html',
@@ -5354,6 +5774,7 @@ def listar_produtos():
 
 @app.route('/produtos/exportar_relatorio', methods=['POST'])
 @login_required
+@tenant_required
 def exportar_relatorio_produtos():
     ano_ativo = session.get('ano_ativo', datetime.now().year)
     filtro_fornecedor = (request.form.get('filtro_fornecedor') or 'TODOS').strip().upper()
@@ -5382,7 +5803,7 @@ def exportar_relatorio_produtos():
     if not colunas:
         colunas = ordem_padrao_colunas
 
-    query = Produto.query.filter(extract('year', Produto.data_chegada) == ano_ativo)
+    query = query_tenant(Produto).filter(extract('year', Produto.data_chegada) == ano_ativo)
     if filtro_fornecedor != 'TODOS':
         query = query.filter(func.upper(func.coalesce(Produto.fornecedor, 'NENHUM')) == filtro_fornecedor)
     if filtro_tipo != 'TODOS':
@@ -5512,6 +5933,7 @@ def exportar_relatorio_produtos():
 
 @app.route('/fornecedores/novo', methods=['POST'])
 @login_required
+@tenant_required
 def novo_fornecedor():
     nome = str(request.form.get('nome') or '').strip().upper()
     razao_social = str(request.form.get('razao_social') or '').strip().upper() or None
@@ -5524,18 +5946,18 @@ def novo_fornecedor():
             tipos_ids.append(int(tid))
         except (TypeError, ValueError):
             continue
-    tipos_selecionados = TipoProduto.query.filter(TipoProduto.id.in_(tipos_ids)).all() if tipos_ids else []
+    tipos_selecionados = query_tenant(TipoProduto).filter(TipoProduto.id.in_(tipos_ids)).all() if tipos_ids else []
 
     if not nome:
         flash('Nome do fornecedor é obrigatório.', 'error')
         return redirect(url_for('listar_produtos'))
 
-    if Fornecedor.query.filter(func.upper(Fornecedor.nome) == nome).first():
+    if query_tenant(Fornecedor).filter(func.upper(Fornecedor.nome) == nome).first():
         flash('Fornecedor já cadastrado.', 'warning')
         return redirect(url_for('listar_produtos'))
 
     try:
-        fornecedor = Fornecedor(nome=nome, razao_social=razao_social, cnpj=cnpj, endereco=endereco)
+        fornecedor = Fornecedor(nome=nome, razao_social=razao_social, cnpj=cnpj, endereco=endereco, empresa_id=empresa_id_atual())
         fornecedor.tipos_produtos = tipos_selecionados
         db.session.add(fornecedor)
         db.session.commit()
@@ -5548,6 +5970,7 @@ def novo_fornecedor():
 
 @app.route('/tipos/novo', methods=['POST'])
 @login_required
+@tenant_required
 def novo_tipo_produto():
     nome = str(request.form.get('nome') or '').strip().upper()
 
@@ -5555,12 +5978,12 @@ def novo_tipo_produto():
         flash('Nome do tipo é obrigatório.', 'error')
         return redirect(url_for('listar_produtos'))
 
-    if TipoProduto.query.filter(func.upper(TipoProduto.nome) == nome).first():
+    if query_tenant(TipoProduto).filter(func.upper(TipoProduto.nome) == nome).first():
         flash('Tipo já cadastrado.', 'warning')
         return redirect(url_for('listar_produtos'))
 
     try:
-        db.session.add(TipoProduto(nome=nome))
+        db.session.add(TipoProduto(nome=nome, empresa_id=empresa_id_atual()))
         db.session.commit()
         flash('Tipo cadastrado com sucesso!', 'success')
     except Exception:
@@ -5571,11 +5994,12 @@ def novo_tipo_produto():
 
 @app.route('/tipos/deletar/<int:id>', methods=['POST'])
 @login_required
+@tenant_required
 @admin_required
 def deletar_tipo(id):
-    tipo = TipoProduto.query.get_or_404(id)
+    tipo = query_tenant(TipoProduto).filter_by(id=id).first_or_404()
     tipo_nome = str(tipo.nome or '').strip().upper()
-    em_uso = Produto.query.filter(func.upper(func.coalesce(Produto.tipo, '')) == tipo_nome).first()
+    em_uso = query_tenant(Produto).filter(func.upper(func.coalesce(Produto.tipo, '')) == tipo_nome).first()
     if em_uso:
         flash('Este tipo está em uso e não pode ser apagado', 'error')
         return redirect(url_for('listar_produtos'))
@@ -5591,16 +6015,17 @@ def deletar_tipo(id):
 
 @app.route('/tipos/editar/<int:id>', methods=['POST'])
 @login_required
+@tenant_required
 @admin_required
 def editar_tipo(id):
-    tipo = TipoProduto.query.get_or_404(id)
+    tipo = query_tenant(TipoProduto).filter_by(id=id).first_or_404()
     novo_nome = str(request.form.get('novo_nome') or '').strip().upper()
 
     if not novo_nome:
         flash('Nome do tipo é obrigatório.', 'error')
         return redirect(url_for('listar_produtos'))
 
-    duplicado = TipoProduto.query.filter(
+    duplicado = query_tenant(TipoProduto).filter(
         func.upper(TipoProduto.nome) == novo_nome,
         TipoProduto.id != tipo.id
     ).first()
@@ -5620,8 +6045,9 @@ def editar_tipo(id):
 
 @app.route('/fornecedores/<int:id>/editar', methods=['POST'])
 @login_required
+@tenant_required
 def editar_fornecedor(id):
-    fornecedor = Fornecedor.query.get_or_404(id)
+    fornecedor = query_tenant(Fornecedor).filter_by(id=id).first_or_404()
     nome = str(request.form.get('nome') or '').strip().upper()
     razao_social = str(request.form.get('razao_social') or '').strip().upper() or None
     cnpj = str(request.form.get('cnpj') or '').strip() or None
@@ -5633,13 +6059,13 @@ def editar_fornecedor(id):
             tipos_ids.append(int(tid))
         except (TypeError, ValueError):
             continue
-    tipos_selecionados = TipoProduto.query.filter(TipoProduto.id.in_(tipos_ids)).all() if tipos_ids else []
+    tipos_selecionados = query_tenant(TipoProduto).filter(TipoProduto.id.in_(tipos_ids)).all() if tipos_ids else []
 
     if not nome:
         flash('Nome do fornecedor é obrigatório.', 'error')
         return redirect(url_for('listar_produtos'))
 
-    ja_existe = Fornecedor.query.filter(
+    ja_existe = query_tenant(Fornecedor).filter(
         func.upper(Fornecedor.nome) == nome,
         Fornecedor.id != fornecedor.id
     ).first()
@@ -5664,8 +6090,9 @@ def editar_fornecedor(id):
 
 @app.route('/fornecedores/<int:id>/editar_ajax', methods=['POST'])
 @login_required
+@tenant_required
 def editar_fornecedor_ajax(id):
-    fornecedor = Fornecedor.query.get_or_404(id)
+    fornecedor = query_tenant(Fornecedor).filter_by(id=id).first_or_404()
     try:
         novo_nome = str(request.form.get('nome') or '').strip().upper()
         nova_razao = str(request.form.get('razao_social') or '').strip().upper() or None
@@ -5677,12 +6104,12 @@ def editar_fornecedor_ajax(id):
                 tipos_ids.append(int(tid))
             except (TypeError, ValueError):
                 continue
-        tipos_selecionados = TipoProduto.query.filter(TipoProduto.id.in_(tipos_ids)).all() if tipos_ids else []
+        tipos_selecionados = query_tenant(TipoProduto).filter(TipoProduto.id.in_(tipos_ids)).all() if tipos_ids else []
 
         if not novo_nome:
             return jsonify({'success': False, 'error': 'O Nome Fantasia é obrigatório.'}), 400
 
-        ja_existe = Fornecedor.query.filter(
+        ja_existe = query_tenant(Fornecedor).filter(
             func.upper(Fornecedor.nome) == novo_nome,
             Fornecedor.id != fornecedor.id
         ).first()
@@ -5702,8 +6129,9 @@ def editar_fornecedor_ajax(id):
 
 @app.route('/fornecedores/<int:id>/excluir', methods=['POST'])
 @login_required
+@tenant_required
 def excluir_fornecedor(id):
-    fornecedor = Fornecedor.query.get_or_404(id)
+    fornecedor = query_tenant(Fornecedor).filter_by(id=id).first_or_404()
     try:
         db.session.delete(fornecedor)
         db.session.commit()
@@ -5715,6 +6143,7 @@ def excluir_fornecedor(id):
 
 @app.route('/produtos/novo', methods=['GET', 'POST'])
 @login_required
+@tenant_required
 def novo_produto():
     if request.method == 'POST':
         tamanhos_bacalhau_validos = {'7/9', '10/12', '13/15', '16/20', 'DESFIADO'}
@@ -5801,7 +6230,8 @@ def novo_produto():
             quantidade_entrada=quantidade_entrada,  # Quantidade original que entrou
             estoque_atual=quantidade_entrada,
             data_chegada=data_chegada,
-            nome_produto=nome_produto
+            nome_produto=nome_produto,
+            empresa_id=empresa_id_atual()
         )
         db.session.add(produto)
         ok, err = _safe_db_commit()
@@ -5850,8 +6280,9 @@ def novo_produto():
 
 @app.route('/produtos/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
+@tenant_required
 def editar_produto(id):
-    produto = Produto.query.get_or_404(id)
+    produto = query_tenant(Produto).filter_by(id=id).first_or_404()
     if request.method == 'POST':
         tamanhos_bacalhau_validos = {'7/9', '10/12', '13/15', '16/20', 'DESFIADO'}
         # Validação de campos obrigatórios
@@ -5955,8 +6386,9 @@ def editar_produto(id):
 
 @app.route('/produtos/excluir/<int:id>', methods=['POST'])
 @login_required
+@tenant_required
 def excluir_produto(id):
-    produto = Produto.query.get_or_404(id)
+    produto = query_tenant(Produto).filter_by(id=id).first_or_404()
     try:
         nome = produto.nome_produto or f'#{produto.id}'
         for foto in list(getattr(produto, 'fotos', []) or []):
@@ -5979,6 +6411,7 @@ def excluir_produto(id):
 
 @app.route('/bulk_delete_produtos', methods=['POST'])
 @login_required
+@tenant_required
 def bulk_delete_produtos():
     data = request.get_json(silent=True) or {}
     ids = data.get('ids', [])
@@ -5987,7 +6420,7 @@ def bulk_delete_produtos():
     excluidos = 0
     ids_erro = []
     for id_ in ids:
-        produto = Produto.query.get(id_)
+        produto = query_tenant(Produto).filter_by(id=id_).first()
         if not produto:
             continue
         try:
@@ -6024,6 +6457,7 @@ def bulk_delete_produtos():
 
 @app.route('/produtos/atualizar_tipo_batch', methods=['POST'])
 @login_required
+@tenant_required
 def produtos_atualizar_tipo_batch():
     """Atualiza o campo tipo de vários produtos (usado em 'Corrigir Categoria' para OUTROS)."""
     data = request.get_json(silent=True) or {}
@@ -6037,7 +6471,7 @@ def produtos_atualizar_tipo_batch():
         novoTipo = (u.get('tipo') or '').strip().upper()
         if pid is None or novoTipo not in permitidos:
             continue
-        p = Produto.query.get(pid)
+        p = query_tenant(Produto).filter_by(id=pid).first()
         if not p or p.tipo != 'OUTROS':
             continue
         p.tipo = novoTipo
@@ -6117,6 +6551,7 @@ def _load_csv_produtos_flexible(filepath):
 
 @app.route('/produtos/importar', methods=['GET', 'POST'])
 @login_required
+@tenant_required
 @admin_required
 def importar_produtos():
     if request.method == 'POST':
@@ -6220,7 +6655,7 @@ def importar_produtos():
                         nome_produto = nome_produto_arquivo
                     else:
                         nome_produto = gerar_nome_produto(tipo, nacionalidade, marca, data_chegada, tamanho)
-                    dup = Produto.query.filter(
+                    dup = query_tenant(Produto).filter(
                         Produto.nome_produto == nome_produto,
                         Produto.data_chegada == data_chegada,
                         Produto.quantidade_entrada == quantidade,
@@ -6229,7 +6664,7 @@ def importar_produtos():
                     if dup:
                         ignorados += 1
                         continue
-                    produto_existente = Produto.query.filter_by(nome_produto=nome_produto).first()
+                    produto_existente = query_tenant(Produto).filter_by(nome_produto=nome_produto).first()
                     if produto_existente:
                         produto_existente.estoque_atual += quantidade
                         produto_existente.preco_custo = Decimal(str(preco_custo_valor))
@@ -6249,7 +6684,8 @@ def importar_produtos():
                             quantidade_entrada=quantidade,
                             estoque_atual=quantidade,
                             data_chegada=data_chegada,
-                            nome_produto=nome_produto
+                            nome_produto=nome_produto,
+                            empresa_id=empresa_id_atual()
                         )
                         db.session.add(produto)
                         db.session.commit()
@@ -6291,9 +6727,13 @@ def importar_produtos():
 
 @app.route('/api/produtos/<int:produto_id>/fotos')
 @login_required
+@tenant_required
 def get_fotos_produto(produto_id):
     """Retorna URLs das fotos do produto para a galeria no modal. Cloudinary: URL completa em arquivo. Local: fallback para static/uploads/."""
-    fotos = ProdutoFoto.query.filter_by(produto_id=produto_id).all()
+    # Multi-tenant: valida que o produto pertence ao tenant do usuario antes
+    # de expor suas fotos (ProdutoFoto nao tem empresa_id, herda via produto).
+    produto = query_tenant(Produto).filter_by(id=produto_id).first_or_404()
+    fotos = ProdutoFoto.query.filter_by(produto_id=produto.id).all()
     urls = []
     for f in fotos:
         if f.arquivo and (f.arquivo.startswith('http://') or f.arquivo.startswith('https://')):
@@ -6305,6 +6745,7 @@ def get_fotos_produto(produto_id):
 
 @app.route('/api/vendas_por_filtro')
 @login_required
+@tenant_required
 def api_vendas_por_filtro():
     """Retorna vendas em JSON filtradas por produto_id ou cliente_id com paginação e totais."""
     produto_id = request.args.get('produto_id', type=int)
@@ -6315,7 +6756,7 @@ def api_vendas_por_filtro():
     if not produto_id and not cliente_id:
         return jsonify({'erro': 'Informe produto_id ou cliente_id'}), 400
     
-    query = Venda.query.options(joinedload(Venda.cliente), joinedload(Venda.produto))
+    query = query_tenant(Venda).options(joinedload(Venda.cliente), joinedload(Venda.produto))
     if produto_id:
         query = query.filter(Venda.produto_id == produto_id)
     if cliente_id:
@@ -6346,10 +6787,10 @@ def api_vendas_por_filtro():
     titulo = None
     cliente_info = None
     if produto_id:
-        p = Produto.query.get(produto_id)
+        p = query_tenant(Produto).filter_by(id=produto_id).first()
         titulo = f"Vendas do Produto {p.nome_produto}" if p else "Vendas do Produto"
     elif cliente_id:
-        c = Cliente.query.get(cliente_id)
+        c = query_tenant(Cliente).filter_by(id=cliente_id).first()
         titulo = f"Vendas do Cliente {c.nome_cliente}" if c else "Vendas do Cliente"
         if c:
             cliente_info = {
@@ -6421,6 +6862,7 @@ def api_vendas_por_filtro():
 
 @app.route('/api/dashboard/detalhes/<filtro>')
 @login_required
+@tenant_required
 def api_dashboard_detalhes(filtro):
     """Retorna lista de vendas filtradas por pendente, pago, avulsa, paty ou destak."""
     filtros_validos = ('pendente', 'pago', 'avulsa', 'paty', 'destak')
@@ -6430,7 +6872,7 @@ def api_dashboard_detalhes(filtro):
         ano_ativo = session.get('ano_ativo', datetime.now().year)
         filtro_ano_venda = extract('year', Venda.data_venda) == ano_ativo
 
-        query = Venda.query.filter(filtro_ano_venda)
+        query = query_tenant(Venda).filter(filtro_ano_venda)
         if filtro == 'pendente':
             query = query.filter(Venda.situacao == 'PENDENTE')
         elif filtro == 'pago':
@@ -6488,11 +6930,12 @@ def api_dashboard_documentos_pendentes_resumo():
 
 @app.route('/api/cliente/ultimo_pagamento', methods=['GET'])
 @login_required
+@tenant_required
 def ultimo_pagamento_cliente():
     """Retorna a forma de pagamento da última venda do cliente para auto-preenchimento."""
     cliente_id = request.args.get('cliente_id')
     cliente_nome = request.args.get('cliente_nome')
-    query = Venda.query
+    query = query_tenant(Venda)
     if cliente_id and str(cliente_id).isdigit():
         query = query.filter_by(cliente_id=int(cliente_id))
     elif cliente_nome and str(cliente_nome).strip():
@@ -6507,11 +6950,12 @@ def ultimo_pagamento_cliente():
 
 @app.route('/api/cobrancas_pendentes')
 @login_required
+@tenant_required
 def api_cobrancas_pendentes():
     """Retorna se há cobranças pendentes (vendas não pagas) para notificações no dispositivo."""
     try:
         ano_ativo = session.get('ano_ativo', datetime.now().year)
-        vendas = Venda.query.filter(
+        vendas = query_tenant(Venda).filter(
             extract('year', Venda.data_venda) == ano_ativo,
             Venda.situacao.in_(['PENDENTE', 'PARCIAL'])
         ).all()
@@ -6528,6 +6972,7 @@ def api_cobrancas_pendentes():
 
 @app.route('/api/dashboard/detalhes_mes/<int:ano>/<int:mes>')
 @login_required
+@tenant_required
 def api_detalhes_mes(ano, mes):
     """Retorna detalhes completos de um mês específico: totais, top clientes e lista de vendas."""
     try:
@@ -6536,7 +6981,7 @@ def api_detalhes_mes(ano, mes):
             return jsonify({'erro': 'Mês inválido. Use valores de 1 a 12.'}), 400
         
         # Filtrar vendas do mês e ano específicos (joinedload evita N+1)
-        vendas_mes = Venda.query.options(
+        vendas_mes = query_tenant(Venda).options(
             joinedload(Venda.cliente), joinedload(Venda.produto)
         ).filter(
             extract('year', Venda.data_venda) == ano,
@@ -6627,6 +7072,7 @@ def api_detalhes_mes(ano, mes):
 
 @app.route('/vendas')
 @login_required
+@tenant_required
 def listar_vendas():
     """
     Lista vendas do ano ativo com filtros e agrupamento por pedido.
@@ -6662,6 +7108,7 @@ def listar_vendas():
     
     # Subquery: IDs das 1000 vendas mais recentes (evita carregar todo o histórico)
     subq_ids = db.session.query(Venda.id).filter(
+        Venda.empresa_id == empresa_id_atual(),
         extract('year', Venda.data_venda) == ano_ativo
     )
     filtro_bacalhau_expr = or_(
@@ -6680,7 +7127,7 @@ def listar_vendas():
     subq_ids = subq_ids.order_by(desc(Venda.data_venda), desc(Venda.id)).limit(1000).subquery()
 
     # Query base com eager loading (evita N+1) e limite de registros
-    query = Venda.query.options(
+    query = query_tenant(Venda).options(
         joinedload(Venda.cliente),
         joinedload(Venda.produto)
     ).filter(Venda.id.in_(subq_ids))
@@ -7012,16 +7459,16 @@ def listar_vendas():
     cliente_filtro = None
     
     if produto_id:
-        produto_filtro = Produto.query.get(produto_id)
+        produto_filtro = query_tenant(Produto).filter_by(id=produto_id).first()
     
     if cliente_id:
-        cliente_filtro = Cliente.query.get(cliente_id)
+        cliente_filtro = query_tenant(Cliente).filter_by(id=cliente_id).first()
 
     # Nova venda (autocomplete): exibe apenas clientes ativos.
-    clientes = Cliente.query.filter(Cliente.ativo.is_(True)).order_by(Cliente.nome_cliente).limit(500).all()
-    produtos = Produto.query.filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
-    todos_clientes = Cliente.query.order_by(Cliente.nome_cliente).limit(500).all()
-    todos_produtos = Produto.query.order_by(Produto.nome_produto).limit(500).all()
+    clientes = query_tenant(Cliente).filter(Cliente.ativo.is_(True)).order_by(Cliente.nome_cliente).limit(500).all()
+    produtos = query_tenant(Produto).filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
+    todos_clientes = query_tenant(Cliente).order_by(Cliente.nome_cliente).limit(500).all()
+    todos_produtos = query_tenant(Produto).order_by(Produto.nome_produto).limit(500).all()
     
     # Agregações para os gráficos com base no MESMO conjunto filtrado da listagem
     graficos_data = {'situacao': {}, 'pagamento': {}, 'empresa': {}}
@@ -7066,6 +7513,7 @@ def listar_vendas():
 
 @app.route('/vendas/exportar_relatorio', methods=['POST'])
 @login_required
+@tenant_required
 def exportar_relatorio_vendas():
     ano_ativo = session.get('ano_ativo', datetime.now().year)
     filtro_empresa = (request.form.get('filtro_empresa') or 'TODAS').strip().upper()
@@ -7104,7 +7552,7 @@ def exportar_relatorio_vendas():
     if not colunas:
         colunas = ordem_padrao_colunas
 
-    query = Venda.query.options(
+    query = query_tenant(Venda).options(
         joinedload(Venda.cliente),
         joinedload(Venda.produto)
     ).filter(
@@ -7229,6 +7677,7 @@ def exportar_relatorio_vendas():
 
 @app.route('/logistica')
 @login_required
+@tenant_required
 def logistica():
     """Roteirizador de Entregas: lista cada venda individualmente por status de entrega."""
     filtro_status = request.args.get('status', 'PENDENTE')
@@ -7242,7 +7691,7 @@ def logistica():
         or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
     )
 
-    vendas = Venda.query.filter_by(status_entrega=filtro_status).options(
+    vendas = query_tenant(Venda).filter_by(status_entrega=filtro_status).options(
         joinedload(Venda.cliente),
         joinedload(Venda.produto)
     ).order_by(Venda.data_venda.desc()).all()
@@ -7309,6 +7758,7 @@ def logistica():
 
 @app.route('/logistica/toggle/<int:venda_id>', methods=['POST'])
 @login_required
+@tenant_required
 def toggle_entrega(venda_id):
     """Alterna o status de entrega entre PENDENTE e ENTREGUE."""
     ids_raw = (request.form.get('ids') or '').strip()
@@ -7325,14 +7775,14 @@ def toggle_entrega(venda_id):
     if not ids:
         ids = [venda_id]
 
-    venda_ref = Venda.query.get_or_404(ids[0])
+    venda_ref = query_tenant(Venda).filter_by(id=ids[0]).first_or_404()
     if not current_user.is_admin() and not _usuario_pode_gerenciar_venda(venda_ref):
         flash('Você não tem permissão para alterar o status desta venda.', 'error')
         return redirect(url_for('logistica'))
     status = request.form.get('status', request.args.get('status', 'PENDENTE'))
     try:
         novo_status = 'ENTREGUE' if (venda_ref.status_entrega or 'PENDENTE') == 'PENDENTE' else 'PENDENTE'
-        Venda.query.filter(Venda.id.in_(ids)).update({'status_entrega': novo_status}, synchronize_session=False)
+        query_tenant(Venda).filter(Venda.id.in_(ids)).update({'status_entrega': novo_status}, synchronize_session=False)
         db.session.commit()
         flash('Status de entrega atualizado com sucesso!', 'success')
     except Exception:
@@ -7343,6 +7793,7 @@ def toggle_entrega(venda_id):
 
 @app.route('/logistica/bulk_update', methods=['POST'])
 @login_required
+@tenant_required
 def logistica_bulk_update():
     """Atualiza status de entrega de vários pedidos de uma vez (ação em massa)."""
     dados = request.get_json() or {}
@@ -7360,7 +7811,7 @@ def logistica_bulk_update():
         return jsonify({'success': False, 'message': 'Status inválido.'}), 400
 
     try:
-        vendas_solicitadas = Venda.query.filter(Venda.id.in_(ids)).all()
+        vendas_solicitadas = query_tenant(Venda).filter(Venda.id.in_(ids)).all()
 
         # Verificação de ownership em memória — Venda não possui usuario_id direto;
         # o controle é feito via _usuario_pode_gerenciar_venda() que inspeciona os Documentos vinculados.
@@ -7375,7 +7826,7 @@ def logistica_bulk_update():
         if not ids_permitidos:
             return jsonify({'success': False, 'message': 'Sem permissão para alterar estas vendas.'}), 403
 
-        atualizados = Venda.query.filter(Venda.id.in_(ids_permitidos)).update(
+        atualizados = query_tenant(Venda).filter(Venda.id.in_(ids_permitidos)).update(
             {'status_entrega': novo_status}, synchronize_session=False
         )
         db.session.commit()
@@ -7388,6 +7839,7 @@ def logistica_bulk_update():
 
 @app.route('/vendas/novo', methods=['GET', 'POST'])
 @login_required
+@tenant_required
 def nova_venda():
     if request.method == 'POST':
         try:
@@ -7397,8 +7849,8 @@ def nova_venda():
             msg = 'Produto e quantidade são obrigatórios.'
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
-            clientes = Cliente.query.filter(Cliente.ativo.is_(True)).order_by(Cliente.nome_cliente).limit(1000).all()
-            produtos = Produto.query.filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
+            clientes = query_tenant(Cliente).filter(Cliente.ativo.is_(True)).order_by(Cliente.nome_cliente).limit(1000).all()
+            produtos = query_tenant(Produto).filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
             return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
 
         # Validação de quantidade (deve ser positiva mesmo para perdas)
@@ -7407,8 +7859,8 @@ def nova_venda():
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
             flash(msg, 'error')
-            clientes = Cliente.query.filter(Cliente.ativo.is_(True)).order_by(Cliente.nome_cliente).limit(1000).all()
-            produtos = Produto.query.filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
+            clientes = query_tenant(Cliente).filter(Cliente.ativo.is_(True)).order_by(Cliente.nome_cliente).limit(1000).all()
+            produtos = query_tenant(Produto).filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
             return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
 
         produto = _produto_com_lock(produto_id)
@@ -7422,8 +7874,8 @@ def nova_venda():
             msg = f'Estoque insuficiente! Disponível: {produto.estoque_atual}'
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
-            clientes = Cliente.query.filter(Cliente.ativo.is_(True)).order_by(Cliente.nome_cliente).limit(1000).all()
-            produtos = Produto.query.filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
+            clientes = query_tenant(Cliente).filter(Cliente.ativo.is_(True)).order_by(Cliente.nome_cliente).limit(1000).all()
+            produtos = query_tenant(Produto).filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
             return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
 
         # ✅ Valores negativos no preço são permitidos (para ajustes, perdas, etc.)
@@ -7442,17 +7894,17 @@ def nova_venda():
             msg = 'Cliente é obrigatório.'
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
-            clientes = Cliente.query.filter(Cliente.ativo.is_(True)).order_by(Cliente.nome_cliente).limit(1000).all()
-            produtos = Produto.query.filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
+            clientes = query_tenant(Cliente).filter(Cliente.ativo.is_(True)).order_by(Cliente.nome_cliente).limit(1000).all()
+            produtos = query_tenant(Produto).filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
             return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
-        cliente_obj = Cliente.query.get(cliente_id)
+        cliente_obj = query_tenant(Cliente).filter_by(id=cliente_id).first()
         if not cliente_obj:
             msg = 'Cliente não encontrado.'
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
             flash(msg, 'error')
-            clientes = Cliente.query.filter(Cliente.ativo.is_(True)).order_by(Cliente.nome_cliente).limit(1000).all()
-            produtos = Produto.query.filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
+            clientes = query_tenant(Cliente).filter(Cliente.ativo.is_(True)).order_by(Cliente.nome_cliente).limit(1000).all()
+            produtos = query_tenant(Produto).filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
             return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
         cliente_avulso = cliente_avulso_raw if 'DESCONHECIDO' in str(cliente_obj.nome_cliente or '').upper() else None
         forma_pagamento = (request.form.get('forma_pagamento') or '').strip() or None
@@ -7464,8 +7916,8 @@ def nova_venda():
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
             flash(msg, 'error')
-            clientes = Cliente.query.filter(Cliente.ativo.is_(True)).order_by(Cliente.nome_cliente).limit(1000).all()
-            produtos = Produto.query.filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
+            clientes = query_tenant(Cliente).filter(Cliente.ativo.is_(True)).order_by(Cliente.nome_cliente).limit(1000).all()
+            produtos = query_tenant(Produto).filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
             return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
         lucro_percentual_raw = (request.form.get('lucro_percentual') or '').strip()
         lucro_percentual = None
@@ -7495,6 +7947,7 @@ def nova_venda():
             forma_pagamento=forma_pagamento,
             tipo_operacao=tipo_operacao,
             lucro_percentual=lucro_percentual,
+            empresa_id=empresa_id_atual(),
         )
         db.session.add(venda)
         novo_estoque = int(produto.estoque_atual) - int(quantidade_venda)
@@ -7509,11 +7962,11 @@ def nova_venda():
         db.session.flush()
         # --- INÍCIO DA INTEGRAÇÃO COM CAIXA (PILOTO AUTOMÁTICO V4) ---
         if tipo_operacao != 'PERDA' and str(venda.situacao or '').strip().upper() in ('PAGO', 'CONCLUÍDO'):
-            lancamentos_existentes = LancamentoCaixa.query.filter(
+            lancamentos_existentes = query_tenant(LancamentoCaixa).filter(
                 LancamentoCaixa.descricao.like(f"Venda #{venda.id} -%")
             ).all()
             if not lancamentos_existentes:
-                cliente = Cliente.query.get(venda.cliente_id)
+                cliente = query_tenant(Cliente).filter_by(id=venda.cliente_id).first()
                 nome_cliente = cliente.nome_cliente if cliente else "Cliente Avulso"
                 forma_pgto = request.form.get('forma_pagamento', 'Dinheiro') or 'Dinheiro'
                 valor_venda = Decimal(str(venda.calcular_total() or Decimal('0.00')))
@@ -7530,7 +7983,8 @@ def nova_venda():
                     categoria='Entrada Cliente',
                     forma_pagamento=forma_pgto,
                     valor=valor_venda,
-                    usuario_id=current_user.id
+                    usuario_id=current_user.id,
+                    empresa_id=empresa_id_atual(),
                 )
                 db.session.add(novo_lanc)
                 if 'boleto' in forma_pgto.lower():
@@ -7541,7 +7995,8 @@ def nova_venda():
                         categoria='Saída Fornecedor',
                         forma_pagamento=forma_pgto,
                         valor=valor_venda,
-                        usuario_id=current_user.id
+                        usuario_id=current_user.id,
+                        empresa_id=empresa_id_atual(),
                     )
                     db.session.add(repasse_lanc)
         # --- FIM DA INTEGRAÇÃO ---
@@ -7577,13 +8032,14 @@ def nova_venda():
         flash('Venda registrada com sucesso!', 'success')
         return redirect(url_for('listar_vendas'))
 
-    clientes = Cliente.query.filter(Cliente.ativo.is_(True)).order_by(Cliente.nome_cliente).limit(1000).all()
-    produtos = Produto.query.filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
+    clientes = query_tenant(Cliente).filter(Cliente.ativo.is_(True)).order_by(Cliente.nome_cliente).limit(1000).all()
+    produtos = query_tenant(Produto).filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
     return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
 
 
 @app.route('/add_venda', methods=['POST'])
 @login_required
+@tenant_required
 def add_venda():
     """Alias para criação de venda via AJAX (listar). Sempre retorna JSON."""
     return nova_venda()
@@ -7591,6 +8047,7 @@ def add_venda():
 
 @app.route('/processar_carrinho', methods=['POST'])
 @login_required
+@tenant_required
 def processar_carrinho():
     """Processa itens do carrinho em lote: cria Venda e atualiza estoque em uma única transação."""
     data = request.get_json(silent=True) or {}
@@ -7644,7 +8101,7 @@ def processar_carrinho():
                     mensagem=f'Estoque insuficiente para "{produto.nome_produto}". Disponível: {produto.estoque_atual}.'
                 ), 400
 
-            cliente = Cliente.query.get(cliente_id)
+            cliente = query_tenant(Cliente).filter_by(id=cliente_id).first()
             if not cliente:
                 return jsonify(ok=False, mensagem=f'Cliente ID {cliente_id} não encontrado.'), 400
             cliente_avulso_raw = (obj.get('cliente_avulso') or '').strip()
@@ -7668,6 +8125,7 @@ def processar_carrinho():
                 forma_pagamento=forma_pagamento,
                 tipo_operacao=tipo_operacao,
                 lucro_percentual=lucro_percentual,
+                empresa_id=empresa_id_atual(),
             )
             db.session.add(venda)
             novo_estoque = int(produto.estoque_atual) - int(quantidade_venda)
@@ -7686,6 +8144,7 @@ def processar_carrinho():
 
 @app.route('/venda/adicionar_item', methods=['POST'])
 @login_required
+@tenant_required
 def venda_adicionar_item():
     """Adiciona um novo item (produto) a um pedido/venda existente. Baixa estoque e mantém dados do pedido."""
     venda_id = request.form.get('venda_id')
@@ -7705,7 +8164,7 @@ def venda_adicionar_item():
         flash('Dados inválidos.', 'error')
         return redirect(url_for('listar_vendas'))
 
-    venda_existente = Venda.query.get_or_404(venda_id)
+    venda_existente = query_tenant(Venda).filter_by(id=venda_id).first_or_404()
     if not _usuario_pode_gerenciar_venda(venda_existente):
         return _resposta_sem_permissao()
     _assumir_ownership_venda_orfa(venda_existente)
@@ -7746,6 +8205,7 @@ def venda_adicionar_item():
         situacao='PERDA' if tipo_operacao == 'PERDA' else venda_existente.situacao,
         forma_pagamento=None if tipo_operacao == 'PERDA' else venda_existente.forma_pagamento,
         tipo_operacao=tipo_operacao,
+        empresa_id=empresa_id_atual(),
     )
     db.session.add(nova_venda)
     db.session.commit()
@@ -7756,8 +8216,9 @@ def venda_adicionar_item():
 
 @app.route('/vendas/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
+@tenant_required
 def editar_venda(id):
-    venda = Venda.query.get_or_404(id)
+    venda = query_tenant(Venda).filter_by(id=id).first_or_404()
     if not _usuario_pode_gerenciar_venda(venda):
         return _resposta_sem_permissao()
     produto_original = venda.produto
@@ -7808,7 +8269,7 @@ def editar_venda(id):
                 flash('Produto é obrigatório.', 'error')
                 return redirect(url_for('listar_vendas'))
 
-            produto = Produto.query.filter(Produto.id == produto_id).with_for_update().first()
+            produto = query_tenant(Produto).filter(Produto.id == produto_id).with_for_update().first()
             if not produto:
                 flash('Produto não encontrado.', 'error')
                 return redirect(url_for('listar_vendas'))
@@ -7899,14 +8360,14 @@ def editar_venda(id):
             # --- INÍCIO DA INTEGRAÇÃO COM CAIXA (PILOTO AUTOMÁTICO V4) ---
             vendas_do_pedido = vendas_do_pedido_alvo
             venda_id_busca = vendas_do_pedido[0].id if vendas_do_pedido else venda.id
-            lancamentos_existentes = LancamentoCaixa.query.filter(
+            lancamentos_existentes = query_tenant(LancamentoCaixa).filter(
                 LancamentoCaixa.descricao.like(f"Venda #{venda_id_busca} -%")
             ).all()
             status_atual = str(venda.situacao).strip().upper() if venda.situacao else ''
             status_pago = status_atual in ('PAGO', 'CONCLUÍDO', 'PARCIAL')
             eh_perda = tipo_operacao == 'PERDA'
             if status_pago and not eh_perda and not lancamentos_existentes:
-                cliente = Cliente.query.get(venda.cliente_id)
+                cliente = query_tenant(Cliente).filter_by(id=venda.cliente_id).first()
                 nome_cliente = cliente.nome_cliente if cliente else "Cliente Avulso"
                 forma_pgto = _clean_nullable_text(request.form.get('forma_pagamento')) or 'Dinheiro'
                 valor_pedido = sum(float(v.calcular_total()) for v in vendas_do_pedido)
@@ -7928,7 +8389,8 @@ def editar_venda(id):
                     categoria='Entrada Cliente',
                     forma_pagamento=forma_pgto,
                     valor=valor_pedido,
-                    usuario_id=current_user.id
+                    usuario_id=current_user.id,
+                    empresa_id=empresa_id_atual(),
                 )
                 db.session.add(novo_lanc)
                 if 'boleto' in forma_pgto.lower():
@@ -7939,7 +8401,8 @@ def editar_venda(id):
                         categoria='Saída Fornecedor',
                         forma_pagamento=forma_pgto,
                         valor=valor_pedido,
-                        usuario_id=current_user.id
+                        usuario_id=current_user.id,
+                        empresa_id=empresa_id_atual(),
                     )
                     db.session.add(repasse_lanc)
             elif not status_pago and lancamentos_existentes:
@@ -7950,9 +8413,9 @@ def editar_venda(id):
             db.session.commit()
 
             limpar_cache_dashboard()  # Limpar cache após editar venda
-            _venda_editada = Venda.query.get(venda.id)
+            _venda_editada = query_tenant(Venda).filter_by(id=venda.id).first()
             if _venda_editada:
-                _cli_edit = Cliente.query.get(_venda_editada.cliente_id)
+                _cli_edit = query_tenant(Cliente).filter_by(id=_venda_editada.cliente_id).first()
                 registrar_log(
                     'EDITAR', 'VENDAS',
                     f"Venda #{_venda_editada.id} editada — Cliente: "
@@ -7968,17 +8431,18 @@ def editar_venda(id):
             flash('Erro ao salvar: verifique os dados preenchidos.', 'error')
             return redirect(request.referrer or url_for('listar_vendas'))
     
-    clientes = Cliente.query.order_by(Cliente.nome_cliente).limit(1000).all()
-    produtos = Produto.query.order_by(Produto.nome_produto).limit(1000).all()
+    clientes = query_tenant(Cliente).order_by(Cliente.nome_cliente).limit(1000).all()
+    produtos = query_tenant(Produto).order_by(Produto.nome_produto).limit(1000).all()
     venda_nf = venda.nf if venda.nf else ''
     return render_template('vendas/formulario.html', venda=venda, venda_nf=venda_nf, clientes=clientes, produtos=produtos)
 
 
 @app.route('/venda/excluir_item/<int:id>', methods=['POST'])
 @login_required
+@tenant_required
 def excluir_item_venda(id):
     """Exclui um item individual de venda (uma linha), devolvendo estoque."""
-    venda = Venda.query.get_or_404(id)
+    venda = query_tenant(Venda).filter_by(id=id).first_or_404()
     if not _usuario_pode_gerenciar_venda(venda):
         return _resposta_sem_permissao()
     try:
@@ -8009,12 +8473,13 @@ def excluir_item_venda(id):
 
 @app.route('/vendas/excluir/<int:id>', methods=['POST'])
 @login_required
+@tenant_required
 def excluir_venda(id):
     """Exclui uma venda e todas as outras vendas do mesmo pedido.
     Regra A (CNPJ preenchido): Cliente + NF + Data
     Regra B (CNPJ = '0' ou '00000000000000'): Cliente + Data (ignora NF)
     """
-    venda = Venda.query.get_or_404(id)
+    venda = query_tenant(Venda).filter_by(id=id).first_or_404()
     if not _usuario_pode_gerenciar_venda(venda):
         return _resposta_sem_permissao()
     
@@ -8036,13 +8501,13 @@ def excluir_venda(id):
     #        Se CNPJ != '0', agrupar por Cliente + NF + Data
     if is_consumidor_final:
         # Consumidor final: apenas Cliente + Data (ignora NF completamente)
-        query = Venda.query.filter(
+        query = query_tenant(Venda).filter(
             Venda.cliente_id == cliente_id,
             Venda.data_venda == data_pedido
         )
     else:
         # Cliente com CNPJ: Cliente + NF + Data
-        query = Venda.query.filter(
+        query = query_tenant(Venda).filter(
             Venda.cliente_id == cliente_id,
             Venda.data_venda == data_pedido
         )
@@ -8097,20 +8562,27 @@ def excluir_venda(id):
 
 
 def _vendas_do_pedido(venda):
-    """Retorna todas as vendas do mesmo pedido (Cliente+NF+Data ou Cliente+Data se CNPJ 0)."""
+    """Retorna todas as vendas do mesmo pedido (Cliente+NF+Data ou Cliente+Data se CNPJ 0).
+
+    Multi-tenant: filtra pelo empresa_id da propria venda (preserva funcionamento
+    em scripts que passam uma venda ja carregada fora do request context).
+    """
     cliente_id = venda.cliente_id
     cnpj_cliente = venda.cliente.cnpj or ''
     nf_pedido = venda.nf
     data_pedido = venda.data_venda
     is_consumidor_final = cnpj_cliente in ('0', '00000000000000', '')
     nf_normalizada = str(nf_pedido).strip() if nf_pedido else ''
+    _eid_pedido = getattr(venda, 'empresa_id', None)
     if is_consumidor_final:
         query = Venda.query.filter(
+            Venda.empresa_id == _eid_pedido,
             Venda.cliente_id == cliente_id,
             Venda.data_venda == data_pedido
         )
     else:
         query = Venda.query.filter(
+            Venda.empresa_id == _eid_pedido,
             Venda.cliente_id == cliente_id,
             Venda.data_venda == data_pedido
         )
@@ -8122,12 +8594,24 @@ def _vendas_do_pedido(venda):
 
 
 def _apagar_lancamentos_caixa_por_vendas(vendas):
-    """Remove lançamentos do caixa vinculados por descrição às vendas informadas."""
+    """Remove lançamentos do caixa vinculados por descrição às vendas informadas.
+
+    Multi-tenant: filtra os lancamentos pelo empresa_id das vendas informadas
+    (todas pertencem ao mesmo tenant, pois sao do mesmo pedido).
+    """
     venda_ids = sorted({int(v.id) for v in (vendas or []) if getattr(v, 'id', None) is not None})
     if not venda_ids:
         return 0
     filtros = [LancamentoCaixa.descricao.like(f"Venda #{vid} -%") for vid in venda_ids]
-    lancamentos = LancamentoCaixa.query.filter(or_(*filtros)).all()
+    _eid = None
+    for v in (vendas or []):
+        _eid = getattr(v, 'empresa_id', None)
+        if _eid is not None:
+            break
+    base_q = LancamentoCaixa.query.filter(or_(*filtros))
+    if _eid is not None:
+        base_q = base_q.filter(LancamentoCaixa.empresa_id == _eid)
+    lancamentos = base_q.all()
     for lanc in lancamentos:
         db.session.delete(lanc)
     return len(lancamentos)
@@ -8135,9 +8619,10 @@ def _apagar_lancamentos_caixa_por_vendas(vendas):
 
 @app.route('/venda/atualizar_status/<int:id_venda>', methods=['POST'])
 @login_required
+@tenant_required
 def atualizar_status_venda(id_venda):
     """Alterna o status do pedido: PENDENTE ↔ PAGO. Aplica a todos os itens do grupo."""
-    venda = Venda.query.get_or_404(id_venda)
+    venda = query_tenant(Venda).filter_by(id=id_venda).first_or_404()
     if not _usuario_pode_gerenciar_venda(venda):
         return _resposta_sem_permissao()
     _assumir_ownership_venda_orfa(venda)
@@ -8160,7 +8645,7 @@ def atualizar_status_venda(id_venda):
     for v in vendas_financeiras:
         v.situacao = novo
     # --- INÍCIO DA INTEGRAÇÃO COM CAIXA (PILOTO AUTOMÁTICO V4) ---
-    lancamentos_existentes = LancamentoCaixa.query.filter(
+    lancamentos_existentes = query_tenant(LancamentoCaixa).filter(
         LancamentoCaixa.descricao.like(f"Venda #{venda.id} -%")
     ).all()
     # Se houver qualquer item BACALHAU no pedido, todo o lançamento vai para o caixa BACALHAU.
@@ -8172,7 +8657,7 @@ def atualizar_status_venda(id_venda):
     setor_destino = 'BACALHAU' if eh_bacalhau else 'GERAL'
     status_pago = novo and novo.upper() in ('PAGO', 'CONCLUÍDO', 'PARCIAL')
     if status_pago and not lancamentos_existentes:
-        cliente = Cliente.query.get(venda.cliente_id)
+        cliente = query_tenant(Cliente).filter_by(id=venda.cliente_id).first()
         nome_cliente = cliente.nome_cliente if cliente else "Cliente Avulso"
         forma_pgto = request.form.get('forma_pagamento') or (request.get_json(silent=True) or {}).get('forma_pagamento', 'Dinheiro') or 'Dinheiro'
         # Lançamento do caixa considera apenas linhas financeiras; linhas PERDA somam 0.
@@ -8196,7 +8681,8 @@ def atualizar_status_venda(id_venda):
             forma_pagamento=forma_pgto,
             valor=valor_pedido,
             setor=setor_destino,
-            usuario_id=current_user.id
+            usuario_id=current_user.id,
+            empresa_id=empresa_id_atual(),
         )
         db.session.add(novo_lancamento)
         if 'boleto' in forma_pgto.lower():
@@ -8208,7 +8694,8 @@ def atualizar_status_venda(id_venda):
                 forma_pagamento=forma_pgto,
                 valor=valor_pedido,
                 setor=setor_destino,
-                usuario_id=current_user.id
+                usuario_id=current_user.id,
+                empresa_id=empresa_id_atual(),
             )
             db.session.add(repasse_lanc)
     elif not status_pago and lancamentos_existentes:
@@ -8218,7 +8705,7 @@ def atualizar_status_venda(id_venda):
     db.session.commit()
     limpar_cache_dashboard()  # Limpar cache após atualizar status da venda
     nf = venda.nf or '-'
-    _cli_nome = Cliente.query.get(venda.cliente_id)
+    _cli_nome = query_tenant(Cliente).filter_by(id=venda.cliente_id).first()
     registrar_log(
         'PAGAR', 'VENDAS',
         f"Status do pedido NF: {nf} (Cliente: {_cli_nome.nome_cliente if _cli_nome else 'N/A'}) "
@@ -8232,6 +8719,7 @@ def atualizar_status_venda(id_venda):
 
 @app.route('/vendas/<int:id>/atualizar_situacao_rapida', methods=['POST'])
 @login_required
+@tenant_required
 def atualizar_situacao_rapida(id):
     try:
         data = request.get_json(silent=True) or {}
@@ -8239,7 +8727,7 @@ def atualizar_situacao_rapida(id):
         if nova_situacao not in ('PENDENTE', 'PAGO', 'PARCIAL', 'PERDA'):
             return jsonify({'status': 'erro', 'mensagem': 'Situação inválida.'}), 400
 
-        venda = Venda.query.get_or_404(id)
+        venda = query_tenant(Venda).filter_by(id=id).first_or_404()
         if not _usuario_pode_gerenciar_venda(venda):
             return jsonify({'status': 'erro', 'mensagem': 'Acesso negado.'}), 403
         _assumir_ownership_venda_orfa(venda)
@@ -8260,13 +8748,14 @@ def atualizar_situacao_rapida(id):
 
 @app.route('/venda/recibo/<int:id>')
 @login_required
+@tenant_required
 def recibo_venda(id):
     """Gera recibo de venda em formato de impressão (uma página A4). Agrupa itens da mesma compra (cliente, data, NF)."""
-    venda_base = Venda.query.options(joinedload(Venda.cliente)).get_or_404(id)
+    venda_base = query_tenant(Venda).options(joinedload(Venda.cliente)).filter_by(id=id).first_or_404()
     cliente = venda_base.cliente
 
     # Busca todas as linhas que pertencem a esta mesma "compra" (mesmo cliente, data e NF)
-    vendas_agrupadas = Venda.query.filter_by(
+    vendas_agrupadas = query_tenant(Venda).filter_by(
         cliente_id=venda_base.cliente_id,
         data_venda=venda_base.data_venda,
         nf=venda_base.nf
@@ -8457,9 +8946,10 @@ def deletar_arquivos_massa():
 
 @app.route('/venda/<int:id>/ver_boleto')
 @login_required
+@tenant_required
 def ver_boleto_venda(id):
     """Abre o PDF do boleto vinculado ao pedido em nova aba. Prioriza conteudo_binario do banco se arquivo físico não existir."""
-    venda = Venda.query.get_or_404(id)
+    venda = query_tenant(Venda).filter_by(id=id).first_or_404()
     path = (venda.caminho_boleto or '').strip()
     if not path:
         flash('Boleto não vinculado a este pedido.', 'error')
@@ -8480,9 +8970,10 @@ def ver_boleto_venda(id):
 
 @app.route('/venda/<int:id>/whatsapp')
 @login_required
+@tenant_required
 def enviar_whatsapp_boleto(id):
     """Redireciona para o WhatsApp com mensagem de cobrança e link do boleto."""
-    venda = Venda.query.options(joinedload(Venda.cliente)).get_or_404(id)
+    venda = query_tenant(Venda).options(joinedload(Venda.cliente)).filter_by(id=id).first_or_404()
     if not (venda.caminho_boleto or '').strip():
         flash('Boleto não vinculado a este pedido. Vincule um boleto antes de enviar cobrança.', 'error')
         return redirect(request.referrer or url_for('listar_vendas'))
@@ -8498,7 +8989,7 @@ def enviar_whatsapp_boleto(id):
     if len(telefone_limpo) <= 11:
         telefone_limpo = '55' + telefone_limpo
     link_boleto = url_for('ver_boleto_venda', id=venda.id, _external=True)
-    vendas_pedido = Venda.query.filter_by(
+    vendas_pedido = query_tenant(Venda).filter_by(
         cliente_id=venda.cliente_id,
         data_venda=venda.data_venda,
         nf=venda.nf
@@ -8518,9 +9009,10 @@ def enviar_whatsapp_boleto(id):
 
 @app.route('/venda/<int:id>/ver_nf')
 @login_required
+@tenant_required
 def ver_nf_venda(id):
     """Abre o PDF da nota fiscal vinculada ao pedido em nova aba."""
-    venda = Venda.query.get_or_404(id)
+    venda = query_tenant(Venda).filter_by(id=id).first_or_404()
     path = (venda.caminho_nf or '').strip()
     if not path:
         flash('Nota fiscal não vinculada a este pedido.', 'error')
@@ -9136,9 +9628,10 @@ def vincular_documento_venda(id):
 
 @app.route('/api/pedidos')
 @login_required
+@tenant_required
 def api_pedidos():
     """Lista pedidos recentes para o modal Vincular à Venda. Retorna {id, label} por pedido."""
-    vendas = Venda.query.order_by(Venda.id.desc()).limit(200).all()
+    vendas = query_tenant(Venda).order_by(Venda.id.desc()).limit(200).all()
     seen = set()
     pedidos = []
     for v in vendas:
@@ -9156,6 +9649,7 @@ def api_pedidos():
 
 @app.route('/vendas/deletar_massa', methods=['POST'])
 @login_required
+@tenant_required
 def vendas_deletar_massa():
     """Exclusão em massa de vendas. Recebe JSON { ids: [1,2,...] }. Deleta em uma transação e restaura estoque."""
     data = request.get_json(silent=True) or {}
@@ -9168,7 +9662,7 @@ def vendas_deletar_massa():
         return jsonify({'ok': False, 'mensagem': 'IDs inválidos.'}), 400
     if not ids:
         return jsonify({'ok': False, 'mensagem': 'Nenhum ID informado.'}), 400
-    vendas = Venda.query.filter(Venda.id.in_(ids)).all()
+    vendas = query_tenant(Venda).filter(Venda.id.in_(ids)).all()
     if not vendas:
         return jsonify({'ok': False, 'mensagem': 'Nenhum registro encontrado.'}), 404
     if len(vendas) != len(ids):
@@ -9280,6 +9774,7 @@ def _load_csv_vendas_flexible(filepath):
 
 @app.route('/vendas/importar', methods=['GET', 'POST'])
 @login_required
+@tenant_required
 @admin_required
 def importar_vendas():
     if request.method == 'POST':
@@ -9307,7 +9802,7 @@ def importar_vendas():
             erros = 0
             erros_detalhados = []
             # Mapa nome normalizado -> Produto para busca tolerante a espaços (evita rejeitar por espaços duplos/invisíveis)
-            _produtos_por_nome_normalizado = {_normalizar_nome_busca(p.nome_produto): p for p in Produto.query.limit(5000).all()}
+            _produtos_por_nome_normalizado = {_normalizar_nome_busca(p.nome_produto): p for p in query_tenant(Produto).limit(5000).all()}
             first_iter = True
             for idx, row in df.iterrows():
                 if first_iter:
@@ -9320,9 +9815,9 @@ def importar_vendas():
                     cnpj_cliente = _strip_quotes(row.get('cnpj', '')) or None
                     cliente = None
                     if cnpj_cliente:
-                        cliente = Cliente.query.filter_by(cnpj=cnpj_cliente).first()
+                        cliente = query_tenant(Cliente).filter_by(cnpj=cnpj_cliente).first()
                     if not cliente and nome_cliente:
-                        cliente = Cliente.query.filter(func.lower(Cliente.nome_cliente) == nome_cliente.lower()).first()
+                        cliente = query_tenant(Cliente).filter(func.lower(Cliente.nome_cliente) == nome_cliente.lower()).first()
                     if not cliente:
                         erros_detalhados.append(_msg_linha(linha_num, nome_cliente or 'vazio', "O cliente não foi encontrado. Verifique se está cadastrado com esse nome exato (ou use o CNPJ)", True))
                         erros += 1
@@ -9372,7 +9867,7 @@ def importar_vendas():
                         nf_val.upper() in ('S/N', '0', '0.0') or nf_val == '' or
                         (nf_val.replace('.', '').replace(',', '').strip() == '0')
                     )
-                    base_dup = Venda.query.filter(
+                    base_dup = query_tenant(Venda).filter(
                         Venda.cliente_id == cliente.id,
                         Venda.produto_id == produto_cache.id,
                         Venda.data_venda == data_venda
@@ -9428,7 +9923,8 @@ def importar_vendas():
                         data_venda=data_venda,
                         empresa_faturadora=empresa_val,
                         situacao=situacao_val,
-                        forma_pagamento=forma_pagamento_val
+                        forma_pagamento=forma_pagamento_val,
+                        empresa_id=empresa_id_atual(),
                     )
                     db.session.add(venda)
                     produto.estoque_atual -= quantidade_venda
@@ -9464,8 +9960,9 @@ def importar_vendas():
 # API para obter informações do produto (usado no frontend)
 @app.route('/api/produto/<int:id>')
 @login_required
+@tenant_required
 def api_produto(id):
-    produto = Produto.query.get_or_404(id)
+    produto = query_tenant(Produto).filter_by(id=id).first_or_404()
     return jsonify({
         'nome': produto.nome_produto,
         'estoque': produto.estoque_atual,
@@ -9693,6 +10190,7 @@ def service_worker():
 
 @app.route('/cliente/<int:id>/receber_lote', methods=['POST'])
 @login_required
+@tenant_required
 def receber_lote_cliente(id):
     """Abatimento Inteligente: recebe valor em lote e abate nas vendas pendentes mais antigas."""
     valor_raw = (request.form.get('valor_recebido') or '').strip()
@@ -9718,10 +10216,10 @@ def receber_lote_cliente(id):
     else:
         data_pagamento = date.today()
 
-    cliente = Cliente.query.get_or_404(id)
+    cliente = query_tenant(Cliente).filter_by(id=id).first_or_404()
 
     # Busca vendas PENDENTES ou PARCIAIS, da mais velha para a mais nova
-    vendas_abertas = Venda.query.filter(
+    vendas_abertas = query_tenant(Venda).filter(
         Venda.cliente_id == id,
         Venda.situacao.in_(['PENDENTE', 'PARCIAL'])
     ).order_by(Venda.data_venda.asc()).all()
@@ -9756,7 +10254,8 @@ def receber_lote_cliente(id):
             categoria='Entrada Cliente',
             forma_pagamento=forma_pgto,
             valor=valor_abatido,
-            usuario_id=current_user.id
+            usuario_id=current_user.id,
+            empresa_id=empresa_id_atual(),
         )
         db.session.add(novo_lanc)
 
@@ -9768,7 +10267,8 @@ def receber_lote_cliente(id):
                 categoria='Saída Fornecedor',
                 forma_pagamento=forma_pgto,
                 valor=valor_abatido,
-                usuario_id=current_user.id
+                usuario_id=current_user.id,
+                empresa_id=empresa_id_atual(),
             )
             db.session.add(repasse_lanc)
 

@@ -5,6 +5,44 @@ from decimal import Decimal
 
 db = SQLAlchemy()
 
+
+# ============================================================
+# MULTI-TENANT — Fase 1
+# ============================================================
+# Perfis do usuário no SaaS:
+#   MASTER      -> administrador global do SaaS (opera acima de qualquer Empresa).
+#   DONO        -> administrador da Empresa (tenant). Gerencia funcionários e dados.
+#   FUNCIONARIO -> usuário comum dentro da Empresa, acesso operacional.
+PERFIL_MASTER = 'MASTER'
+PERFIL_DONO = 'DONO'
+PERFIL_FUNCIONARIO = 'FUNCIONARIO'
+PERFIS_USUARIO = (PERFIL_MASTER, PERFIL_DONO, PERFIL_FUNCIONARIO)
+
+
+class Empresa(db.Model):
+    """
+    Tenant do SaaS. Cada Empresa é um silo lógico de dados: seus usuários,
+    clientes, produtos, vendas etc. são completamente isolados dos demais.
+
+    Attributes:
+        nome_fantasia: Nome comercial da empresa (usado na UI).
+        cnpj: CNPJ da empresa (opcional, pode ser vazio em contas de teste).
+        data_cadastro: Timestamp de criação do tenant.
+        ativo: Flag de conta ativa/inativa (suspensão por inadimplência, etc.).
+    """
+
+    __tablename__ = 'empresas'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    nome_fantasia = db.Column(db.String(150), nullable=False, index=True)
+    cnpj = db.Column(db.String(18), nullable=True, unique=True, index=True)
+    data_cadastro = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    ativo = db.Column(db.Boolean, default=True, nullable=False, server_default='1', index=True)
+
+    def __repr__(self):
+        return f'<Empresa {self.id} - {self.nome_fantasia}>'
+
+
 fornecedor_tipo_assoc = db.Table(
     'fornecedor_tipo_assoc',
     db.Column('fornecedor_id', db.Integer, db.ForeignKey('fornecedores.id', ondelete='CASCADE'), primary_key=True),
@@ -14,13 +52,16 @@ fornecedor_tipo_assoc = db.Table(
 
 class Usuario(UserMixin, db.Model):
     """
-    Utilizador do sistema. Suporta roles (admin/user) e autenticação via Flask-Login.
+    Utilizador do sistema. Autenticação via Flask-Login.
 
-    Attributes:
-        username: Nome de login único.
-        password_hash: Hash da senha (werkzeug).
-        role: 'admin' ou 'user'.
-        profile_image_url: URL da foto no Cloudinary.
+    Modelo de permissões após a Fase 1 multi-tenant:
+        * role (legado): 'admin' ou 'user' — preservado para compatibilidade
+          com o código existente que chama is_admin().
+        * perfil (novo): 'MASTER', 'DONO' ou 'FUNCIONARIO' — define o papel
+          no SaaS. MASTER é administrador global (não pertence a Empresa
+          específica); DONO e FUNCIONARIO pertencem a uma única Empresa.
+        * empresa_id: FK para Empresa (nullable temporariamente; obrigatório
+          por regra de negócio exceto para MASTER).
     """
 
     __tablename__ = "usuarios"
@@ -28,7 +69,20 @@ class Usuario(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
-    role = db.Column(db.String(20), nullable=False, default='user')  # 'admin' ou 'user'
+    role = db.Column(db.String(20), nullable=False, default='user')  # legado: 'admin' ou 'user'
+    perfil = db.Column(
+        db.String(20),
+        nullable=False,
+        default=PERFIL_FUNCIONARIO,
+        server_default=PERFIL_FUNCIONARIO,
+        index=True,
+    )  # 'MASTER', 'DONO' ou 'FUNCIONARIO'
+    empresa_id = db.Column(
+        db.Integer,
+        db.ForeignKey('empresas.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True,
+    )
     profile_image_url = db.Column(db.String(500), nullable=True)  # URL da foto de perfil (Cloudinary)
     nome = db.Column(db.String(100), nullable=True)  # Nome completo/real do usuário
     email = db.Column(db.String(150), nullable=True)
@@ -37,12 +91,36 @@ class Usuario(UserMixin, db.Model):
     notifica_logistica = db.Column(db.Boolean, default=True)
     notifica_frase = db.Column(db.Boolean, default=True)
 
+    empresa = db.relationship('Empresa', backref=db.backref('usuarios', lazy='dynamic'))
+
+    def is_master(self):
+        """Administrador global do SaaS (acima de qualquer Empresa)."""
+        return (self.perfil or '').upper() == PERFIL_MASTER
+
+    def is_dono(self):
+        """Dono/administrador da Empresa atual."""
+        return (self.perfil or '').upper() == PERFIL_DONO
+
+    def is_funcionario(self):
+        """Funcionário comum dentro de uma Empresa."""
+        return (self.perfil or '').upper() == PERFIL_FUNCIONARIO
+
     def is_admin(self):
-        """Jhones é sempre admin. Demais seguem role."""
-        return self.username == 'Jhones' or self.role == 'admin'
+        """Admin legado: Jhones, role='admin', perfil MASTER ou DONO.
+
+        Mantido para compatibilidade com decoradores e rotas que já usam
+        is_admin() em todo o app. Dono da Empresa passa a contar como admin
+        do seu próprio tenant.
+        """
+        if self.username == 'Jhones':
+            return True
+        if self.role == 'admin':
+            return True
+        perfil_upper = (self.perfil or '').upper()
+        return perfil_upper in (PERFIL_MASTER, PERFIL_DONO)
 
     def __repr__(self):
-        return f'<Usuario {self.username}>'
+        return f'<Usuario {self.username} ({self.perfil})>'
 
 class Cliente(db.Model):
     """
@@ -57,13 +135,22 @@ class Cliente(db.Model):
     __tablename__ = "clientes"
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    empresa_id = db.Column(
+        db.Integer,
+        db.ForeignKey('empresas.id', ondelete='CASCADE'),
+        nullable=True,  # nullable temporário para migração; regra de negócio exige não-nulo
+        index=True,
+    )
     nome_cliente = db.Column(db.String(200), nullable=False, index=True)  # Índice para buscas por nome
     razao_social = db.Column(db.String(200), index=True)  # Índice para buscas por razão social
+    # TODO Fase 2: remover unique=True e trocar por UniqueConstraint(empresa_id, cnpj).
     cnpj = db.Column(db.String(18), unique=True, index=True)
     cidade = db.Column(db.String(100))
     telefone = db.Column(db.String(20), nullable=True)
     endereco = db.Column(db.String(255))
     ativo = db.Column(db.Boolean, default=True, nullable=False, server_default='1', index=True)
+
+    empresa = db.relationship('Empresa', backref=db.backref('clientes', lazy='dynamic'))
 
     # Relacionamento com vendas — sem cascade intencional: excluir um cliente
     # deve falhar via FK constraint se houver vendas vinculadas, preservando o histórico financeiro.
@@ -93,6 +180,12 @@ class Produto(db.Model):
     )
     
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    empresa_id = db.Column(
+        db.Integer,
+        db.ForeignKey('empresas.id', ondelete='CASCADE'),
+        nullable=True,
+        index=True,
+    )
     tipo = db.Column(db.String(20), nullable=False, index=True)
     nacionalidade = db.Column(db.String(20), nullable=False, index=True)
     marca = db.Column(db.String(100), nullable=False)
@@ -105,7 +198,8 @@ class Produto(db.Model):
     estoque_atual = db.Column(db.Integer, nullable=False, default=0)  # Saldo atual em estoque
     data_chegada = db.Column(db.Date, default=date.today, nullable=False, index=True)  # Índice para filtros por data
     nome_produto = db.Column(db.String(200), nullable=False, index=True)  # Índice para buscas por nome
-    
+
+    empresa = db.relationship('Empresa', backref=db.backref('produtos', lazy='dynamic'))
     # Relacionamento com vendas
     vendas = db.relationship('Venda', backref='produto', lazy=True)
     # Relacionamento com fotos (até 5 por produto)
@@ -148,10 +242,19 @@ class Fornecedor(db.Model):
     __tablename__ = "fornecedores"
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    empresa_id = db.Column(
+        db.Integer,
+        db.ForeignKey('empresas.id', ondelete='CASCADE'),
+        nullable=True,
+        index=True,
+    )
+    # TODO Fase 2: remover unique=True e trocar por UniqueConstraint(empresa_id, nome).
     nome = db.Column(db.String(100), nullable=False, unique=True, index=True)
     razao_social = db.Column(db.String(150), nullable=True)
     cnpj = db.Column(db.String(20), nullable=True)
     endereco = db.Column(db.String(255), nullable=True)
+
+    empresa = db.relationship('Empresa', backref=db.backref('fornecedores', lazy='dynamic'))
     tipos_produtos = db.relationship('TipoProduto', secondary=fornecedor_tipo_assoc, backref='fornecedores')
 
     def __repr__(self):
@@ -163,7 +266,16 @@ class TipoProduto(db.Model):
     __tablename__ = "tipos_produto"
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    empresa_id = db.Column(
+        db.Integer,
+        db.ForeignKey('empresas.id', ondelete='CASCADE'),
+        nullable=True,
+        index=True,
+    )
+    # TODO Fase 2: remover unique=True e trocar por UniqueConstraint(empresa_id, nome).
     nome = db.Column(db.String(100), nullable=False, unique=True, index=True)
+
+    empresa = db.relationship('Empresa', backref=db.backref('tipos_produto', lazy='dynamic'))
 
     def __repr__(self):
         return f'<TipoProduto {self.nome}>'
@@ -197,6 +309,12 @@ class Venda(db.Model):
     __tablename__ = "vendas"
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    empresa_id = db.Column(
+        db.Integer,
+        db.ForeignKey('empresas.id', ondelete='CASCADE'),
+        nullable=True,
+        index=True,
+    )
     cliente_id = db.Column(db.Integer, db.ForeignKey('clientes.id'), nullable=False, index=True)  # Índice para filtros e joins
     produto_id = db.Column(db.Integer, db.ForeignKey('produtos.id'), nullable=False, index=True)
     nf = db.Column(db.String(50), index=True)  # Índice para buscas por NF
@@ -215,6 +333,7 @@ class Venda(db.Model):
     caminho_nf = db.Column(db.String(500), nullable=True)
     data_vencimento = db.Column(db.Date, nullable=True, index=True)  # vencimento do boleto vinculado (extraído do PDF)
 
+    empresa = db.relationship('Empresa', backref=db.backref('vendas', lazy='dynamic'))
     # Relacionamento com documentos
     documentos = db.relationship('Documento', backref='venda', lazy=True, cascade='all, delete-orphan', passive_deletes=True)
     
@@ -247,11 +366,24 @@ class Venda(db.Model):
 
 
 class Configuracao(db.Model):
-    """Configurações globais do sistema (uma linha). Código exigido no cadastro de novos usuários."""
+    """Configurações globais por Empresa (uma linha por tenant).
+
+    Historicamente havia uma linha única global. A partir da Fase 1 multi-tenant,
+    cada Empresa passa a ter sua própria Configuracao; as rotas que consultam
+    esta tabela devem filtrar por empresa_id do usuário atual.
+    """
     __tablename__ = 'configuracoes'
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    empresa_id = db.Column(
+        db.Integer,
+        db.ForeignKey('empresas.id', ondelete='CASCADE'),
+        nullable=True,
+        index=True,
+    )
     codigo_cadastro = db.Column(db.String(100), nullable=False, default='alho123')
+
+    empresa = db.relationship('Empresa', backref=db.backref('configuracoes', lazy='dynamic'))
 
     def __repr__(self):
         return f'<Configuracao id={self.id}>'
@@ -262,6 +394,12 @@ class LancamentoCaixa(db.Model):
     __tablename__ = 'lancamentos_caixa'
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    empresa_id = db.Column(
+        db.Integer,
+        db.ForeignKey('empresas.id', ondelete='CASCADE'),
+        nullable=True,
+        index=True,
+    )
     data = db.Column(db.Date, nullable=False, index=True)
     descricao = db.Column(db.String(200), nullable=False)
     tipo = db.Column(db.String(20), nullable=False, index=True)  # 'ENTRADA' ou 'SAIDA'
@@ -272,6 +410,8 @@ class LancamentoCaixa(db.Model):
     valor = db.Column(db.Numeric(10, 2), nullable=False)
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)
 
+    empresa = db.relationship('Empresa', backref=db.backref('lancamentos_caixa', lazy='dynamic'))
+
     def __repr__(self):
         return f'<LancamentoCaixa {self.id} - {self.tipo} {self.valor}>'
 
@@ -281,10 +421,18 @@ class ContagemGaveta(db.Model):
     __tablename__ = 'contagens_gaveta'
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    empresa_id = db.Column(
+        db.Integer,
+        db.ForeignKey('empresas.id', ondelete='CASCADE'),
+        nullable=True,
+        index=True,
+    )
     data = db.Column(db.Date, nullable=False, index=True)
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True, index=True)
     estado_json = db.Column(db.Text, nullable=False)  # {"dinheiro":[...], "cheques":[...]}
     atualizado_em = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    empresa = db.relationship('Empresa', backref=db.backref('contagens_gaveta', lazy='dynamic'))
 
     def __repr__(self):
         return f'<ContagemGaveta {self.id} - {self.data}>'
