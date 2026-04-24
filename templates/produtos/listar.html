@@ -517,22 +517,29 @@
         </div>
         <div class="p-6 overflow-y-auto">
             <button type="button" data-bs-dismiss="modal" data-bs-toggle="modal" data-bs-target="#modalNovoTipo" onclick="document.getElementById('modalTiposCadastrados').classList.add('hidden');document.getElementById('modalNovoTipo').classList.remove('hidden');travarFundo();" class="mb-3 w-full sm:w-auto inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none">
-                <i class="fas fa-plus mr-2"></i> Novo Tipo
+                <i data-lucide="plus" class="w-4 h-4 mr-2"></i> Novo Tipo
             </button>
             <ul class="divide-y divide-gray-200 dark:divide-gray-700">
                 {% for tipo in tipos %}
                 <li class="py-3 flex justify-between items-center w-full border-b border-gray-100 dark:border-gray-700 last:border-0">
                     <span class="text-sm font-medium text-gray-900 dark:text-white">{{ tipo.nome }}</span>
 
-                    <div class="flex items-center gap-4">
-                        <button type="button" onclick="editarTipoCadastrado({{ tipo.id }}, '{{ tipo.nome }}')" class="text-gray-400 hover:text-amber-500 transition-colors focus:outline-none" title="Editar">
-                            <i class="fas fa-pencil-alt text-lg"></i>
+                    <div class="flex items-center gap-2">
+                        <button type="button"
+                                onclick="editarTipoCadastrado({{ tipo.id }}, '{{ tipo.nome|e }}')"
+                                class="inline-flex items-center justify-center w-8 h-8 rounded-lg text-gray-500 dark:text-gray-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition focus:outline-none focus:ring-2 focus:ring-amber-500"
+                                title="Editar tipo"
+                                aria-label="Editar tipo {{ tipo.nome }}">
+                            <i data-lucide="pencil" class="w-4 h-4"></i>
                         </button>
 
                         <form action="{{ url_for('deletar_tipo', id=tipo.id) }}" method="POST" class="inline m-0 p-0 flex items-center" onsubmit="return confirm('Tem certeza que deseja apagar o tipo {{ tipo.nome }}?');">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                            <button type="submit" class="text-gray-400 hover:text-red-500 transition-colors focus:outline-none" title="Excluir">
-                                <i class="fas fa-trash-alt text-lg"></i>
+                            <button type="submit"
+                                    class="inline-flex items-center justify-center w-8 h-8 rounded-lg text-gray-500 dark:text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition focus:outline-none focus:ring-2 focus:ring-red-500"
+                                    title="Excluir tipo"
+                                    aria-label="Excluir tipo {{ tipo.nome }}">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
                             </button>
                         </form>
                     </div>
