@@ -4300,45 +4300,50 @@ def dashboard():
             'prejuizo_valor': abs(v.calcular_lucro())
         })
 
-    # KPI 6: Faturamento por Empresa - FILTRADO POR ANO
-    total_paty = db.session.query(
-        func.sum(Venda.preco_venda * Venda.quantidade_venda)
-    ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
-     .filter(Venda.empresa_faturadora == 'PATY', filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
-    
-    total_destak = db.session.query(
-        func.sum(Venda.preco_venda * Venda.quantidade_venda)
-    ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
-     .filter(Venda.empresa_faturadora == 'DESTAK', filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
-    
-    # Separação PATY e DESTAK por situação (Pago vs Pendente)
-    paty_pago = db.session.query(
-        func.sum(Venda.preco_venda * Venda.quantidade_venda)
-    ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
-     .filter(Venda.empresa_faturadora == 'PATY', Venda.situacao == 'PAGO', filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
-    paty_pendente = db.session.query(
-        func.sum(Venda.preco_venda * Venda.quantidade_venda)
-    ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
-     .filter(Venda.empresa_faturadora == 'PATY', Venda.situacao == 'PENDENTE', filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
-    destak_pago = db.session.query(
-        func.sum(Venda.preco_venda * Venda.quantidade_venda)
-    ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
-     .filter(Venda.empresa_faturadora == 'DESTAK', Venda.situacao == 'PAGO', filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
-    destak_pendente = db.session.query(
-        func.sum(Venda.preco_venda * Venda.quantidade_venda)
-    ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id)\
-     .filter(Venda.empresa_faturadora == 'DESTAK', Venda.situacao == 'PENDENTE', filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
-    
-    # Vendas sem empresa (NENHUM ou string vazia) - FILTRADO POR ANO
-    total_nenhum = db.session.query(
-        func.sum(Venda.preco_venda * Venda.quantidade_venda)
+    # KPI 6: Faturamento por Fornecedor (empresa faturadora) - DINÂMICO, FILTRADO POR ANO.
+    # Agrupa dinamicamente por Venda.empresa_faturadora (normalizada) e separa as
+    # vendas sem fornecedor (NENHUM/None/'') em 'Vendas Avulsas'.
+    empresa_norm = func.upper(func.coalesce(Venda.empresa_faturadora, 'NENHUM'))
+    valor_venda = Venda.preco_venda * Venda.quantidade_venda
+    situacao_upper = func.upper(func.coalesce(Venda.situacao, ''))
+
+    rows_faturamento = db.session.query(
+        empresa_norm.label('empresa'),
+        func.sum(valor_venda).label('total'),
+        func.sum(case((situacao_upper == 'PAGO', valor_venda), else_=0)).label('pago'),
+        func.sum(case((situacao_upper == 'PENDENTE', valor_venda), else_=0)).label('pendente'),
     ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id).filter(
-        ~Venda.empresa_faturadora.in_(['PATY', 'DESTAK']),
-        filtro_tenant_venda,
-        filtro_ano_venda,
-        filtro_sem_bacalhau_tipo,
-        filtro_sem_bacalhau_nome
-    ).scalar() or 0
+        filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome
+    ).group_by(empresa_norm).all()
+
+    faturamento_geral = sum(float(r.total or 0) for r in rows_faturamento)
+
+    faturamento_por_fornecedor = []
+    avulsas_info = {'total': 0.0, 'pago': 0.0, 'pendente': 0.0, 'percentual': 0.0}
+    for row in rows_faturamento:
+        nome = (row.empresa or 'NENHUM').strip()
+        total_f = float(row.total or 0)
+        pago_f = float(row.pago or 0)
+        pendente_f = float(row.pendente or 0)
+        percentual_f = (total_f / faturamento_geral * 100) if faturamento_geral > 0 else 0.0
+        if nome in ('', 'NENHUM'):
+            avulsas_info = {
+                'total': total_f,
+                'pago': pago_f,
+                'pendente': pendente_f,
+                'percentual': percentual_f,
+            }
+            continue
+        faturamento_por_fornecedor.append({
+            'nome': nome,
+            'faturamento': total_f,
+            'pago': pago_f,
+            'pendente': pendente_f,
+            'percentual': percentual_f,
+        })
+
+    # Ordena do maior para o menor faturamento (cards mais relevantes primeiro).
+    faturamento_por_fornecedor.sort(key=lambda x: x['faturamento'], reverse=True)
     
     # KPI 7: Total de Vendas - FILTRADO POR ANO
     total_vendas = db.session.query(
@@ -4468,13 +4473,8 @@ def dashboard():
                          total_prejuizo=float(total_prejuizo),
                          qtd_caixas_prejuizo=int(qtd_caixas_prejuizo),
                          detalhes_prejuizo=detalhes_prejuizo,
-                         total_paty=float(total_paty),
-                         total_destak=float(total_destak),
-                         paty_pago=float(paty_pago),
-                         paty_pendente=float(paty_pendente),
-                         destak_pago=float(destak_pago),
-                         destak_pendente=float(destak_pendente),
-                         total_nenhum=float(total_nenhum),
+                         faturamento_por_fornecedor=faturamento_por_fornecedor,
+                         avulsas_info=avulsas_info,
                          margem_porcentagem=float(margem_porcentagem),
                          ticket_medio=float(ticket_medio),
                          documentos_recem_chegados=documentos_recem_chegados,
@@ -6930,25 +6930,43 @@ def api_vendas_por_filtro():
 @login_required
 @tenant_required
 def api_dashboard_detalhes(filtro):
-    """Retorna lista de vendas filtradas por pendente, pago, avulsa, paty ou destak."""
-    filtros_validos = ('pendente', 'pago', 'avulsa', 'paty', 'destak')
-    if filtro not in filtros_validos:
-        return jsonify({'erro': f'Filtro inválido. Use: {", ".join(filtros_validos)}'}), 400
+    """Retorna lista de vendas filtradas por pendente, pago, avulsa ou fornecedor dinâmico.
+
+    Filtros fixos:
+      - 'pendente', 'pago': por situacao.
+      - 'avulsa': vendas sem empresa_faturadora (NULL, '' ou 'NENHUM').
+
+    Qualquer outro valor é tratado como nome de fornecedor (empresa_faturadora),
+    comparado case-insensitive. Isso suporta os cards dinâmicos do dashboard.
+    """
     try:
         ano_ativo = session.get('ano_ativo', datetime.now().year)
         filtro_ano_venda = extract('year', Venda.data_venda) == ano_ativo
 
         query = query_tenant(Venda).filter(filtro_ano_venda)
-        if filtro == 'pendente':
+        filtro_norm = (filtro or '').strip()
+        filtro_lower = filtro_norm.lower()
+
+        if filtro_lower == 'pendente':
             query = query.filter(Venda.situacao == 'PENDENTE')
-        elif filtro == 'pago':
+        elif filtro_lower == 'pago':
             query = query.filter(Venda.situacao == 'PAGO')
-        elif filtro == 'avulsa':
-            query = query.filter(~Venda.empresa_faturadora.in_(['PATY', 'DESTAK']))
-        elif filtro == 'paty':
-            query = query.filter(Venda.empresa_faturadora == 'PATY')
-        elif filtro == 'destak':
-            query = query.filter(Venda.empresa_faturadora == 'DESTAK')
+        elif filtro_lower == 'avulsa':
+            # Sem fornecedor: NULL, vazio, ou string 'NENHUM' (case-insensitive).
+            query = query.filter(
+                or_(
+                    Venda.empresa_faturadora.is_(None),
+                    func.upper(func.coalesce(Venda.empresa_faturadora, '')) == '',
+                    func.upper(Venda.empresa_faturadora) == 'NENHUM',
+                )
+            )
+        elif filtro_norm:
+            # Filtro dinâmico por nome de fornecedor (case-insensitive).
+            query = query.filter(
+                func.upper(func.coalesce(Venda.empresa_faturadora, '')) == filtro_norm.upper()
+            )
+        else:
+            return jsonify({'erro': 'Filtro vazio.'}), 400
 
         vendas = query.options(
             joinedload(Venda.cliente), joinedload(Venda.produto)
