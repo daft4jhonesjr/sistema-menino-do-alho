@@ -6522,6 +6522,79 @@ def excluir_produto(id):
     return redirect(url_for('listar_produtos'))
 
 
+@app.route('/produto/<int:id>/devolver', methods=['POST'])
+@login_required
+@tenant_required
+def devolver_produto(id):
+    """
+    Registra devolução de mercadorias ao fornecedor.
+
+    Regras:
+        * Valida tenant: produto precisa pertencer à empresa do usuário (query_tenant).
+        * Lock pessimista no produto antes de alterar o estoque (evita race condition).
+        * Quantidade deve ser >= 1 e <= estoque_atual.
+        * Subtrai a quantidade do estoque_atual do produto.
+        * Audita a ação no LogAtividade com tipo "DEVOLUCAO" e o motivo informado.
+    """
+    produto = query_tenant(Produto).filter_by(id=id).first_or_404()
+    nome_produto = produto.nome_produto or f'#{produto.id}'
+    fornecedor_nome = produto.fornecedor or '—'
+
+    try:
+        quantidade = int((request.form.get('quantidade') or '0').strip())
+    except (ValueError, TypeError):
+        quantidade = 0
+    motivo = (request.form.get('motivo') or '').strip()
+
+    if quantidade < 1:
+        flash('❌ Ops! Informe uma quantidade válida (mínimo 1) para devolver.', 'error')
+        return redirect(url_for('listar_produtos'))
+
+    produto_lock = _produto_com_lock(produto.id)
+    if produto_lock is None:
+        db.session.rollback()
+        flash('❌ Não foi possível localizar o produto para devolução.', 'error')
+        return redirect(url_for('listar_produtos'))
+
+    estoque_antes = int(produto_lock.estoque_atual or 0)
+    if quantidade > estoque_antes:
+        db.session.rollback()
+        flash(
+            f'❌ Quantidade a devolver ({quantidade}) é maior que o estoque atual '
+            f'({estoque_antes}) do produto {nome_produto}.',
+            'error',
+        )
+        return redirect(url_for('listar_produtos'))
+
+    produto_lock.estoque_atual = estoque_antes - quantidade
+    estoque_depois = produto_lock.estoque_atual
+
+    ok, err = _safe_db_commit()
+    if not ok:
+        flash(err or '❌ Erro ao registrar a devolução. Tente novamente.', 'error')
+        return redirect(url_for('listar_produtos'))
+
+    limpar_cache_dashboard()
+
+    motivo_log = motivo if motivo else 'sem motivo informado'
+    descricao_log = (
+        f"DEVOLUCAO — Produto #{produto.id} ({nome_produto}) | "
+        f"Fornecedor: {fornecedor_nome} | "
+        f"Qtd devolvida: {quantidade} | "
+        f"Estoque {estoque_antes} → {estoque_depois} | "
+        f"Motivo: {motivo_log}"
+    )
+    registrar_log('DEVOLUCAO', 'PRODUTOS', descricao_log)
+
+    flash(
+        f'✅ Devolução registrada: {quantidade} un de "{nome_produto}" '
+        f'devolvidas ao fornecedor {fornecedor_nome}. '
+        f'Estoque atualizado para {estoque_depois} un.',
+        'success',
+    )
+    return redirect(url_for('listar_produtos'))
+
+
 @app.route('/bulk_delete_produtos', methods=['POST'])
 @login_required
 @tenant_required

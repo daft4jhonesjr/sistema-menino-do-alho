@@ -281,6 +281,16 @@
                                         title="Editar produto">
                                     <i data-lucide="pencil" class="w-4 h-4"></i>
                                 </button>
+                                <button type="button"
+                                        class="btn-devolver-produto text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300 mr-4 inline-flex items-center cursor-pointer bg-transparent border-none p-0"
+                                        data-id="{{ produto.id }}"
+                                        data-nome="{{ (produto.nome_produto or '')|replace('\n', ' ')|e }}"
+                                        data-fornecedor="{{ (produto.fornecedor or '')|replace('\n', ' ')|e }}"
+                                        data-estoque-atual="{{ produto.estoque_atual }}"
+                                        onclick="abrirModalDevolverProduto(this)"
+                                        title="Devolver ao fornecedor">
+                                    <i data-lucide="undo-2" class="w-4 h-4"></i>
+                                </button>
                                 <form action="{{ url_for('excluir_produto', id=produto.id) }}" method="POST" class="inline" onsubmit="return confirm('Tem certeza que deseja excluir este produto?');">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                     <button type="submit" class="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 inline-flex items-center">
@@ -961,7 +971,123 @@ function editarTipoCadastrado(id, nomeAtual) {
     </div>
 </div>
 
+<!-- Modal Devolver ao Fornecedor -->
+<div id="modal-devolver-produto-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
+    <div class="fixed inset-0 bg-black/50" id="modal-devolver-produto-overlay"></div>
+    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-xl shadow-sm dark:shadow-none border border-gray-200 dark:border-gray-700 z-50" onclick="event.stopPropagation()">
+        <div class="sticky top-0 flex justify-between items-center px-8 py-5 bg-amber-600 text-white rounded-t-xl z-10">
+            <h3 class="text-xl font-bold flex items-center">
+                <i data-lucide="undo-2" class="w-5 h-5 mr-2"></i>Devolver ao Fornecedor
+            </h3>
+            <button type="button" class="modal-devolver-produto-fechar w-10 h-10 flex items-center justify-center rounded-full hover:bg-amber-500 text-white font-bold transition" title="Fechar">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+        <div class="p-8">
+            <div class="mb-5 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl">
+                <p class="text-sm text-gray-600 dark:text-gray-300 mb-1">Produto:</p>
+                <p id="devolver-nome-produto" class="text-base font-bold text-gray-900 dark:text-gray-100 mb-3">—</p>
+                <p class="text-sm text-gray-600 dark:text-gray-300 mb-1">Fornecedor:</p>
+                <p id="devolver-nome-fornecedor" class="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-3">—</p>
+                <p class="text-sm text-gray-600 dark:text-gray-300 mb-1">Estoque atual disponível:</p>
+                <p class="text-2xl font-bold text-emerald-700 dark:text-emerald-400"><span id="devolver-estoque-atual">0</span> un</p>
+            </div>
+            <form id="form-devolver-produto" method="POST" action="" data-action-base="{{ url_for('devolver_produto', id=0) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="mb-4">
+                    <label for="devolver_quantidade" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Quantidade a Devolver <span class="text-red-500">*</span></label>
+                    <input type="number" id="devolver_quantidade" name="quantidade" min="1" step="1" required inputmode="numeric" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 dark:bg-gray-700 dark:text-gray-100">
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Máximo permitido: <span id="devolver-max-hint">0</span> un</p>
+                </div>
+                <div class="mb-4">
+                    <label for="devolver_motivo" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Motivo da Devolução <span class="text-gray-400 text-xs">(opcional)</span></label>
+                    <textarea id="devolver_motivo" name="motivo" rows="3" maxlength="500" placeholder="Ex: Produto fora do padrão de qualidade, vencimento próximo..." class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 dark:bg-gray-700 dark:text-gray-100"></textarea>
+                </div>
+                <div class="flex gap-4 mt-6">
+                    <button type="submit" class="bg-amber-600 text-white px-6 py-2.5 rounded-xl hover:bg-amber-500 transition flex items-center font-medium">
+                        <i data-lucide="check" class="w-4 h-4 mr-2"></i>Confirmar Devolução
+                    </button>
+                    <button type="button" class="modal-devolver-produto-fechar bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-6 py-2.5 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 transition flex items-center font-medium">
+                        <i data-lucide="x" class="w-4 h-4 mr-2"></i>Cancelar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <script>
+(function() {
+    var wrap = document.getElementById('modal-devolver-produto-wrap');
+    var overlay = document.getElementById('modal-devolver-produto-overlay');
+    var btnsFechar = document.querySelectorAll('.modal-devolver-produto-fechar');
+    var form = document.getElementById('form-devolver-produto');
+    if (!wrap || !form) return;
+    var actionBase = form.getAttribute('data-action-base') || '';
+    var inputQtd = document.getElementById('devolver_quantidade');
+    var inputMotivo = document.getElementById('devolver_motivo');
+    var spanNome = document.getElementById('devolver-nome-produto');
+    var spanFornecedor = document.getElementById('devolver-nome-fornecedor');
+    var spanEstoque = document.getElementById('devolver-estoque-atual');
+    var spanMaxHint = document.getElementById('devolver-max-hint');
+
+    function abrirModalDevolverProduto(btn) {
+        var id = btn.getAttribute('data-id');
+        var nome = btn.getAttribute('data-nome') || '—';
+        var fornecedor = btn.getAttribute('data-fornecedor') || '—';
+        var estoque = parseInt(btn.getAttribute('data-estoque-atual') || '0', 10) || 0;
+
+        form.action = actionBase.replace(/\/0\/devolver$/, '/' + id + '/devolver');
+        spanNome.textContent = (nome || '').replace(/\s+S\/N\s+/gi, ' ').replace(/\s+N\/A\s+/gi, ' ').replace(/\s+NENHUMA\s+/gi, ' ').replace(/\s+/g, ' ').trim() || '—';
+        spanFornecedor.textContent = fornecedor || '—';
+        spanEstoque.textContent = estoque;
+        spanMaxHint.textContent = estoque;
+        inputQtd.max = estoque;
+        inputQtd.value = '';
+        inputMotivo.value = '';
+
+        if (estoque <= 0) {
+            inputQtd.disabled = true;
+            inputQtd.placeholder = 'Estoque zerado';
+        } else {
+            inputQtd.disabled = false;
+            inputQtd.placeholder = '';
+        }
+
+        wrap.classList.remove('hidden');
+        if (typeof travarFundo === 'function') travarFundo();
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+        setTimeout(function() { try { inputQtd.focus(); } catch (e) {} }, 50);
+    }
+    window.abrirModalDevolverProduto = abrirModalDevolverProduto;
+
+    function fecharModalDevolverProduto() {
+        wrap.classList.add('hidden');
+        if (typeof liberarFundo === 'function') liberarFundo();
+    }
+
+    if (overlay) overlay.addEventListener('click', fecharModalDevolverProduto);
+    btnsFechar.forEach(function(b) { b.addEventListener('click', fecharModalDevolverProduto); });
+
+    form.addEventListener('submit', function(e) {
+        var max = parseInt(inputQtd.max || '0', 10) || 0;
+        var qtd = parseInt(inputQtd.value || '0', 10) || 0;
+        if (qtd < 1) {
+            e.preventDefault();
+            alert('Informe uma quantidade válida (mínimo 1) para devolver.');
+            return;
+        }
+        if (qtd > max) {
+            e.preventDefault();
+            alert('Quantidade a devolver (' + qtd + ') maior que o estoque atual (' + max + ').');
+            return;
+        }
+        if (!confirm('Confirmar devolução de ' + qtd + ' un ao fornecedor? Esta ação reduzirá o estoque.')) {
+            e.preventDefault();
+        }
+    });
+})();
+
 (function() {
     var btn = document.getElementById('bulk-delete-btn');
     var selectAll = document.getElementById('bulk-select-all');
