@@ -3034,6 +3034,21 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
                 db.session.commit()
             except Exception:
                 db.session.rollback()
+        # Migração: quantidade_devolvida em produtos (rastro de devolução ao fornecedor)
+        try:
+            _adicionar_coluna_se_ausente('produtos', 'quantidade_devolvida', 'INTEGER NOT NULL DEFAULT 0')
+        except (OperationalError, Exception):
+            db.session.rollback()
+            # Fallback: alguns SQLites não aceitam NOT NULL sem reescrever a tabela
+            try:
+                _adicionar_coluna_se_ausente('produtos', 'quantidade_devolvida', 'INTEGER DEFAULT 0')
+            except Exception:
+                db.session.rollback()
+        try:
+            db.session.execute(text('UPDATE produtos SET quantidade_devolvida = 0 WHERE quantidade_devolvida IS NULL'))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
         # Migração: garantir tabela documentos (cross-database)
         try:
             Documento.__table__.create(bind=db.engine, checkfirst=True)
@@ -6567,7 +6582,10 @@ def devolver_produto(id):
         return redirect(url_for('listar_produtos'))
 
     produto_lock.estoque_atual = estoque_antes - quantidade
+    devolvido_antes = int(produto_lock.quantidade_devolvida or 0)
+    produto_lock.quantidade_devolvida = devolvido_antes + quantidade
     estoque_depois = produto_lock.estoque_atual
+    devolvido_total = produto_lock.quantidade_devolvida
 
     ok, err = _safe_db_commit()
     if not ok:
@@ -6582,6 +6600,7 @@ def devolver_produto(id):
         f"Fornecedor: {fornecedor_nome} | "
         f"Qtd devolvida: {quantidade} | "
         f"Estoque {estoque_antes} → {estoque_depois} | "
+        f"Total devolvido acumulado: {devolvido_total} | "
         f"Motivo: {motivo_log}"
     )
     registrar_log('DEVOLUCAO', 'PRODUTOS', descricao_log)

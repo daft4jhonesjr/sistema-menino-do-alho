@@ -246,8 +246,14 @@
                                 <td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap min-w-[260px]">
                                 <button type="button" onclick="abrirModalVendas('produto', {{ produto.id }})"
                                         class="text-emerald-700 dark:text-emerald-400 hover:underline font-bold transition text-left cursor-pointer">
-                                    {{ (' ' ~ (produto.nome_produto or '') ~ ' ') | replace(' S/N ', ' ') | replace(' s/n ', ' ') | replace(' N/A ', ' ') | replace(' n/a ', ' ') | replace(' NENHUMA ', ' ') | replace(' nenhuma ', ' ') | replace('  ', ' ') | replace('  ', ' ') | trim }}
+                                    {{ (' ' ~ (produto.nome_produto or '') ~ ' ') | replace(' S/N ', ' ') | replace(' s/n ', ' ') | replace(' N/A ', ' ') | replace(' n/a ', ' ') | replace(' NENHUMA ', ' ') | replace('  ', ' ') | replace('  ', ' ') | trim }}
                                 </button>
+                                {% if produto.quantidade_devolvida and produto.quantidade_devolvida > 0 %}
+                                <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 border border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700"
+                                      title="Quantidade total devolvida ao fornecedor: {{ produto.quantidade_devolvida }} un">
+                                    <i data-lucide="undo-2" class="w-3 h-3 mr-1"></i>Devolvido ({{ produto.quantidade_devolvida }} un)
+                                </span>
+                                {% endif %}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm font-bold {% if produto.estoque_atual <= 0 %}text-red-600 dark:text-red-400{% elif produto.estoque_atual < 10 %}text-amber-600 dark:text-amber-400{% else %}text-emerald-600 dark:text-emerald-400{% endif %} text-right">
                                 {{ produto.estoque_atual }}

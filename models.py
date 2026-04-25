@@ -197,6 +197,12 @@ class Produto(db.Model):
     preco_venda_alvo = db.Column(db.Numeric(10, 2), nullable=True)  # Opcional; padrão ex.: R$ 160 para alho
     quantidade_entrada = db.Column(db.Integer, nullable=False, default=0)  # Quantidade original que entrou no sistema
     estoque_atual = db.Column(db.Integer, nullable=False, default=0)  # Saldo atual em estoque
+    quantidade_devolvida = db.Column(
+        db.Integer,
+        nullable=False,
+        default=0,
+        server_default='0',
+    )  # Total acumulado devolvido ao fornecedor (rastro do motivo de baixa de estoque)
     data_chegada = db.Column(db.Date, default=date.today, nullable=False, index=True)  # Índice para filtros por data
     nome_produto = db.Column(db.String(200), nullable=False, index=True)  # Índice para buscas por nome
 
