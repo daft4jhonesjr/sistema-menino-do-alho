@@ -107,18 +107,30 @@ class Usuario(UserMixin, db.Model):
         return (self.perfil or '').upper() == PERFIL_FUNCIONARIO
 
     def is_admin(self):
-        """Admin legado: Jhones, role='admin', perfil MASTER ou DONO.
+        """Admin global do SaaS (acima de qualquer tenant).
 
-        Mantido para compatibilidade com decoradores e rotas que já usam
-        is_admin() em todo o app. Dono da Empresa passa a contar como admin
-        do seu próprio tenant.
+        SEMÂNTICA MULTI-TENANT (pós-auditoria P0):
+            * Retorna True APENAS para usuários MASTER (perfil) ou role='admin'
+              (legado, equivalente a MASTER global).
+            * DONO de uma Empresa NÃO é mais "admin" para fins de
+              autorização cruzada. Ele só pode gerenciar dados da própria
+              empresa — essa decisão agora é responsabilidade dos helpers
+              `_usuario_pode_gerenciar_*` em app.py, que cruzam `empresa_id`
+              do recurso com o do usuário antes de liberar a operação.
+
+        Por que isso mudou:
+            Antes desta correção, qualquer DONO retornava True aqui, o que
+            transformava `is_admin()` numa porta de fundo: helpers de
+            permissão por recurso (Documento, Venda) liberavam ações
+            cross-tenant — DONO da Empresa A conseguia tocar em recursos
+            da Empresa B.
+
+        Returns:
+            bool: True se o usuário é MASTER do SaaS; False caso contrário.
         """
-        if self.username == 'Jhones':
-            return True
         if self.role == 'admin':
             return True
-        perfil_upper = (self.perfil or '').upper()
-        return perfil_upper in (PERFIL_MASTER, PERFIL_DONO)
+        return (self.perfil or '').upper() == PERFIL_MASTER
 
     def __repr__(self):
         return f'<Usuario {self.username} ({self.perfil})>'
@@ -590,6 +602,12 @@ class Documento(db.Model):
     __tablename__ = "documentos"
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    empresa_id = db.Column(
+        db.Integer,
+        db.ForeignKey('empresas.id', ondelete='CASCADE'),
+        nullable=True,  # nullable até a migração popular registros legados; regra de negócio exige preenchido a partir da Fase 2.
+        index=True,
+    )
     url_arquivo = db.Column(db.String(500), nullable=True)  # URL do Cloudinary (armazenamento em nuvem)
     public_id = db.Column(db.String(200), nullable=True, unique=True)  # ID público do Cloudinary (para exclusão)
     caminho_arquivo = db.Column(db.String(500), nullable=True, index=True)
@@ -602,6 +620,8 @@ class Documento(db.Model):
     venda_id = db.Column(db.Integer, db.ForeignKey('vendas.id', ondelete='CASCADE'), nullable=True, index=True)
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True, index=True)
     data_processamento = db.Column(db.Date, default=date.today, nullable=False)  # Quando foi processado
+
+    empresa = db.relationship('Empresa', backref=db.backref('documentos', lazy='dynamic'))
     
     def __repr__(self):
         return f'<Documento {self.public_id or self.id} - Tipo: {self.tipo}>'

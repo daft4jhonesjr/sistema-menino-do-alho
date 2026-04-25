@@ -1427,6 +1427,9 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                         data_vencimento=dados_extraidos.get('data_vencimento'),
                         venda_id=venda_id,
                         usuario_id=usuario_id,
+                        empresa_id=_empresa_id_para_documento(
+                            venda_id=venda_id, fallback_user_id=usuario_id
+                        ),
                         data_processamento=date.today()
                     )
                     db.session.add(documento)
@@ -1544,15 +1547,35 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
     # alcançados pelo loop acima. Esta segunda passagem resolve o vínculo pendente
     # usando apenas os metadados já extraídos (numero_nf, cnpj, etc.) no banco.
     try:
-        docs_sem_arquivo = Documento.query.filter(
+        # Auditoria P0 (A2): escopa Documentos e Vendas pelo tenant atual quando
+        # houver request autenticada para evitar cross-match entre empresas.
+        # Em jobs/scripts sem request context (ex.: cron), a varredura segue
+        # global por compatibilidade — mas o seed de empresa_id em Documento
+        # garante que matches dentro do mesmo número_nf/empresa permaneçam corretos.
+        eid_atual = None
+        try:
+            if getattr(current_user, 'is_authenticated', False):
+                eid_atual = getattr(current_user, 'empresa_id', None)
+        except Exception:
+            eid_atual = None
+
+        docs_query = Documento.query.filter(
             Documento.venda_id.is_(None),
             Documento.numero_nf.isnot(None),
             Documento.numero_nf != '',
-        ).all()
+        )
+        if eid_atual is not None:
+            docs_query = docs_query.filter(
+                or_(Documento.empresa_id == eid_atual, Documento.empresa_id.is_(None))
+            )
+        docs_sem_arquivo = docs_query.all()
 
-        vendas_com_nf_cache = Venda.query.filter(
+        vendas_query = Venda.query.filter(
             Venda.nf.isnot(None), Venda.nf != ''
-        ).options(joinedload(Venda.cliente)).limit(5000).all()
+        )
+        if eid_atual is not None:
+            vendas_query = vendas_query.filter(Venda.empresa_id == eid_atual)
+        vendas_com_nf_cache = vendas_query.options(joinedload(Venda.cliente)).limit(5000).all()
 
         for doc_pendente in docs_sem_arquivo:
             # Pular se existe localmente (já foi processado no loop acima)
@@ -1830,17 +1853,23 @@ def _listar_documentos_recem_chegados():
     via bot/Cloudinary) que o ``_processar_documentos_pendentes`` nunca alcança.
     """
     resultado_processamento = {"sucesso": 0, "falha": 0, "erros": [], "vinculos_novos": 0, "processados": 0}
-    query = Documento.query.filter(
-        Documento.venda_id.is_(None)
-    )
+    # Auditoria P0 (A2): a fila do dashboard é tenant-aware. Apenas documentos
+    # do próprio tenant (ou órfãos legados sem empresa_id) entram na fila.
+    eid_atual = empresa_id_atual()
+    query = Documento.query.filter(Documento.venda_id.is_(None))
+    if eid_atual is not None:
+        query = query.filter(
+            or_(Documento.empresa_id == eid_atual, Documento.empresa_id.is_(None))
+        )
     # Para o Dashboard, documentos órfãos devem ser visíveis independentemente de ownership.
     # Mantemos o parâmetro user_id por compatibilidade, mas sem restringir esta listagem.
     # Limite defensivo para evitar timeout de worker em bases grandes.
     docs = query.order_by(Documento.id.desc()).limit(300).all()
     # Cache da consulta de vendas por NF nesta mesma request (evita N x 5000 scans).
-    vendas_com_nf_cache = Venda.query.filter(
-        Venda.nf.isnot(None), Venda.nf != ''
-    ).options(joinedload(Venda.cliente)).limit(5000).all()
+    vendas_query = Venda.query.filter(Venda.nf.isnot(None), Venda.nf != '')
+    if eid_atual is not None:
+        vendas_query = vendas_query.filter(Venda.empresa_id == eid_atual)
+    vendas_com_nf_cache = vendas_query.options(joinedload(Venda.cliente)).limit(5000).all()
     documentos = []
     for doc in docs:
         diag = _diagnosticar_vinculo_falhou(doc, vendas_com_nf_cache=vendas_com_nf_cache)
@@ -1895,14 +1924,33 @@ def _listar_documentos_recem_chegados():
 
 def _auto_vincular_documentos_pendentes_por_nf(user_id=None):
     """Vincula documentos já salvos no banco (venda_id=None) usando NF extraída.
-    Não bloqueia por existência de outros documentos na venda."""
+
+    Auditoria P0 (A2): escopa Documentos e Vendas pelo tenant atual quando
+    houver request autenticada para evitar matches NF cross-tenant. Em
+    contextos sem request (ex.: cron), a varredura segue global por
+    compatibilidade.
+    """
     resultado = {'vinculados': 0, 'erros': 0}
+    eid_atual = None
+    try:
+        if getattr(current_user, 'is_authenticated', False):
+            eid_atual = getattr(current_user, 'empresa_id', None)
+    except Exception:
+        eid_atual = None
+
     query = Documento.query.filter(Documento.venda_id.is_(None))
     if user_id is not None:
         query = query.filter(Documento.usuario_id == user_id)
+    if eid_atual is not None:
+        query = query.filter(
+            or_(Documento.empresa_id == eid_atual, Documento.empresa_id.is_(None))
+        )
     docs = query.all()
 
-    vendas_com_nf = Venda.query.filter(Venda.nf.isnot(None), Venda.nf != '').limit(5000).all()
+    vendas_query = Venda.query.filter(Venda.nf.isnot(None), Venda.nf != '')
+    if eid_atual is not None:
+        vendas_query = vendas_query.filter(Venda.empresa_id == eid_atual)
+    vendas_com_nf = vendas_query.limit(5000).all()
 
     for doc in docs:
         try:
@@ -2645,7 +2693,7 @@ def _contar_cobrancas_pendentes_visiveis():
         if eid is None:
             return 0
 
-        if current_user.is_admin():
+        if _e_admin_tenant():
             # Caminho rápido para admin: contar via SQL puro usando data_vencimento direta.
             # Vendas sem data_vencimento própria precisariam de JOIN com Documento —
             # aceitamos uma sub-estimativa leve aqui em troca de performance.
@@ -2676,7 +2724,9 @@ def _contar_cobrancas_pendentes_visiveis():
         })
         docs_por_caminho: dict = {}
         if caminhos_boleto:
-            docs_boleto = Documento.query.with_entities(
+            # Auditoria P0 (A2): escopa Documentos pelo tenant — caminho_arquivo
+            # pode coincidir entre empresas e dispararia leitura cross-tenant.
+            docs_boleto = query_documentos_tenant().with_entities(
                 Documento.caminho_arquivo, Documento.data_vencimento
             ).filter(Documento.caminho_arquivo.in_(caminhos_boleto)).all()
             docs_por_caminho = {str(d.caminho_arquivo or '').strip(): d for d in docs_boleto}
@@ -2864,6 +2914,16 @@ def query_tenant(model):
     return model.query.filter_by(empresa_id=eid)
 
 
+def query_documentos_tenant():
+    """Atalho semântico para `query_tenant(Documento)` — usar em rotas que
+    listam/filtram documentos do próprio tenant após a auditoria P0 (A2).
+
+    Garante que QUALQUER consulta sobre Documento numa rota operacional
+    seja restrita ao empresa_id do usuário atual.
+    """
+    return query_tenant(Documento)
+
+
 def _is_safe_next_url(target):
     """Evita open redirect: só permite redirecionamentos internos para o mesmo host."""
     if not target:
@@ -2873,44 +2933,166 @@ def _is_safe_next_url(target):
     return test_url.scheme in ('http', 'https') and ref_url.netloc == test_url.netloc
 
 
-def _usuario_pode_gerenciar_documento(documento):
-    """Permissão por recurso: admin ou dono explícito do documento."""
-    if current_user.is_admin():
+def _empresa_id_para_documento(venda_id=None, fallback_user_id=None):
+    """Resolve o `empresa_id` que deve ser gravado num novo Documento.
+
+    Ordem de prioridade:
+        1. `current_user.empresa_id` se houver request autenticada (caminho
+           normal: rotas operacionais com @tenant_required).
+        2. Empresa da Venda à qual o documento será vinculado (cobre o
+           pipeline de processamento de PDFs que pode rodar fora do tenant
+           do uploader — ex.: bot/cron usando user_id_forcado).
+        3. Empresa do `fallback_user_id` (caminho de scripts/bots que
+           passam um usuário canônico do tenant).
+        4. Primeira Empresa ativa cadastrada (último recurso para
+           preservar o dado histórico em vez de criar Documento órfão).
+
+    Returns:
+        int | None: empresa_id resolvido; None apenas em ambientes vazios
+        (sem nenhuma Empresa cadastrada) — caso defensivo.
+    """
+    eid = None
+    try:
+        if getattr(current_user, 'is_authenticated', False):
+            eid = getattr(current_user, 'empresa_id', None)
+    except Exception:
+        eid = None
+    if eid:
+        return int(eid)
+    if venda_id:
+        try:
+            v = Venda.query.with_entities(Venda.empresa_id).filter_by(id=int(venda_id)).first()
+            if v and v.empresa_id:
+                return int(v.empresa_id)
+        except Exception:
+            db.session.rollback()
+    if fallback_user_id:
+        try:
+            u = Usuario.query.with_entities(Usuario.empresa_id).filter_by(id=int(fallback_user_id)).first()
+            if u and u.empresa_id:
+                return int(u.empresa_id)
+        except Exception:
+            db.session.rollback()
+    try:
+        empresa = Empresa.query.filter_by(ativo=True).order_by(Empresa.id.asc()).first()
+        if empresa:
+            return int(empresa.id)
+    except Exception:
+        db.session.rollback()
+    return None
+
+
+def _e_admin_tenant():
+    """True se o usuário atual é admin DENTRO do próprio tenant.
+
+    Inclui MASTER (admin global do SaaS) e DONO da empresa atual. NÃO confere
+    nada cross-tenant: para isso, combine com `_mesmo_tenant(recurso)` ou use
+    `query_tenant()`.
+
+    Use este helper em rotas que ANTES contavam com `current_user.is_admin()`
+    para liberar visões/operações administrativas DO TENANT (relatórios,
+    fast-paths SQL, listagens completas dentro do tenant). Após a auditoria,
+    `is_admin()` virou MASTER-only; este helper preserva o comportamento
+    administrativo do DONO sem reabrir a brecha cross-tenant.
+    """
+    if not getattr(current_user, 'is_authenticated', False):
+        return False
+    if getattr(current_user, 'is_master', lambda: False)():
         return True
+    return getattr(current_user, 'is_dono', lambda: False)()
+
+
+def _mesmo_tenant(recurso):
+    """Compara o empresa_id do recurso com o empresa_id do usuário atual.
+
+    Multi-tenant guard: a checagem PRIMORDIAL antes de qualquer outra regra
+    de permissão por recurso. Se o recurso pertence a outra empresa, bloqueia
+    imediatamente — nem mesmo um DONO consegue tocar dados de tenant alheio.
+
+    Regras:
+        * recurso é None ............... retorna False (defensivo).
+        * recurso.empresa_id é None .... retorna True (legado órfão; será
+          adotado pela própria operação ou tratado pelos helpers seed).
+        * empresa_id bate com usuário .. retorna True.
+        * caso contrário ............... retorna False (cross-tenant).
+    """
+    if recurso is None:
+        return False
+    eid_recurso = getattr(recurso, 'empresa_id', None)
+    if eid_recurso is None:
+        # Legado pré-multi-tenant: deixa passar; criação/migration popula depois.
+        return True
+    eid_usuario = getattr(current_user, 'empresa_id', None)
+    if eid_usuario is None:
+        return False
+    return int(eid_recurso) == int(eid_usuario)
+
+
+def _usuario_pode_gerenciar_documento(documento):
+    """Permissão por recurso para Documento, blindada por tenant.
+
+    Ordem de checagem (Fase 2 — pós auditoria P0):
+        1. MASTER do SaaS: passe livre (única exceção global).
+        2. Documento de OUTRA empresa: bloqueio imediato. Nem DONO de tenant
+           alheio toca aqui — `is_admin()` agora só é True para MASTER.
+        3. Dono/Funcionário do mesmo tenant:
+              - DONO da empresa: pode gerenciar qualquer documento do tenant.
+              - FUNCIONARIO: só gerencia documentos próprios (usuario_id) ou
+                documentos órfãos (sem usuario_id) para preservar o fluxo
+                operacional legado.
+    """
     if documento is None:
         return False
-    return getattr(documento, 'usuario_id', None) == getattr(current_user, 'id', None)
+    # 1) MASTER passa livre.
+    if getattr(current_user, 'is_master', lambda: False)():
+        return True
+    # 2) Guard cross-tenant: bloqueia ANTES de qualquer outra checagem.
+    if not _mesmo_tenant(documento):
+        return False
+    # 3) DONO do tenant gerencia tudo dentro da própria empresa.
+    if getattr(current_user, 'is_dono', lambda: False)():
+        return True
+    # 4) FUNCIONARIO: ownership explícito ou documento órfão (legado).
+    uid = getattr(current_user, 'id', None)
+    dono_doc = getattr(documento, 'usuario_id', None)
+    return dono_doc == uid or dono_doc is None
 
 
 def _usuario_pode_gerenciar_venda(venda):
-    """Permissão por recurso para vendas com fallback seguro para legado órfão.
+    """Permissão por recurso para Venda, blindada por tenant.
 
-    Regras:
-    - Admin sempre pode.
-    - Se houver documento(s) vinculado(s) com dono explícito, só o dono pode.
-    - Se a venda estiver órfã (sem documentos ou só com documentos sem usuario_id), permite operação.
+    Mesma ordem do `_usuario_pode_gerenciar_documento`:
+        1. MASTER passa livre.
+        2. Venda de outra empresa => bloqueio imediato.
+        3. DONO do tenant => libera tudo dentro do próprio tenant.
+        4. FUNCIONARIO => libera se for venda órfã (sem documentos com dono)
+           ou se houver documento explicitamente associado a ele.
     """
-    if current_user.is_admin():
-        return True
     if venda is None:
         return False
-    docs = getattr(venda, 'documentos', None) or []
-    uid = getattr(current_user, 'id', None)
-    if not docs:
-        # Legado: venda antiga sem vínculo de documento.
+    # 1) MASTER.
+    if getattr(current_user, 'is_master', lambda: False)():
         return True
-
-    # Se já houver owner explícito no documento, só ele pode gerenciar.
+    # 2) Guard cross-tenant.
+    if not _mesmo_tenant(venda):
+        return False
+    # 3) DONO do tenant: livre dentro da própria empresa.
+    if getattr(current_user, 'is_dono', lambda: False)():
+        return True
+    # 4) FUNCIONARIO: regra de ownership operacional via documentos.
+    uid = getattr(current_user, 'id', None)
+    docs = getattr(venda, 'documentos', None) or []
+    if not docs:
+        # Legado: venda antiga sem vínculo de documento dentro do mesmo tenant.
+        return True
     if any(getattr(d, 'usuario_id', None) == uid for d in docs):
         return True
-
-    # Fallback controlado: todos sem dono definido => permite gestão operacional.
     return all(getattr(d, 'usuario_id', None) is None for d in docs)
 
 
 def _assumir_ownership_venda_orfa(venda):
     """Em vendas órfãs, atribui ao usuário atual os documentos sem dono."""
-    if venda is None or current_user.is_admin():
+    if venda is None or _e_admin_tenant():
         return 0
     docs = getattr(venda, 'documentos', None) or []
     uid = getattr(current_user, 'id', None)
@@ -3053,6 +3235,60 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
         try:
             Documento.__table__.create(bind=db.engine, checkfirst=True)
             db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
+        # Migração P0 (Auditoria — A2): adicionar empresa_id em documentos.
+        # Faz seed retroativo a partir de Venda; órfãos vão para a primeira
+        # empresa existente para preservar o dado histórico sem deixar
+        # registros invisíveis em produção. Idempotente.
+        try:
+            criou_coluna = _adicionar_coluna_se_ausente(
+                'documentos', 'empresa_id', 'INTEGER REFERENCES empresas(id)'
+            )
+        except (OperationalError, Exception):
+            db.session.rollback()
+            # Fallback para SQLite legado que não aceita REFERENCES inline.
+            try:
+                criou_coluna = _adicionar_coluna_se_ausente(
+                    'documentos', 'empresa_id', 'INTEGER'
+                )
+            except Exception:
+                db.session.rollback()
+                criou_coluna = False
+        try:
+            db.session.execute(text(
+                'CREATE INDEX IF NOT EXISTS ix_documentos_empresa_id ON documentos(empresa_id)'
+            ))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
+        try:
+            # Seed via Venda: documentos vinculados herdam o tenant da Venda.
+            db.session.execute(text("""
+                UPDATE documentos
+                   SET empresa_id = (
+                       SELECT v.empresa_id FROM vendas v WHERE v.id = documentos.venda_id
+                   )
+                 WHERE documentos.empresa_id IS NULL
+                   AND documentos.venda_id IS NOT NULL
+            """))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
+        try:
+            # Órfãos legados: caem no primeiro tenant disponível para
+            # preservar o dado. Em produção, cuidar disso manualmente
+            # antes de o segundo cliente entrar.
+            empresa_fallback = db.session.execute(
+                text('SELECT id FROM empresas ORDER BY id ASC LIMIT 1')
+            ).scalar()
+            if empresa_fallback:
+                db.session.execute(text("""
+                    UPDATE documentos
+                       SET empresa_id = :eid
+                     WHERE empresa_id IS NULL
+                """), {"eid": int(empresa_fallback)})
+                db.session.commit()
         except (OperationalError, Exception):
             db.session.rollback()
         # Migração: caminho_pdf em vendas (PDF vinculado) — apenas para DBs antigos
@@ -4228,14 +4464,15 @@ def dashboard():
     else:
         erros = []
     
-    # Estatísticas de saúde do sistema de documentos
-    total_documentos = Documento.query.count()
-    documentos_vinculados = Documento.query.filter(Documento.venda_id.isnot(None)).count()
+    # Estatísticas de saúde do sistema de documentos — tenant-aware (P0 A2).
+    docs_tenant = query_documentos_tenant()
+    total_documentos = docs_tenant.count()
+    documentos_vinculados = docs_tenant.filter(Documento.venda_id.isnot(None)).count()
     documentos_sem_vinculo = total_documentos - documentos_vinculados
-    total_boletos = Documento.query.filter(Documento.tipo == 'BOLETO').count()
-    total_notas = Documento.query.filter(Documento.tipo == 'NOTA_FISCAL').count()
-    boletos_vinculados = Documento.query.filter(Documento.tipo == 'BOLETO', Documento.venda_id.isnot(None)).count()
-    notas_vinculadas = Documento.query.filter(Documento.tipo == 'NOTA_FISCAL', Documento.venda_id.isnot(None)).count()
+    total_boletos = docs_tenant.filter(Documento.tipo == 'BOLETO').count()
+    total_notas = docs_tenant.filter(Documento.tipo == 'NOTA_FISCAL').count()
+    boletos_vinculados = docs_tenant.filter(Documento.tipo == 'BOLETO', Documento.venda_id.isnot(None)).count()
+    notas_vinculadas = docs_tenant.filter(Documento.tipo == 'NOTA_FISCAL', Documento.venda_id.isnot(None)).count()
     
     if vinculos_novos > 0:
         flash(f"✅ Sucesso: {vinculos_novos} documento(s) vinculado(s) automaticamente pela NF.", 'success')
@@ -7129,10 +7366,18 @@ def api_dashboard_detalhes(filtro):
 
 @app.route('/api/dashboard/documentos_pendentes/resumo', methods=['GET'])
 @login_required
+@tenant_required
 def api_dashboard_documentos_pendentes_resumo():
     """Retorna resumo leve da fila de documentos pendentes para polling do dashboard."""
     try:
+        # Auditoria P0 (A2): escopa pela empresa do usuário; órfãos legados
+        # entram para preservar a fila do dashboard até serem adotados.
+        eid_atual = empresa_id_atual()
         base_query = Documento.query.filter(Documento.venda_id.is_(None))
+        if eid_atual is not None:
+            base_query = base_query.filter(
+                or_(Documento.empresa_id == eid_atual, Documento.empresa_id.is_(None))
+            )
         total = base_query.count()
         ultimo = base_query.with_entities(Documento.id).order_by(Documento.id.desc()).first()
         ultimo_id = int(ultimo[0]) if ultimo else None
@@ -7184,7 +7429,7 @@ def api_cobrancas_pendentes():
         ).all()
         total = Decimal('0.00')
         for v in vendas:
-            if not current_user.is_admin() and not _usuario_pode_gerenciar_venda(v):
+            if not _e_admin_tenant() and not _usuario_pode_gerenciar_venda(v):
                 continue
             total += Decimal(str(v.calcular_total() or Decimal('0.00'))) - Decimal(str(getattr(v, 'valor_pago', None) or Decimal('0.00')))
         return jsonify({'has_pendentes': total > Decimal('0.00'), 'total': float(total)})
@@ -7463,7 +7708,12 @@ def listar_vendas():
     docs_por_venda = {}
     all_venda_ids = [vv.id for pedido in pedidos_agrupados for vv in pedido.get('vendas', [])]
     if all_venda_ids:
-        docs_vinculados = Documento.query.filter(Documento.venda_id.in_(all_venda_ids)).order_by(desc(Documento.id)).all()
+        # Auditoria P0 (A2): escopa explicitamente pelo tenant — embora venda_ids
+        # já venham do tenant atual, o filtro extra garante a invariante mesmo
+        # se um pedido futuro mudar a origem de all_venda_ids.
+        docs_vinculados = query_documentos_tenant().filter(
+            Documento.venda_id.in_(all_venda_ids)
+        ).order_by(desc(Documento.id)).all()
         for doc in docs_vinculados:
             docs_por_venda.setdefault(doc.venda_id, []).append(doc)
 
@@ -7484,7 +7734,8 @@ def listar_vendas():
     _todos_caminhos = _todos_caminhos_boleto | _todos_caminhos_nf
     _docs_por_caminho: dict = {}
     if _todos_caminhos:
-        _docs_pre = Documento.query.filter(
+        # Auditoria P0 (A2): consulta restrita ao tenant.
+        _docs_pre = query_documentos_tenant().filter(
             Documento.caminho_arquivo.in_(list(_todos_caminhos))
         ).all()
         _docs_por_caminho = {(d.caminho_arquivo or '').strip(): d for d in _docs_pre}
@@ -7792,7 +8043,7 @@ def exportar_relatorio_vendas():
         query = query.filter(extract('month', Venda.data_venda) == filtro_mes)
 
     vendas = query.order_by(Venda.data_venda.desc(), Venda.id.desc()).all()
-    if not current_user.is_admin():
+    if not _e_admin_tenant():
         vendas = [v for v in vendas if _usuario_pode_gerenciar_venda(v)]
 
     def _fmt_num(valor):
@@ -7999,7 +8250,7 @@ def toggle_entrega(venda_id):
         ids = [venda_id]
 
     venda_ref = query_tenant(Venda).filter_by(id=ids[0]).first_or_404()
-    if not current_user.is_admin() and not _usuario_pode_gerenciar_venda(venda_ref):
+    if not _e_admin_tenant() and not _usuario_pode_gerenciar_venda(venda_ref):
         flash('Você não tem permissão para alterar o status desta venda.', 'error')
         return redirect(url_for('logistica'))
     status = request.form.get('status', request.args.get('status', 'PENDENTE'))
@@ -8038,7 +8289,7 @@ def logistica_bulk_update():
 
         # Verificação de ownership em memória — Venda não possui usuario_id direto;
         # o controle é feito via _usuario_pode_gerenciar_venda() que inspeciona os Documentos vinculados.
-        if current_user.is_admin():
+        if _e_admin_tenant():
             ids_permitidos = [v.id for v in vendas_solicitadas]
         else:
             ids_permitidos = [
@@ -9001,9 +9252,10 @@ def recibo_venda(id):
 
 @app.route('/documento/visualizar/<int:id>')
 @login_required
+@tenant_required
 def visualizar_documento(id):
     """Redireciona para o PDF na nuvem (Cloudinary)."""
-    documento = Documento.query.get_or_404(id)
+    documento = query_documentos_tenant().filter_by(id=id).first_or_404()
     if not _usuario_pode_gerenciar_documento(documento):
         return _resposta_sem_permissao()
     if documento.url_arquivo:
@@ -9029,11 +9281,13 @@ def _extrair_texto_raw_pdfplumber(arquivo_pdf):
 
 @app.route('/arquivos/<int:id>/debug_texto', methods=['GET'])
 @login_required
+@master_required
 def debug_texto_arquivo(id):
-    """Raio-X: exibe o texto bruto extraído do PDF para depuração de regex."""
-    if not current_user.is_admin():
-        return "<html><body><h3>Acesso negado</h3><p>Somente administradores podem usar o modo Debug.</p></body></html>", 403
+    """Raio-X: exibe o texto bruto extraído do PDF para depuração de regex.
 
+    MASTER-only por design: a ferramenta acessa qualquer documento do SaaS
+    para debug de OCR/regex; abrir para DONO reabriria a brecha cross-tenant.
+    """
     documento = Documento.query.get_or_404(id)
 
     try:
@@ -9089,10 +9343,11 @@ def debug_texto_arquivo(id):
 
 @app.route('/arquivo/<int:id>/deletar', methods=['POST'])
 @login_required
+@tenant_required
 def deletar_arquivo_dashboard(id):
     """Exclui documento com tolerância a falhas na remoção física."""
     doc_id = int(id)
-    documento = Documento.query.get_or_404(doc_id)
+    documento = query_documentos_tenant().filter_by(id=doc_id).first_or_404()
     if not _usuario_pode_gerenciar_documento(documento):
         return jsonify(ok=False, mensagem='Acesso negado.'), 403
 
@@ -9127,6 +9382,7 @@ def deletar_arquivo_dashboard(id):
 
 @app.route('/arquivos/deletar_em_massa', methods=['POST'])
 @login_required
+@tenant_required
 def deletar_arquivos_massa():
     """Exclui múltiplos documentos (Cloudinary + banco) da seção de documentos recentes."""
     data = request.get_json(silent=True) or {}
@@ -9143,7 +9399,7 @@ def deletar_arquivos_massa():
     if not ids:
         return jsonify(ok=False, status='erro', mensagem='Nenhum ID válido informado.'), 400
 
-    documentos = Documento.query.filter(Documento.id.in_(ids)).all()
+    documentos = query_documentos_tenant().filter(Documento.id.in_(ids)).all()
     if not documentos:
         return jsonify(ok=False, status='erro', mensagem='Nenhum documento encontrado para exclusão.'), 404
     if any(not _usuario_pode_gerenciar_documento(doc) for doc in documentos):
@@ -9177,7 +9433,7 @@ def ver_boleto_venda(id):
     if not path:
         flash('Boleto não vinculado a este pedido.', 'error')
         return redirect(url_for('listar_vendas'))
-    doc = Documento.query.filter(or_(Documento.caminho_arquivo == path, Documento.url_arquivo == path)).first()
+    doc = query_documentos_tenant().filter(or_(Documento.caminho_arquivo == path, Documento.url_arquivo == path)).first()
     if doc and doc.url_arquivo:
         return redirect(doc.url_arquivo)
     # Bloquear path traversal: normalizar e garantir prefixo de diretório permitido
@@ -9241,7 +9497,7 @@ def ver_nf_venda(id):
         flash('Nota fiscal não vinculada a este pedido.', 'error')
         return redirect(url_for('listar_vendas'))
     
-    doc = Documento.query.filter(or_(Documento.caminho_arquivo == path, Documento.url_arquivo == path)).first()
+    doc = query_documentos_tenant().filter(or_(Documento.caminho_arquivo == path, Documento.url_arquivo == path)).first()
     if not doc:
         venda.caminho_nf = None
         db.session.commit()
@@ -9277,6 +9533,7 @@ def _token_upload_required(f):
 @csrf.exempt
 @app.route('/upload', methods=['POST'])
 @login_required
+@tenant_required
 @_token_upload_required
 def upload_documento():
     """
@@ -9325,6 +9582,7 @@ def upload_documento():
                 caminho_arquivo=caminho_relativo,
                 tipo=tipo_doc,
                 usuario_id=uid,
+                empresa_id=_empresa_id_para_documento(fallback_user_id=uid),
                 venda_id=None,
                 data_processamento=date.today()
             )
@@ -9410,6 +9668,7 @@ def api_receber_automatico():
             numero_nf=(request.form.get('numero_nf') or request.form.get('nf') or None),
             razao_social=(request.form.get('razao_social') or request.form.get('pagador') or None),
             usuario_id=user_id,
+            empresa_id=_empresa_id_para_documento(fallback_user_id=user_id),
             venda_id=None,
             data_processamento=date.today()
         )
@@ -9494,6 +9753,7 @@ def api_bot_upload():
                 caminho_arquivo=caminho_relativo,
                 tipo=tipo_doc,
                 usuario_id=user_id,
+                empresa_id=_empresa_id_para_documento(fallback_user_id=user_id),
                 venda_id=None,
                 data_processamento=date.today()
             )
@@ -9519,6 +9779,7 @@ def api_bot_upload():
 
 @app.route('/processar_documentos', methods=['POST'])
 @login_required
+@tenant_required
 def processar_documentos():
     """Rota para processar documentos manualmente (opcional, via AJAX)."""
     resultado = _processar_documentos_pendentes()
@@ -9532,6 +9793,7 @@ def processar_documentos():
 
 @app.route('/reprocessar_boletos', methods=['POST'])
 @login_required
+@tenant_required
 def reprocessar_boletos():
     """Re-lê os PDFs em documentos_entrada/boletos e atualiza numero_nf (e demais campos) nos Documentos."""
     r = _reprocessar_boletos_atualizar_extracao()
@@ -9543,13 +9805,18 @@ def reprocessar_boletos():
 
 @app.route('/admin/arquivos')
 @login_required
+@tenant_required
 def admin_arquivos():
-    """Lista todos os documentos salvos no banco, ordenados pelos mais recentes."""
-    if not current_user.is_admin():
+    """Lista os documentos do tenant atual, ordenados pelos mais recentes.
+
+    Restrito a admins do tenant (DONO/MASTER) — funcionário comum vê apenas
+    a fila do dashboard com os documentos atribuídos a ele.
+    """
+    if not _e_admin_tenant():
         flash('Acesso negado. Apenas administradores podem gerenciar arquivos.', 'error')
         return redirect(url_for('dashboard'))
     busca = (request.args.get('busca') or '').strip()
-    query = Documento.query
+    query = query_documentos_tenant()
     if busca:
         termo = f"%{busca}%"
         filtros = [
@@ -9582,8 +9849,9 @@ def admin_arquivos():
 
 @app.route('/arquivos/upload_massa', methods=['POST'])
 @login_required
+@tenant_required
 def upload_massa_arquivos():
-    if not current_user.is_admin():
+    if not _e_admin_tenant():
         return jsonify({'success': False, 'error': 'Apenas administradores podem importar arquivos.'}), 403
 
     arquivos = request.files.getlist('arquivos[]')
@@ -9641,9 +9909,14 @@ def upload_massa_arquivos():
 
 @app.route('/admin/arquivos/deletar_massa', methods=['POST'])
 @login_required
+@tenant_required
 def admin_arquivos_deletar_massa():
-    """Exclusão em massa de documentos. Recebe lista de IDs via form ou JSON."""
-    if not current_user.is_admin():
+    """Exclusão em massa de documentos do tenant. Recebe lista de IDs via form ou JSON.
+
+    Pós-auditoria P0: filtra exclusivamente pelo tenant do usuário (DONO/MASTER).
+    Funcionário comum não tem permissão administrativa de massa.
+    """
+    if not _e_admin_tenant():
         flash('Acesso negado. Apenas administradores podem gerenciar arquivos.', 'error')
         return redirect(url_for('dashboard'))
     ids_raw = request.form.getlist('ids[]') or request.form.getlist('ids') or (request.get_json(silent=True) or {}).get('ids', [])
@@ -9659,7 +9932,7 @@ def admin_arquivos_deletar_massa():
         flash('Nenhum arquivo selecionado.', 'warning')
         return redirect(url_for('admin_arquivos'))
     try:
-        docs = Documento.query.filter(Documento.id.in_(ids)).all()
+        docs = query_documentos_tenant().filter(Documento.id.in_(ids)).all()
         for d in docs:
             if d.public_id and (os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL')):
                 try:
@@ -9678,14 +9951,15 @@ def admin_arquivos_deletar_massa():
 
 @app.route('/admin/reprocessar-vencimentos', methods=['GET', 'POST'])
 @login_required
+@master_required
 def admin_reprocessar_vencimentos():
     """Reprocessa todos os PDFs de boletos vinculados às vendas para extrair/atualizar data_vencimento.
+
+    MASTER-only: a operação varre TODOS os boletos do SaaS para extrair
+    data_vencimento; abrir para DONO reabriria a brecha cross-tenant.
     GET: exibe página de confirmação com preview
     POST: executa o reprocessamento
     """
-    if not current_user.is_admin():
-        flash('Acesso restrito a administradores.', 'error')
-        return redirect(url_for('dashboard'))
     
     if request.method == 'GET':
         # Preview: quantas vendas com boleto existem
@@ -9773,9 +10047,10 @@ def admin_reprocessar_vencimentos():
 
 @app.route('/documento/<int:id>/vincular', methods=['POST'])
 @login_required
+@tenant_required
 def vincular_documento_venda(id):
     """Associa o documento a um pedido (venda). Espera venda_id (primeira_venda_id do pedido)."""
-    documento = Documento.query.get_or_404(id)
+    documento = query_documentos_tenant().filter_by(id=id).first_or_404()
     if not _usuario_pode_gerenciar_documento(documento):
         return _resposta_sem_permissao()
     venda_id = request.form.get('venda_id') or (request.get_json(silent=True) or {}).get('venda_id')
@@ -9791,7 +10066,7 @@ def vincular_documento_venda(id):
             return jsonify(ok=False, mensagem='venda_id inválido.'), 400
         flash('Pedido inválido.', 'error')
         return redirect(url_for('dashboard'))
-    venda = Venda.query.get(venda_id)
+    venda = query_tenant(Venda).filter_by(id=venda_id).first()
     if not venda:
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return jsonify(ok=False, mensagem='Pedido não encontrado.'), 404
@@ -10195,10 +10470,12 @@ def api_produto(id):
 
 @app.route('/admin/raio_x', methods=['GET'])
 @login_required
+@master_required
 def raio_x():
-    """Diagnóstico: últimos 5 documentos cadastrados e ID do usuário atual."""
-    if not current_user.is_admin():
-        return '<html><body><p>Acesso negado.</p></body></html>', 403
+    """Diagnóstico: últimos 5 documentos cadastrados e ID do usuário atual.
+
+    MASTER-only: a query lê documentos cross-tenant para diagnóstico.
+    """
     docs = Documento.query.order_by(Documento.id.desc()).limit(5).all()
     html = '''<!DOCTYPE html>
 <html lang="pt-BR">
@@ -10224,11 +10501,12 @@ def raio_x():
 
 @app.route('/admin/resgatar_orfaos', methods=['POST'])
 @login_required
+@master_required
 def resgatar_orfaos():
-    """Atribui ao usuário atual todos os documentos com usuario_id NULL (órfãos)."""
-    if not current_user.is_admin():
-        flash('Acesso negado. Apenas administradores podem executar esta ação.', 'error')
-        return redirect(url_for('dashboard'))
+    """Atribui ao usuário atual (MASTER) todos os documentos com usuario_id NULL.
+
+    MASTER-only: ação varre documentos sem owner em todo o SaaS.
+    """
     db.session.rollback()
     try:
         orfaos = Documento.query.filter(Documento.usuario_id.is_(None)).all()
@@ -10245,10 +10523,12 @@ def resgatar_orfaos():
 
 @app.route('/admin/forcar_leitura_pasta', methods=['POST'])
 @login_required
+@master_required
 def forcar_leitura_pasta():
-    """Rota de emergência: lê PDFs em boletos e notas_fiscais, cria registros Documento para os que não existem no banco."""
-    if not current_user.is_admin():
-        return jsonify({'erro': 'Acesso negado. Apenas administradores.'}), 403
+    """Rota de emergência: lê PDFs em boletos e notas_fiscais, cria registros Documento para os que não existem no banco.
+
+    MASTER-only: opera diretamente sobre o filesystem do servidor.
+    """
     db.session.rollback()
     base_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'documentos_entrada')
     pastas = {
@@ -10282,6 +10562,7 @@ def forcar_leitura_pasta():
                         public_id=public_id,
                         tipo=tipo,
                         usuario_id=current_user.id,
+                        empresa_id=_empresa_id_para_documento(fallback_user_id=current_user.id),
                         data_processamento=date.today()
                     )
                     db.session.add(doc)
@@ -10309,10 +10590,12 @@ def forcar_leitura_pasta():
 
 @app.route('/admin/limpar_fantasmas', methods=['POST'])
 @login_required
+@master_required
 def limpar_fantasmas():
-    """Remove da tabela Documento os registros cujo arquivo físico não existe mais."""
-    if not current_user.is_admin():
-        return jsonify({'erro': 'Acesso negado. Apenas administradores.'}), 403
+    """Remove da tabela Documento os registros cujo arquivo físico não existe mais.
+
+    MASTER-only: limpeza global do banco/filesystem.
+    """
     db.session.rollback()
     base_path = os.path.dirname(os.path.abspath(__file__))
     removidos = 0
@@ -10332,13 +10615,14 @@ def limpar_fantasmas():
 
 @app.route('/admin/limpar_vinculos_quebrados', methods=['POST'])
 @login_required
+@master_required
 def limpar_vinculos_quebrados():
     """Limpa todos os vínculos quebrados:
     1. caminho_boleto/caminho_nf que apontam para documentos inexistentes
-    2. Documentos com venda_id apontando para vendas inexistentes"""
-    if not current_user.is_admin():
-        flash('Acesso negado. Apenas administradores podem executar esta ação.', 'error')
-        return redirect(url_for('dashboard'))
+    2. Documentos com venda_id apontando para vendas inexistentes
+
+    MASTER-only: operação de manutenção global.
+    """
     
     try:
         limpos_boleto = 0
@@ -10387,10 +10671,12 @@ def limpar_vinculos_quebrados():
 
 @app.route('/debug/testar_log', methods=['POST'])
 @login_required
+@master_required
 def debug_testar_log():
-    """Endpoint de debug para testar criação de arquivo de log"""
-    if not current_user.is_admin():
-        return jsonify({'sucesso': False, 'erro': 'Acesso negado.'}), 403
+    """Endpoint de debug para testar criação de arquivo de log.
+
+    MASTER-only: escreve arquivo no filesystem do servidor.
+    """
     try:
         log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'vinculo_detalhado.log')
         with open(log_path, 'w', encoding='utf-8') as f:
@@ -11005,8 +11291,16 @@ def enviar_frase_diaria():
 
 @app.route('/api/backup/excel')
 @login_required
+@master_required
 def backup_excel():
-    """Cofre de Dados: exporta Vendas, Clientes, Produtos e Caixa para download CSV."""
+    """Cofre de Dados: exporta Vendas, Clientes, Produtos e Caixa para download CSV.
+
+    MASTER-only (auditoria P0): a função `gerar_arquivo_backup_csv()` consulta
+    Venda/Cliente/Produto/LancamentoCaixa SEM filtro de tenant — abrir para
+    DONO permitiria vazar dados de outros tenants. A versão tenant-aware
+    deve ser construída em separado quando for necessário expor a feature
+    para administradores de empresa.
+    """
     csv_bytes, nome_arquivo = gerar_arquivo_backup_csv()
     return send_file(
         io.BytesIO(csv_bytes),
