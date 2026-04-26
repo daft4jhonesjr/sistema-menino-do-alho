@@ -19,6 +19,8 @@ from flask_login import login_required
 from werkzeug.security import generate_password_hash
 
 from models import db, Empresa, Usuario, PERFIL_DONO
+from services.auth_utils import master_required
+from services.db_utils import _safe_db_commit
 
 
 master_bp = Blueprint('master', __name__)
@@ -66,8 +68,6 @@ def _master_validar_form_nova_empresa(form):
 @login_required
 def master_admin():
     """Painel Super Admin: cria novas Empresas + Dono inicial."""
-    from app import master_required
-
     @master_required
     def _master_admin():
         if request.method == 'POST':
@@ -128,8 +128,6 @@ def master_admin():
 @login_required
 def master_toggle_empresa_ativo(empresa_id):
     """Ativa/desativa um tenant (suspensão por inadimplência etc)."""
-    from app import master_required, _safe_db_commit
-
     @master_required
     def _toggle():
         empresa = Empresa.query.get_or_404(empresa_id)

@@ -59,6 +59,27 @@ from werkzeug.utils import secure_filename
 import cloudinary.uploader
 
 from models import db, Produto, ProdutoFoto, Fornecedor, TipoProduto, Venda
+from services.auth_utils import (
+    tenant_required, admin_required, _is_ajax,
+)
+from services.db_utils import query_tenant, empresa_id_atual, _safe_db_commit
+from services.cache_utils import limpar_cache_dashboard
+from services.config_helpers import (
+    registrar_log, _EXTERNAL_TIMEOUT,
+)
+from services.files_utils import (
+    _arquivo_imagem_permitido, _deletar_cloudinary_seguro,
+    _cloudinary_thumb_url,
+)
+from services.vendas_services import _produto_com_lock
+from services.csv_utils import (
+    _msg_linha, _strip_quotes, _normalizar_nome_coluna,
+    _normalizar_nome_busca, _parse_preco, _parse_quantidade,
+    _parse_data_flex, COLUNA_ARQUIVO_PARA_BANCO,
+)
+# ``_limpar_valor_moeda`` foi extraído para ``routes/caixa.py`` (helper
+# nativo do livro caixa, mas reutilizado aqui em formulários monetários).
+from routes.caixa import _limpar_valor_moeda
 
 
 produtos_bp = Blueprint('produtos', __name__)
@@ -75,8 +96,6 @@ def _exigir_tenant_em_todas_rotas():
     para centralizar as regras de redirecionamento (MASTER → /master-admin,
     sem empresa → /login com flash).
     """
-    from app import tenant_required
-
     @tenant_required
     def _ok():
         return None
@@ -272,8 +291,6 @@ def listar_produtos():
 
     Query params: ordem_data (crescente|decrescente), pagina, por_pagina.
     """
-    from app import query_tenant
-
     ano_ativo = session.get('ano_ativo', datetime.now().year)
 
     ordem_data = (request.args.get('ordem_data') or 'crescente').strip().lower()
@@ -513,8 +530,6 @@ def listar_produtos():
 
 @produtos_bp.route('/produtos/exportar_relatorio', methods=['POST'])
 def exportar_relatorio_produtos():
-    from app import query_tenant
-
     ano_ativo = session.get('ano_ativo', datetime.now().year)
     filtro_fornecedor = (request.form.get('filtro_fornecedor') or 'TODOS').strip().upper()
     filtro_tipo = (request.form.get('filtro_tipo') or 'TODOS').strip().upper()
@@ -676,8 +691,6 @@ def exportar_relatorio_produtos():
 
 @produtos_bp.route('/fornecedores/novo', methods=['POST'])
 def novo_fornecedor():
-    from app import query_tenant, empresa_id_atual
-
     nome = str(request.form.get('nome') or '').strip().upper()
     razao_social = str(request.form.get('razao_social') or '').strip().upper() or None
     cnpj = str(request.form.get('cnpj') or '').strip() or None
@@ -713,8 +726,6 @@ def novo_fornecedor():
 
 @produtos_bp.route('/fornecedores/<int:id>/editar', methods=['POST'])
 def editar_fornecedor(id):
-    from app import query_tenant
-
     fornecedor = query_tenant(Fornecedor).filter_by(id=id).first_or_404()
     nome = str(request.form.get('nome') or '').strip().upper()
     razao_social = str(request.form.get('razao_social') or '').strip().upper() or None
@@ -758,8 +769,6 @@ def editar_fornecedor(id):
 
 @produtos_bp.route('/fornecedores/<int:id>/editar_ajax', methods=['POST'])
 def editar_fornecedor_ajax(id):
-    from app import query_tenant
-
     fornecedor = query_tenant(Fornecedor).filter_by(id=id).first_or_404()
     try:
         novo_nome = str(request.form.get('nome') or '').strip().upper()
@@ -797,8 +806,6 @@ def editar_fornecedor_ajax(id):
 
 @produtos_bp.route('/fornecedores/<int:id>/excluir', methods=['POST'])
 def excluir_fornecedor(id):
-    from app import query_tenant
-
     fornecedor = query_tenant(Fornecedor).filter_by(id=id).first_or_404()
     try:
         db.session.delete(fornecedor)
@@ -815,8 +822,6 @@ def excluir_fornecedor(id):
 
 @produtos_bp.route('/tipos/novo', methods=['POST'])
 def novo_tipo_produto():
-    from app import query_tenant, empresa_id_atual
-
     nome = str(request.form.get('nome') or '').strip().upper()
 
     if not nome:
@@ -842,8 +847,6 @@ def novo_tipo_produto():
 @produtos_bp.route('/tipos/deletar/<int:id>', methods=['POST'])
 def deletar_tipo(id):
     """Remoção de tipo de produto. Exige admin além do tenant guard global."""
-    from app import admin_required, query_tenant
-
     @admin_required
     def _deletar():
         tipo = query_tenant(TipoProduto).filter_by(id=id).first_or_404()
@@ -867,8 +870,6 @@ def deletar_tipo(id):
 @produtos_bp.route('/tipos/editar/<int:id>', methods=['POST'])
 def editar_tipo(id):
     """Edição de tipo de produto. Exige admin além do tenant guard global."""
-    from app import admin_required, query_tenant
-
     @admin_required
     def _editar():
         tipo = query_tenant(TipoProduto).filter_by(id=id).first_or_404()
@@ -909,12 +910,6 @@ def editar_tipo(id):
 
 @produtos_bp.route('/produtos/novo', methods=['GET', 'POST'])
 def novo_produto():
-    from app import (
-        empresa_id_atual, registrar_log, _is_ajax, _arquivo_imagem_permitido,
-        _safe_db_commit, _limpar_valor_moeda, limpar_cache_dashboard,
-        _EXTERNAL_TIMEOUT,
-    )
-
     if request.method == 'POST':
         tamanhos_bacalhau_validos = {'7/9', '10/12', '13/15', '16/20', 'DESFIADO'}
         fornecedor = request.form.get('fornecedor', '').strip()
@@ -1050,12 +1045,6 @@ def novo_produto():
 
 @produtos_bp.route('/produtos/editar/<int:id>', methods=['GET', 'POST'])
 def editar_produto(id):
-    from app import (
-        query_tenant, registrar_log, _arquivo_imagem_permitido,
-        _safe_db_commit, _limpar_valor_moeda, _produto_com_lock,
-        limpar_cache_dashboard, _EXTERNAL_TIMEOUT,
-    )
-
     produto = query_tenant(Produto).filter_by(id=id).first_or_404()
     if request.method == 'POST':
         tamanhos_bacalhau_validos = {'7/9', '10/12', '13/15', '16/20', 'DESFIADO'}
@@ -1159,11 +1148,6 @@ def editar_produto(id):
 
 @produtos_bp.route('/produtos/excluir/<int:id>', methods=['POST'])
 def excluir_produto(id):
-    from app import (
-        query_tenant, registrar_log, _deletar_cloudinary_seguro,
-        limpar_cache_dashboard,
-    )
-
     produto = query_tenant(Produto).filter_by(id=id).first_or_404()
     try:
         nome = produto.nome_produto or f'#{produto.id}'
@@ -1197,11 +1181,6 @@ def devolver_produto(id):
         * Subtrai a quantidade do estoque_atual do produto.
         * Audita a ação no LogAtividade com tipo "DEVOLUCAO" e o motivo informado.
     """
-    from app import (
-        query_tenant, registrar_log, _produto_com_lock,
-        _safe_db_commit, limpar_cache_dashboard,
-    )
-
     produto = query_tenant(Produto).filter_by(id=id).first_or_404()
     nome_produto = produto.nome_produto or f'#{produto.id}'
     fornecedor_nome = produto.fornecedor or '—'
@@ -1267,8 +1246,6 @@ def devolver_produto(id):
 
 @produtos_bp.route('/bulk_delete_produtos', methods=['POST'])
 def bulk_delete_produtos():
-    from app import query_tenant, _deletar_cloudinary_seguro, limpar_cache_dashboard
-
     data = request.get_json(silent=True) or {}
     ids = data.get('ids', [])
     if not ids:
@@ -1314,8 +1291,6 @@ def bulk_delete_produtos():
 @produtos_bp.route('/produtos/atualizar_tipo_batch', methods=['POST'])
 def produtos_atualizar_tipo_batch():
     """Atualiza o campo tipo de vários produtos (usado em 'Corrigir Categoria' para OUTROS)."""
-    from app import query_tenant
-
     data = request.get_json(silent=True) or {}
     updates = data.get('updates', [])
     if not updates:
@@ -1343,13 +1318,6 @@ def produtos_atualizar_tipo_batch():
 @produtos_bp.route('/produtos/importar', methods=['GET', 'POST'])
 def importar_produtos():
     """Importação em lote de produtos. Exige admin além do tenant guard."""
-    from app import (
-        admin_required, query_tenant, empresa_id_atual,
-        _normalizar_nome_coluna, _strip_quotes, _msg_linha,
-        _parse_preco, _parse_quantidade, _parse_data_flex,
-        COLUNA_ARQUIVO_PARA_BANCO,
-    )
-
     @admin_required
     def _importar():
         if request.method == 'POST':
@@ -1539,8 +1507,6 @@ def get_fotos_produto(produto_id):
     Mantém retrocompatibilidade: clientes antigos podem iterar como string
     via ``arr.map(o => o.full)``.
     """
-    from app import query_tenant, _cloudinary_thumb_url
-
     # Multi-tenant: valida que o produto pertence ao tenant do usuário antes de
     # expor suas fotos (ProdutoFoto não tem empresa_id, herda via produto).
     produto = query_tenant(Produto).filter_by(id=produto_id).first_or_404()
@@ -1562,8 +1528,6 @@ def get_fotos_produto(produto_id):
 
 @produtos_bp.route('/api/produto/<int:id>')
 def api_produto(id):
-    from app import query_tenant
-
     produto = query_tenant(Produto).filter_by(id=id).first_or_404()
     return jsonify({
         'nome': produto.nome_produto,

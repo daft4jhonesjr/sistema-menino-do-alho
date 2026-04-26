@@ -39,6 +39,14 @@ from sqlalchemy.orm import joinedload
 
 from extensions import cache
 from models import db, Cliente, Produto, Venda, Documento
+from services.auth_utils import (
+    tenant_required, _e_admin_tenant, _usuario_pode_gerenciar_venda,
+)
+from services.db_utils import (
+    query_tenant, query_documentos_tenant, empresa_id_atual,
+)
+from services.cache_utils import _dashboard_cache_key
+from services.documentos_services import _listar_documentos_recem_chegados
 
 
 dashboard_bp = Blueprint('dashboard', __name__)
@@ -57,8 +65,6 @@ def _exigir_tenant_em_todas_rotas():
     """
     if request.endpoint in _ENDPOINTS_PUBLICOS:
         return None
-
-    from app import tenant_required
 
     @tenant_required
     def _ok():
@@ -103,8 +109,6 @@ def get_radar_recompra():
        Isso evita que uma compra grande e recente infle a taxa.
     5. Duração = qtd_ultima_compra / consumo_diario.
     """
-    from app import query_tenant
-
     hoje = datetime.now().date()
     alertas = []
 
@@ -221,23 +225,9 @@ def index():
     return redirect(url_for('dashboard.dashboard'))
 
 
-def _dashboard_cached_key():
-    """Wrapper que delega para o cache key do app.py.
-
-    Mantemos o helper em ``app.py`` (depende de ``empresa_id_atual`` e
-    versão de cache) e o expomos aqui apenas para o ``@cache.cached``.
-    """
-    from app import _dashboard_cache_key
-    return _dashboard_cache_key()
-
-
 @dashboard_bp.route('/dashboard')
-@cache.cached(timeout=300, key_prefix=_dashboard_cached_key)
+@cache.cached(timeout=300, key_prefix=_dashboard_cache_key)
 def dashboard():
-    from app import (
-        empresa_id_atual, query_tenant, query_documentos_tenant,
-        _listar_documentos_recem_chegados,
-    )
     from quotes import frase_do_dia
 
     ano_ativo = session.get('ano_ativo', datetime.now().year)
@@ -527,8 +517,6 @@ def dashboard():
 @dashboard_bp.route('/api/vendas_por_filtro')
 def api_vendas_por_filtro():
     """Retorna vendas em JSON filtradas por produto_id ou cliente_id com paginação."""
-    from app import query_tenant
-
     produto_id = request.args.get('produto_id', type=int)
     cliente_id = request.args.get('cliente_id', type=int)
     page = request.args.get('page', 1, type=int)
@@ -631,7 +619,6 @@ def api_vendas_por_filtro():
 def api_dashboard_detalhes(filtro):
     """Lista vendas filtradas por pendente/pago/avulsa/<fornecedor>."""
     import traceback
-    from app import query_tenant
 
     try:
         ano_ativo = session.get('ano_ativo', datetime.now().year)
@@ -683,8 +670,6 @@ def api_dashboard_detalhes(filtro):
 @dashboard_bp.route('/api/dashboard/documentos_pendentes/resumo', methods=['GET'])
 def api_dashboard_documentos_pendentes_resumo():
     """Resumo leve da fila de documentos pendentes (polling do dashboard)."""
-    from app import empresa_id_atual
-
     try:
         eid_atual = empresa_id_atual()
         base_query = Documento.query.filter(Documento.venda_id.is_(None))
@@ -712,8 +697,6 @@ def api_dashboard_documentos_pendentes_resumo():
 @dashboard_bp.route('/api/cliente/ultimo_pagamento', methods=['GET'])
 def ultimo_pagamento_cliente():
     """Forma de pagamento da última venda do cliente para auto-preenchimento."""
-    from app import query_tenant
-
     cliente_id = request.args.get('cliente_id')
     cliente_nome = request.args.get('cliente_nome')
     query = query_tenant(Venda)
@@ -733,7 +716,6 @@ def ultimo_pagamento_cliente():
 def api_cobrancas_pendentes():
     """Indica se há cobranças pendentes — usado pelas push notifications."""
     from decimal import Decimal
-    from app import query_tenant, _e_admin_tenant, _usuario_pode_gerenciar_venda
 
     try:
         ano_ativo = session.get('ano_ativo', datetime.now().year)
@@ -756,7 +738,6 @@ def api_cobrancas_pendentes():
 def api_detalhes_mes(ano, mes):
     """Drill-down de um mês: totais, top clientes e lista de vendas."""
     import traceback
-    from app import query_tenant
 
     try:
         if mes < 1 or mes > 12:

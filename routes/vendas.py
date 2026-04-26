@@ -51,6 +51,31 @@ import pandas as pd
 from werkzeug.utils import secure_filename
 
 from models import db, Cliente, Produto, Venda, Documento, LancamentoCaixa
+from services.auth_utils import (
+    tenant_required, admin_required, _is_ajax,
+    _e_admin_tenant, _usuario_pode_gerenciar_venda,
+    _resposta_sem_permissao, _assumir_ownership_venda_orfa,
+)
+from services.db_utils import (
+    query_tenant, query_documentos_tenant, empresa_id_atual,
+)
+from services.cache_utils import limpar_cache_dashboard
+from services.config_helpers import (
+    registrar_log, get_hoje_brasil,
+)
+from services.files_utils import _deletar_cloudinary_seguro
+from services.vendas_services import (
+    _vendas_do_pedido, _apagar_lancamentos_caixa_por_vendas,
+    _produto_com_lock,
+)
+from services.csv_utils import (
+    _msg_linha, _strip_quotes,
+    _normalizar_nome_busca, _parse_preco, _parse_quantidade,
+    _parse_data_flex,
+)
+# ``_limpar_valor_moeda`` é helper nativo do livro caixa, reutilizado
+# aqui em formulários monetários.
+from routes.caixa import _limpar_valor_moeda
 
 
 vendas_bp = Blueprint('vendas', __name__)
@@ -63,8 +88,6 @@ vendas_bp = Blueprint('vendas', __name__)
 def _exigir_tenant_em_todas_rotas():
     """Aplica ``@login_required`` + ``@tenant_required`` em todas as rotas
     deste blueprint via hook centralizado."""
-    from app import tenant_required
-
     @tenant_required
     def _ok():
         return None
@@ -171,11 +194,6 @@ def listar_vendas():
     Query params: produto_id, cliente_id, filtro (geral|bacalhau),
     ordenar_por, ordem_data, filtro_vencidos, forma_pagto.
     """
-    from app import (
-        query_tenant, query_documentos_tenant, empresa_id_atual,
-        get_hoje_brasil,
-    )
-
     produto_id = request.args.get('produto_id', type=int)
     cliente_id = request.args.get('cliente_id', type=int)
     filtro_vencidos = request.args.get('filtro_vencidos', type=int) == 1
@@ -557,9 +575,6 @@ def listar_vendas():
 
 @vendas_bp.route('/vendas/exportar_relatorio', methods=['POST'])
 def exportar_relatorio_vendas():
-    from app import (
-        query_tenant, _e_admin_tenant, _usuario_pode_gerenciar_venda,
-    )
     ano_ativo = session.get('ano_ativo', datetime.now().year)
     filtro_empresa = (request.form.get('filtro_empresa') or 'TODAS').strip().upper()
     filtro_situacao = (request.form.get('filtro_situacao') or 'TODAS').strip().upper()
@@ -723,7 +738,6 @@ def exportar_relatorio_vendas():
 @vendas_bp.route('/logistica')
 def logistica():
     """Roteirizador de Entregas: lista cada venda individualmente por status de entrega."""
-    from app import query_tenant
     filtro_status = request.args.get('status', 'PENDENTE')
     if filtro_status not in ('PENDENTE', 'ENTREGUE'):
         filtro_status = 'PENDENTE'
@@ -803,7 +817,6 @@ def logistica():
 @vendas_bp.route('/logistica/toggle/<int:venda_id>', methods=['POST'])
 def toggle_entrega(venda_id):
     """Alterna o status de entrega entre PENDENTE e ENTREGUE."""
-    from app import query_tenant, _e_admin_tenant, _usuario_pode_gerenciar_venda
     ids_raw = (request.form.get('ids') or '').strip()
     ids = []
     if ids_raw:
@@ -837,7 +850,6 @@ def toggle_entrega(venda_id):
 @vendas_bp.route('/logistica/bulk_update', methods=['POST'])
 def logistica_bulk_update():
     """Atualiza status de entrega de vários pedidos de uma vez (ação em massa)."""
-    from app import query_tenant, _e_admin_tenant, _usuario_pode_gerenciar_venda
     dados = request.get_json() or {}
     ids_raw = dados.get('ids', [])
     novo_status = dados.get('status')
@@ -879,11 +891,6 @@ def logistica_bulk_update():
 
 @vendas_bp.route('/vendas/novo', methods=['GET', 'POST'])
 def nova_venda():
-    from app import (
-        query_tenant, empresa_id_atual, registrar_log, _is_ajax,
-        _produto_com_lock, _limpar_valor_moeda, limpar_cache_dashboard,
-    )
-
     # B1 (auditoria): Carregar listas de clientes ativos e produtos com estoque
     # APENAS UMA VEZ por request. Antes, cada validação que falhava recarregava
     # ambas as listas, causando até 8 round-trips ao banco em fluxos de erro.
@@ -1098,10 +1105,6 @@ def add_venda():
 def processar_carrinho():
     """Processa itens do carrinho em lote: cria Venda e atualiza estoque
     em uma única transação."""
-    from app import (
-        query_tenant, empresa_id_atual, _produto_com_lock,
-        _limpar_valor_moeda, limpar_cache_dashboard,
-    )
     data = request.get_json(silent=True) or {}
     itens = data.get('itens', [])
     if not itens:
@@ -1198,12 +1201,6 @@ def processar_carrinho():
 def venda_adicionar_item():
     """Adiciona um novo item (produto) a um pedido/venda existente.
     Baixa estoque e mantém dados do pedido."""
-    from app import (
-        query_tenant, empresa_id_atual,
-        _usuario_pode_gerenciar_venda, _resposta_sem_permissao,
-        _assumir_ownership_venda_orfa, _produto_com_lock,
-        _limpar_valor_moeda, limpar_cache_dashboard,
-    )
     venda_id = request.form.get('venda_id')
     produto_id = request.form.get('produto_id')
     quantidade_venda = request.form.get('quantidade_venda')
@@ -1273,12 +1270,6 @@ def venda_adicionar_item():
 
 @vendas_bp.route('/vendas/editar/<int:id>', methods=['GET', 'POST'])
 def editar_venda(id):
-    from app import (
-        query_tenant, empresa_id_atual, registrar_log,
-        _usuario_pode_gerenciar_venda, _resposta_sem_permissao,
-        _assumir_ownership_venda_orfa, _vendas_do_pedido,
-        limpar_cache_dashboard,
-    )
     venda = query_tenant(Venda).filter_by(id=id).first_or_404()
     if not _usuario_pode_gerenciar_venda(venda):
         return _resposta_sem_permissao()
@@ -1488,12 +1479,6 @@ def editar_venda(id):
 @vendas_bp.route('/venda/excluir_item/<int:id>', methods=['POST'])
 def excluir_item_venda(id):
     """Exclui um item individual de venda (uma linha), devolvendo estoque."""
-    from app import (
-        query_tenant, _is_ajax,
-        _usuario_pode_gerenciar_venda, _resposta_sem_permissao,
-        _produto_com_lock, _deletar_cloudinary_seguro,
-        _apagar_lancamentos_caixa_por_vendas, limpar_cache_dashboard,
-    )
     venda = query_tenant(Venda).filter_by(id=id).first_or_404()
     if not _usuario_pode_gerenciar_venda(venda):
         return _resposta_sem_permissao()
@@ -1529,12 +1514,6 @@ def excluir_venda(id):
     Regra A (CNPJ preenchido): Cliente + NF + Data
     Regra B (CNPJ = '0' ou '00000000000000'): Cliente + Data (ignora NF)
     """
-    from app import (
-        query_tenant, registrar_log,
-        _usuario_pode_gerenciar_venda, _resposta_sem_permissao,
-        _produto_com_lock, _deletar_cloudinary_seguro,
-        _apagar_lancamentos_caixa_por_vendas, limpar_cache_dashboard,
-    )
     venda = query_tenant(Venda).filter_by(id=id).first_or_404()
     if not _usuario_pode_gerenciar_venda(venda):
         return _resposta_sem_permissao()
@@ -1612,12 +1591,6 @@ def excluir_venda(id):
 @vendas_bp.route('/venda/atualizar_status/<int:id_venda>', methods=['POST'])
 def atualizar_status_venda(id_venda):
     """Alterna o status do pedido: PENDENTE ↔ PAGO. Aplica a todos os itens do grupo."""
-    from app import (
-        query_tenant, empresa_id_atual, registrar_log,
-        _usuario_pode_gerenciar_venda, _resposta_sem_permissao,
-        _assumir_ownership_venda_orfa, _vendas_do_pedido,
-        limpar_cache_dashboard,
-    )
     venda = query_tenant(Venda).filter_by(id=id_venda).first_or_404()
     if not _usuario_pode_gerenciar_venda(venda):
         return _resposta_sem_permissao()
@@ -1711,10 +1684,6 @@ def atualizar_status_venda(id_venda):
 
 @vendas_bp.route('/vendas/<int:id>/atualizar_situacao_rapida', methods=['POST'])
 def atualizar_situacao_rapida(id):
-    from app import (
-        query_tenant, _usuario_pode_gerenciar_venda,
-        _assumir_ownership_venda_orfa, limpar_cache_dashboard,
-    )
     try:
         data = request.get_json(silent=True) or {}
         nova_situacao = str(data.get('situacao') or '').strip().upper()
@@ -1744,7 +1713,6 @@ def atualizar_situacao_rapida(id):
 def recibo_venda(id):
     """Gera recibo de venda em formato de impressão (uma página A4).
     Agrupa itens da mesma compra (cliente, data, NF)."""
-    from app import query_tenant
     venda_base = query_tenant(Venda).options(joinedload(Venda.cliente)).filter_by(id=id).first_or_404()
     cliente = venda_base.cliente
 
@@ -1771,7 +1739,6 @@ def recibo_venda(id):
 def api_pedidos():
     """Lista pedidos recentes para o modal Vincular à Venda.
     Retorna {id, label} por pedido."""
-    from app import query_tenant
     vendas = query_tenant(Venda).order_by(Venda.id.desc()).limit(200).all()
     seen = set()
     pedidos = []
@@ -1792,10 +1759,6 @@ def api_pedidos():
 def vendas_deletar_massa():
     """Exclusão em massa de vendas. Recebe JSON { ids: [1,2,...] }.
     Deleta em uma transação e restaura estoque."""
-    from app import (
-        query_tenant, _produto_com_lock,
-        _apagar_lancamentos_caixa_por_vendas, limpar_cache_dashboard,
-    )
     data = request.get_json(silent=True) or {}
     ids = data.get('ids', [])
     if not ids:
@@ -1836,13 +1799,6 @@ def vendas_deletar_massa():
 @vendas_bp.route('/vendas/importar', methods=['GET', 'POST'])
 def importar_vendas():
     """Importação de vendas via CSV/TSV/XLSX. Apenas admin do tenant."""
-    from app import (
-        query_tenant, empresa_id_atual,
-        admin_required, _msg_linha, _strip_quotes,
-        _normalizar_nome_busca, _parse_preco, _parse_quantidade,
-        _parse_data_flex, _produto_com_lock,
-    )
-
     @admin_required
     def _impl():
         if request.method == 'POST':

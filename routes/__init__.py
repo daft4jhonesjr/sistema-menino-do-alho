@@ -46,21 +46,25 @@ Estado atual:
                            /upload_imagem_cheque, /caixa/gaveta/{salvar,carregar},
                            /caixa/{salvar_gaveta,obter_gaveta}
 
-Próximas fases:
-    * Extrair helpers compartilhados (_vendas_do_pedido, _safe_db_commit,
-      query_tenant, etc.) para um pacote ``services/`` — eliminando os
-      late imports de ``app.py``.
-
-Convenção:
+Convenção (Fase 5 finalizada):
     Cada blueprint expõe uma única variável module-level ``<nome>_bp`` que
     o ``app.py`` registra via ``app.register_blueprint(...)`` no fim do
-    bootstrap. Os handlers continuam reutilizando os helpers definidos em
-    ``app.py`` (decorators ``tenant_required``, ``master_required``,
-    ``_safe_db_commit``, etc.) via late imports — esses helpers serão
-    movidos para um pacote ``services/`` em uma fase futura.
+    bootstrap. Os handlers reutilizam helpers via **imports limpos no topo
+    do arquivo**, organizados por domínio em ``services/*``:
+
+        from services.db_utils import query_tenant, empresa_id_atual
+        from services.auth_utils import tenant_required, admin_required
+        from services.cache_utils import limpar_cache_dashboard
+        ...
+
+    Os módulos de ``services/`` são uma fachada que re-exporta as funções
+    ainda fisicamente presentes em ``app.py``, eliminando completamente os
+    late imports (``from app import ...`` dentro de cada handler) sem
+    precisar mover dezenas de funções de uma vez. A migração física pode
+    ocorrer arquivo a arquivo no futuro sem alterar nenhum blueprint.
 
     Singletons (db, login_manager, csrf, cache, limiter) ficam em
-    ``extensions.py`` e são importados diretamente nos blueprints novos.
+    ``extensions.py`` e são importados diretamente nos blueprints.
 
 Proteção de tenant:
     Os blueprints de domínio (``produtos_bp``, ``clientes_bp``, ``vendas_bp``,

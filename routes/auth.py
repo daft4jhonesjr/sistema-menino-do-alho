@@ -34,6 +34,15 @@ from models import (
     PERFIL_DONO, PERFIL_FUNCIONARIO, PERFIL_MASTER,
 )
 from extensions import limiter
+from services.auth_utils import (
+    tenant_required, admin_required,
+    _pos_login_landing, _is_safe_next_url,
+)
+from services.db_utils import empresa_id_atual, _safe_db_commit
+from services.config_helpers import (
+    get_config, _logs_file, _EXTERNAL_TIMEOUT,
+)
+from services.files_utils import _arquivo_imagem_permitido
 
 
 auth_bp = Blueprint('auth', __name__)
@@ -45,8 +54,6 @@ def _checar_gestao_usuario_permitida(usuario_alvo):
     MASTER nunca chega aqui (``tenant_required`` redireciona para o
     painel master). Retorna ``(ok, redirect_response)``.
     """
-    from app import empresa_id_atual
-
     if usuario_alvo is None:
         flash('Usuario nao encontrado.', 'error')
         return False, redirect(url_for('auth.gerenciar_usuarios'))
@@ -82,10 +89,6 @@ def login():
           uma URL segura interna).
         * MASTER é sempre redirecionado para ``master.master_admin``.
     """
-    # Helpers permanecem em ``app.py`` por enquanto (próxima fase irão
-    # para ``services/``); usamos late import para evitar ciclo.
-    from app import _pos_login_landing, _is_safe_next_url
-
     if current_user.is_authenticated:
         destino = _pos_login_landing(current_user)
         return redirect(destino or url_for('auth.login'))
@@ -139,8 +142,6 @@ def logout():
 @auth_bp.route('/configuracoes', methods=['GET', 'POST'])
 @login_required
 def configuracoes():
-    from app import _logs_file
-
     usuario = current_user
     if request.method == 'POST':
         usuario.notifica_boletos = 'notifica_boletos' in request.form
@@ -168,8 +169,6 @@ def configuracoes():
 @auth_bp.route('/api/logs/erros', methods=['GET'])
 @login_required
 def ler_logs_erros():
-    from app import _logs_file
-
     if not current_user.is_admin():
         return jsonify({'status': 'erro', 'mensagem': 'Acesso negado.'}), 403
     try:
@@ -187,8 +186,6 @@ def ler_logs_erros():
 @auth_bp.route('/api/logs/limpar', methods=['POST'])
 @login_required
 def limpar_logs_erros():
-    from app import _logs_file
-
     if not current_user.is_admin():
         return jsonify({'status': 'erro', 'mensagem': 'Acesso negado.'}), 403
     try:
@@ -204,8 +201,6 @@ def limpar_logs_erros():
 @login_required
 def perfil():
     """Exibe e atualiza o perfil do usuário autenticado."""
-    from app import _arquivo_imagem_permitido, _safe_db_commit, _EXTERNAL_TIMEOUT
-
     if request.method == 'POST':
         novo_nome_real = request.form.get('nome', '').strip()
         novo_username = request.form.get('username', '').strip()
@@ -259,8 +254,6 @@ def cadastro():
     digitar errado várias vezes, mas trava bots que tentam descobrir
     códigos de cadastro válidos por força bruta.
     """
-    from app import _safe_db_commit
-
     if current_user.is_authenticated:
         return redirect(url_for('dashboard.dashboard'))
     erro = None
@@ -318,11 +311,6 @@ def cadastro():
 @auth_bp.route('/gerenciar_usuarios', methods=['GET', 'POST'])
 @login_required
 def gerenciar_usuarios():
-    from app import (
-        tenant_required, admin_required, empresa_id_atual,
-        get_config, _safe_db_commit,
-    )
-
     @tenant_required
     @admin_required
     def _gerenciar_usuarios():
@@ -411,8 +399,6 @@ def gerenciar_usuarios():
 @login_required
 def atualizar_codigo_cadastro():
     """Atualiza o código de segurança exigido no cadastro de novos usuários."""
-    from app import tenant_required, admin_required, get_config, _safe_db_commit
-
     @tenant_required
     @admin_required
     def _atualizar():
@@ -439,8 +425,6 @@ def atualizar_codigo_cadastro():
 @auth_bp.route('/gerenciar_usuarios/editar_completo/<int:id>', methods=['POST'])
 @login_required
 def editar_usuario_completo(id):
-    from app import tenant_required, admin_required, _safe_db_commit
-
     @tenant_required
     @admin_required
     def _editar():
@@ -493,8 +477,6 @@ def editar_usuario_completo(id):
 @auth_bp.route('/gerenciar_usuarios/excluir/<int:id>', methods=['POST'])
 @login_required
 def excluir_usuario(id):
-    from app import tenant_required, admin_required
-
     @tenant_required
     @admin_required
     def _excluir():
@@ -524,8 +506,6 @@ def excluir_usuario(id):
 @auth_bp.route('/gerenciar_usuarios/alterar_role/<int:id>', methods=['POST'])
 @login_required
 def alterar_role_usuario(id):
-    from app import tenant_required, admin_required, _safe_db_commit
-
     @tenant_required
     @admin_required
     def _alterar():

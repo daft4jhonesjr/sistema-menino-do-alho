@@ -64,6 +64,24 @@ import cloudinary.uploader
 import pdfplumber
 
 from models import db, Documento, Venda, Cliente, Usuario
+from extensions import limiter
+from services.auth_utils import (
+    tenant_required, admin_required, master_required,
+    _e_admin_tenant, _usuario_pode_gerenciar_documento,
+    _usuario_pode_gerenciar_venda, _resposta_sem_permissao,
+)
+from services.db_utils import query_tenant, query_documentos_tenant
+from services.cache_utils import limpar_cache_dashboard
+from services.config_helpers import _EXTERNAL_TIMEOUT
+from services.files_utils import _deletar_cloudinary_seguro
+from services.vendas_services import _vendas_do_pedido
+from services.documentos_services import (
+    _processar_documento, _processar_pdf,
+    _processar_documentos_pendentes,
+    _empresa_id_para_documento, _resolver_caminho_documento_seguro,
+    _reprocessar_boletos_atualizar_extracao,
+    _reprocessar_vencimentos_vendas,
+)
 
 
 documentos_bp = Blueprint('documentos', __name__)
@@ -90,7 +108,6 @@ def _exigir_tenant_em_todas_rotas():
     """
     if request.endpoint in _ENDPOINTS_PUBLICOS:
         return None
-    from app import tenant_required
 
     @tenant_required
     def _ok():
@@ -142,10 +159,6 @@ def _token_upload_required(f):
 @documentos_bp.route('/documento/visualizar/<int:id>')
 def visualizar_documento(id):
     """Redireciona para o PDF na nuvem (Cloudinary)."""
-    from app import (
-        query_documentos_tenant, _usuario_pode_gerenciar_documento,
-        _resposta_sem_permissao,
-    )
     documento = query_documentos_tenant().filter_by(id=id).first_or_404()
     if not _usuario_pode_gerenciar_documento(documento):
         return _resposta_sem_permissao()
@@ -162,8 +175,6 @@ def debug_texto_arquivo(id):
     MASTER-only por design: a ferramenta acessa qualquer documento do SaaS
     para debug de OCR/regex; abrir para DONO reabriria a brecha cross-tenant.
     """
-    from app import master_required, _EXTERNAL_TIMEOUT
-
     @master_required
     def _impl():
         documento = Documento.query.get_or_404(id)
@@ -219,10 +230,6 @@ def debug_texto_arquivo(id):
 @documentos_bp.route('/arquivo/<int:id>/deletar', methods=['POST'])
 def deletar_arquivo_dashboard(id):
     """Exclui documento com tolerância a falhas na remoção física."""
-    from app import (
-        query_documentos_tenant, _usuario_pode_gerenciar_documento,
-        _deletar_cloudinary_seguro, limpar_cache_dashboard,
-    )
     doc_id = int(id)
     documento = query_documentos_tenant().filter_by(id=doc_id).first_or_404()
     if not _usuario_pode_gerenciar_documento(documento):
@@ -258,10 +265,6 @@ def deletar_arquivo_dashboard(id):
 @documentos_bp.route('/arquivos/deletar_em_massa', methods=['POST'])
 def deletar_arquivos_massa():
     """Exclui múltiplos documentos (Cloudinary + banco) da seção de documentos recentes."""
-    from app import (
-        query_documentos_tenant, _usuario_pode_gerenciar_documento,
-        limpar_cache_dashboard, _EXTERNAL_TIMEOUT,
-    )
     data = request.get_json(silent=True) or {}
     ids_para_deletar = data.get('ids', [])
 
@@ -304,9 +307,6 @@ def deletar_arquivos_massa():
 def ver_boleto_venda(id):
     """Abre o PDF do boleto vinculado ao pedido em nova aba.
     Prioriza URL Cloudinary; fallback para arquivo local com guarda contra path traversal."""
-    from app import (
-        query_tenant, query_documentos_tenant, _resolver_caminho_documento_seguro,
-    )
     venda = query_tenant(Venda).filter_by(id=id).first_or_404()
     path = (venda.caminho_boleto or '').strip()
     if not path:
@@ -330,7 +330,6 @@ def ver_boleto_venda(id):
 @documentos_bp.route('/venda/<int:id>/whatsapp')
 def enviar_whatsapp_boleto(id):
     """Redireciona para o WhatsApp com mensagem de cobrança e link do boleto."""
-    from app import query_tenant
     venda = query_tenant(Venda).options(joinedload(Venda.cliente)).filter_by(id=id).first_or_404()
     if not (venda.caminho_boleto or '').strip():
         flash('Boleto não vinculado a este pedido. Vincule um boleto antes de enviar cobrança.', 'error')
@@ -368,9 +367,6 @@ def enviar_whatsapp_boleto(id):
 @documentos_bp.route('/venda/<int:id>/ver_nf')
 def ver_nf_venda(id):
     """Abre o PDF da nota fiscal vinculada ao pedido em nova aba."""
-    from app import (
-        query_tenant, query_documentos_tenant, _resolver_caminho_documento_seguro,
-    )
     venda = query_tenant(Venda).filter_by(id=id).first_or_404()
     path = (venda.caminho_nf or '').strip()
     if not path:
@@ -406,10 +402,6 @@ def upload_documento():
     ``_processar_documentos_pendentes`` (Organizar).
     Campo ``tipo``: 'boleto' -> boletos ; 'nfe' -> notas_fiscais
     """
-    from app import (
-        _processar_documento, _empresa_id_para_documento,
-        limpar_cache_dashboard,
-    )
     # CSRF está exempt para esta rota — exemption aplicada no app.py após
     # ``register_blueprint(documentos_bp)`` via ``csrf.exempt(view_func)``.
     # Bot externo se autentica via header Authorization (token).
@@ -474,11 +466,6 @@ def api_receber_automatico():
     Endpoint público (token-based). O ``before_request`` deste blueprint
     está configurado para NÃO exigir login_required nesta rota.
     """
-    from app import (
-        limiter, _empresa_id_para_documento, limpar_cache_dashboard,
-        _EXTERNAL_TIMEOUT,
-    )
-
     @limiter.limit("10 per minute")
     def _impl():
         token_esperado = os.environ.get('API_RECEBER_AUTOMATICO_TOKEN')
@@ -573,11 +560,6 @@ def api_bot_upload():
     API_BOT_TOKEN. Aceita campos: file/arquivo/documento (arquivo),
     tipo (boleto|nfe), numero_nf, razao_social.
     """
-    from app import (
-        limiter, _processar_documento, _empresa_id_para_documento,
-        limpar_cache_dashboard,
-    )
-
     @limiter.limit("10 per minute")
     def _impl():
         token_enviado = request.headers.get('X-API-KEY')
@@ -662,7 +644,6 @@ def api_bot_upload():
 @documentos_bp.route('/processar_documentos', methods=['POST'])
 def processar_documentos():
     """Rota para processar documentos manualmente (opcional, via AJAX)."""
-    from app import _processar_documentos_pendentes
     resultado = _processar_documentos_pendentes()
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return jsonify(ok=True, **resultado)
@@ -676,7 +657,6 @@ def processar_documentos():
 def reprocessar_boletos():
     """Re-lê os PDFs em documentos_entrada/boletos e atualiza numero_nf
     (e demais campos) nos Documentos."""
-    from app import _reprocessar_boletos_atualizar_extracao
     r = _reprocessar_boletos_atualizar_extracao()
     flash(f"Boletos reprocessados: {r['atualizados']} atualizado(s).", 'success')
     if r['erros'] > 0:
@@ -691,7 +671,6 @@ def admin_arquivos():
     Restrito a admins do tenant (DONO/MASTER) — funcionário comum vê apenas
     a fila do dashboard com os documentos atribuídos a ele.
     """
-    from app import _e_admin_tenant, query_documentos_tenant
     if not _e_admin_tenant():
         flash('Acesso negado. Apenas administradores podem gerenciar arquivos.', 'error')
         return redirect(url_for('dashboard.dashboard'))
@@ -729,7 +708,6 @@ def admin_arquivos():
 
 @documentos_bp.route('/arquivos/upload_massa', methods=['POST'])
 def upload_massa_arquivos():
-    from app import _e_admin_tenant, _processar_documento, limpar_cache_dashboard
     if not _e_admin_tenant():
         return jsonify({'success': False, 'error': 'Apenas administradores podem importar arquivos.'}), 403
 
@@ -792,7 +770,6 @@ def admin_arquivos_deletar_massa():
     Pós-auditoria P0: filtra exclusivamente pelo tenant do usuário (DONO/MASTER).
     Funcionário comum não tem permissão administrativa de massa.
     """
-    from app import _e_admin_tenant, query_documentos_tenant, _EXTERNAL_TIMEOUT
     if not _e_admin_tenant():
         flash('Acesso negado. Apenas administradores podem gerenciar arquivos.', 'error')
         return redirect(url_for('dashboard.dashboard'))
@@ -836,8 +813,6 @@ def admin_reprocessar_vencimentos():
     GET: exibe página de confirmação com preview
     POST: executa o reprocessamento
     """
-    from app import master_required, _reprocessar_vencimentos_vendas
-
     @master_required
     def _impl():
         if request.method == 'GET':
@@ -927,12 +902,6 @@ def admin_reprocessar_vencimentos():
 @documentos_bp.route('/documento/<int:id>/vincular', methods=['POST'])
 def vincular_documento_venda(id):
     """Associa o documento a um pedido (venda). Espera venda_id (primeira_venda_id do pedido)."""
-    from app import (
-        query_documentos_tenant, query_tenant,
-        _usuario_pode_gerenciar_documento, _usuario_pode_gerenciar_venda,
-        _resposta_sem_permissao, _processar_pdf, _vendas_do_pedido,
-        limpar_cache_dashboard,
-    )
     documento = query_documentos_tenant().filter_by(id=id).first_or_404()
     if not _usuario_pode_gerenciar_documento(documento):
         return _resposta_sem_permissao()
@@ -1011,8 +980,6 @@ def raio_x():
 
     MASTER-only: a query lê documentos cross-tenant para diagnóstico.
     """
-    from app import master_required
-
     @master_required
     def _impl():
         docs = Documento.query.order_by(Documento.id.desc()).limit(5).all()
@@ -1046,8 +1013,6 @@ def resgatar_orfaos():
 
     MASTER-only: ação varre documentos sem owner em todo o SaaS.
     """
-    from app import master_required
-
     @master_required
     def _impl():
         db.session.rollback()
@@ -1073,8 +1038,6 @@ def forcar_leitura_pasta():
 
     MASTER-only: opera diretamente sobre o filesystem do servidor.
     """
-    from app import master_required, _empresa_id_para_documento, _EXTERNAL_TIMEOUT
-
     @master_required
     def _impl():
         db.session.rollback()
@@ -1162,8 +1125,6 @@ def limpar_fantasmas():
 
     MASTER-only: limpeza global do banco/filesystem.
     """
-    from app import master_required
-
     @master_required
     def _impl():
         db.session.rollback()
@@ -1193,8 +1154,6 @@ def limpar_vinculos_quebrados():
 
     MASTER-only: operação de manutenção global.
     """
-    from app import master_required
-
     @master_required
     def _impl():
         try:
@@ -1247,8 +1206,6 @@ def debug_testar_log():
 
     MASTER-only: escreve arquivo no filesystem do servidor.
     """
-    from app import master_required
-
     @master_required
     def _impl():
         try:
@@ -1273,8 +1230,6 @@ def debug_vincular():
 
     Restrito a admin do tenant (decorator ``admin_required`` aplicado dinamicamente).
     """
-    from app import admin_required, _processar_documentos_pendentes
-
     @admin_required
     def _impl():
         try:

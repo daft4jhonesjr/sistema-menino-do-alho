@@ -39,6 +39,14 @@ import pandas as pd
 from werkzeug.utils import secure_filename
 
 from models import db, Cliente, Venda, LancamentoCaixa
+from services.auth_utils import tenant_required, admin_required, _is_ajax
+from services.db_utils import query_tenant, empresa_id_atual
+from services.cache_utils import limpar_cache_dashboard
+from services.config_helpers import registrar_log
+from services.csv_utils import (
+    _msg_linha, _strip_quotes,
+    _parse_clientes_raw_tsv, _sanitizar_cnpj_importacao,
+)
 
 
 clientes_bp = Blueprint('clientes', __name__)
@@ -58,8 +66,6 @@ def _exigir_tenant_em_todas_rotas():
     /login com flash). Retornar uma response aborta o handler; retornar
     ``None`` continua o pipeline.
     """
-    from app import tenant_required
-
     @tenant_required
     def _ok():
         return None
@@ -78,8 +84,6 @@ def _processar_linhas_clientes_upsert(linhas, erros_detalhados, sucesso_ref, err
     Atualiza ``sucesso_ref[0]`` e ``erros_ref[0]`` (passados como listas
     para emular passagem por referência) e faz append em ``erros_detalhados``.
     """
-    from app import _msg_linha, empresa_id_atual
-
     for idx, row in enumerate(linhas):
         linha_num = linha_offset + idx + 1
         nome = (row.get('nome_cliente') or '').strip()
@@ -142,8 +146,6 @@ def _processar_linhas_clientes_upsert(linhas, erros_detalhados, sucesso_ref, err
 
 @clientes_bp.route('/clientes')
 def listar_clientes():
-    from app import query_tenant
-
     ordem_param = (request.args.get('ordem') or '').strip().lower()
     if ordem_param in ('desc', 'id_decrescente'):
         ordem = 'id_decrescente'
@@ -162,8 +164,6 @@ def novo_cliente():
     GET: Exibe formulário vazio.
     POST: Recebe nome_cliente, cnpj, telefone, etc. e persiste no banco.
     """
-    from app import query_tenant, empresa_id_atual, registrar_log, _is_ajax
-
     if request.method == 'POST':
         try:
             cnpj = re.sub(r'\D', '', request.form.get('cnpj', '').strip()) or None
@@ -210,8 +210,6 @@ def novo_cliente():
 
 @clientes_bp.route('/clientes/editar/<int:id>', methods=['GET', 'POST'])
 def editar_cliente(id):
-    from app import query_tenant, registrar_log
-
     # first_or_404 precisa propagar para o handler do Flask: fica FORA do try
     # genérico, senão 404 vira 500 e isolamento cross-tenant fica ruidoso.
     cliente = query_tenant(Cliente).filter_by(id=id).first_or_404()
@@ -250,8 +248,6 @@ def editar_cliente(id):
 
 @clientes_bp.route('/clientes/excluir/<int:id>', methods=['POST'])
 def excluir_cliente(id):
-    from app import query_tenant, registrar_log
-
     cliente = query_tenant(Cliente).filter_by(id=id).first_or_404()
     nome_cliente_del = cliente.nome_cliente
     try:
@@ -268,8 +264,6 @@ def excluir_cliente(id):
 @clientes_bp.route('/cliente/<int:id>/toggle_ativo', methods=['POST'])
 def toggle_ativo_cliente(id: int):
     """Alterna o status ativo/inativo de um cliente (soft delete)."""
-    from app import query_tenant, registrar_log, _is_ajax
-
     cliente = query_tenant(Cliente).filter_by(id=id).first_or_404()
     try:
         cliente.ativo = not cliente.ativo
@@ -292,8 +286,6 @@ def toggle_ativo_cliente(id: int):
 @clientes_bp.route('/clientes/<int:cliente_id>/extrato')
 def extrato_cliente(cliente_id):
     """Extrato de cobrança em PDF: vendas pendentes e parciais do cliente."""
-    from app import query_tenant
-
     cliente = query_tenant(Cliente).filter_by(id=cliente_id).first_or_404()
 
     # Filtro: PENDENTE e PARCIAL (saldo devedor); ignora itens de perda/brinde (R$ 0,00)
@@ -315,8 +307,6 @@ def extrato_cliente(cliente_id):
 
 @clientes_bp.route('/bulk_delete_clientes', methods=['POST'])
 def bulk_delete_clientes():
-    from app import query_tenant
-
     data = request.get_json(silent=True) or {}
     ids = data.get('ids', [])
     if not ids:
@@ -339,12 +329,6 @@ def importar_clientes():
 
     Exige ``admin_required`` adicional além do tenant guard global.
     """
-    from app import (
-        admin_required, query_tenant, empresa_id_atual,
-        _parse_clientes_raw_tsv, _strip_quotes, _msg_linha,
-        _sanitizar_cnpj_importacao,
-    )
-
     @admin_required
     def _importar():
         if request.method == 'POST':
@@ -461,8 +445,6 @@ def importar_clientes():
 @clientes_bp.route('/cliente/<int:id>/receber_lote', methods=['POST'])
 def receber_lote_cliente(id):
     """Abatimento Inteligente: recebe valor em lote e abate nas vendas pendentes mais antigas."""
-    from app import query_tenant, empresa_id_atual, limpar_cache_dashboard
-
     valor_raw = (request.form.get('valor_recebido') or '').strip()
     valor_str = valor_raw.replace('.', '').replace(',', '.')
     try:

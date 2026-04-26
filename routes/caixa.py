@@ -16,7 +16,7 @@ Rotas extraídas do legado ``app.py``:
 * ``POST /caixa/importar``                         — importação CSV/TSV/TXT
 
 Helpers exclusivos do módulo (usados também por scripts utilitários e
-por outros blueprints via ``from app import _limpar_valor_moeda``):
+por outros blueprints via ``from routes.caixa import _limpar_valor_moeda``):
 
 * ``_limpar_valor_moeda(v)``                       — parser BRL → Decimal
 * ``_normalizar_itens_contagem(itens, incluir_nome)`` — sanitização da gaveta
@@ -51,6 +51,13 @@ import cloudinary
 import cloudinary.uploader
 
 from models import db, Venda, LancamentoCaixa, ContagemGaveta
+from services.auth_utils import tenant_required, admin_required
+from services.db_utils import (
+    query_tenant, empresa_id_atual, _safe_db_commit,
+)
+from services.config_helpers import get_hoje_brasil
+from services.files_utils import _arquivo_imagem_permitido
+from services.config_helpers import _EXTERNAL_TIMEOUT
 
 
 caixa_bp = Blueprint('caixa', __name__)
@@ -59,8 +66,6 @@ caixa_bp = Blueprint('caixa', __name__)
 @caixa_bp.before_request
 def _exigir_tenant_em_todas_rotas():
     """Aplica ``login_required`` + ``tenant_required`` em todas as rotas."""
-    from app import tenant_required
-
     @tenant_required
     def _ok():
         return None
@@ -160,8 +165,6 @@ def _lancamento_caixa_before_update_status_envio(mapper, connection, target):
 
 @caixa_bp.route('/caixa')
 def caixa():
-    from app import empresa_id_atual, query_tenant
-
     setor_atual = (request.args.get('setor', 'GERAL') or 'GERAL').strip().upper()
     if setor_atual not in ('GERAL', 'BACALHAU'):
         setor_atual = 'GERAL'
@@ -288,8 +291,6 @@ def caixa():
 
 @caixa_bp.route('/upload_imagem_cheque', methods=['POST'])
 def upload_imagem_cheque():
-    from app import _arquivo_imagem_permitido, _EXTERNAL_TIMEOUT
-
     if 'file' not in request.files:
         return jsonify({'error': 'Nenhum arquivo enviado'}), 400
 
@@ -310,8 +311,6 @@ def upload_imagem_cheque():
 @caixa_bp.route('/caixa/gaveta/salvar', methods=['POST'])
 @caixa_bp.route('/caixa/salvar_gaveta', methods=['POST'])
 def salvar_contagem_gaveta():
-    from app import empresa_id_atual, query_tenant, get_hoje_brasil
-
     payload = request.get_json(silent=True) or {}
     dinheiro = _normalizar_itens_contagem(payload.get('dinheiro', []), incluir_nome=False)
     cheques = _normalizar_itens_contagem(payload.get('cheques', []), incluir_nome=True)
@@ -342,8 +341,6 @@ def salvar_contagem_gaveta():
 @caixa_bp.route('/caixa/gaveta/carregar', methods=['GET'])
 @caixa_bp.route('/caixa/obter_gaveta', methods=['GET'])
 def carregar_contagem_gaveta():
-    from app import query_tenant
-
     registro = query_tenant(ContagemGaveta).filter_by(usuario_id=current_user.id).order_by(ContagemGaveta.id.desc()).first()
     if not registro:
         return jsonify(ok=True, estado={'dinheiro': [], 'cheques': []})
@@ -360,8 +357,6 @@ def carregar_contagem_gaveta():
 
 @caixa_bp.route('/caixa/adicionar', methods=['POST'])
 def adicionar_caixa():
-    from app import empresa_id_atual, _safe_db_commit
-
     nova_data = datetime.strptime(request.form.get('data'), '%Y-%m-%d').date()
     descricao_base = (request.form.get('descricao') or '').strip()
     tipo = request.form.get('tipo')
@@ -438,8 +433,6 @@ def adicionar_caixa():
 @caixa_bp.route('/caixa/editar/<int:id>', methods=['POST'])
 def editar_lancamento_caixa(id):
     """Atualiza um lançamento existente no caixa."""
-    from app import query_tenant
-
     lancamento = query_tenant(LancamentoCaixa).filter_by(id=id).first_or_404()
     try:
         lancamento.data = datetime.strptime(request.form.get('data'), '%Y-%m-%d').date()
@@ -465,8 +458,6 @@ def editar_lancamento_caixa(id):
 @caixa_bp.route('/caixa/cheque/<int:id>/alternar_status', methods=['POST'])
 def alternar_status_envio_cheque(id):
     """Alterna status de envio físico do cheque entre 'Não Enviado' e 'Enviado'."""
-    from app import query_tenant
-
     lancamento = query_tenant(LancamentoCaixa).filter_by(id=id).first_or_404()
     forma = (lancamento.forma_pagamento or '').lower()
     if 'cheque' not in forma:
@@ -487,8 +478,6 @@ def alternar_status_envio_cheque(id):
 @caixa_bp.route('/caixa/<int:id>/toggle_status_cheque', methods=['POST'])
 def toggle_status_cheque(id):
     """Variante AJAX do alternar_status_envio_cheque (retorna JSON)."""
-    from app import query_tenant
-
     lancamento = query_tenant(LancamentoCaixa).filter_by(id=id).first_or_404()
     forma = str(lancamento.forma_pagamento or '').strip().lower()
     if 'cheque' not in forma:
@@ -507,8 +496,6 @@ def toggle_status_cheque(id):
 @caixa_bp.route('/desfazer_caixa/<int:id>', methods=['POST'])
 def desfazer_caixa(id):
     """Rota genérica para desfazer lançamento do caixa (retorna JSON para Undo via Toast)."""
-    from app import query_tenant
-
     try:
         lancamento = query_tenant(LancamentoCaixa).filter_by(id=id).first_or_404()
         # Estorno reverso (Caixa → Venda)
@@ -538,8 +525,6 @@ def desfazer_caixa(id):
 @caixa_bp.route('/caixa/deletar/<int:id>', methods=['POST'])
 def deletar_caixa(id):
     """Deleta um lançamento aplicando estorno reverso para a venda associada."""
-    from app import query_tenant
-
     try:
         lancamento = query_tenant(LancamentoCaixa).filter_by(id=id).first_or_404()
 
@@ -574,8 +559,6 @@ def deletar_caixa(id):
 @caixa_bp.route('/caixa/deletar_massa', methods=['POST'])
 def deletar_massa_caixa():
     """Deleta múltiplos lançamentos (admin only)."""
-    from app import query_tenant, admin_required
-
     @admin_required
     def _impl():
         deletar_tudo = request.form.get('deletar_tudo') == '1'
@@ -610,8 +593,6 @@ def deletar_massa_caixa():
 @caixa_bp.route('/caixa/importar', methods=['POST'])
 def importar_caixa():
     """Importa lançamentos a partir de CSV/TSV/TXT (5 colunas posicionais)."""
-    from app import empresa_id_atual, query_tenant
-
     if 'arquivo' not in request.files:
         flash('Nenhum arquivo enviado.', 'error')
         return redirect(url_for('caixa.caixa'))
