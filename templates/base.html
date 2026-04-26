@@ -432,10 +432,10 @@
                 <a href="{{ url_for('dashboard') }}" class="px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors text-sm {% if request.endpoint == 'dashboard' %}bg-white/20 text-white font-medium{% else %}text-emerald-50 hover:bg-white/10 hover:text-white{% endif %}">
                     <i data-lucide="layout-dashboard" class="w-4 h-4"></i>Dashboard
                 </a>
-                <a href="{{ url_for('listar_clientes') }}" class="px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors text-sm {% if request.endpoint in ('listar_clientes', 'novo_cliente', 'editar_cliente') %}bg-white/20 text-white font-medium{% else %}text-emerald-50 hover:bg-white/10 hover:text-white{% endif %}">
+                <a href="{{ url_for('clientes.listar_clientes') }}" class="px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors text-sm {% if request.endpoint in ('clientes.listar_clientes', 'clientes.novo_cliente', 'clientes.editar_cliente') %}bg-white/20 text-white font-medium{% else %}text-emerald-50 hover:bg-white/10 hover:text-white{% endif %}">
                     <i data-lucide="users" class="w-4 h-4"></i>Clientes
                 </a>
-                <a href="{{ url_for('listar_produtos') }}" class="px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors text-sm relative {% if request.endpoint in ('listar_produtos', 'novo_produto', 'editar_produto') %}bg-white/20 text-white font-medium{% else %}text-emerald-50 hover:bg-white/10 hover:text-white{% endif %}">
+                <a href="{{ url_for('produtos.listar_produtos') }}" class="px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors text-sm relative {% if request.endpoint in ('produtos.listar_produtos', 'produtos.novo_produto', 'produtos.editar_produto') %}bg-white/20 text-white font-medium{% else %}text-emerald-50 hover:bg-white/10 hover:text-white{% endif %}">
                     <i data-lucide="package" class="w-4 h-4"></i>Entrada de Produtos
                     {% if count_outros and count_outros > 0 %}
                     <span class="ml-1.5 inline-flex items-center justify-center text-amber-300" title="{{ count_outros }} produto(s) em OUTROS sem categoria definida">

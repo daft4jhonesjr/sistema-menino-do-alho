@@ -301,7 +301,7 @@
                 </a>
                 {% endif %}
                 {% if item.diagnostico is defined and item.diagnostico and item.diagnostico.cliente_id %}
-                <a href="{{ url_for('editar_cliente', id=item.diagnostico.cliente_id) }}" class="inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition" title="Verificar dados do cliente no cadastro">
+                <a href="{{ url_for('clientes.editar_cliente', id=item.diagnostico.cliente_id) }}" class="inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition" title="Verificar dados do cliente no cadastro">
                     <i data-lucide="user-check" class="w-4 h-4 mr-2"></i>Ver Cliente
                 </a>
                 {% endif %}

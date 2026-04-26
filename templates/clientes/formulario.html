@@ -11,7 +11,7 @@
 </div>
 
 <div class="bg-white rounded-lg shadow-md p-6 max-w-2xl">
-    <form method="POST" action="{% if cliente %}{{ url_for('editar_cliente', id=cliente.id) }}{% else %}{{ url_for('novo_cliente') }}{% endif %}" onsubmit="return loadingBotao(this)">
+    <form method="POST" action="{% if cliente %}{{ url_for('clientes.editar_cliente', id=cliente.id) }}{% else %}{{ url_for('clientes.novo_cliente') }}{% endif %}" onsubmit="return loadingBotao(this)">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         <div class="mb-4">
             <label for="nome_cliente" class="block text-sm font-medium text-gray-700 mb-2">
@@ -79,7 +79,7 @@
             <button type="submit" class="bg-verde-floresta text-white px-6 py-2 rounded-lg hover:bg-green-800 transition">
                 <i class="fas fa-save mr-2"></i>Salvar
             </button>
-            <a href="{{ url_for('listar_clientes') }}" class="bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400 transition">
+            <a href="{{ url_for('clientes.listar_clientes') }}" class="bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400 transition">
                 <i class="fas fa-times mr-2"></i>Cancelar
             </a>
         </div>

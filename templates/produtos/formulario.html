@@ -21,7 +21,7 @@
     </div>
     {% endif %}
 
-    <form method="POST" action="{% if produto %}{{ url_for('editar_produto', id=produto.id) }}{% else %}{{ url_for('novo_produto') }}{% endif %}" onsubmit="return loadingBotao(this)">
+    <form method="POST" action="{% if produto %}{{ url_for('produtos.editar_produto', id=produto.id) }}{% else %}{{ url_for('produtos.novo_produto') }}{% endif %}" onsubmit="return loadingBotao(this)">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <!-- 1. Produto (Nome gerado) - Exibido acima se editando -->
@@ -154,7 +154,7 @@
             <button type="submit" class="bg-verde-floresta text-white px-6 py-2 rounded-lg hover:bg-green-800 transition">
                 <i class="fas fa-save mr-2"></i>Salvar
             </button>
-            <a href="{{ url_for('listar_produtos') }}" class="bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400 transition">
+            <a href="{{ url_for('produtos.listar_produtos') }}" class="bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400 transition">
                 <i class="fas fa-times mr-2"></i>Cancelar
             </a>
         </div>
