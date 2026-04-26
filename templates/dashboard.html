@@ -292,11 +292,11 @@
                 </div>
             </div>
             <div class="flex flex-col sm:flex-row items-center gap-2 flex-shrink-0 p-4 sm:pl-0 sm:pr-4 sm:py-4 border-t sm:border-t-0 sm:border-l border-gray-200 dark:border-gray-700">
-                <a href="{{ url_for('visualizar_documento', id=doc.id) }}" target="_blank" class="inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition">
+                <a href="{{ url_for('documentos.visualizar_documento', id=doc.id) }}" target="_blank" class="inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition">
                     <i data-lucide="external-link" class="w-4 h-4 mr-2"></i>Visualizar
                 </a>
                 {% if current_user.is_admin() %}
-                <a href="{{ url_for('debug_texto_arquivo', id=doc.id) }}" target="_blank" title="Ver texto bruto lido pelo robô" class="inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-slate-200 hover:bg-slate-300 text-slate-700 transition-colors">
+                <a href="{{ url_for('documentos.debug_texto_arquivo', id=doc.id) }}" target="_blank" title="Ver texto bruto lido pelo robô" class="inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-slate-200 hover:bg-slate-300 text-slate-700 transition-colors">
                     <i data-lucide="search" class="w-4 h-4 mr-2"></i>Debug
                 </a>
                 {% endif %}
@@ -310,7 +310,7 @@
                 {% if doc.razao_social %}{% set _ = criar_venda_params.update({'cliente': doc.razao_social}) %}{% endif %}
                 {% if doc.numero_nf %}{% set _ = criar_venda_params.update({'nf': doc.numero_nf}) %}{% endif %}
                 {% if doc.data_vencimento %}{% set _ = criar_venda_params.update({'data': doc.data_vencimento.strftime('%Y-%m-%d')}) %}{% endif %}
-                <a href="{{ url_for('listar_vendas', **criar_venda_params) }}" class="inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-gray-600 text-white hover:bg-gray-700 transition">
+                <a href="{{ url_for('vendas.listar_vendas', **criar_venda_params) }}" class="inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-gray-600 text-white hover:bg-gray-700 transition">
                     <i data-lucide="plus-circle" class="w-4 h-4 mr-2"></i>Criar venda
                 </a>
                 {% endif %}

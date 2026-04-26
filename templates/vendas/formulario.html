@@ -11,7 +11,7 @@
 </div>
 
 <div class="bg-white rounded-lg shadow-md p-4 sm:p-6 max-w-3xl overflow-hidden">
-    <form method="POST" action="{% if venda %}{{ url_for('editar_venda', id=venda.id) }}{% else %}{{ url_for('nova_venda') }}{% endif %}" onsubmit="return loadingBotao(this)">
+    <form method="POST" action="{% if venda %}{{ url_for('vendas.editar_venda', id=venda.id) }}{% else %}{{ url_for('vendas.nova_venda') }}{% endif %}" onsubmit="return loadingBotao(this)">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="mb-4">
@@ -125,7 +125,7 @@
             <button type="submit" class="bg-verde-floresta text-white px-6 py-2 rounded-lg hover:bg-green-800 transition">
                 <i class="fas fa-save mr-2"></i>Salvar
             </button>
-            <a href="{{ url_for('listar_vendas') }}" class="bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400 transition">
+            <a href="{{ url_for('vendas.listar_vendas') }}" class="bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400 transition">
                 <i class="fas fa-times mr-2"></i>Cancelar
             </a>
         </div>

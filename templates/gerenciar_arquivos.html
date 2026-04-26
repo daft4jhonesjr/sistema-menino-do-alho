@@ -15,7 +15,7 @@
     <button type="button" onclick="document.getElementById('input-upload-massa').click()" id="btn-upload-massa" class="bg-emerald-600 text-white px-4 py-2 rounded-md font-semibold text-sm hover:bg-emerald-700 transition-colors shadow-sm flex items-center gap-2">
         <span>📤 Importar Arquivos</span>
     </button>
-    <form method="GET" action="{{ url_for('admin_arquivos') }}" class="w-full md:w-auto md:min-w-[360px]">
+    <form method="GET" action="{{ url_for('documentos.admin_arquivos') }}" class="w-full md:w-auto md:min-w-[360px]">
         <div class="relative">
             <input type="text" name="busca" value="{{ busca or '' }}" placeholder="Buscar por NF, ID ou Cliente..." class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 pr-24">
             <button type="submit" class="absolute right-1 top-1 bottom-1 px-3 rounded-md bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition-colors">Buscar</button>
@@ -23,7 +23,7 @@
     </form>
 </div>
 
-<form action="{{ url_for('admin_arquivos_deletar_massa') }}" method="POST" id="form-deletar-massa">
+<form action="{{ url_for('documentos.admin_arquivos_deletar_massa') }}" method="POST" id="form-deletar-massa">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
     <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-hidden">
         <div class="overflow-x-auto">
@@ -73,7 +73,7 @@
                                 <i data-lucide="eye" class="w-4 h-4"></i>Visualizar
                             </a>
                             {% else %}
-                            <a href="{{ url_for('visualizar_documento', id=doc.id) }}" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition" title="Abrir PDF em nova aba">
+                            <a href="{{ url_for('documentos.visualizar_documento', id=doc.id) }}" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition" title="Abrir PDF em nova aba">
                                 <i data-lucide="eye" class="w-4 h-4"></i>Visualizar
                             </a>
                             {% endif %}
