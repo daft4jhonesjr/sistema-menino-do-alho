@@ -37,7 +37,7 @@
                     {% endfor %}
                 {% endif %}
             {% endwith %}
-            <form method="POST" action="{{ url_for('login') }}" class="space-y-4">
+            <form method="POST" action="{{ url_for('auth.login') }}" class="space-y-4">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <input type="hidden" name="next" value="{{ request.args.get('next', '') }}">
                 <div>
@@ -75,7 +75,7 @@
                 </button>
             </form>
             <p class="mt-4 text-center text-sm text-gray-500 dark:text-gray-400">
-                Não tem conta? <a href="{{ url_for('cadastro') }}" class="text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 font-medium">Cadastre-se</a>
+                Não tem conta? <a href="{{ url_for('auth.cadastro') }}" class="text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 font-medium">Cadastre-se</a>
             </p>
         </div>
     </div>

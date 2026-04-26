@@ -28,7 +28,7 @@
                 <span class="text-sm text-slate-300 hidden sm:block">
                     Logado como <strong>{{ current_user.username }}</strong>
                 </span>
-                <a href="{{ url_for('logout') }}" class="inline-flex items-center gap-2 rounded-lg bg-slate-700 hover:bg-slate-600 px-3 py-1.5 text-sm font-medium transition-colors">
+                <a href="{{ url_for('auth.logout') }}" class="inline-flex items-center gap-2 rounded-lg bg-slate-700 hover:bg-slate-600 px-3 py-1.5 text-sm font-medium transition-colors">
                     <i class="fas fa-sign-out-alt"></i> Sair
                 </a>
             </div>
@@ -91,7 +91,7 @@
                                     <span><i class="fas fa-calendar mr-1"></i>{{ empresa.data_cadastro.strftime('%d/%m/%Y') }}</span>
                                 </div>
                             </div>
-                            <form method="POST" action="{{ url_for('master_toggle_empresa_ativo', empresa_id=empresa.id) }}"
+                            <form method="POST" action="{{ url_for('master.master_toggle_empresa_ativo', empresa_id=empresa.id) }}"
                                   onsubmit="return confirm('{% if empresa.ativo %}Suspender{% else %}Reativar{% endif %} a empresa {{ empresa.nome_fantasia }}?');">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit"
@@ -126,7 +126,7 @@
                         </p>
                     </header>
 
-                    <form method="POST" action="{{ url_for('master_admin') }}" class="space-y-4">
+                    <form method="POST" action="{{ url_for('master.master_admin') }}" class="space-y-4">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
                         <div>

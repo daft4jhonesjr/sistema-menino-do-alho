@@ -2477,7 +2477,7 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
 
 login_manager = LoginManager()
 login_manager.init_app(app)
-login_manager.login_view = 'login'
+login_manager.login_view = 'auth.login'
 login_manager.login_message = 'Faça login para acessar esta página.'
 
 csrf = CSRFProtect(app)
@@ -2860,7 +2860,7 @@ def admin_required(f):
     @wraps(f)
     def wrapped(*args, **kwargs):
         if not current_user.is_authenticated:
-            return redirect(url_for('login'))
+            return redirect(url_for('auth.login'))
         if not current_user.is_admin():
             flash('Acesso restrito ao Administrador.', 'warning')
             return redirect(url_for('dashboard'))
@@ -2899,7 +2899,7 @@ def master_required(f):
     @wraps(f)
     def wrapped(*args, **kwargs):
         if not current_user.is_authenticated:
-            return redirect(url_for('login'))
+            return redirect(url_for('auth.login'))
         if not getattr(current_user, 'is_master', lambda: False)():
             # Nao expomos 404/403 especifico: flash neutro para nao vazar
             # a existencia do painel master para contas comuns.
@@ -2920,16 +2920,16 @@ def tenant_required(f):
     @wraps(f)
     def wrapped(*args, **kwargs):
         if not current_user.is_authenticated:
-            return redirect(url_for('login'))
+            return redirect(url_for('auth.login'))
         if getattr(current_user, 'is_master', lambda: False)():
-            return redirect(url_for('master_admin'))
+            return redirect(url_for('master.master_admin'))
         if not getattr(current_user, 'empresa_id', None):
             flash(
                 'Seu usuario nao esta vinculado a nenhuma empresa. '
                 'Contate o administrador.',
                 'error',
             )
-            return redirect(url_for('login'))
+            return redirect(url_for('auth.login'))
         return f(*args, **kwargs)
     return wrapped
 
@@ -3579,179 +3579,11 @@ def _pos_login_landing(user):
       invalido para rotas operacionais.
     """
     if getattr(user, 'is_master', lambda: False)():
-        return url_for('master_admin')
+        return url_for('master.master_admin')
     if not getattr(user, 'empresa_id', None):
         return None
     return url_for('dashboard')
 
-
-@app.route('/login', methods=['GET', 'POST'])
-@limiter.limit("200 per minute")  # Proteção contra brute force: máximo 5 tentativas por minuto
-def login():
-    if current_user.is_authenticated:
-        destino = _pos_login_landing(current_user)
-        return redirect(destino or url_for('login'))
-    if request.method == 'POST':
-        username = (request.form.get('username') or '').strip()
-        password = request.form.get('password') or ''
-        if not username or not password:
-            flash('Preencha usuário e senha.', 'error')
-            return render_template('auth/login.html')
-        try:
-            user = Usuario.query.filter_by(username=username).first()
-        except Exception:
-            db.session.rollback()
-            try:
-                user = Usuario.query.filter_by(username=username).first()
-            except Exception:
-                flash('Erro no sistema, tente novamente.', 'error')
-                return render_template('auth/login.html')
-        if not user or not check_password_hash(user.password_hash, password):
-            flash('Usuário ou senha inválidos.', 'error')
-            return render_template('auth/login.html')
-        # Bloqueia login em tenants suspensos (exceto MASTER, que nao pertence a tenant).
-        if not getattr(user, 'is_master', lambda: False)():
-            empresa = getattr(user, 'empresa', None)
-            if empresa is not None and not empresa.ativo:
-                flash('Empresa suspensa. Contate o administrador do sistema.', 'error')
-                return render_template('auth/login.html')
-            if not getattr(user, 'empresa_id', None):
-                flash('Seu usuário não está vinculado a nenhuma empresa. Contate o administrador.', 'error')
-                return render_template('auth/login.html')
-        remember = True if request.form.get('remember') else False
-        login_user(user, remember=remember)
-        destino_padrao = _pos_login_landing(user) or url_for('login')
-        next_url = request.form.get('next') or request.args.get('next')
-        if not _is_safe_next_url(next_url):
-            next_url = destino_padrao
-        # MASTER NUNCA eh redirecionado para rotas operacionais, mesmo com next=.
-        if getattr(user, 'is_master', lambda: False)():
-            next_url = url_for('master_admin')
-        return redirect(next_url)
-    return render_template('auth/login.html')
-
-
-@app.route('/logout')
-@login_required
-def logout():
-    logout_user()
-    return redirect(url_for('login'))
-
-
-@app.route('/configuracoes', methods=['GET', 'POST'])
-@login_required
-def configuracoes():
-    usuario = current_user
-    if request.method == 'POST':
-        usuario.notifica_boletos = 'notifica_boletos' in request.form
-        usuario.notifica_radar = 'notifica_radar' in request.form
-        usuario.notifica_logistica = 'notifica_logistica' in request.form
-        usuario.notifica_frase = 'notifica_frase' in request.form
-        db.session.commit()
-        flash('Configurações de notificação atualizadas com sucesso!', 'success')
-        return redirect(url_for('configuracoes'))
-
-    # Lê as últimas 100 linhas do log de erros críticos para exibição server-side
-    erros_log_content = 'Nenhum erro crítico registrado ainda.'
-    if current_user.is_admin():
-        try:
-            if os.path.exists(_logs_file):
-                with open(_logs_file, 'r', encoding='utf-8') as f:
-                    linhas = f.readlines()
-                erros_log_content = ''.join(linhas[-100:]) if linhas else 'Log de erros vazio.'
-        except Exception as e:
-            erros_log_content = f'Não foi possível ler o log de erros: {str(e)}'
-
-    return render_template('configuracoes.html', usuario=usuario, erros_log_content=erros_log_content)
-
-
-@app.route('/api/logs/erros', methods=['GET'])
-@login_required
-def ler_logs_erros():
-    if not current_user.is_admin():
-        return jsonify({'status': 'erro', 'mensagem': 'Acesso negado.'}), 403
-    try:
-        with open(_logs_file, 'r', encoding='utf-8') as f:
-            linhas = f.readlines()
-            conteudo = ''.join(linhas[-200:]) if linhas else 'Nenhum erro registrado ainda.'
-        return jsonify({'status': 'sucesso', 'logs': conteudo})
-    except FileNotFoundError:
-        return jsonify({'status': 'sucesso', 'logs': 'Arquivo de log não encontrado. O sistema está limpo.'})
-    except Exception as e:
-        app.logger.error(f"Erro ao ler logs: {str(e)}\n{traceback.format_exc()}")
-        return jsonify({'status': 'erro', 'mensagem': 'Falha ao ler o arquivo de logs.'}), 500
-
-
-@app.route('/api/logs/limpar', methods=['POST'])
-@login_required
-def limpar_logs_erros():
-    if not current_user.is_admin():
-        return jsonify({'status': 'erro', 'mensagem': 'Acesso negado.'}), 403
-    try:
-        # Trunca o log de erros críticos (erros_sistema.log)
-        with open(_logs_file, 'w', encoding='utf-8') as f:
-            pass
-        return jsonify({'status': 'sucesso'})
-    except Exception as e:
-        app.logger.error(f"Erro ao limpar logs: {str(e)}\n{traceback.format_exc()}")
-        return jsonify({'status': 'erro', 'mensagem': str(e)}), 500
-
-
-@app.route('/perfil', methods=['GET', 'POST'])
-@login_required
-def perfil():
-    """
-    Exibe e atualiza o perfil do utilizador autenticado.
-
-    GET: Renderiza o formulário com dados atuais.
-    POST: Atualiza nome, username, email e foto de perfil (Cloudinary).
-
-    Returns:
-        redirect: Para 'perfil' após sucesso ou erro.
-        render_template: Formulário de perfil.
-    """
-    if request.method == 'POST':
-        novo_nome_real = request.form.get('nome', '').strip()
-        novo_username = request.form.get('username', '').strip()
-        imagem = request.files.get('profile_image')
-        # Atualizar Nome Real/Completo
-        current_user.nome = novo_nome_real if novo_nome_real else None
-        novo_email = request.form.get('email', '').strip()
-        current_user.email = novo_email if novo_email else None
-        # Atualizar Username (com verificação de duplicidade)
-        if novo_username and novo_username != current_user.username:
-            if Usuario.query.filter_by(username=novo_username).first():
-                flash('Este nome de usuário já está em uso.', 'error')
-            else:
-                current_user.username = novo_username
-                flash('Nome de usuário atualizado!', 'success')
-        # Atualizar Foto de Perfil (Upload para Cloudinary)
-        if imagem and imagem.filename != '':
-            if not _arquivo_imagem_permitido(imagem.filename):
-                flash('Tipo de arquivo não permitido. Use PNG, JPG, JPEG, GIF ou WEBP.', 'error')
-            elif os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL'):
-                try:
-                    upload_result = cloudinary.uploader.upload(
-                        imagem,
-                        folder="perfis_usuarios",
-                        public_id=f"user_{current_user.id}_profile",
-                        timeout=_EXTERNAL_TIMEOUT,
-                        overwrite=True,
-                        resource_type="image"
-                    )
-                    current_user.profile_image_url = upload_result['secure_url']
-                    flash('Foto de perfil atualizada com sucesso!', 'success')
-                except Exception as e:
-                    flash(f'Erro ao fazer upload da imagem: {str(e)}', 'error')
-            else:
-                flash('Cloudinary não configurado. Não foi possível enviar a foto.', 'error')
-        ok, err = _safe_db_commit()
-        if not ok:
-            flash(err or "Erro ao salvar perfil. Tente novamente.", "error")
-            return redirect(url_for("perfil"))
-        flash('Perfil atualizado com sucesso!', 'success')
-        return redirect(url_for('perfil'))
-    return render_template('auth/perfil.html', user=current_user)
 
 
 def get_config(empresa_id=None):
@@ -3788,418 +3620,6 @@ def get_config(empresa_id=None):
     return config
 
 
-# ============================================================
-# PAINEL SUPER ADMIN (MASTER) — Fase 2
-# ============================================================
-# Acesso restrito a usuarios com perfil=MASTER. Permite criar novas
-# Empresas (tenants) e ja instancia o primeiro Usuario DONO vinculado.
-# Nao expomos cadastro publico de empresas: novos tenants sao criados
-# exclusivamente aqui.
-
-def _master_validar_form_nova_empresa(form):
-    """Valida campos do form de criacao de Empresa+Dono.
-
-    Retorna (dados_validados, erro). Se erro, dados_validados eh None.
-    """
-    nome_fantasia = (form.get('nome_fantasia') or '').strip()
-    cnpj = (form.get('cnpj') or '').strip() or None
-    dono_nome = (form.get('dono_nome') or '').strip() or None
-    dono_username = (form.get('dono_username') or '').strip()
-    dono_email = (form.get('dono_email') or '').strip() or None
-    dono_senha = form.get('dono_senha') or ''
-    dono_senha_confirmar = form.get('dono_senha_confirmar') or ''
-
-    if not nome_fantasia:
-        return None, 'Informe o nome fantasia da empresa.'
-    if not dono_username:
-        return None, 'Informe o login (username) do Dono da empresa.'
-    if not dono_senha:
-        return None, 'Informe a senha inicial do Dono.'
-    if dono_senha != dono_senha_confirmar:
-        return None, 'As senhas nao conferem.'
-    if len(dono_senha) < 6:
-        return None, 'A senha deve ter pelo menos 6 caracteres.'
-    if Usuario.query.filter_by(username=dono_username).first():
-        return None, f'Ja existe um usuario com o login "{dono_username}".'
-    if cnpj and Empresa.query.filter_by(cnpj=cnpj).first():
-        return None, f'Ja existe uma empresa com o CNPJ "{cnpj}".'
-
-    return {
-        'nome_fantasia': nome_fantasia,
-        'cnpj': cnpj,
-        'dono_nome': dono_nome,
-        'dono_username': dono_username,
-        'dono_email': dono_email,
-        'dono_senha': dono_senha,
-    }, None
-
-
-@app.route('/master-admin', methods=['GET', 'POST'])
-@login_required
-@master_required
-def master_admin():
-    """Painel Super Admin: cria novas Empresas + Dono inicial."""
-    if request.method == 'POST':
-        dados, erro = _master_validar_form_nova_empresa(request.form)
-        if erro:
-            flash(erro, 'error')
-            return redirect(url_for('master_admin'))
-
-        try:
-            nova_empresa = Empresa(
-                nome_fantasia=dados['nome_fantasia'],
-                cnpj=dados['cnpj'],
-                ativo=True,
-            )
-            db.session.add(nova_empresa)
-            db.session.flush()  # garante nova_empresa.id
-
-            dono = Usuario(
-                username=dados['dono_username'],
-                password_hash=generate_password_hash(dados['dono_senha']),
-                role='admin',  # legado: dono do tenant eh admin pra rotas que olham is_admin()
-                perfil=PERFIL_DONO,
-                empresa_id=nova_empresa.id,
-                nome=dados['dono_nome'],
-                email=dados['dono_email'],
-            )
-            db.session.add(dono)
-            db.session.commit()
-        except Exception as e:
-            db.session.rollback()
-            logging.error('Erro ao criar empresa+dono: %s', e, exc_info=True)
-            flash('Erro ao criar empresa. Tente novamente.', 'error')
-            return redirect(url_for('master_admin'))
-
-        flash(
-            f'Empresa "{nova_empresa.nome_fantasia}" criada com sucesso. '
-            f'Usuario Dono: {dono.username}.',
-            'success',
-        )
-        return redirect(url_for('master_admin'))
-
-    empresas = (
-        db.session.query(
-            Empresa,
-            db.func.count(Usuario.id).label('total_usuarios'),
-        )
-        .outerjoin(Usuario, Usuario.empresa_id == Empresa.id)
-        .group_by(Empresa.id)
-        .order_by(Empresa.data_cadastro.desc())
-        .all()
-    )
-    return render_template('admin_master.html', empresas=empresas)
-
-
-@app.route('/master-admin/empresa/<int:empresa_id>/toggle_ativo', methods=['POST'])
-@login_required
-@master_required
-def master_toggle_empresa_ativo(empresa_id):
-    """Ativa/desativa um tenant (suspensao por inadimplencia, etc.)."""
-    empresa = Empresa.query.get_or_404(empresa_id)
-    empresa.ativo = not bool(empresa.ativo)
-    ok, err = _safe_db_commit()
-    if not ok:
-        flash(err or 'Erro ao atualizar empresa.', 'error')
-    else:
-        estado = 'ativada' if empresa.ativo else 'desativada'
-        flash(f'Empresa "{empresa.nome_fantasia}" {estado}.', 'success')
-    return redirect(url_for('master_admin'))
-
-
-@app.route('/cadastro', methods=['GET', 'POST'])
-@limiter.limit("10 per hour")
-def cadastro():
-    """Cadastro publico de FUNCIONARIO vinculado a um tenant existente.
-
-    Regras multi-tenant (Fase 2):
-    - O codigo de seguranca identifica a empresa: precisa bater com uma
-      Configuracao.codigo_cadastro de alguma empresa ATIVA.
-    - O usuario criado recebe perfil=FUNCIONARIO e empresa_id da empresa
-      cujo codigo foi informado.
-    - Novas EMPRESAS (tenants) NAO sao criadas aqui -- sao criadas apenas
-      pelo painel MASTER (/master-admin).
-    """
-    if current_user.is_authenticated:
-        return redirect(url_for('dashboard'))
-    erro = None
-    if request.method == 'POST':
-        username = (request.form.get('username') or '').strip()
-        senha = request.form.get('password') or ''
-        confirmar = request.form.get('confirmar') or ''
-        codigo_seguranca = (request.form.get('codigo_seguranca') or '').strip()
-
-        # Identifica a empresa pelo codigo de cadastro informado.
-        empresa_alvo = None
-        if codigo_seguranca:
-            config_match = (
-                Configuracao.query
-                .filter(Configuracao.codigo_cadastro == codigo_seguranca)
-                .filter(Configuracao.empresa_id.isnot(None))
-                .first()
-            )
-            if config_match:
-                empresa_alvo = Empresa.query.filter_by(
-                    id=config_match.empresa_id, ativo=True
-                ).first()
-
-        if not username:
-            erro = 'Informe o usuário.'
-        elif not senha:
-            erro = 'Informe a senha.'
-        elif senha != confirmar:
-            erro = 'As senhas não coincidem.'
-        elif not empresa_alvo:
-            erro = 'Código de segurança inválido!'
-        elif Usuario.query.filter_by(username=username).first():
-            erro = 'Este usuário já está em uso.'
-        else:
-            email_cadastro = (request.form.get('email') or '').strip() or None
-            u = Usuario(
-                username=username,
-                password_hash=generate_password_hash(senha),
-                role='user',
-                perfil=PERFIL_FUNCIONARIO,
-                empresa_id=empresa_alvo.id,
-                email=email_cadastro,
-            )
-            db.session.add(u)
-            ok, err = _safe_db_commit()
-            if not ok:
-                flash(err or "Erro ao criar conta. Tente novamente.", "error")
-                return render_template("auth/cadastro.html")
-            flash("Cadastro realizado! Faça login.", "success")
-            return redirect(url_for("login"))
-        if erro:
-            flash(erro, 'error')
-    return render_template('auth/cadastro.html')
-
-
-def _checar_gestao_usuario_permitida(usuario_alvo):
-    """Garante que DONO so gerencia usuarios da propria empresa.
-
-    MASTER nao chega aqui (tenant_required redireciona para master_admin).
-    Retorna (ok, redirect_response).
-    """
-    if usuario_alvo is None:
-        flash('Usuario nao encontrado.', 'error')
-        return False, redirect(url_for('gerenciar_usuarios'))
-    eid_atual = empresa_id_atual()
-    alvo_eid = getattr(usuario_alvo, 'empresa_id', None)
-    if eid_atual and alvo_eid and alvo_eid != eid_atual:
-        flash('Acesso negado: usuario pertence a outra empresa.', 'error')
-        return False, redirect(url_for('gerenciar_usuarios'))
-    return True, None
-
-
-@app.route('/gerenciar_usuarios', methods=['GET', 'POST'])
-@login_required
-@tenant_required
-@admin_required
-def gerenciar_usuarios():
-    # Auto-correcao de seguranca: se 'Jhones' ficou orfao (empresa_id=None),
-    # religa automaticamente a Empresa Matriz (id=1) como DONO/admin.
-    # Conservador: so age sobre Jhones e so se Empresa id=1 ja existir.
-    if current_user.username == 'Jhones' and current_user.empresa_id is None:
-        empresa_matriz = Empresa.query.filter_by(id=1).first()
-        if empresa_matriz is not None:
-            current_user.empresa_id = 1
-            current_user.perfil = PERFIL_DONO
-            current_user.role = 'admin'
-            _safe_db_commit()
-
-    # POST: cadastro de nova Empresa + Dono (SaaS). Apenas Jhones ou MASTER.
-    if request.method == 'POST' and request.form.get('acao') == 'cadastrar_empresa':
-        if not (current_user.username == 'Jhones' or current_user.perfil == PERFIL_MASTER):
-            flash('Acesso negado: apenas o administrador principal pode cadastrar empresas.', 'error')
-            return redirect(url_for('gerenciar_usuarios'))
-
-        nome_fantasia = (request.form.get('nome_fantasia') or '').strip()
-        username_dono = (request.form.get('username_dono') or '').strip()
-        senha_provisoria = request.form.get('senha_provisoria') or ''
-
-        if not nome_fantasia:
-            flash('Informe o Nome Fantasia da empresa.', 'error')
-            return redirect(url_for('gerenciar_usuarios'))
-        if not username_dono:
-            flash('Informe o Username do Dono.', 'error')
-            return redirect(url_for('gerenciar_usuarios'))
-        if len(senha_provisoria) < 6:
-            flash('A senha provisória deve ter no mínimo 6 caracteres.', 'error')
-            return redirect(url_for('gerenciar_usuarios'))
-        if Usuario.query.filter_by(username=username_dono).first():
-            flash(f'O usuário "{username_dono}" já está em uso.', 'error')
-            return redirect(url_for('gerenciar_usuarios'))
-        if Empresa.query.filter(func.lower(Empresa.nome_fantasia) == nome_fantasia.lower()).first():
-            flash(f'Já existe uma empresa cadastrada com o nome "{nome_fantasia}".', 'error')
-            return redirect(url_for('gerenciar_usuarios'))
-
-        try:
-            nova_empresa = Empresa(
-                nome_fantasia=nome_fantasia,
-                ativo=True,
-                data_cadastro=datetime.utcnow(),
-            )
-            db.session.add(nova_empresa)
-            db.session.flush()
-
-            novo_dono = Usuario(
-                username=username_dono,
-                password_hash=generate_password_hash(senha_provisoria),
-                role='admin',
-                perfil=PERFIL_DONO,
-                empresa_id=nova_empresa.id,
-            )
-            db.session.add(novo_dono)
-            ok, err = _safe_db_commit()
-            if not ok:
-                flash(err or 'Erro ao cadastrar empresa.', 'error')
-                return redirect(url_for('gerenciar_usuarios'))
-        except Exception as e:
-            db.session.rollback()
-            flash(f'Erro ao cadastrar empresa: {e}', 'error')
-            return redirect(url_for('gerenciar_usuarios'))
-
-        flash(f'Empresa "{nome_fantasia}" e Dono "{username_dono}" criados com sucesso.', 'success')
-        return redirect(url_for('gerenciar_usuarios'))
-
-    # GET: lista usuarios do tenant atual com empresa em eager loading.
-    usuarios = (
-        Usuario.query
-        .options(joinedload(Usuario.empresa))
-        .filter_by(empresa_id=empresa_id_atual())
-        .order_by(Usuario.username)
-        .all()
-    )
-    config = get_config()
-    return render_template('auth/gerenciar_usuarios.html', usuarios=usuarios, config=config)
-
-
-@app.route('/gerenciar_usuarios/atualizar_codigo', methods=['POST'])
-@login_required
-@tenant_required
-@admin_required
-def atualizar_codigo_cadastro():
-    """Atualiza o código de segurança exigido no cadastro de novos usuários."""
-    novo_codigo = (request.form.get('codigo_cadastro') or '').strip()
-    confirmar = (request.form.get('confirmar_codigo') or '').strip()
-    if not novo_codigo:
-        flash('Informe o novo código de segurança.', 'error')
-        return redirect(url_for('gerenciar_usuarios'))
-    if novo_codigo != confirmar:
-        flash('Os códigos não conferem!', 'error')
-        return redirect(url_for('gerenciar_usuarios'))
-    config = get_config()
-    config.codigo_cadastro = novo_codigo
-    ok, err = _safe_db_commit()
-    if not ok:
-        flash(err or "Erro ao atualizar código de cadastro.", "error")
-        return redirect(url_for("gerenciar_usuarios"))
-    flash("Código de cadastro atualizado com sucesso.", "success")
-    return redirect(url_for("gerenciar_usuarios"))
-
-
-@app.route('/gerenciar_usuarios/editar_completo/<int:id>', methods=['POST'])
-@login_required
-@tenant_required
-@admin_required
-def editar_usuario_completo(id):
-    u = Usuario.query.get_or_404(id)
-    ok_perm, resp = _checar_gestao_usuario_permitida(u)
-    if not ok_perm:
-        return resp
-    novo_nome = request.form.get('username', '').strip()
-    senha_atual = (request.form.get('senha_atual') or '').strip()
-    nova_senha = (request.form.get('nova_senha') or '').strip()
-    confirmar_senha = (request.form.get('confirmar_senha') or '').strip()
-    novo_role = request.form.get('role')
-    senha_alterada = False
-    # Lógica para alterar o Nome de Usuário
-    if novo_nome and novo_nome != u.username:
-        existe = Usuario.query.filter_by(username=novo_nome).first()
-        if existe:
-            flash(f'Erro: O nome {novo_nome} já está em uso por outro usuário.', 'error')
-            return redirect(url_for('gerenciar_usuarios'))
-        u.username = novo_nome
-    # Atualiza senha somente com validação rigorosa.
-    if nova_senha or confirmar_senha:
-        if nova_senha != confirmar_senha:
-            flash('As novas senhas não coincidem. Tente novamente.', 'error')
-            return redirect(url_for('gerenciar_usuarios'))
-        if not senha_atual:
-            flash('Para alterar a senha, você deve informar a Senha Atual.', 'error')
-            return redirect(url_for('gerenciar_usuarios'))
-        if not check_password_hash(current_user.password_hash, senha_atual):
-            flash('A Senha Atual está incorreta. Alteração de senha negada.', 'error')
-            return redirect(url_for('gerenciar_usuarios'))
-        u.password_hash = generate_password_hash(nova_senha)
-        senha_alterada = True
-    # Atualiza nível (Proteção para o Jhones não se auto-rebaixar)
-    if novo_role in ('admin', 'user'):
-        if u.username == 'Jhones' and novo_role == 'user':
-            flash('Atenção: O administrador principal não pode ser alterado para usuário comum.', 'warning')
-        else:
-            u.role = novo_role
-    ok, err = _safe_db_commit()
-    if not ok:
-        flash(err or "Erro ao atualizar usuário. Tente novamente.", "error")
-        return redirect(url_for("gerenciar_usuarios"))
-    if senha_alterada:
-        flash(f'Usuário {u.username} atualizado com sucesso! A senha foi redefinida.', 'success')
-    else:
-        flash(f'Usuário {u.username} atualizado com sucesso!', 'success')
-    return redirect(url_for('gerenciar_usuarios'))
-
-
-@app.route('/gerenciar_usuarios/excluir/<int:id>', methods=['POST'])
-@login_required
-@tenant_required
-@admin_required
-def excluir_usuario(id):
-    if current_user.id == id:
-        flash('Você não pode excluir a sua própria conta!', 'error')
-        return redirect(url_for('gerenciar_usuarios'))
-    u = Usuario.query.get_or_404(id)
-    ok_perm, resp = _checar_gestao_usuario_permitida(u)
-    if not ok_perm:
-        return resp
-    if u.username == 'Jhones':
-        flash('O administrador principal (Jhones) não pode ser excluído.', 'warning')
-        return redirect(url_for('gerenciar_usuarios'))
-    try:
-        nome = u.username
-        db.session.delete(u)
-        db.session.commit()
-        flash(f'Usuário "{nome}" excluído com sucesso.', 'success')
-    except Exception:
-        db.session.rollback()
-        flash('Erro ao excluir usuário.', 'error')
-    return redirect(url_for('gerenciar_usuarios'))
-
-
-@app.route('/gerenciar_usuarios/alterar_role/<int:id>', methods=['POST'])
-@login_required
-@tenant_required
-@admin_required
-def alterar_role_usuario(id):
-    u = Usuario.query.get_or_404(id)
-    ok_perm, resp = _checar_gestao_usuario_permitida(u)
-    if not ok_perm:
-        return resp
-    novo_role = request.form.get('role')
-    if novo_role not in ('admin', 'user'):
-        flash('Nível inválido.', 'error')
-        return redirect(url_for('gerenciar_usuarios'))
-    if u.username == 'Jhones':
-        flash('O administrador principal (Jhones) não pode ser alterado.', 'warning')
-        return redirect(url_for('gerenciar_usuarios'))
-    u.role = novo_role
-    ok, err = _safe_db_commit()
-    if not ok:
-        flash(err or "Erro ao alterar nível do usuário.", "error")
-        return redirect(url_for("gerenciar_usuarios"))
-    flash(f'Nível de "{u.username}" alterado para {novo_role}.', 'success')
-    return redirect(url_for('gerenciar_usuarios'))
 
 
 @app.route('/historico')
@@ -11451,6 +10871,27 @@ def debug_vincular():
             'traceback': traceback.format_exc(),
             'timestamp': datetime.now().isoformat()
         }), 500
+
+
+# ============================================================
+# REGISTRO DE BLUEPRINTS — refatoração estrutural (Fase 1)
+# ============================================================
+# IMPORTANTE: o import abaixo é deliberadamente colocado no FINAL
+# de app.py. Os blueprints (routes/auth.py, routes/master.py)
+# fazem ``from app import ...`` para reusar helpers/decorators
+# (tenant_required, master_required, _safe_db_commit, get_config,
+# limiter, _logs_file, _pos_login_landing, etc). Importar os
+# blueprints somente após esses símbolos estarem definidos evita
+# ciclos de import.
+#
+# Próximas fases extrairão dashboard, vendas, produtos, documentos,
+# caixa e clientes. Quando todos os blueprints estiverem prontos,
+# moveremos as singletons (db/login_manager/cache/csrf/limiter)
+# para um ``extensions.py`` e os helpers para ``services/``.
+from routes import auth_bp, master_bp
+
+app.register_blueprint(auth_bp)
+app.register_blueprint(master_bp)
 
 
 if __name__ == '__main__':
