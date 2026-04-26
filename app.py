@@ -5961,6 +5961,12 @@ def listar_produtos():
         
         for produto_id, lucro_total in lucros_agregados:
             lucro_realizado_por_produto[produto_id] = float(lucro_total) if lucro_total else 0.0
+
+    # Lucro médio por unidade: derivado dos dois dicts já agregados (sem novas queries).
+    lucro_medio_por_produto = {}
+    for pid, lucro in lucro_realizado_por_produto.items():
+        qtd = quantidade_vendida_por_produto.get(pid, 0)
+        lucro_medio_por_produto[pid] = (lucro / qtd) if qtd else 0.0
     
     # Calcular totais globais por tipo (usando TODOS os produtos)
     totais_por_tipo = {}
@@ -6086,7 +6092,10 @@ def listar_produtos():
         html_linhas = render_template(
             '_linhas_entrada.html',
             produtos_agrupados=produtos_agrupados,
-            current_page=page
+            current_page=page,
+            quantidade_vendida_por_produto=quantidade_vendida_por_produto,
+            lucro_realizado_por_produto=lucro_realizado_por_produto,
+            lucro_medio_por_produto=lucro_medio_por_produto,
         )
         return jsonify({'html': html_linhas, 'has_next': pagination.has_next, 'page': page})
 
@@ -6111,6 +6120,9 @@ def listar_produtos():
         ordem_data=ordem_data,
         totais_por_tipo=totais_por_tipo,
         pagination=pagination,
+        quantidade_vendida_por_produto=quantidade_vendida_por_produto,
+        lucro_realizado_por_produto=lucro_realizado_por_produto,
+        lucro_medio_por_produto=lucro_medio_por_produto,
     )
 
 
@@ -8315,6 +8327,35 @@ def logistica_bulk_update():
 @login_required
 @tenant_required
 def nova_venda():
+    # B1 (auditoria): Carregar listas de clientes ativos e produtos com estoque
+    # APENAS UMA VEZ por request. Antes, cada validação que falhava recarregava
+    # ambas as listas, causando até 8 round-trips ao banco em fluxos de erro.
+    # Lazy: só executa as queries se realmente precisarmos renderizar o form
+    # (evita custo no caminho feliz com AJAX, que retorna JSON sem template).
+    _cache_form = {}
+
+    def _carregar_listas_form():
+        if 'clientes' not in _cache_form:
+            _cache_form['clientes'] = (
+                query_tenant(Cliente)
+                .filter(Cliente.ativo.is_(True))
+                .order_by(Cliente.nome_cliente)
+                .limit(1000)
+                .all()
+            )
+            _cache_form['produtos'] = (
+                query_tenant(Produto)
+                .filter(Produto.estoque_atual > 0)
+                .order_by(Produto.nome_produto)
+                .limit(500)
+                .all()
+            )
+        return _cache_form['clientes'], _cache_form['produtos']
+
+    def _render_form():
+        clientes, produtos = _carregar_listas_form()
+        return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
+
     if request.method == 'POST':
         try:
             produto_id = int(request.form.get('produto_id', 0))
@@ -8323,9 +8364,7 @@ def nova_venda():
             msg = 'Produto e quantidade são obrigatórios.'
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
-            clientes = query_tenant(Cliente).filter(Cliente.ativo.is_(True)).order_by(Cliente.nome_cliente).limit(1000).all()
-            produtos = query_tenant(Produto).filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
-            return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
+            return _render_form()
 
         # Validação de quantidade (deve ser positiva mesmo para perdas)
         if quantidade_venda <= 0:
@@ -8333,9 +8372,7 @@ def nova_venda():
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
             flash(msg, 'error')
-            clientes = query_tenant(Cliente).filter(Cliente.ativo.is_(True)).order_by(Cliente.nome_cliente).limit(1000).all()
-            produtos = query_tenant(Produto).filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
-            return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
+            return _render_form()
 
         produto = _produto_com_lock(produto_id)
         if not produto:
@@ -8348,9 +8385,7 @@ def nova_venda():
             msg = f'Estoque insuficiente! Disponível: {produto.estoque_atual}'
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
-            clientes = query_tenant(Cliente).filter(Cliente.ativo.is_(True)).order_by(Cliente.nome_cliente).limit(1000).all()
-            produtos = query_tenant(Produto).filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
-            return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
+            return _render_form()
 
         # ✅ Valores negativos no preço são permitidos (para ajustes, perdas, etc.)
         # Não há validação que impeça preços negativos
@@ -8368,18 +8403,14 @@ def nova_venda():
             msg = 'Cliente é obrigatório.'
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
-            clientes = query_tenant(Cliente).filter(Cliente.ativo.is_(True)).order_by(Cliente.nome_cliente).limit(1000).all()
-            produtos = query_tenant(Produto).filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
-            return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
+            return _render_form()
         cliente_obj = query_tenant(Cliente).filter_by(id=cliente_id).first()
         if not cliente_obj:
             msg = 'Cliente não encontrado.'
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
             flash(msg, 'error')
-            clientes = query_tenant(Cliente).filter(Cliente.ativo.is_(True)).order_by(Cliente.nome_cliente).limit(1000).all()
-            produtos = query_tenant(Produto).filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
-            return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
+            return _render_form()
         cliente_avulso = cliente_avulso_raw if 'DESCONHECIDO' in str(cliente_obj.nome_cliente or '').upper() else None
         forma_pagamento = (request.form.get('forma_pagamento') or '').strip() or None
         tipo_operacao = (request.form.get('tipo_operacao') or 'VENDA').strip().upper()
@@ -8390,9 +8421,7 @@ def nova_venda():
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
             flash(msg, 'error')
-            clientes = query_tenant(Cliente).filter(Cliente.ativo.is_(True)).order_by(Cliente.nome_cliente).limit(1000).all()
-            produtos = query_tenant(Produto).filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
-            return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
+            return _render_form()
         lucro_percentual_raw = (request.form.get('lucro_percentual') or '').strip()
         lucro_percentual = None
         if lucro_percentual_raw:
@@ -8506,9 +8535,7 @@ def nova_venda():
         flash('Venda registrada com sucesso!', 'success')
         return redirect(url_for('listar_vendas'))
 
-    clientes = query_tenant(Cliente).filter(Cliente.ativo.is_(True)).order_by(Cliente.nome_cliente).limit(1000).all()
-    produtos = query_tenant(Produto).filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
-    return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
+    return _render_form()
 
 
 @app.route('/add_venda', methods=['POST'])

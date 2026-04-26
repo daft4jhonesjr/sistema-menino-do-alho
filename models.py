@@ -146,6 +146,11 @@ class Cliente(db.Model):
     """
 
     __tablename__ = "clientes"
+    __table_args__ = (
+        # Acelera listagens multi-tenant que filtram clientes ativos por empresa
+        # (combinação muito frequente em selects de venda e listagens de cliente).
+        db.Index('ix_clientes_empresa_ativo', 'empresa_id', 'ativo'),
+    )
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     empresa_id = db.Column(
@@ -190,6 +195,12 @@ class Produto(db.Model):
     __tablename__ = "produtos"
     __table_args__ = (
         db.CheckConstraint('estoque_atual >= 0', name='ck_produtos_estoque_nao_negativo'),
+        # Acelera buscas por estoque positivo dentro de uma empresa
+        # (modais de nova venda, dashboards de estoque baixo).
+        db.Index('ix_produtos_empresa_estoque', 'empresa_id', 'estoque_atual'),
+        # Acelera filtros por tipo dentro de uma empresa
+        # (relatórios e listagens agrupadas por categoria).
+        db.Index('ix_produtos_empresa_tipo', 'empresa_id', 'tipo'),
     )
     
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
@@ -393,6 +404,15 @@ class Venda(db.Model):
     """
 
     __tablename__ = "vendas"
+    __table_args__ = (
+        # Filtragens cronológicas multi-tenant (dashboards, relatórios mensais).
+        db.Index('ix_vendas_empresa_data', 'empresa_id', 'data_venda'),
+        # Listagens por situação (PENDENTE/PAGO/PARCIAL/PERDA) por empresa.
+        db.Index('ix_vendas_empresa_situacao', 'empresa_id', 'situacao'),
+        # Histórico cronológico de um cliente dentro da empresa
+        # (ficha do cliente e cobrança).
+        db.Index('ix_vendas_empresa_cliente_data', 'empresa_id', 'cliente_id', 'data_venda'),
+    )
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     empresa_id = db.Column(
