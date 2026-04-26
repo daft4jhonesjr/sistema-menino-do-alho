@@ -33,8 +33,23 @@ Estado atual:
                            /venda/<id>/ver_boleto, /venda/<id>/whatsapp,
                            /venda/<id>/ver_nf, /debug/testar_log, /debug-vincular
 
+    * ``dashboard_bp``   → /, /dashboard, /api/vendas_por_filtro,
+                           /api/dashboard/detalhes/<filtro>,
+                           /api/dashboard/documentos_pendentes/resumo,
+                           /api/cliente/ultimo_pagamento,
+                           /api/cobrancas_pendentes,
+                           /api/dashboard/detalhes_mes/<ano>/<mes>
+    * ``caixa_bp``       → /caixa, /caixa/adicionar, /caixa/editar/<id>,
+                           /caixa/deletar/<id>, /caixa/deletar_massa,
+                           /caixa/importar, /caixa/cheque/<id>/alternar_status,
+                           /caixa/<id>/toggle_status_cheque, /desfazer_caixa/<id>,
+                           /upload_imagem_cheque, /caixa/gaveta/{salvar,carregar},
+                           /caixa/{salvar_gaveta,obter_gaveta}
+
 Próximas fases:
-    * dashboard_bp, caixa_bp.
+    * Extrair helpers compartilhados (_vendas_do_pedido, _safe_db_commit,
+      query_tenant, etc.) para um pacote ``services/`` — eliminando os
+      late imports de ``app.py``.
 
 Convenção:
     Cada blueprint expõe uma única variável module-level ``<nome>_bp`` que
@@ -44,12 +59,16 @@ Convenção:
     ``_safe_db_commit``, etc.) via late imports — esses helpers serão
     movidos para um pacote ``services/`` em uma fase futura.
 
+    Singletons (db, login_manager, csrf, cache, limiter) ficam em
+    ``extensions.py`` e são importados diretamente nos blueprints novos.
+
 Proteção de tenant:
     Os blueprints de domínio (``produtos_bp``, ``clientes_bp``, ``vendas_bp``,
-    ``documentos_bp``) aplicam ``@tenant_required`` automaticamente via
-    ``before_request``, eliminando o risco de esquecer o decorator em rotas
-    novas. ``documentos_bp`` mantém endpoints públicos token-based em uma
-    allowlist explícita (bot externo).
+    ``documentos_bp``, ``caixa_bp``) aplicam ``@tenant_required`` automaticamente
+    via ``before_request``, eliminando o risco de esquecer o decorator em rotas
+    novas. ``dashboard_bp`` aplica também, mas exempta apenas a raiz ``/``
+    (que apenas redireciona). ``documentos_bp`` mantém endpoints públicos
+    token-based em uma allowlist explícita (bot externo).
 """
 
 from .auth import auth_bp
@@ -58,6 +77,8 @@ from .clientes import clientes_bp
 from .produtos import produtos_bp
 from .vendas import vendas_bp
 from .documentos import documentos_bp
+from .dashboard import dashboard_bp
+from .caixa import caixa_bp
 
 __all__ = [
     'auth_bp',
@@ -66,4 +87,6 @@ __all__ = [
     'produtos_bp',
     'vendas_bp',
     'documentos_bp',
+    'dashboard_bp',
+    'caixa_bp',
 ]

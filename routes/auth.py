@@ -33,6 +33,7 @@ from models import (
     db, Usuario, Empresa, Configuracao,
     PERFIL_DONO, PERFIL_FUNCIONARIO, PERFIL_MASTER,
 )
+from extensions import limiter
 
 
 auth_bp = Blueprint('auth', __name__)
@@ -58,59 +59,74 @@ def _checar_gestao_usuario_permitida(usuario_alvo):
 
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
+@limiter.limit(
+    "5 per minute",
+    methods=['POST'],
+    error_message='Muitas tentativas de login. Aguarde 1 minuto e tente novamente.',
+)
 def login():
-    # Imports tardios para evitar ciclos no bootstrap (auth_bp é importado
-    # ANTES de o limiter/helpers do app estarem prontos no tempo de import).
-    from app import limiter, _pos_login_landing, _is_safe_next_url
+    """Login do sistema.
 
-    # Aplica rate-limit dinamicamente (não dá pra usar o decorator no nível
-    # do módulo porque ``limiter`` ainda não existe quando este arquivo é
-    # importado pela primeira vez).
-    @limiter.limit("200 per minute")
-    def _do_login():
-        if current_user.is_authenticated:
-            destino = _pos_login_landing(current_user)
-            return redirect(destino or url_for('auth.login'))
-        if request.method == 'POST':
-            username = (request.form.get('username') or '').strip()
-            password = request.form.get('password') or ''
-            if not username or not password:
-                flash('Preencha usuário e senha.', 'error')
-                return render_template('auth/login.html')
+    Segurança (Fase 4 — P0):
+        * Rate limit ESTRITO de 5 POST/minuto por IP (proteção contra
+          brute-force). GET é livre — recarregar a página de login não
+          consome a cota.
+        * Em caso de excesso, ``flask_limiter`` retorna HTTP 429 com a
+          ``error_message`` definida (renderizada como JSON ou HTML
+          dependendo do Accept header).
+
+    Fluxo:
+        * Se o usuário já estiver autenticado → redireciona para landing.
+        * POST: valida credenciais, bloqueia tenants suspensos/órfãos,
+          chama ``login_user`` e redireciona respeitando ``next=`` (se for
+          uma URL segura interna).
+        * MASTER é sempre redirecionado para ``master.master_admin``.
+    """
+    # Helpers permanecem em ``app.py`` por enquanto (próxima fase irão
+    # para ``services/``); usamos late import para evitar ciclo.
+    from app import _pos_login_landing, _is_safe_next_url
+
+    if current_user.is_authenticated:
+        destino = _pos_login_landing(current_user)
+        return redirect(destino or url_for('auth.login'))
+    if request.method == 'POST':
+        username = (request.form.get('username') or '').strip()
+        password = request.form.get('password') or ''
+        if not username or not password:
+            flash('Preencha usuário e senha.', 'error')
+            return render_template('auth/login.html')
+        try:
+            user = Usuario.query.filter_by(username=username).first()
+        except Exception:
+            db.session.rollback()
             try:
                 user = Usuario.query.filter_by(username=username).first()
             except Exception:
-                db.session.rollback()
-                try:
-                    user = Usuario.query.filter_by(username=username).first()
-                except Exception:
-                    flash('Erro no sistema, tente novamente.', 'error')
-                    return render_template('auth/login.html')
-            if not user or not check_password_hash(user.password_hash, password):
-                flash('Usuário ou senha inválidos.', 'error')
+                flash('Erro no sistema, tente novamente.', 'error')
                 return render_template('auth/login.html')
-            # Bloqueia login em tenants suspensos (exceto MASTER).
-            if not getattr(user, 'is_master', lambda: False)():
-                empresa = getattr(user, 'empresa', None)
-                if empresa is not None and not empresa.ativo:
-                    flash('Empresa suspensa. Contate o administrador do sistema.', 'error')
-                    return render_template('auth/login.html')
-                if not getattr(user, 'empresa_id', None):
-                    flash('Seu usuário não está vinculado a nenhuma empresa. Contate o administrador.', 'error')
-                    return render_template('auth/login.html')
-            remember = True if request.form.get('remember') else False
-            login_user(user, remember=remember)
-            destino_padrao = _pos_login_landing(user) or url_for('auth.login')
-            next_url = request.form.get('next') or request.args.get('next')
-            if not _is_safe_next_url(next_url):
-                next_url = destino_padrao
-            # MASTER NUNCA é redirecionado para rotas operacionais, mesmo com next=.
-            if getattr(user, 'is_master', lambda: False)():
-                next_url = url_for('master.master_admin')
-            return redirect(next_url)
-        return render_template('auth/login.html')
-
-    return _do_login()
+        if not user or not check_password_hash(user.password_hash, password):
+            flash('Usuário ou senha inválidos.', 'error')
+            return render_template('auth/login.html')
+        # Bloqueia login em tenants suspensos (exceto MASTER).
+        if not getattr(user, 'is_master', lambda: False)():
+            empresa = getattr(user, 'empresa', None)
+            if empresa is not None and not empresa.ativo:
+                flash('Empresa suspensa. Contate o administrador do sistema.', 'error')
+                return render_template('auth/login.html')
+            if not getattr(user, 'empresa_id', None):
+                flash('Seu usuário não está vinculado a nenhuma empresa. Contate o administrador.', 'error')
+                return render_template('auth/login.html')
+        remember = True if request.form.get('remember') else False
+        login_user(user, remember=remember)
+        destino_padrao = _pos_login_landing(user) or url_for('auth.login')
+        next_url = request.form.get('next') or request.args.get('next')
+        if not _is_safe_next_url(next_url):
+            next_url = destino_padrao
+        # MASTER NUNCA é redirecionado para rotas operacionais, mesmo com next=.
+        if getattr(user, 'is_master', lambda: False)():
+            next_url = url_for('master.master_admin')
+        return redirect(next_url)
+    return render_template('auth/login.html')
 
 
 @auth_bp.route('/logout')
@@ -235,66 +251,68 @@ def perfil():
 
 
 @auth_bp.route('/cadastro', methods=['GET', 'POST'])
+@limiter.limit("10 per hour", methods=['POST'])
 def cadastro():
-    """Cadastro público de FUNCIONARIO vinculado a um tenant existente."""
-    from app import limiter, _safe_db_commit
+    """Cadastro público de FUNCIONARIO vinculado a um tenant existente.
 
-    @limiter.limit("10 per hour")
-    def _do_cadastro():
-        if current_user.is_authenticated:
-            return redirect(url_for('dashboard'))
-        erro = None
-        if request.method == 'POST':
-            username = (request.form.get('username') or '').strip()
-            senha = request.form.get('password') or ''
-            confirmar = request.form.get('confirmar') or ''
-            codigo_seguranca = (request.form.get('codigo_seguranca') or '').strip()
+    Rate-limit: 10 POST/hora por IP — suficiente para um usuário legítimo
+    digitar errado várias vezes, mas trava bots que tentam descobrir
+    códigos de cadastro válidos por força bruta.
+    """
+    from app import _safe_db_commit
 
-            empresa_alvo = None
-            if codigo_seguranca:
-                config_match = (
-                    Configuracao.query
-                    .filter(Configuracao.codigo_cadastro == codigo_seguranca)
-                    .filter(Configuracao.empresa_id.isnot(None))
-                    .first()
-                )
-                if config_match:
-                    empresa_alvo = Empresa.query.filter_by(
-                        id=config_match.empresa_id, ativo=True
-                    ).first()
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard.dashboard'))
+    erro = None
+    if request.method == 'POST':
+        username = (request.form.get('username') or '').strip()
+        senha = request.form.get('password') or ''
+        confirmar = request.form.get('confirmar') or ''
+        codigo_seguranca = (request.form.get('codigo_seguranca') or '').strip()
 
-            if not username:
-                erro = 'Informe o usuário.'
-            elif not senha:
-                erro = 'Informe a senha.'
-            elif senha != confirmar:
-                erro = 'As senhas não coincidem.'
-            elif not empresa_alvo:
-                erro = 'Código de segurança inválido!'
-            elif Usuario.query.filter_by(username=username).first():
-                erro = 'Este usuário já está em uso.'
-            else:
-                email_cadastro = (request.form.get('email') or '').strip() or None
-                u = Usuario(
-                    username=username,
-                    password_hash=generate_password_hash(senha),
-                    role='user',
-                    perfil=PERFIL_FUNCIONARIO,
-                    empresa_id=empresa_alvo.id,
-                    email=email_cadastro,
-                )
-                db.session.add(u)
-                ok, err = _safe_db_commit()
-                if not ok:
-                    flash(err or "Erro ao criar conta. Tente novamente.", "error")
-                    return render_template("auth/cadastro.html")
-                flash("Cadastro realizado! Faça login.", "success")
-                return redirect(url_for("auth.login"))
-            if erro:
-                flash(erro, 'error')
-        return render_template('auth/cadastro.html')
+        empresa_alvo = None
+        if codigo_seguranca:
+            config_match = (
+                Configuracao.query
+                .filter(Configuracao.codigo_cadastro == codigo_seguranca)
+                .filter(Configuracao.empresa_id.isnot(None))
+                .first()
+            )
+            if config_match:
+                empresa_alvo = Empresa.query.filter_by(
+                    id=config_match.empresa_id, ativo=True
+                ).first()
 
-    return _do_cadastro()
+        if not username:
+            erro = 'Informe o usuário.'
+        elif not senha:
+            erro = 'Informe a senha.'
+        elif senha != confirmar:
+            erro = 'As senhas não coincidem.'
+        elif not empresa_alvo:
+            erro = 'Código de segurança inválido!'
+        elif Usuario.query.filter_by(username=username).first():
+            erro = 'Este usuário já está em uso.'
+        else:
+            email_cadastro = (request.form.get('email') or '').strip() or None
+            u = Usuario(
+                username=username,
+                password_hash=generate_password_hash(senha),
+                role='user',
+                perfil=PERFIL_FUNCIONARIO,
+                empresa_id=empresa_alvo.id,
+                email=email_cadastro,
+            )
+            db.session.add(u)
+            ok, err = _safe_db_commit()
+            if not ok:
+                flash(err or "Erro ao criar conta. Tente novamente.", "error")
+                return render_template("auth/cadastro.html")
+            flash("Cadastro realizado! Faça login.", "success")
+            return redirect(url_for("auth.login"))
+        if erro:
+            flash(erro, 'error')
+    return render_template('auth/cadastro.html')
 
 
 @auth_bp.route('/gerenciar_usuarios', methods=['GET', 'POST'])

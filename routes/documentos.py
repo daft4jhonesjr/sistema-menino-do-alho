@@ -152,7 +152,7 @@ def visualizar_documento(id):
     if documento.url_arquivo:
         return redirect(documento.url_arquivo)
     flash('Link do arquivo não encontrado na nuvem. Faça o upload novamente.', 'error')
-    return redirect(request.referrer or url_for('dashboard'))
+    return redirect(request.referrer or url_for('dashboard.dashboard'))
 
 
 @documentos_bp.route('/arquivos/<int:id>/debug_texto', methods=['GET'])
@@ -669,7 +669,7 @@ def processar_documentos():
     flash(f"Processados {resultado['processados']} documento(s).", 'success')
     if resultado['erros'] > 0:
         flash(f"Erros: {resultado['erros']}.", 'error')
-    return redirect(url_for('dashboard'))
+    return redirect(url_for('dashboard.dashboard'))
 
 
 @documentos_bp.route('/reprocessar_boletos', methods=['POST'])
@@ -681,7 +681,7 @@ def reprocessar_boletos():
     flash(f"Boletos reprocessados: {r['atualizados']} atualizado(s).", 'success')
     if r['erros'] > 0:
         flash(f"Erros ao reprocessar: {r['erros']}.", 'error')
-    return redirect(url_for('dashboard'))
+    return redirect(url_for('dashboard.dashboard'))
 
 
 @documentos_bp.route('/admin/arquivos')
@@ -694,7 +694,7 @@ def admin_arquivos():
     from app import _e_admin_tenant, query_documentos_tenant
     if not _e_admin_tenant():
         flash('Acesso negado. Apenas administradores podem gerenciar arquivos.', 'error')
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('dashboard.dashboard'))
     busca = (request.args.get('busca') or '').strip()
     query = query_documentos_tenant()
     if busca:
@@ -795,7 +795,7 @@ def admin_arquivos_deletar_massa():
     from app import _e_admin_tenant, query_documentos_tenant, _EXTERNAL_TIMEOUT
     if not _e_admin_tenant():
         flash('Acesso negado. Apenas administradores podem gerenciar arquivos.', 'error')
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('dashboard.dashboard'))
     ids_raw = request.form.getlist('ids[]') or request.form.getlist('ids') or (request.get_json(silent=True) or {}).get('ids', [])
     if not ids_raw:
         flash('Nenhum arquivo selecionado.', 'warning')
@@ -941,20 +941,20 @@ def vincular_documento_venda(id):
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return jsonify(ok=False, mensagem='Informe o pedido (venda_id).'), 400
         flash('Informe o pedido para vincular.', 'error')
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('dashboard.dashboard'))
     try:
         venda_id = int(venda_id)
     except (TypeError, ValueError):
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return jsonify(ok=False, mensagem='venda_id inválido.'), 400
         flash('Pedido inválido.', 'error')
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('dashboard.dashboard'))
     venda = query_tenant(Venda).filter_by(id=venda_id).first()
     if not venda:
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return jsonify(ok=False, mensagem='Pedido não encontrado.'), 404
         flash('Pedido não encontrado.', 'error')
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('dashboard.dashboard'))
     if not _usuario_pode_gerenciar_venda(venda):
         return _resposta_sem_permissao()
     try:
@@ -989,7 +989,7 @@ def vincular_documento_venda(id):
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return jsonify(ok=False, mensagem='Erro ao salvar vínculo do documento.'), 500
         flash('Erro ao salvar vínculo do documento.', 'error')
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('dashboard.dashboard'))
 
     c = venda.cliente
     rs = (c.razao_social or '').strip()
@@ -1002,7 +1002,7 @@ def vincular_documento_venda(id):
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return jsonify(ok=True, sucesso=True, mensagem=msg, doc_id=documento.id)
     flash(msg, 'success')
-    return redirect(url_for('dashboard'))
+    return redirect(url_for('dashboard.dashboard'))
 
 
 @documentos_bp.route('/admin/raio_x', methods=['GET'])
@@ -1061,7 +1061,7 @@ def resgatar_orfaos():
         except Exception as e:
             db.session.rollback()
             flash(f'Erro ao resgatar órfãos: {str(e)}', 'error')
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('dashboard.dashboard'))
 
     return _impl()
 
@@ -1236,7 +1236,7 @@ def limpar_vinculos_quebrados():
             flash(f'Erro ao limpar vínculos: {str(e)}', 'error')
             current_app.logger.error(f"DEBUG LIMPEZA ERRO: {str(e)}")
 
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('dashboard.dashboard'))
 
     return _impl()
 
