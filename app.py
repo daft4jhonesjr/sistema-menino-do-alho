@@ -323,17 +323,17 @@ def _extrair_cnpj(texto, nome_arquivo=None):
     
     # Debug: mostrar todos os CNPJs encontrados
     if nome_arquivo:
-        print(f"DEBUG: CNPJs localizados no arquivo {nome_arquivo}: {todos}")
+        app.logger.debug(f"DEBUG: CNPJs localizados no arquivo {nome_arquivo}: {todos}")
         if emissores_encontrados:
-            print(f"DEBUG: CNPJs de emissores ignorados: {emissores_encontrados}")
+            app.logger.debug(f"DEBUG: CNPJs de emissores ignorados: {emissores_encontrados}")
         if candidatos:
-            print(f"DEBUG: CNPJs candidatos (pagador): {candidatos}")
+            app.logger.debug(f"DEBUG: CNPJs candidatos (pagador): {candidatos}")
         elif todos:
-            print("DEBUG: AVISO - Apenas CNPJs de emissores encontrados. CNPJ do pagador não identificado.")
+            app.logger.warning("DEBUG: AVISO - Apenas CNPJs de emissores encontrados. CNPJ do pagador não identificado.")
     
     if not candidatos:
         if todos and nome_arquivo:
-            print(f"DEBUG: Erro - Apenas CNPJ(s) do emissor localizado(s) em {nome_arquivo}: {emissores_encontrados}")
+            app.logger.error(f"DEBUG: Erro - Apenas CNPJ(s) do emissor localizado(s) em {nome_arquivo}: {emissores_encontrados}")
         return None
 
     # Prioridade 0 (DANFE): linha "NOME / RAZÃO SOCIAL CNPJ / CPF DATA DA EMISSÃO"
@@ -700,12 +700,12 @@ def _extrair_data_vencimento(texto, debug_paty=False):
         debug_paty: Se True, imprime debug detalhado no console (para boletos PATY/Bradesco)
     """
     if debug_paty:
-        print("\n" + "="*80)
-        print("DEBUG EXTRAÇÃO DE VENCIMENTO - BOLETO PATY/BRADESCO")
-        print("="*80)
-        print("TEXTO COMPLETO DO PDF (primeiros 2000 caracteres):")
-        print(texto[:2000])
-        print("\n" + "-"*80)
+        app.logger.info("\n" + "="*80)
+        app.logger.debug("DEBUG EXTRAÇÃO DE VENCIMENTO - BOLETO PATY/BRADESCO")
+        app.logger.info("="*80)
+        app.logger.info("TEXTO COMPLETO DO PDF (primeiros 2000 caracteres):")
+        app.logger.info(texto[:2000])
+        app.logger.info("\n" + "-"*80)
     
     # Padrões mais flexíveis e abrangentes
     padroes = [
@@ -735,22 +735,22 @@ def _extrair_data_vencimento(texto, debug_paty=False):
         if m:
             data_str = m.group(1)
             if debug_paty:
-                print(f"\n✓ Match encontrado com padrão {idx}: {p}")
-                print(f"  Data capturada: {data_str}")
-                print(f"  Contexto: ...{texto[max(0, m.start()-50):m.end()+50]}...")
+                app.logger.info(f"\n✓ Match encontrado com padrão {idx}: {p}")
+                app.logger.info(f"  Data capturada: {data_str}")
+                app.logger.info(f"  Contexto: ...{texto[max(0, m.start()-50):m.end()+50]}...")
             
             data_parsed, _ = _parse_data_flex(data_str)
             if data_parsed:
                 if debug_paty:
-                    print(f"  ✓ Data parseada com sucesso: {data_parsed.strftime('%d/%m/%Y')}")
-                    print("="*80 + "\n")
+                    app.logger.info(f"  ✓ Data parseada com sucesso: {data_parsed.strftime('%d/%m/%Y')}")
+                    app.logger.info("="*80 + "\n")
                 return data_parsed
             elif debug_paty:
-                print(f"  ✗ Falha ao parsear data: {data_str}")
+                app.logger.error(f"  ✗ Falha ao parsear data: {data_str}")
     
     if debug_paty:
-        print("\n✗ NENHUMA DATA DE VENCIMENTO ENCONTRADA")
-        print("="*80 + "\n")
+        app.logger.error("\n✗ NENHUMA DATA DE VENCIMENTO ENCONTRADA")
+        app.logger.info("="*80 + "\n")
     
     return None
 
@@ -881,10 +881,10 @@ def organizar_arquivos():
             try:
                 shutil.move(src, dst)
                 out["bonificacoes"] += 1
-                print(f"[ORGANIZAR] Bonificação movida: {nome}")
+                app.logger.info(f"[ORGANIZAR] Bonificação movida: {nome}")
                 continue
             except Exception as e:
-                print(f"[ORGANIZAR] Erro ao mover bonificação {nome}: {e}")
+                app.logger.error(f"[ORGANIZAR] Erro ao mover bonificação {nome}: {e}")
                 out["erros"] += 1
                 continue
         
@@ -1056,7 +1056,7 @@ def _processar_pdf(caminho_arquivo, tipo_documento):
         if not numero_nf:
             numero_nf = _extrair_nf_do_nome_arquivo(nome_arquivo)
             if numero_nf:
-                print(f"DEBUG: NF extraída do nome do arquivo: {numero_nf} (arquivo: {nome_arquivo})")
+                app.logger.debug(f"DEBUG: NF extraída do nome do arquivo: {numero_nf} (arquivo: {nome_arquivo})")
         
         # Detectar se é boleto PATY/Bradesco para ativar debug
         eh_paty_bradesco = (
@@ -1079,7 +1079,7 @@ def _processar_pdf(caminho_arquivo, tipo_documento):
         }
         return resultado
     except Exception as e:
-        print(f"Erro ao processar PDF {caminho_arquivo}: {str(e)}")
+        app.logger.error(f"Erro ao processar PDF {caminho_arquivo}: {str(e)}")
         return None
 
 
@@ -1109,7 +1109,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
     
     def _log_detalhado(msg):
         """Imprime no console e captura em memória quando solicitado; sem I/O de arquivo."""
-        print(msg)
+        app.logger.info(msg)
         if capturar_logs_memoria:
             logs_memoria.append(msg)
     
@@ -1121,7 +1121,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
         _log_detalhado(f"Arquivo existe: {os.path.exists(log_detalhado_path)}")
         _log_detalhado(f"{'='*80}\n")
     except Exception as e:
-        print(f"ERRO no log inicial: {e}")
+        app.logger.error(f"ERRO no log inicial: {e}")
         traceback.print_exc()
     
     base_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'documentos_entrada')
@@ -1140,7 +1140,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
         
         # Lista todos os PDFs na pasta
         arquivos_pdf = [f for f in os.listdir(pasta) if f.lower().endswith('.pdf')]
-        print(f"DEBUG: Processando {len(arquivos_pdf)} arquivo(s) do tipo {tipo}")
+        app.logger.debug(f"DEBUG: Processando {len(arquivos_pdf)} arquivo(s) do tipo {tipo}")
         
         for arquivo in arquivos_pdf:
             caminho_completo = os.path.join(pasta, arquivo)
@@ -1153,7 +1153,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                     # Mover arquivo para pasta bonificacoes
                     sucesso, caminho_destino, mensagem = _mover_para_bonificacoes(caminho_completo)
                     if sucesso:
-                        print(f"[BONIFICACAO] {mensagem}")
+                        app.logger.info(f"[BONIFICACAO] {mensagem}")
                         # Se havia documento no banco, removê-lo
                         doc_existente = Documento.query.filter_by(caminho_arquivo=caminho_relativo).first()
                         if doc_existente:
@@ -1166,7 +1166,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                             db.session.commit()
                         resultado['mensagens'].append(f"Bonificação movida: {arquivo}")
                     else:
-                        print(f"[BONIFICACAO] ERRO: {mensagem}")
+                        app.logger.error(f"[BONIFICACAO] ERRO: {mensagem}")
                         resultado['erros'] += 1
                     continue  # Pular processamento deste arquivo
             
@@ -1178,10 +1178,10 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
             doc_existente = Documento.query.filter_by(caminho_arquivo=caminho_relativo).first()
             # CORREÇÃO: Só pular se documento existe E está vinculado. Permite re-processar documentos não vinculados.
             if doc_existente and doc_existente.venda_id is not None:
-                print(f"DEBUG: Arquivo {arquivo} já processado e vinculado (Venda ID {doc_existente.venda_id}), pulando")
+                app.logger.debug(f"DEBUG: Arquivo {arquivo} já processado e vinculado (Venda ID {doc_existente.venda_id}), pulando")
                 continue
             elif doc_existente and doc_existente.venda_id is None:
-                print(f"DEBUG: Documento ID {doc_existente.id} existe mas não está vinculado. Re-processando para tentar vincular.")
+                app.logger.debug(f"DEBUG: Documento ID {doc_existente.id} existe mas não está vinculado. Re-processando para tentar vincular.")
                 documento = doc_existente
                 if not documento.url_arquivo and (os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL')):
                     try:
@@ -1190,7 +1190,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                         documento.public_id = resultado_nuvem.get('public_id')
                         db.session.flush()
                     except Exception as ex:
-                        print(f"Erro ao fazer upload para Cloudinary (doc existente): {ex}")
+                        app.logger.error(f"Erro ao fazer upload para Cloudinary (doc existente): {ex}")
                 nf_cached = (getattr(doc_existente, 'nf_extraida', None) or doc_existente.numero_nf)
                 nf_cached = (nf_cached or '').strip() or None
                 if nf_cached:
@@ -1305,7 +1305,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                                 
                                 # Se o documento não existe mais, limpar o campo (vínculo fantasma)
                                 if not documento_existe:
-                                    print(f"DEBUG: Limpando vínculo fantasma: {tipo} '{caminho_existente}' não existe mais no banco")
+                                    app.logger.debug(f"DEBUG: Limpando vínculo fantasma: {tipo} '{caminho_existente}' não existe mais no banco")
                                     if tipo == 'BOLETO':
                                         v.caminho_boleto = None
                                     elif tipo == 'NOTA_FISCAL':
@@ -1316,9 +1316,9 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                             # Isso resolve o problema de vínculos órfãos e permite atualização automática
                             vendas_validas.append(v)
                             if caminho_existente and documento_existe:
-                                print(f"DEBUG: NF idêntica encontrada. Substituindo vínculo antigo: {caminho_existente} → {caminho_relativo}")
+                                app.logger.debug(f"DEBUG: NF idêntica encontrada. Substituindo vínculo antigo: {caminho_existente} → {caminho_relativo}")
                             elif caminho_existente and not documento_existe:
-                                print(f"DEBUG: Limpando vínculo órfão e vinculando novo documento: {caminho_relativo}")
+                                app.logger.debug(f"DEBUG: Limpando vínculo órfão e vinculando novo documento: {caminho_relativo}")
 
                     # Deduplicação defensiva:
                     # 1) por ID da venda (joins podem repetir a mesma linha)
@@ -1344,12 +1344,12 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                             empresa_doc_upper = empresa_doc_nome.upper()
                             if empresa_doc_upper != empresa_venda_upper:
                                 mensagem_conflito = f"Achei a NF {nf_str}, mas ela pertence à empresa {empresa_venda} e o {tipo.lower()} lido é da {empresa_doc_nome}. VINCULANDO MESMO ASSIM (override por NF)."
-                                print(f"DEBUG: ⚠️ CONFLITO DE EMPRESA DETECTADO MAS IGNORADO: {mensagem_conflito}")
+                                app.logger.warning(f"DEBUG: ⚠️ CONFLITO DE EMPRESA DETECTADO MAS IGNORADO: {mensagem_conflito}")
                                 resultado['mensagens'].append(f"⚠️ {mensagem_conflito}")
                                 # Mesmo com conflito, permite vínculo (override) - REGRA: NF é soberana
-                                print("DEBUG: ⚠️ SOBRESCREVENDO apesar do conflito de empresa (NF é a única chave)")
+                                app.logger.warning("DEBUG: ⚠️ SOBRESCREVENDO apesar do conflito de empresa (NF é a única chave)")
                         
-                        print(f"DEBUG: ✅ VÍNCULO AUTOMÁTICO FORÇADO (SOBRESCRITA): NF '{nf_limpa}' → Venda {venda_id} (Cliente: {cliente_nome})")
+                        app.logger.debug(f"DEBUG: ✅ VÍNCULO AUTOMÁTICO FORÇADO (SOBRESCRITA): NF '{nf_limpa}' → Venda {venda_id} (Cliente: {cliente_nome})")
                         # FORÇAR vínculo: não há retorno prematuro, vai direto para o commit
                     elif len(vendas_validas) > 1:
                         # Regra de negócio (1-para-1): com múltiplas vendas para a mesma NF
@@ -1409,11 +1409,11 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                             resultado_nuvem = cloudinary.uploader.upload(caminho_completo, resource_type='raw', timeout=_EXTERNAL_TIMEOUT)
                             url_arquivo = resultado_nuvem.get('secure_url')
                             public_id = resultado_nuvem.get('public_id')
-                            print(f"✅ Sucesso Nuvem: {url_arquivo}")
+                            app.logger.info(f"✅ Sucesso Nuvem: {url_arquivo}")
                         except Exception as ex:
-                            print(f"❌ ERRO GRAVE Nuvem: {ex}")
+                            app.logger.error(f"❌ ERRO GRAVE Nuvem: {ex}")
                     else:
-                        print("⚠️ Cloudinary não configurado. Salvando sem URL.")
+                        app.logger.warning("⚠️ Cloudinary não configurado. Salvando sem URL.")
 
                     documento = Documento(
                         caminho_arquivo=caminho_relativo,
@@ -1486,7 +1486,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                             try:
                                 os.remove(caminho_completo)
                             except Exception as rm_err:
-                                print(f"Aviso: não foi possível remover arquivo temporário {caminho_completo}: {rm_err}")
+                                app.logger.warning(f"Aviso: não foi possível remover arquivo temporário {caminho_completo}: {rm_err}")
                         resultado['processados'] += 1
                         resultado['vinculos_novos'] += 1
                         rotulo = "Nota Fiscal" if tipo == 'NOTA_FISCAL' else "Boleto"
@@ -1521,21 +1521,21 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                         resultado['mensagens'].append(f"❌ {mensagem_erro}")
                 else:
                     # Sem vínculo automático (múltiplas vendas ou não encontrada)
-                    print(f"DEBUG: Sem vínculo automático: venda_id={venda_id}, venda_match={venda_match is not None}")
+                    app.logger.debug(f"DEBUG: Sem vínculo automático: venda_id={venda_id}, venda_match={venda_match is not None}")
                     db.session.commit()
                     if documento.url_arquivo and os.path.exists(caminho_completo):
                         try:
                             os.remove(caminho_completo)
                         except Exception as rm_err:
-                            print(f"Aviso: não foi possível remover arquivo temporário {caminho_completo}: {rm_err}")
+                            app.logger.warning(f"Aviso: não foi possível remover arquivo temporário {caminho_completo}: {rm_err}")
                     resultado['processados'] += 1
                     resultado['mensagens'].append(f"Processado: {arquivo}")
             except Exception as e:
                 db.session.rollback()
                 nf_doc = dados_extraidos.get('numero_nf') if dados_extraidos else 'N/A'
                 mensagem_erro = f"Falha técnica ao vincular NF {nf_doc}: {str(e)}"
-                print(f"DEBUG: ❌ ERRO ao processar {arquivo}: {mensagem_erro}")
-                print(f"DEBUG: Traceback: {traceback.format_exc()}")
+                app.logger.error(f"DEBUG: ❌ ERRO ao processar {arquivo}: {mensagem_erro}")
+                app.logger.debug(f"DEBUG: Traceback: {traceback.format_exc()}")
                 resultado['erros'] += 1
                 resultado['mensagens'].append(f"❌ {mensagem_erro}")
     
@@ -1988,7 +1988,7 @@ def _auto_vincular_documentos_pendentes_por_nf(user_id=None):
             resultado['vinculados'] += 1
         except Exception as e:
             resultado['erros'] += 1
-            print(f"[auto_vinculo_nf] Erro ao vincular documento ID {getattr(doc, 'id', '?')}: {e}")
+            app.logger.error(f"[auto_vinculo_nf] Erro ao vincular documento ID {getattr(doc, 'id', '?')}: {e}")
 
     try:
         db.session.commit()
@@ -1996,7 +1996,7 @@ def _auto_vincular_documentos_pendentes_por_nf(user_id=None):
             limpar_cache_dashboard()
     except Exception as e:
         db.session.rollback()
-        print(f"[auto_vinculo_nf] Erro no commit: {e}")
+        app.logger.error(f"[auto_vinculo_nf] Erro no commit: {e}")
         resultado['erros'] += 1
 
     return resultado
@@ -2063,11 +2063,23 @@ VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY')
 VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY')
 VAPID_CLAIM_EMAIL = os.environ.get('VAPID_CLAIM_EMAIL', 'mailto:admin@meninoalho.com.br')
 
-# Configurar compressão Gzip para HTML, CSS, JS e JSON
+# Configurar compressão Gzip para HTML, CSS, JS e JSON.
+# IMPORTANTE: definir COMPRESS_* ANTES de Compress(app), caso contrário a
+# extensão lê os defaults na inicialização e ignora os valores customizados.
+app.config['COMPRESS_MIMETYPES'] = [
+    'text/html',
+    'text/css',
+    'text/javascript',
+    'application/javascript',
+    'application/json',
+    'text/xml',
+    'application/xml',
+    'image/svg+xml',
+]
+app.config['COMPRESS_LEVEL'] = 6  # 1-9, 6 é o equilíbrio CPU x tamanho
+app.config['COMPRESS_MIN_SIZE'] = 500  # bytes (não vale comprimir respostas pequenas)
+app.config['COMPRESS_ALGORITHM'] = ['br', 'gzip']  # brotli para clientes modernos, gzip como fallback
 Compress(app)
-app.config['COMPRESS_MIMETYPES'] = ['text/html', 'text/css', 'text/javascript', 'application/javascript', 'application/json', 'text/xml', 'application/xml']
-app.config['COMPRESS_LEVEL'] = 6  # Nível de compressão (1-9, 6 é um bom equilíbrio)
-app.config['COMPRESS_MIN_SIZE'] = 500  # Comprimir apenas arquivos maiores que 500 bytes
 
 # Configurar cache (Redis em produção, SimpleCache local)
 redis_url = os.environ.get('REDIS_URL')
@@ -2077,10 +2089,10 @@ if redis_url:
         'CACHE_REDIS_URL': redis_url,
         'CACHE_DEFAULT_TIMEOUT': 300  # 5 minutos
     })
-    print("🟢 Cache configurado usando Redis Unificado")
+    app.logger.info("🟢 Cache configurado usando Redis Unificado")
 else:
     cache = Cache(config={'CACHE_TYPE': 'SimpleCache'})
-    print("🟡 Cache configurado usando SimpleCache (Memória Local)")
+    app.logger.info("🟡 Cache configurado usando SimpleCache (Memória Local)")
 cache.init_app(app)
 
 # Configurar Fila de Tarefas (RQ)
@@ -2503,7 +2515,7 @@ def shutdown_session(exception=None):
             db.session.rollback()
         db.session.remove()
     except Exception as e:
-        print(f"Erro ao fechar conexão DB: {e}")
+        app.logger.error(f"Erro ao fechar conexão DB: {e}")
 
 
 @app.after_request
@@ -2551,6 +2563,33 @@ def _dashboard_cache_version() -> str:
     except Exception:
         # Em caso de indisponibilidade do backend de cache, evita quebrar a view.
         return 'no-cache'
+
+
+def _dashboard_cache_key() -> str:
+    """Chave de cache do dashboard, segmentada POR TENANT.
+
+    Usa ``empresa_id`` (multi-tenant) em vez de ``user_id`` para permitir
+    que vários funcionários da mesma empresa compartilhem o resultado já
+    computado — economiza CPU/banco e mantém o isolamento entre empresas.
+
+    Usuários sem tenant (MASTER) caem em uma chave própria identificada
+    pelo ``user_id`` para nunca cruzar dados entre tenants.
+    """
+    versao = _dashboard_cache_version()
+    try:
+        ano = session.get('ano_ativo') or datetime.now().year
+    except Exception:
+        ano = datetime.now().year
+    try:
+        emp = empresa_id_atual()
+    except Exception:
+        emp = None
+    if emp:
+        scope = f"emp:{emp}"
+    else:
+        # MASTER ou usuário fora de empresa: isola pelo id para não vazar.
+        scope = f"u:{getattr(current_user, 'id', 'anon')}"
+    return f"dashboard:v{versao}:{scope}:ano:{ano}"
 
 
 @login_manager.user_loader
@@ -3146,7 +3185,7 @@ def _deletar_cloudinary_seguro(public_id=None, url=None, resource_type='image'):
         cloudinary.uploader.destroy(pid, resource_type=resource_type, timeout=_EXTERNAL_TIMEOUT)
         return True
     except Exception as ex:
-        print(f"Aviso: falha ao deletar Cloudinary ({pid}): {ex}")
+        app.logger.error(f"Aviso: falha ao deletar Cloudinary ({pid}): {ex}")
         return False
 
 
@@ -3366,20 +3405,20 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
                     adicionadas.append(col)
 
             if adicionadas:
-                print(f"Migração: Colunas de notificação adicionadas: {', '.join(adicionadas)}")
+                app.logger.info(f"Migração: Colunas de notificação adicionadas: {', '.join(adicionadas)}")
             else:
-                print("Migração: Colunas de notificação já estavam presentes.")
+                app.logger.info("Migração: Colunas de notificação já estavam presentes.")
         except Exception as e:
             db.session.rollback()
-            print(f"Migração notificação (usuarios) falhou: {e}")
+            app.logger.error(f"Migração notificação (usuarios) falhou: {e}")
         # Migração: tabela de inscrições Web Push
         try:
             PushSubscription.__table__.create(bind=db.engine, checkfirst=True)
             db.session.commit()
-            print("Migração: tabela push_subscriptions verificada/criada com sucesso.")
+            app.logger.info("Migração: tabela push_subscriptions verificada/criada com sucesso.")
         except Exception as e:
             db.session.rollback()
-            print(f"Migração push_subscriptions falhou: {e}")
+            app.logger.error(f"Migração push_subscriptions falhou: {e}")
         # Migração: data_vencimento em vendas (vencimento do boleto extraído do PDF)
         try:
             _adicionar_coluna_se_ausente('vendas', 'data_vencimento', 'DATE')
@@ -3516,12 +3555,12 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             admin_pass = os.environ.get('ADMIN_INITIAL_PASS')
             if not admin_pass:
                 admin_pass = _secrets.token_urlsafe(12)
-                print(f"\n{'='*60}")
-                print(f"  ATENÇÃO: Senha do admin gerada automaticamente:")
-                print(f"  Usuário: Jhones")
-                print(f"  Senha:   {admin_pass}")
-                print(f"  Altere imediatamente em Configurações > Usuários.")
-                print(f"{'='*60}\n")
+                app.logger.info(f"\n{'='*60}")
+                app.logger.info(f"  ATENÇÃO: Senha do admin gerada automaticamente:")
+                app.logger.info(f"  Usuário: Jhones")
+                app.logger.info(f"  Senha:   {admin_pass}")
+                app.logger.info(f"  Altere imediatamente em Configurações > Usuários.")
+                app.logger.info(f"{'='*60}\n")
             u = Usuario(username='Jhones', password_hash=generate_password_hash(admin_pass), role='admin')
             db.session.add(u)
             db.session.commit()
@@ -4436,7 +4475,7 @@ def get_radar_recompra():
 @app.route('/dashboard')
 @login_required
 @tenant_required
-@cache.cached(timeout=300, key_prefix=lambda: f"dashboard:v{_dashboard_cache_version()}:{getattr(current_user, 'id', 'anon')}")
+@cache.cached(timeout=300, key_prefix=_dashboard_cache_key)
 def dashboard():
     # Obter ano ativo da sessão
     ano_ativo = session.get('ano_ativo', datetime.now().year)
@@ -5124,7 +5163,7 @@ def editar_lancamento_caixa(id):
     except Exception as e:
         db.session.rollback()
         flash(f'Erro ao atualizar lançamento: {str(e)}', 'error')
-        print(f"Erro no banco (editar_lancamento_caixa): {e}")
+        app.logger.error(f"Erro no banco (editar_lancamento_caixa): {e}")
     return redirect(url_for('caixa'))
 
 
@@ -5517,7 +5556,7 @@ def editar_cliente(id):
 
     except Exception as e:
         db.session.rollback()
-        print(f"ERRO CRÍTICO NA EDIÇÃO DE CLIENTE {id}: {str(e)}")
+        app.logger.error(f"ERRO CRÍTICO NA EDIÇÃO DE CLIENTE {id}: {str(e)}")
         flash(f'Erro interno ao processar cliente: {str(e)}', 'error')
         return redirect(url_for('listar_clientes'))
 
@@ -6625,7 +6664,7 @@ def novo_produto():
             for foto in fotos[:5]:
                 if foto and foto.filename:
                     if not _arquivo_imagem_permitido(foto.filename):
-                        print(f"Upload de foto ignorado (extensão inválida): {foto.filename}")
+                        app.logger.info(f"Upload de foto ignorado (extensão inválida): {foto.filename}")
                         continue
                     try:
                         upload_result = cloudinary.uploader.upload(foto, folder="menino_do_alho/produtos", timeout=_EXTERNAL_TIMEOUT)
@@ -6635,7 +6674,7 @@ def novo_produto():
                             nova_foto = ProdutoFoto(produto_id=produto.id, arquivo=url_segura, public_id=public_id_foto)
                             db.session.add(nova_foto)
                     except Exception as e:
-                        print(f"Erro ao fazer upload para o Cloudinary (produto {produto.id}): {e}")
+                        app.logger.error(f"Erro ao fazer upload para o Cloudinary (produto {produto.id}): {e}")
         ok2, err2 = _safe_db_commit()
         if not ok2:
             msg = err2 or "Produto criado, mas falha ao salvar fotos. Edite o produto para adicionar fotos."
@@ -6737,7 +6776,7 @@ def editar_produto(id):
             for foto in fotos[:slots_disponiveis]:
                 if foto and foto.filename:
                     if not _arquivo_imagem_permitido(foto.filename):
-                        print(f"Upload de foto ignorado (extensão inválida): {foto.filename}")
+                        app.logger.info(f"Upload de foto ignorado (extensão inválida): {foto.filename}")
                         continue
                     try:
                         upload_result = cloudinary.uploader.upload(foto, folder="menino_do_alho/produtos", timeout=_EXTERNAL_TIMEOUT)
@@ -6747,7 +6786,7 @@ def editar_produto(id):
                             nova_foto = ProdutoFoto(produto_id=produto.id, arquivo=url_segura, public_id=public_id_foto)
                             db.session.add(nova_foto)
                     except Exception as e:
-                        print(f"Erro ao fazer upload para o Cloudinary (produto {produto.id}): {e}")
+                        app.logger.error(f"Erro ao fazer upload para o Cloudinary (produto {produto.id}): {e}")
 
         ok, err = _safe_db_commit()
         if not ok:
@@ -7179,22 +7218,66 @@ def importar_produtos():
 
 # ========== MÓDULO VENDAS ==========
 
+@app.template_filter('cloudinary_thumb')
+def _cloudinary_thumb_url(url: str, w: int = 300, h: int = 300) -> str:
+    """Gera URL de thumbnail Cloudinary inserindo transformações no path.
+
+    Exemplo:
+        original:  https://res.cloudinary.com/<cloud>/image/upload/v1/foo/bar.jpg
+        thumb:     https://res.cloudinary.com/<cloud>/image/upload/w_300,h_300,c_fill,q_auto,f_auto/v1/foo/bar.jpg
+
+    Reduz dramaticamente o peso de imagens em listagens (até 90% menor que
+    o original). Para clientes modernos, ``f_auto`` entrega WebP/AVIF
+    automaticamente; ``q_auto`` ajusta a qualidade sem perda perceptível.
+
+    Não-Cloudinary ou strings inválidas: devolve a URL original (no-op).
+    """
+    if not url or 'res.cloudinary.com' not in url:
+        return url
+    marker = '/upload/'
+    idx = url.find(marker)
+    if idx < 0:
+        return url
+    prefix = url[: idx + len(marker)]
+    suffix = url[idx + len(marker):]
+    transform = f"w_{w},h_{h},c_fill,q_auto,f_auto/"
+    # Evita duplicar a transformação se a URL já tiver uma w_/h_/q_auto manualmente.
+    if suffix.startswith(('w_', 'h_', 'c_', 'q_', 'f_')):
+        return url
+    return f"{prefix}{transform}{suffix}"
+
+
 @app.route('/api/produtos/<int:produto_id>/fotos')
 @login_required
 @tenant_required
 def get_fotos_produto(produto_id):
-    """Retorna URLs das fotos do produto para a galeria no modal. Cloudinary: URL completa em arquivo. Local: fallback para static/uploads/."""
+    """Retorna lista de fotos do produto.
+
+    Cada item tem ``thumb`` (versão leve para a grade do modal) e ``full``
+    (versão original para abrir em nova aba/lightbox). Em Cloudinary, o
+    ``thumb`` aplica ``w_300,h_300,c_fill,q_auto,f_auto`` para reduzir
+    drasticamente o peso de transferência na listagem.
+
+    Mantém retrocompatibilidade: se algum cliente antigo iterar como string,
+    pode usar ``arr.map(o => o.full)``.
+    """
     # Multi-tenant: valida que o produto pertence ao tenant do usuario antes
     # de expor suas fotos (ProdutoFoto nao tem empresa_id, herda via produto).
     produto = query_tenant(Produto).filter_by(id=produto_id).first_or_404()
     fotos = ProdutoFoto.query.filter_by(produto_id=produto.id).all()
-    urls = []
+    items = []
     for f in fotos:
         if f.arquivo and (f.arquivo.startswith('http://') or f.arquivo.startswith('https://')):
-            urls.append(f.arquivo)
+            full = f.arquivo
         elif f.arquivo:
-            urls.append(url_for('static', filename=f'uploads/{f.arquivo}'))
-    return jsonify(urls)
+            full = url_for('static', filename=f'uploads/{f.arquivo}')
+        else:
+            continue
+        items.append({
+            'thumb': _cloudinary_thumb_url(full, w=300, h=300),
+            'full': full,
+        })
+    return jsonify(items)
 
 
 @app.route('/api/vendas_por_filtro')
@@ -8927,7 +9010,7 @@ def editar_venda(id):
             return redirect(url_for('listar_vendas'))
         except Exception as e:
             db.session.rollback()
-            print(f"ERRO AO EDITAR VENDA: {str(e)}")
+            app.logger.error(f"ERRO AO EDITAR VENDA: {str(e)}")
             app.logger.exception('Falha inesperada na edição da venda')
             flash('Erro ao salvar: verifique os dados preenchidos.', 'error')
             return redirect(request.referrer or url_for('listar_vendas'))
@@ -9043,11 +9126,11 @@ def excluir_venda(id):
         limpar_cache_dashboard()  # Limpar cache após excluir venda
 
         # Log detalhado usando variáveis salvas
-        print(f"Pedido excluído (Cliente: {nome_cliente}, NF: {nf_pedido or 'N/A'}, Data: {data_pedido.strftime('%d/%m/%Y')}):")
+        app.logger.info(f"Pedido excluído (Cliente: {nome_cliente}, NF: {nf_pedido or 'N/A'}, Data: {data_pedido.strftime('%d/%m/%Y')}):")
         for log in logs:
-            print(f"  - {log}")
+            app.logger.info(f"  - {log}")
         if lancamentos_removidos:
-            print(f"  - {lancamentos_removidos} lançamento(s) de caixa removido(s).")
+            app.logger.info(f"  - {lancamentos_removidos} lançamento(s) de caixa removido(s).")
 
         registrar_log(
             'EXCLUIR', 'VENDAS',
@@ -9057,7 +9140,7 @@ def excluir_venda(id):
         flash(f'Pedido completo excluído com sucesso! {len(vendas_do_pedido)} item(ns) removido(s) e {lancamentos_removidos} lançamento(s) de caixa removido(s).', 'success')
     except Exception as e:
         db.session.rollback()  # OBRIGATÓRIO para destravar o sistema em caso de erro
-        print(f"Erro ao deletar venda: {e}")
+        app.logger.error(f"Erro ao deletar venda: {e}")
         flash('Erro ao deletar a venda. Tente novamente.', 'error')
     return redirect(url_for('listar_vendas'))
 
@@ -9438,7 +9521,7 @@ def deletar_arquivos_massa():
                 try:
                     cloudinary.uploader.destroy(documento.public_id, resource_type='raw', timeout=_EXTERNAL_TIMEOUT)
                 except Exception as ex:
-                    print(f"Erro ao excluir do Cloudinary {documento.public_id}: {ex}")
+                    app.logger.error(f"Erro ao excluir do Cloudinary {documento.public_id}: {ex}")
             db.session.delete(documento)
 
         db.session.commit()
@@ -9446,7 +9529,7 @@ def deletar_arquivos_massa():
         return jsonify(ok=True, status='sucesso', mensagem='Documentos excluídos com sucesso.', total=len(documentos))
     except Exception as e:
         db.session.rollback()
-        print(f"Erro ao excluir documentos em massa: {e}")
+        app.logger.error(f"Erro ao excluir documentos em massa: {e}")
         return jsonify(ok=False, status='erro', mensagem='Erro ao excluir documentos em massa.'), 500
 
 
@@ -9619,7 +9702,7 @@ def upload_documento():
         return jsonify({'mensagem': 'Sucesso'}), 200
     except Exception as e:
         db.session.rollback()
-        print(f"Erro ao guardar ficheiro em documentos_entrada/{subpasta}: {e}")
+        app.logger.error(f"Erro ao guardar ficheiro em documentos_entrada/{subpasta}: {e}")
         return jsonify({'mensagem': str(e)}), 500
 
 
@@ -9965,13 +10048,13 @@ def admin_arquivos_deletar_massa():
                 try:
                     cloudinary.uploader.destroy(d.public_id, resource_type='raw', timeout=_EXTERNAL_TIMEOUT)
                 except Exception as ex:
-                    print(f"Erro ao excluir do Cloudinary {d.public_id}: {ex}")
+                    app.logger.error(f"Erro ao excluir do Cloudinary {d.public_id}: {ex}")
             db.session.delete(d)
         db.session.commit()
         flash(f'{len(docs)} documento(s) excluído(s) com sucesso!', 'success')
     except Exception as e:
         db.session.rollback()
-        print(f"Erro ao deletar documentos em massa: {e}")
+        app.logger.error(f"Erro ao deletar documentos em massa: {e}")
         flash('Erro ao excluir documentos. Tente novamente.', 'error')
     return redirect(url_for('admin_arquivos'))
 
@@ -10131,7 +10214,7 @@ def vincular_documento_venda(id):
         limpar_cache_dashboard()
     except Exception as e:
         db.session.rollback()
-        print(f"[vincular_documento_venda] Erro ao vincular documento ID {id} na venda {venda_id}: {e}")
+        app.logger.error(f"[vincular_documento_venda] Erro ao vincular documento ID {id} na venda {venda_id}: {e}")
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return jsonify(ok=False, mensagem='Erro ao salvar vínculo do documento.'), 500
         flash('Erro ao salvar vínculo do documento.', 'error')
@@ -10206,7 +10289,7 @@ def vendas_deletar_massa():
         db.session.commit()
         limpar_cache_dashboard()
         for msg in logs:
-            print(msg)
+            app.logger.info(msg)
         return jsonify({'ok': True, 'mensagem': f'{len(vendas)} registro(s) excluído(s). Estoque restaurado e {lancamentos_removidos} lançamento(s) de caixa removido(s).', 'excluidos': len(vendas)})
     except Exception as e:
         db.session.rollback()
@@ -10582,7 +10665,7 @@ def forcar_leitura_pasta():
                             url_arquivo = resultado_nuvem.get('secure_url')
                             public_id = resultado_nuvem.get('public_id')
                         except Exception as ex:
-                            print(f"Erro Cloudinary (forcar_leitura): {ex}")
+                            app.logger.error(f"Erro Cloudinary (forcar_leitura): {ex}")
                     doc = Documento(
                         caminho_arquivo=caminho_relativo,
                         url_arquivo=url_arquivo,
@@ -10608,7 +10691,7 @@ def forcar_leitura_pasta():
                     try:
                         os.remove(caminho_full)
                     except Exception as rm_err:
-                        print(f"Aviso: não foi possível remover {caminho_full}: {rm_err}")
+                        app.logger.warning(f"Aviso: não foi possível remover {caminho_full}: {rm_err}")
     except Exception as e:
         db.session.rollback()
         return jsonify({'erro': str(e), 'ressuscitados': 0}), 500
@@ -10687,11 +10770,11 @@ def limpar_vinculos_quebrados():
         db.session.commit()
         total = limpos_boleto + limpos_nf + limpos_docs
         flash(f'✅ Limpeza concluída: {limpos_boleto} vínculo(s) de boleto, {limpos_nf} vínculo(s) de NF e {limpos_docs} documento(s) órfão(s) removidos ({total} total).', 'success')
-        print(f"DEBUG LIMPEZA: {limpos_boleto} boletos, {limpos_nf} NFs e {limpos_docs} documentos órfãos limpos")
+        app.logger.debug(f"DEBUG LIMPEZA: {limpos_boleto} boletos, {limpos_nf} NFs e {limpos_docs} documentos órfãos limpos")
     except Exception as e:
         db.session.rollback()
         flash(f'Erro ao limpar vínculos: {str(e)}', 'error')
-        print(f"DEBUG LIMPEZA ERRO: {str(e)}")
+        app.logger.error(f"DEBUG LIMPEZA ERRO: {str(e)}")
     
     return redirect(url_for('dashboard'))
 
@@ -10898,7 +10981,7 @@ def disparar_relatorio():
         server.quit()
         return jsonify({'msg': f'Relatórios enviados com sucesso para {enviados} admin(s).'}), 200
     except Exception as e:
-        print(f"Erro ao enviar relatório por e-mail: {e}")
+        app.logger.error(f"Erro ao enviar relatório por e-mail: {e}")
         return jsonify({'erro': str(e)}), 500
 
 
