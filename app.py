@@ -3552,6 +3552,72 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             _adicionar_coluna_se_ausente('lancamentos_caixa', 'status_envio', "VARCHAR(20) DEFAULT 'Não Enviado'")
         except (OperationalError, Exception):
             db.session.rollback()
+        # Migração P0 (Integridade Financeira): venda_id em lancamentos_caixa.
+        # Substitui o vínculo frágil por regex em ``descricao`` ('Venda #N')
+        # por uma FK real. Faz backfill automático dos lançamentos
+        # históricos extraindo o ID via regex e validando que a venda
+        # existe no MESMO ``empresa_id`` (defesa multi-tenant). Idempotente.
+        try:
+            criou_venda_id = _adicionar_coluna_se_ausente(
+                'lancamentos_caixa', 'venda_id', 'INTEGER REFERENCES vendas(id) ON DELETE SET NULL'
+            )
+        except (OperationalError, Exception):
+            db.session.rollback()
+            # Fallback SQLite legado (sem REFERENCES inline)
+            try:
+                criou_venda_id = _adicionar_coluna_se_ausente(
+                    'lancamentos_caixa', 'venda_id', 'INTEGER'
+                )
+            except Exception:
+                db.session.rollback()
+                criou_venda_id = False
+        try:
+            db.session.execute(text(
+                'CREATE INDEX IF NOT EXISTS ix_lancamentos_caixa_venda_id ON lancamentos_caixa(venda_id)'
+            ))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
+        # Backfill: percorre lançamentos com venda_id NULL e descrição
+        # contendo 'Venda #N'. Só preenche se a venda existir e pertencer
+        # ao mesmo empresa_id (segurança multi-tenant).
+        try:
+            import re as _re_bf
+            pendentes = db.session.execute(text(
+                "SELECT id, descricao, empresa_id FROM lancamentos_caixa "
+                "WHERE venda_id IS NULL AND descricao LIKE 'Venda #%'"
+            )).fetchall()
+            atualizados = 0
+            for row in pendentes:
+                lanc_id = row[0]
+                descricao = row[1] or ''
+                emp_id = row[2]
+                m = _re_bf.search(r'Venda #(\d+)', descricao)
+                if not m:
+                    continue
+                try:
+                    vid = int(m.group(1))
+                except (TypeError, ValueError):
+                    continue
+                # Valida existência + tenant
+                v_exists = db.session.execute(text(
+                    'SELECT id FROM vendas WHERE id = :vid AND '
+                    '(empresa_id = :eid OR :eid IS NULL OR empresa_id IS NULL)'
+                ), {'vid': vid, 'eid': emp_id}).fetchone()
+                if not v_exists:
+                    continue
+                db.session.execute(text(
+                    'UPDATE lancamentos_caixa SET venda_id = :vid WHERE id = :lid'
+                ), {'vid': vid, 'lid': lanc_id})
+                atualizados += 1
+            db.session.commit()
+            if atualizados:
+                app.logger.info(
+                    f"Migração P0: {atualizados} lançamentos antigos vinculados a vendas via backfill."
+                )
+        except (OperationalError, Exception) as _bf_err:
+            db.session.rollback()
+            app.logger.warning(f"Migração P0 (backfill venda_id): {_bf_err}")
         try:
             db.session.execute(text("UPDATE lancamentos_caixa SET status_envio = 'Não Enviado' WHERE lower(forma_pagamento) LIKE '%cheque%' AND (status_envio IS NULL OR trim(status_envio) = '')"))
             db.session.commit()

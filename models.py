@@ -515,8 +515,23 @@ class LancamentoCaixa(db.Model):
     status_envio = db.Column(db.String(20), nullable=True, default='Não Enviado')  # Controle de envio físico de cheques
     valor = db.Column(db.Numeric(10, 2), nullable=False)
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)
+    # Vínculo forte com a Venda que este lançamento liquida/abate.
+    # Substitui o esquema legado de "Venda #N" embutido em ``descricao``,
+    # que era frágil (regex). Sempre que um pagamento de venda for
+    # registrado, este campo DEVE ser preenchido. Lançamentos que não
+    # se referem a uma venda (despesas, gaveta, ajustes) ficam NULL.
+    # ``ondelete='SET NULL'`` é intencional: se a venda for removida, o
+    # lançamento histórico no caixa deve sobreviver para preservar a
+    # integridade do livro caixa, apenas perdendo o vínculo cruzado.
+    venda_id = db.Column(
+        db.Integer,
+        db.ForeignKey('vendas.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True,
+    )
 
     empresa = db.relationship('Empresa', backref=db.backref('lancamentos_caixa', lazy='dynamic'))
+    venda = db.relationship('Venda', backref=db.backref('lancamentos_caixa', lazy='dynamic'))
 
     def __repr__(self):
         return f'<LancamentoCaixa {self.id} - {self.tipo} {self.valor}>'

@@ -46,7 +46,7 @@ from flask import (
     flash, jsonify, current_app,
 )
 from flask_login import current_user
-from sqlalchemy import event, func
+from sqlalchemy import event, func, case
 import cloudinary
 import cloudinary.uploader
 
@@ -170,26 +170,38 @@ def caixa():
     if setor_atual not in ('GERAL', 'BACALHAU'):
         setor_atual = 'GERAL'
 
-    total_entradas = db.session.query(func.coalesce(func.sum(LancamentoCaixa.valor), 0)).filter(
-        LancamentoCaixa.empresa_id == empresa_id_atual(),
-        LancamentoCaixa.tipo == 'ENTRADA',
-        LancamentoCaixa.setor == setor_atual,
-    ).scalar() or 0.0
-    total_saida_pessoal = db.session.query(func.coalesce(func.sum(LancamentoCaixa.valor), 0)).filter(
-        LancamentoCaixa.empresa_id == empresa_id_atual(),
-        LancamentoCaixa.tipo == 'SAIDA', LancamentoCaixa.categoria.like('%Pessoal%'),
-        LancamentoCaixa.setor == setor_atual,
-    ).scalar() or 0.0
-    total_saida_fornecedor = db.session.query(func.coalesce(func.sum(LancamentoCaixa.valor), 0)).filter(
-        LancamentoCaixa.empresa_id == empresa_id_atual(),
-        LancamentoCaixa.tipo == 'SAIDA', LancamentoCaixa.categoria.like('%Fornecedor%'),
-        LancamentoCaixa.setor == setor_atual,
-    ).scalar() or 0.0
-    total_saidas = db.session.query(func.coalesce(func.sum(LancamentoCaixa.valor), 0)).filter(
-        LancamentoCaixa.empresa_id == empresa_id_atual(),
-        LancamentoCaixa.tipo == 'SAIDA',
-        LancamentoCaixa.setor == setor_atual,
-    ).scalar() or 0.0
+    # P0 (perf): consolidamos os 4 SUMs separados em 1 única query com
+    # CASE WHEN. Antes: 4 round-trips ao Postgres por GET /caixa, cada um
+    # com filtro pesado em ``lancamentos_caixa``. Depois do redirect do
+    # POST /caixa/adicionar isto era o gargalo que estourava o timeout
+    # do Gunicorn (~30s) e o usuário via "conexão cortada".
+    _eid = empresa_id_atual()
+    _filtro_base = (
+        (LancamentoCaixa.empresa_id == _eid)
+        & (LancamentoCaixa.setor == setor_atual)
+    )
+    _agg = db.session.query(
+        func.coalesce(func.sum(case(
+            (LancamentoCaixa.tipo == 'ENTRADA', LancamentoCaixa.valor),
+            else_=0,
+        )), 0).label('total_entradas'),
+        func.coalesce(func.sum(case(
+            ((LancamentoCaixa.tipo == 'SAIDA') & LancamentoCaixa.categoria.like('%Pessoal%'), LancamentoCaixa.valor),
+            else_=0,
+        )), 0).label('total_saida_pessoal'),
+        func.coalesce(func.sum(case(
+            ((LancamentoCaixa.tipo == 'SAIDA') & LancamentoCaixa.categoria.like('%Fornecedor%'), LancamentoCaixa.valor),
+            else_=0,
+        )), 0).label('total_saida_fornecedor'),
+        func.coalesce(func.sum(case(
+            (LancamentoCaixa.tipo == 'SAIDA', LancamentoCaixa.valor),
+            else_=0,
+        )), 0).label('total_saidas'),
+    ).filter(_filtro_base).one()
+    total_entradas = _agg.total_entradas or 0.0
+    total_saida_pessoal = _agg.total_saida_pessoal or 0.0
+    total_saida_fornecedor = _agg.total_saida_fornecedor or 0.0
+    total_saidas = _agg.total_saidas or 0.0
     saldo_atual = Decimal(str(total_entradas or Decimal('0.00'))) - Decimal(str(total_saidas or Decimal('0.00')))
 
     lancamentos = query_tenant(LancamentoCaixa).filter_by(setor=setor_atual).order_by(
@@ -358,6 +370,17 @@ def carregar_contagem_gaveta():
 
 @caixa_bp.route('/caixa/adicionar', methods=['POST'])
 def adicionar_caixa():
+    # Higiene defensiva (P0): em produção (Postgres + pool), uma transação
+    # pendente em outra rota pode contaminar a conexão devolvida ao pool.
+    # Rollback explícito aqui garante que começamos limpos antes do INSERT,
+    # eliminando o risco de bloqueio até pool_timeout=30s (que derrubava
+    # o worker do Gunicorn ao tentar registrar despesas).
+    try:
+        db.session.rollback()
+    except Exception:
+        # Se já está limpa ou houve erro no rollback, segue: o INSERT
+        # abaixo abrirá uma transação nova de qualquer forma.
+        pass
     nova_data = datetime.strptime(request.form.get('data'), '%Y-%m-%d').date()
     descricao_base = (request.form.get('descricao') or '').strip()
     tipo = request.form.get('tipo')
@@ -542,8 +565,9 @@ def desfazer_caixa(id):
         db.session.delete(lancamento)
         db.session.flush()
         _resincronizar_vendas_por_ids(venda_ids)
-        if not _safe_db_commit():
-            return jsonify({"status": "error", "message": "Erro ao salvar alterações."}), 500
+        ok, err = _safe_db_commit()
+        if not ok:
+            return jsonify({"status": "error", "message": err or "Erro ao salvar alterações."}), 500
         return jsonify({"status": "success", "message": "Lançamento desfeito com sucesso."})
     except Exception as e:
         db.session.rollback()
@@ -559,8 +583,9 @@ def deletar_caixa(id):
         db.session.delete(lancamento)
         db.session.flush()
         _resincronizar_vendas_por_ids(venda_ids)
-        if not _safe_db_commit():
-            flash('Erro ao remover lançamento.', 'error')
+        ok, err = _safe_db_commit()
+        if not ok:
+            flash(err or 'Erro ao remover lançamento.', 'error')
         else:
             flash('Lançamento removido do caixa.', 'success')
     except Exception as e:
@@ -586,8 +611,9 @@ def deletar_massa_caixa():
                     db.session.delete(lanc)
                 db.session.flush()
                 _resincronizar_vendas_por_ids(venda_ids)
-                if not _safe_db_commit():
-                    flash('Erro ao excluir lançamentos.', 'error')
+                ok, err = _safe_db_commit()
+                if not ok:
+                    flash(err or 'Erro ao excluir lançamentos.', 'error')
                 else:
                     flash(f'{count} lançamentos apagados com sucesso!', 'success')
             except Exception as e:
@@ -609,8 +635,9 @@ def deletar_massa_caixa():
                 db.session.delete(lanc)
             db.session.flush()
             _resincronizar_vendas_por_ids(venda_ids)
-            if not _safe_db_commit():
-                flash('Erro ao excluir lançamentos.', 'error')
+            ok, err = _safe_db_commit()
+            if not ok:
+                flash(err or 'Erro ao excluir lançamentos.', 'error')
             else:
                 flash(f'{count} lançamentos apagados com sucesso!', 'success')
         except Exception as e:
