@@ -1,7 +1,12 @@
 // Service Worker PWA - Menino do Alho
 // Cache local de estáticos para carregamento instantâneo
 // v3: adicionado suporte a Web Push (eventos push e notificationclick)
-const CACHE_NAME = 'menino-alho-v3';
+// v4 (P0 fix): NÃO interceptar mais navegações HTML (mode === 'navigate').
+//     O respondWith em navegação pós-redirect 302 causava abort prematuro
+//     no Safari ("Servidor cortou a conexão"), mesmo com o INSERT já
+//     comitado no servidor. Versão v4 força clientes em campo a limpar
+//     o SW antigo via evento 'activate'.
+const CACHE_NAME = 'menino-alho-v4';
 const ASSETS_TO_CACHE = [
     '/static/images/logo_menino_do_alho_amarelo1.jpeg',
     '/static/manifest.json',
@@ -44,11 +49,14 @@ self.addEventListener('fetch', (event) => {
     // Rotas que fazem redirect externo (WhatsApp, etc.) — não interceptar
     if (url.pathname.includes('/whatsapp')) return;
 
-    // Requisições de navegação (HTML) — sempre ir à rede, sem fallback de cache
+    // Navegações HTML (mode === 'navigate'): NÃO interceptar.
+    // Deixar o navegador gerenciar nativamente. Em SPAs/PWAs com Safari,
+    // o uso de event.respondWith(fetch(...)) em navegação pós-redirect 302
+    // pode abortar prematuramente, mostrando "Servidor cortou a conexão"
+    // mesmo quando o backend já respondeu OK (ex.: POST /caixa/adicionar
+    // → 302 → GET /caixa). Sem respondWith aqui, o navegador faz o fetch
+    // direto e a navegação fica robusta.
     if (event.request.mode === 'navigate') {
-        event.respondWith(
-            fetch(event.request).catch(() => caches.match(event.request) || caches.match('/'))
-        );
         return;
     }
 

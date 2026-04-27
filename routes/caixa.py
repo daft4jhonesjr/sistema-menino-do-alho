@@ -389,6 +389,13 @@ def adicionar_caixa():
     if setor not in ('GERAL', 'BACALHAU'):
         setor = 'GERAL'
 
+    # Tracing P0: rastrear o ciclo completo da rota nos logs do Render.
+    # Permite diagnosticar se o crash foi no commit, no flash, ou no redirect.
+    current_app.logger.info(
+        f"[CAIXA-ADD] start | tipo={tipo} setor={setor} "
+        f"categoria={categoria} split={request.form.get('is_split')}"
+    )
+
     if request.form.get('is_split') == 'true':
         valor1 = _limpar_valor_moeda(request.form.get('valor1'))
         valor2 = _limpar_valor_moeda(request.form.get('valor2'))
@@ -428,8 +435,12 @@ def adicionar_caixa():
             db.session.add(lanc)
         ok, err = _safe_db_commit()
         if not ok:
+            current_app.logger.warning(f"[CAIXA-ADD] commit-fail (split) err={err}")
             flash(err or "Erro ao adicionar lançamentos.", "error")
             return redirect(url_for('caixa.caixa', setor=setor))
+        current_app.logger.info(
+            f"[CAIXA-ADD] commit-ok (split) ids={[l.id for l in lancamentos]}"
+        )
         flash('Lançamentos divididos adicionados com sucesso!', 'success')
     else:
         novo_valor = _limpar_valor_moeda(request.form.get('valor'))
@@ -448,9 +459,14 @@ def adicionar_caixa():
         db.session.add(novo_lancamento)
         ok, err = _safe_db_commit()
         if not ok:
+            current_app.logger.warning(f"[CAIXA-ADD] commit-fail err={err}")
             flash(err or "Erro ao adicionar lançamento.", "error")
             return redirect(url_for('caixa.caixa', setor=setor))
+        current_app.logger.info(
+            f"[CAIXA-ADD] commit-ok id={novo_lancamento.id} valor={novo_valor}"
+        )
         flash(f'Lançamento adicionado com sucesso!|UNDO_CAIXA_{novo_lancamento.id}', 'success')
+    current_app.logger.info(f"[CAIXA-ADD] redirecting setor={setor}")
     return redirect(url_for('caixa.caixa', setor=setor))
 
 
