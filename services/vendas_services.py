@@ -16,16 +16,24 @@ Estas funções são **inerentemente cross-blueprint** — usadas por
   ``SELECT ... FOR UPDATE`` para serializar atualizações de estoque
   concorrentes (importante em finalização de carrinho e edição de
   vendas).
+* ``_resincronizar_pagamento_venda(venda)`` — recalcula
+  ``valor_pago`` (somando todos os ``LancamentoCaixa`` ENTRADA
+  remanescentes da venda) e reclassifica ``situacao`` para PENDENTE/
+  PARCIAL/PAGO. **Use sempre** após criar/editar/deletar lançamentos
+  de caixa que afetam vendas — substitui a lógica frágil de
+  delta-a-delta. Não faz commit; o chamador agrupa a transação.
 """
 
 from app import (
     _vendas_do_pedido,
     _apagar_lancamentos_caixa_por_vendas,
     _produto_com_lock,
+    _resincronizar_pagamento_venda,
 )
 
 __all__ = [
     '_vendas_do_pedido',
     '_apagar_lancamentos_caixa_por_vendas',
     '_produto_com_lock',
+    '_resincronizar_pagamento_venda',
 ]

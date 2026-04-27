@@ -3854,6 +3854,82 @@ def _apagar_lancamentos_caixa_por_vendas(vendas):
     return len(lancamentos)
 
 
+def _resincronizar_pagamento_venda(venda):
+    """Recalcula ``valor_pago`` e ``situacao`` de uma Venda a partir do zero.
+
+    Esta é a fonte da verdade para sincronizar pagamento ↔ caixa. Use
+    sempre que um ``LancamentoCaixa`` da venda for criado, editado ou
+    deletado — em vez de tentar somar/subtrair manualmente delta-a-delta
+    (que acumula erros de arredondamento e dessincroniza em deletes em
+    massa).
+
+    Algoritmo:
+        1. Soma TODOS os ``LancamentoCaixa.tipo == 'ENTRADA'`` ainda
+           presentes no banco com descrição matching ``Venda #<id>`` (e
+           mesmo ``empresa_id`` da venda).
+        2. Atribui essa soma a ``venda.valor_pago``.
+        3. Reclassifica ``venda.situacao``:
+              * ``valor_pago == 0``                       → 'PENDENTE'
+              * ``0 < valor_pago < total - 0.01``         → 'PARCIAL'
+              * ``valor_pago >= total - 0.01``            → 'PAGO'
+        4. Preserva ``situacao == 'PERDA'`` (não é tocado por pagamento).
+
+    Multi-tenant: a query é filtrada por ``empresa_id`` da própria venda
+    (defensivo, mesmo que a invocação venha de contexto sem tenant).
+
+    NÃO faz commit — o chamador é responsável por ``_safe_db_commit()``
+    ou ``db.session.commit()``. Isto permite agrupar várias mudanças
+    (delete de N lançamentos, ressync de M vendas) numa única transação.
+
+    Não levanta exceção em caso de venda inválida (None) — apenas
+    retorna False. Em caso de erro de cálculo, deixa a venda inalterada
+    e retorna False; chamador decide se faz rollback.
+
+    Returns:
+        bool: True se ressincronizou (alterou ou confirmou estado), False
+        se a venda é inválida.
+    """
+    if venda is None or getattr(venda, 'id', None) is None:
+        return False
+    # Vendas marcadas como PERDA não recebem pagamento por definição;
+    # o pipeline de criação garante valor_pago=0 e situacao='PERDA'.
+    if str(getattr(venda, 'tipo_operacao', '') or '').strip().upper() == 'PERDA':
+        return False
+    try:
+        eid = getattr(venda, 'empresa_id', None)
+        q = LancamentoCaixa.query.filter(
+            LancamentoCaixa.tipo == 'ENTRADA',
+            LancamentoCaixa.descricao.like(f"Venda #{venda.id} -%"),
+        )
+        if eid is not None:
+            q = q.filter(LancamentoCaixa.empresa_id == eid)
+        total_pago = q.with_entities(
+            func.coalesce(func.sum(LancamentoCaixa.valor), 0)
+        ).scalar() or 0
+        total_pago = Decimal(str(total_pago))
+        # Quantize para 2 casas para evitar diff espúrio no banco
+        # (Numeric(10,2) já trunca, mas Decimal puro pode ter mais casas).
+        if total_pago < Decimal('0.00'):
+            total_pago = Decimal('0.00')
+        venda.valor_pago = total_pago
+
+        valor_total_venda = Decimal(str(venda.calcular_total() or Decimal('0.00')))
+        # Tolerância de 1 centavo para evitar PARCIAL por arredondamento.
+        if total_pago <= Decimal('0.01'):
+            venda.valor_pago = Decimal('0.00')
+            venda.situacao = 'PENDENTE'
+        elif total_pago < (valor_total_venda - Decimal('0.01')):
+            venda.situacao = 'PARCIAL'
+        else:
+            venda.situacao = 'PAGO'
+        return True
+    except Exception:
+        # Não engole o erro silenciosamente: re-levanta para o caller
+        # decidir o rollback. Mas não toca em venda.valor_pago além
+        # do que já foi atribuído acima (SQLAlchemy session pode reverter).
+        raise
+
+
 @app.route('/sw.js')
 def service_worker():
     """Serve o Service Worker com o tipo MIME correto."""

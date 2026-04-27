@@ -32,7 +32,7 @@ from flask import (
     flash, jsonify, current_app,
 )
 from flask_login import current_user
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError
 import pandas as pd
@@ -285,21 +285,51 @@ def toggle_ativo_cliente(id: int):
 
 @clientes_bp.route('/clientes/<int:cliente_id>/extrato')
 def extrato_cliente(cliente_id):
-    """Extrato de cobrança em PDF: vendas pendentes e parciais do cliente."""
+    """Extrato de cobrança: vendas com saldo devedor do cliente.
+
+    Critério de inclusão (defensivo, em camadas):
+        1. ``situacao IN ('PENDENTE', 'PARCIAL')`` — caminho normal
+           pós-ressincronização do caixa.
+        2. **OU** ``valor_pago < calcular_total - 0.01`` — captura
+           qualquer venda que esteja marcada como PAGO mas cujo
+           ``valor_pago`` divirja do total (sintoma de desync histórico).
+           Calcula via SQL para evitar carregar todas as vendas e
+           filtrar em Python.
+
+    Sempre filtra fora vendas de valor zero (perdas/brindes) e do
+    tipo PERDA. Cálculo do total devido usa estritamente
+    ``calcular_total() - valor_pago`` por venda (sem cache).
+    """
     cliente = query_tenant(Cliente).filter_by(id=cliente_id).first_or_404()
 
-    # Filtro: PENDENTE e PARCIAL (saldo devedor); ignora itens de perda/brinde (R$ 0,00)
+    # Saldo devedor calculado em SQL: (preco_venda * qtd) - valor_pago > 0.01
+    # Usa coalesce para tratar valor_pago NULL como 0.
+    saldo_sql = (Venda.preco_venda * Venda.quantidade_venda) - func.coalesce(Venda.valor_pago, 0)
+
     vendas_pendentes = query_tenant(Venda).filter(
         Venda.cliente_id == cliente.id,
-        Venda.situacao.in_(['PENDENTE', 'PARCIAL']),
-        (Venda.preco_venda * Venda.quantidade_venda) > 0
+        # Exclui PERDA explicitamente (não gera saldo devedor)
+        func.upper(func.coalesce(Venda.tipo_operacao, 'VENDA')) != 'PERDA',
+        # Valor da nota > 0 (ignora brindes/perdas com valor zero)
+        (Venda.preco_venda * Venda.quantidade_venda) > 0,
+        # Tem saldo devedor real OU está marcada como pendente/parcial
+        or_(
+            Venda.situacao.in_(['PENDENTE', 'PARCIAL']),
+            saldo_sql > Decimal('0.01'),
+        ),
     ).options(joinedload(Venda.produto)).order_by(Venda.data_venda).all()
 
-    # Total devido = soma do saldo restante (valor da nota - já pago) de cada venda
+    # Total devido = soma dos saldos restantes (sem confiar em cache)
     total_devido = sum(
-        Decimal(str(v.calcular_total() or Decimal('0.00'))) - Decimal(str(v.valor_pago or Decimal('0.00')))
+        (
+            Decimal(str(v.calcular_total() or Decimal('0.00')))
+            - Decimal(str(v.valor_pago or Decimal('0.00')))
+        )
         for v in vendas_pendentes
     )
+    # Defensivo: nunca devolver total negativo (overpayment seria bug em outro lugar)
+    if total_devido < Decimal('0.00'):
+        total_devido = Decimal('0.00')
     data_hoje = datetime.now().strftime('%d/%m/%Y')
 
     return render_template('extrato.html', cliente=cliente, vendas=vendas_pendentes, total=total_devido, data_hoje=data_hoje)

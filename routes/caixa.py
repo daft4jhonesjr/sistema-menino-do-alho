@@ -58,6 +58,7 @@ from services.db_utils import (
 from services.config_helpers import get_hoje_brasil
 from services.files_utils import _arquivo_imagem_permitido
 from services.config_helpers import _EXTERNAL_TIMEOUT
+from services.vendas_services import _resincronizar_pagamento_venda
 
 
 caixa_bp = Blueprint('caixa', __name__)
@@ -493,29 +494,56 @@ def toggle_status_cheque(id):
         return jsonify({'success': False, 'message': 'Erro ao atualizar status do cheque.'}), 500
 
 
+_RE_MARCADOR_VENDA = re.compile(r'Venda #(\d+)')
+
+
+def _coletar_vendas_afetadas(lancamentos):
+    """Extrai IDs de venda únicos referenciados nos lançamentos.
+
+    Trabalha sobre uma lista de ``LancamentoCaixa`` já carregados e
+    devolve um set de inteiros com os ``venda_id`` extraídos do marcador
+    ``Venda #N`` na descrição. Considera apenas lançamentos do tipo
+    ENTRADA — saídas (repasses a fornecedor) não afetam ``valor_pago``
+    da venda do cliente.
+    """
+    venda_ids = set()
+    for lanc in lancamentos:
+        if (lanc.tipo or '').upper() != 'ENTRADA':
+            continue
+        match = _RE_MARCADOR_VENDA.search(lanc.descricao or '')
+        if match:
+            try:
+                venda_ids.add(int(match.group(1)))
+            except (TypeError, ValueError):
+                continue
+    return venda_ids
+
+
+def _resincronizar_vendas_por_ids(venda_ids):
+    """Aplica ``_resincronizar_pagamento_venda`` em batch.
+
+    Carrega vendas no tenant atual e ressincroniza ``valor_pago`` +
+    ``situacao`` de cada uma. NÃO faz commit — chamador agrupa.
+    """
+    if not venda_ids:
+        return 0
+    vendas = query_tenant(Venda).filter(Venda.id.in_(list(venda_ids))).all()
+    for venda in vendas:
+        _resincronizar_pagamento_venda(venda)
+    return len(vendas)
+
+
 @caixa_bp.route('/desfazer_caixa/<int:id>', methods=['POST'])
 def desfazer_caixa(id):
-    """Rota genérica para desfazer lançamento do caixa (retorna JSON para Undo via Toast)."""
+    """Desfaz lançamento e ressincroniza pagamento da venda associada (JSON para Toast)."""
     try:
         lancamento = query_tenant(LancamentoCaixa).filter_by(id=id).first_or_404()
-        # Estorno reverso (Caixa → Venda)
-        match = re.search(r'Venda #(\d+)', lancamento.descricao or '')
-        if match and lancamento.tipo == 'ENTRADA':
-            venda_id = int(match.group(1))
-            venda = query_tenant(Venda).filter_by(id=venda_id).first()
-            if venda:
-                venda.valor_pago = Decimal(str(venda.valor_pago or Decimal('0.00'))) - Decimal(str(lancamento.valor or Decimal('0.00')))
-                if venda.valor_pago <= Decimal('0.01'):
-                    venda.valor_pago = Decimal('0.00')
-                    venda.situacao = 'PENDENTE'
-                else:
-                    valor_total_venda = Decimal(str(venda.calcular_total() or Decimal('0.00')))
-                    if venda.valor_pago < (valor_total_venda - Decimal('0.01')):
-                        venda.situacao = 'PARCIAL'
-                    else:
-                        venda.situacao = 'PAGO'
+        venda_ids = _coletar_vendas_afetadas([lancamento])
         db.session.delete(lancamento)
-        db.session.commit()
+        db.session.flush()
+        _resincronizar_vendas_por_ids(venda_ids)
+        if not _safe_db_commit():
+            return jsonify({"status": "error", "message": "Erro ao salvar alterações."}), 500
         return jsonify({"status": "success", "message": "Lançamento desfeito com sucesso."})
     except Exception as e:
         db.session.rollback()
@@ -524,32 +552,17 @@ def desfazer_caixa(id):
 
 @caixa_bp.route('/caixa/deletar/<int:id>', methods=['POST'])
 def deletar_caixa(id):
-    """Deleta um lançamento aplicando estorno reverso para a venda associada."""
+    """Deleta um lançamento e ressincroniza ``valor_pago``/``situacao`` da venda."""
     try:
         lancamento = query_tenant(LancamentoCaixa).filter_by(id=id).first_or_404()
-
-        match = re.search(r'Venda #(\d+)', lancamento.descricao or '')
-
-        if match and lancamento.tipo == 'ENTRADA':
-            venda_id = int(match.group(1))
-            venda = query_tenant(Venda).filter_by(id=venda_id).first()
-
-            if venda:
-                venda.valor_pago = Decimal(str(venda.valor_pago or Decimal('0.00'))) - Decimal(str(lancamento.valor or Decimal('0.00')))
-
-                if venda.valor_pago <= Decimal('0.01'):
-                    venda.valor_pago = Decimal('0.00')
-                    venda.situacao = 'PENDENTE'
-                else:
-                    valor_total_venda = Decimal(str(venda.calcular_total() or Decimal('0.00')))
-                    if venda.valor_pago < (valor_total_venda - Decimal('0.01')):
-                        venda.situacao = 'PARCIAL'
-                    else:
-                        venda.situacao = 'PAGO'
-
+        venda_ids = _coletar_vendas_afetadas([lancamento])
         db.session.delete(lancamento)
-        db.session.commit()
-        flash('Lançamento removido do caixa.', 'success')
+        db.session.flush()
+        _resincronizar_vendas_por_ids(venda_ids)
+        if not _safe_db_commit():
+            flash('Erro ao remover lançamento.', 'error')
+        else:
+            flash('Lançamento removido do caixa.', 'success')
     except Exception as e:
         db.session.rollback()
         flash(f'Erro ao remover lançamento: {str(e)}', 'error')
@@ -558,7 +571,7 @@ def deletar_caixa(id):
 
 @caixa_bp.route('/caixa/deletar_massa', methods=['POST'])
 def deletar_massa_caixa():
-    """Deleta múltiplos lançamentos (admin only)."""
+    """Deleta múltiplos lançamentos com ressincronização de vendas afetadas (admin only)."""
     @admin_required
     def _impl():
         deletar_tudo = request.form.get('deletar_tudo') == '1'
@@ -566,9 +579,17 @@ def deletar_massa_caixa():
 
         if deletar_tudo:
             try:
-                count = query_tenant(LancamentoCaixa).delete()
-                db.session.commit()
-                flash(f'{count} lançamentos apagados com sucesso!', 'success')
+                lancamentos = query_tenant(LancamentoCaixa).all()
+                venda_ids = _coletar_vendas_afetadas(lancamentos)
+                count = len(lancamentos)
+                for lanc in lancamentos:
+                    db.session.delete(lanc)
+                db.session.flush()
+                _resincronizar_vendas_por_ids(venda_ids)
+                if not _safe_db_commit():
+                    flash('Erro ao excluir lançamentos.', 'error')
+                else:
+                    flash(f'{count} lançamentos apagados com sucesso!', 'success')
             except Exception as e:
                 db.session.rollback()
                 flash(f'Erro ao excluir lançamentos: {str(e)}', 'error')
@@ -579,9 +600,19 @@ def deletar_massa_caixa():
             return redirect(url_for('caixa.caixa'))
         try:
             ids_int = [int(x) for x in ids]
-            query_tenant(LancamentoCaixa).filter(LancamentoCaixa.id.in_(ids_int)).delete(synchronize_session=False)
-            db.session.commit()
-            flash(f'{len(ids_int)} lançamentos apagados com sucesso!', 'success')
+            lancamentos = query_tenant(LancamentoCaixa).filter(
+                LancamentoCaixa.id.in_(ids_int)
+            ).all()
+            venda_ids = _coletar_vendas_afetadas(lancamentos)
+            count = len(lancamentos)
+            for lanc in lancamentos:
+                db.session.delete(lanc)
+            db.session.flush()
+            _resincronizar_vendas_por_ids(venda_ids)
+            if not _safe_db_commit():
+                flash('Erro ao excluir lançamentos.', 'error')
+            else:
+                flash(f'{count} lançamentos apagados com sucesso!', 'success')
         except Exception as e:
             db.session.rollback()
             flash(f'Erro ao excluir lançamentos: {str(e)}', 'error')
