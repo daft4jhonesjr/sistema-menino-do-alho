@@ -42,7 +42,7 @@ Estado atual:
     * ``caixa_bp``       → /caixa, /caixa/adicionar, /caixa/editar/<id>,
                            /caixa/deletar/<id>, /caixa/deletar_massa,
                            /caixa/importar, /caixa/cheque/<id>/alternar_status,
-                           /caixa/<id>/toggle_status_cheque, /desfazer_caixa/<id>,
+                           /caixa/<id>/toggle_status_cheque,
                            /upload_imagem_cheque, /caixa/gaveta/{salvar,carregar},
                            /caixa/{salvar_gaveta,obter_gaveta}
 

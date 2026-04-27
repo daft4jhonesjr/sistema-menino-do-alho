@@ -25,7 +25,8 @@ As rotas abaixo não foram encontradas em `url_for('...')` dentro de `templates/
 
 - `ler_logs_erros`, `limpar_logs_erros`
 - `editar_usuario_completo`, `alterar_role_usuario`
-- `alternar_status_envio_cheque`, `toggle_status_cheque`, `desfazer_caixa`
+- `alternar_status_envio_cheque`, `toggle_status_cheque`
+  - `desfazer_caixa`: REMOVIDA do código (Undo Pattern descontinuado).
 - `editar_fornecedor`, `editar_fornecedor_ajax`, `excluir_fornecedor`
 - `get_fotos_produto`
 - `api_vendas_por_filtro`, `api_dashboard_detalhes`, `api_detalhes_mes`, `ultimo_pagamento_cliente`

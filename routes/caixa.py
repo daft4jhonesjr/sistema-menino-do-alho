@@ -10,7 +10,6 @@ Rotas extraídas do legado ``app.py``:
 * ``POST /caixa/editar/<id>``                      — atualizar lançamento
 * ``POST /caixa/cheque/<id>/alternar_status``      — alterna ENVIADO/NÃO ENVIADO
 * ``POST /caixa/<id>/toggle_status_cheque``        — variante AJAX do toggle
-* ``POST /desfazer_caixa/<id>``                    — undo (toast) com estorno reverso
 * ``POST /caixa/deletar/<id>``                     — deletar com estorno reverso
 * ``POST /caixa/deletar_massa``                    — deletar múltiplos (admin)
 * ``POST /caixa/importar``                         — importação CSV/TSV/TXT
@@ -465,17 +464,42 @@ def adicionar_caixa():
         current_app.logger.info(
             f"[CAIXA-ADD] commit-ok id={novo_lancamento.id} valor={novo_valor}"
         )
-        flash(f'Lançamento adicionado com sucesso!|UNDO_CAIXA_{novo_lancamento.id}', 'success')
+        flash('Lançamento adicionado com sucesso!', 'success')
     current_app.logger.info(f"[CAIXA-ADD] redirecting setor={setor}")
     return redirect(url_for('caixa.caixa', setor=setor))
 
 
 @caixa_bp.route('/caixa/editar/<int:id>', methods=['POST'])
 def editar_lancamento_caixa(id):
-    """Atualiza um lançamento existente no caixa."""
-    lancamento = query_tenant(LancamentoCaixa).filter_by(id=id).first_or_404()
+    """Atualiza um lançamento existente no caixa.
+
+    Padrão robusto (alinhado com ``adicionar_caixa``):
+    - Rollback defensivo antes de qualquer SELECT — evita
+      ``PendingRollbackError`` com sessão suja vinda do pool em Postgres
+      (Render). Em produção, este era o motivo de a flash mostrar
+      ``"Erro ao atualizar lançamento :()"`` (str vazia da exception).
+    - ``_safe_db_commit()`` em vez de ``db.session.commit()`` para
+      capturar erros e devolver mensagem acionável.
+    - Validação explícita de ``data`` (evita TypeError em strptime(None)).
+    - ``msg = str(e) or repr(e) or e.__class__.__name__`` garante que a
+      flash NUNCA fique apenas com ``()``.
+    - ``exc_info=True`` no logger preserva o traceback nos logs do Render
+      para diagnóstico.
+    """
     try:
-        lancamento.data = datetime.strptime(request.form.get('data'), '%Y-%m-%d').date()
+        db.session.rollback()
+    except Exception:
+        pass
+
+    lancamento = query_tenant(LancamentoCaixa).filter_by(id=id).first_or_404()
+    current_app.logger.info(f"[CAIXA-EDIT] start | id={id}")
+
+    try:
+        data_raw = request.form.get('data')
+        if not data_raw:
+            flash('Data é obrigatória.', 'error')
+            return redirect(url_for('caixa.caixa'))
+        lancamento.data = datetime.strptime(data_raw, '%Y-%m-%d').date()
         lancamento.valor = _limpar_valor_moeda(request.form.get('valor'))
         lancamento.descricao = (request.form.get('descricao') or '').strip()
         lancamento.tipo = request.form.get('tipo') or lancamento.tipo
@@ -486,12 +510,24 @@ def editar_lancamento_caixa(id):
                 lancamento.status_envio = 'Não Enviado'
         else:
             lancamento.status_envio = None
-        db.session.commit()
+
+        ok, err = _safe_db_commit()
+        if not ok:
+            current_app.logger.warning(f"[CAIXA-EDIT] commit-fail id={id} err={err}")
+            flash(err or 'Erro ao atualizar lançamento. Tente novamente.', 'error')
+            return redirect(url_for('caixa.caixa'))
+
+        current_app.logger.info(f"[CAIXA-EDIT] commit-ok id={id}")
         flash('Lançamento atualizado com sucesso!', 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'Erro ao atualizar lançamento: {str(e)}', 'error')
-        current_app.logger.error(f"Erro no banco (editar_lancamento_caixa): {e}")
+        msg = str(e) or repr(e) or e.__class__.__name__
+        current_app.logger.error(
+            f"[CAIXA-EDIT] exception id={id} type={e.__class__.__name__} msg={msg!r}",
+            exc_info=True,
+        )
+        flash(f'Erro ao atualizar lançamento: {msg}', 'error')
+
     return redirect(url_for('caixa.caixa'))
 
 
@@ -570,24 +606,6 @@ def _resincronizar_vendas_por_ids(venda_ids):
     for venda in vendas:
         _resincronizar_pagamento_venda(venda)
     return len(vendas)
-
-
-@caixa_bp.route('/desfazer_caixa/<int:id>', methods=['POST'])
-def desfazer_caixa(id):
-    """Desfaz lançamento e ressincroniza pagamento da venda associada (JSON para Toast)."""
-    try:
-        lancamento = query_tenant(LancamentoCaixa).filter_by(id=id).first_or_404()
-        venda_ids = _coletar_vendas_afetadas([lancamento])
-        db.session.delete(lancamento)
-        db.session.flush()
-        _resincronizar_vendas_por_ids(venda_ids)
-        ok, err = _safe_db_commit()
-        if not ok:
-            return jsonify({"status": "error", "message": err or "Erro ao salvar alterações."}), 500
-        return jsonify({"status": "success", "message": "Lançamento desfeito com sucesso."})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"status": "error", "message": str(e)}), 500
 
 
 @caixa_bp.route('/caixa/deletar/<int:id>', methods=['POST'])
