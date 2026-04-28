@@ -77,32 +77,116 @@ def _exigir_tenant_em_todas_rotas():
 # Helpers exclusivos do caixa
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _limpar_valor_moeda(v):
-    """Converte string BRL (R$ 1.000,00 ou 1.000,00) ou número (300.5) para Decimal.
+def _normalizar_valor_brl(v):
+    """Normaliza valor monetário BRL "sujo" para string em formato Decimal.
 
-    Remove R$, espaços. Se tem vírgula: formato BR (remove pontos de milhar,
-    vírgula→ponto). Se não tem vírgula: mantém ponto como decimal (ex: 300.5).
+    À prova de balas para formatos comuns no mundo real:
 
-    Robustez (P0): captura ``decimal.InvalidOperation`` além de
-    ``ValueError``/``AttributeError``. ``Decimal('xx')`` em string inválida
-    lança ``InvalidOperation`` (subclasse de ``ArithmeticError``, NÃO de
-    ``ValueError``), que estava escapando do try e quebrando rotas com a
-    mensagem ``"[<class 'decimal.ConversionSyntax'>]"`` exposta ao usuário.
+    Aceita
+    ------
+    - ``'1234'``, ``'1234.56'``, ``'1234,56'`` (limpos)
+    - ``'1.234'`` (milhar BR), ``'1,234'`` (milhar US, raro mas ocorre)
+    - ``'1.234,56'`` (BR padrão), ``'1,234.56'`` (US padrão)
+    - ``'4,900,00'`` (vírgula como decimal E milhar — caso real do log)
+    - ``'4.900.00'`` (ponto como decimal E milhar)
+    - ``'1.234.567,89'`` (BR com múltiplos milhares)
+    - ``'R$ 4.900,00'``, ``'  R$  4.900,00 '`` (com prefixo/espaços)
+    - ``Decimal``, ``int``, ``float``
+    - ``'-100'``, ``'-99,99'`` (negativo passa por aqui — caller decide)
 
-    Versão TOLERANTE: em input inválido devolve ``Decimal('0.00')`` —
-    útil para criação onde aceitar 0 é razoável. Para EDIÇÃO, prefira
-    ``_converter_valor_brl_estrito`` que lança em vez de zerar
-    (impede que um typo do usuário sobrescreva um lançamento por R$ 0,00).
+    Estratégia (algoritmo do usuário, refinado)
+    -------------------------------------------
+    1. Sanitiza: tira tudo que não é dígito/``.``/``,``/``-``.
+    2. Detecta sinal e segue só com a parte numérica.
+    3. Se houver 2+ separadores: **o último** é o decimal SE tiver
+       exatamente 2 dígitos depois (cobre ``'4,900,00'``, ``'4.900.00'``,
+       ``'1.234.567,89'``). Senão, todos são milhar e somem.
+    4. Se houver 1 separador:
+       - Vírgula → sempre decimal BR (troca por ``.``).
+       - Ponto + exatamente 3 dígitos depois → milhar (some). Ex: ``'4.900'`` → ``'4900'``.
+       - Ponto com qualquer outra contagem → decimal. Ex: ``'300.5'``, ``'99.99'``.
+    5. Sem separador: número limpo.
+
+    Retorna
+    -------
+    str pronta para ``Decimal(...)``.
+
+    Lança
+    -----
+    ``InvalidOperation`` se o input não tem nenhum dígito (string vazia,
+    só lixo, ``None``).
     """
-    if not v:
+    if v is None:
+        raise InvalidOperation('valor_none')
+    if isinstance(v, Decimal):
+        return str(v)
+    if isinstance(v, (int, float)):
+        return str(v)
+
+    s = str(v).strip()
+    if not s:
+        raise InvalidOperation('valor_vazio')
+
+    # Sanitização: mantém só dígito, ., ,, -. ``R$``, espaços, letras
+    # parasitas etc. são jogados fora.
+    sinal = '-' if s.lstrip().startswith('-') else ''
+    s = ''.join(ch for ch in s if ch.isdigit() or ch in (',', '.'))
+    if not any(ch.isdigit() for ch in s):
+        raise InvalidOperation('sem_digitos')
+
+    seps = [(i, ch) for i, ch in enumerate(s) if ch in (',', '.')]
+
+    if len(seps) >= 2:
+        # 2+ separadores: o último é decimal SOMENTE se tiver exatamente
+        # 2 dígitos depois dele (centavos). Caso contrário, todos são
+        # separadores de milhar.
+        ultimo_idx, _ultimo_ch = seps[-1]
+        digitos_apos_ultimo = len(s) - ultimo_idx - 1
+        if digitos_apos_ultimo == 2:
+            inteiro = ''.join(ch for ch in s[:ultimo_idx] if ch.isdigit())
+            decimal_part = s[ultimo_idx + 1:]
+            return f'{sinal}{inteiro}.{decimal_part}'
+        # Todos milhar → some os separadores.
+        return f"{sinal}{''.join(ch for ch in s if ch.isdigit())}"
+
+    if len(seps) == 1:
+        idx, ch = seps[0]
+        digitos_apos = len(s) - idx - 1
+        digitos_antes = sum(1 for c in s[:idx] if c.isdigit())
+        # 1 separador + exatamente 3 dígitos depois + parte inteira não vazia →
+        # tratamos como milhar (BR ``1.234`` = 1234, e também US ``1,234`` =
+        # 1234, e o caso "sujo" comum de entrada digitada). Em BRL, valor
+        # monetário com decimal sempre tem 2 dígitos (centavos), então
+        # ``'4,900'`` ou ``'4.900'`` é milhar inteiro, não 4.9.
+        if digitos_apos == 3 and digitos_antes >= 1:
+            return f"{sinal}{''.join(c for c in s if c.isdigit())}"
+        if ch == ',':
+            # vírgula com 1, 2, ou 4+ dígitos depois → decimal BR
+            return f'{sinal}{s[:idx]}.{s[idx + 1:]}'
+        # ch == '.', com 1, 2, ou 4+ dígitos depois → decimal
+        return f'{sinal}{s}'
+
+    # Sem separador: número limpo.
+    return f'{sinal}{s}'
+
+
+def _limpar_valor_moeda(v):
+    """Converte valor BRL (string suja, Decimal, int, float) para ``Decimal``.
+
+    Versão **TOLERANTE**: input inválido → ``Decimal('0.00')`` em vez de
+    levantar. Útil para fluxos de criação onde aceitar 0 é razoável.
+
+    Para EDIÇÃO, prefira ``_converter_valor_brl_estrito`` que lança
+    ``InvalidOperation`` em input ruim (impede que um typo do usuário
+    sobrescreva um lançamento de R$ 4.900 por R$ 0).
+
+    Robustez de formato delegada a ``_normalizar_valor_brl`` — cobre
+    BR/US, milhares, mistos sujos e edge cases.
+    """
+    if v is None or v == '':
         return Decimal('0.00')
     try:
-        s = str(v).strip().replace('R$', '').replace(' ', '').strip()
-        if not s:
-            return Decimal('0.00')
-        if ',' in s:
-            s = s.replace('.', '').replace(',', '.')
-        return Decimal(s)
+        return Decimal(_normalizar_valor_brl(v))
     except (ValueError, AttributeError, InvalidOperation):
         return Decimal('0.00')
 
@@ -110,23 +194,20 @@ def _limpar_valor_moeda(v):
 def _converter_valor_brl_estrito(v):
     """Variante ESTRITA de ``_limpar_valor_moeda`` para fluxos de edição.
 
-    Aceita os mesmos formatos (``"R$ 4.900,00"``, ``"4900,00"``, ``"300.5"``,
-    ``Decimal``, ``int``, ``float``), mas:
-    - ``None``/string vazia → ``InvalidOperation``.
-    - String inválida (ex.: ``"abc"``, ``"4.900.00"``) → ``InvalidOperation``.
+    Aceita os mesmos formatos (BR, US, mistos sujos, ``Decimal``, ``int``,
+    ``float``), mas:
+    - ``None`` / string vazia → ``InvalidOperation``.
+    - String sem dígitos (só lixo) → ``InvalidOperation``.
     - Negativo → ``InvalidOperation`` (lançamento não pode ter valor negativo).
 
-    Uso: edição de lançamento, onde silenciar o erro com 0,00 zeraria o
-    valor do lançamento sem o usuário perceber.
+    Robustez de formato delegada a ``_normalizar_valor_brl``.
     """
     if v is None:
         raise InvalidOperation('valor_obrigatorio')
-    s = str(v).strip().replace('R$', '').replace(' ', '').strip()
+    s = str(v).strip()
     if not s:
         raise InvalidOperation('valor_vazio')
-    if ',' in s:
-        s = s.replace('.', '').replace(',', '.')
-    valor = Decimal(s)  # propaga InvalidOperation em sintaxe inválida
+    valor = Decimal(_normalizar_valor_brl(v))  # pode lançar InvalidOperation
     if valor < 0:
         raise InvalidOperation('valor_negativo')
     return valor
