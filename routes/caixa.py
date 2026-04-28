@@ -38,7 +38,7 @@ import io
 import json
 import re
 from datetime import datetime, date, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from flask import (
     Blueprint, render_template, request, redirect, url_for,
@@ -82,6 +82,17 @@ def _limpar_valor_moeda(v):
 
     Remove R$, espaços. Se tem vírgula: formato BR (remove pontos de milhar,
     vírgula→ponto). Se não tem vírgula: mantém ponto como decimal (ex: 300.5).
+
+    Robustez (P0): captura ``decimal.InvalidOperation`` além de
+    ``ValueError``/``AttributeError``. ``Decimal('xx')`` em string inválida
+    lança ``InvalidOperation`` (subclasse de ``ArithmeticError``, NÃO de
+    ``ValueError``), que estava escapando do try e quebrando rotas com a
+    mensagem ``"[<class 'decimal.ConversionSyntax'>]"`` exposta ao usuário.
+
+    Versão TOLERANTE: em input inválido devolve ``Decimal('0.00')`` —
+    útil para criação onde aceitar 0 é razoável. Para EDIÇÃO, prefira
+    ``_converter_valor_brl_estrito`` que lança em vez de zerar
+    (impede que um typo do usuário sobrescreva um lançamento por R$ 0,00).
     """
     if not v:
         return Decimal('0.00')
@@ -92,8 +103,33 @@ def _limpar_valor_moeda(v):
         if ',' in s:
             s = s.replace('.', '').replace(',', '.')
         return Decimal(s)
-    except (ValueError, AttributeError):
+    except (ValueError, AttributeError, InvalidOperation):
         return Decimal('0.00')
+
+
+def _converter_valor_brl_estrito(v):
+    """Variante ESTRITA de ``_limpar_valor_moeda`` para fluxos de edição.
+
+    Aceita os mesmos formatos (``"R$ 4.900,00"``, ``"4900,00"``, ``"300.5"``,
+    ``Decimal``, ``int``, ``float``), mas:
+    - ``None``/string vazia → ``InvalidOperation``.
+    - String inválida (ex.: ``"abc"``, ``"4.900.00"``) → ``InvalidOperation``.
+    - Negativo → ``InvalidOperation`` (lançamento não pode ter valor negativo).
+
+    Uso: edição de lançamento, onde silenciar o erro com 0,00 zeraria o
+    valor do lançamento sem o usuário perceber.
+    """
+    if v is None:
+        raise InvalidOperation('valor_obrigatorio')
+    s = str(v).strip().replace('R$', '').replace(' ', '').strip()
+    if not s:
+        raise InvalidOperation('valor_vazio')
+    if ',' in s:
+        s = s.replace('.', '').replace(',', '.')
+    valor = Decimal(s)  # propaga InvalidOperation em sintaxe inválida
+    if valor < 0:
+        raise InvalidOperation('valor_negativo')
+    return valor
 
 
 def _normalizar_itens_contagem(itens, incluir_nome=False):
@@ -547,7 +583,28 @@ def editar_lancamento_caixa(id):
             current_app.logger.info(f"[CAIXA-EDIT] redirecting (data_obrigatoria) id={id}")
             return redirect(url_for('caixa.caixa'))
         lancamento.data = datetime.strptime(data_raw, '%Y-%m-%d').date()
-        lancamento.valor = _limpar_valor_moeda(request.form.get('valor'))
+
+        # Valor: validação explícita. ``_limpar_valor_moeda`` é tolerante e
+        # devolve Decimal('0.00') em string inválida — mas para EDIÇÃO isso
+        # zeraria o lançamento silenciosamente. Aqui, se o input não bate
+        # com nenhum formato BR/decimal aceitável, abortamos com flash claro
+        # em vez de gravar 0,00 ou propagar ``InvalidOperation`` cru ao UI.
+        valor_raw = request.form.get('valor')
+        try:
+            valor_limpo = _converter_valor_brl_estrito(valor_raw)
+        except (InvalidOperation, ValueError):
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
+            current_app.logger.warning(
+                f"[CAIXA-EDIT] valor_invalido id={id} valor_raw={valor_raw!r}"
+            )
+            flash('Valor inválido. Verifique a formatação do número.', 'error')
+            current_app.logger.info(f"[CAIXA-EDIT] redirecting (valor_invalido) id={id}")
+            return redirect(url_for('caixa.caixa'))
+        lancamento.valor = valor_limpo
+
         lancamento.descricao = (request.form.get('descricao') or '').strip()
         lancamento.tipo = request.form.get('tipo') or lancamento.tipo
         lancamento.categoria = request.form.get('categoria') or lancamento.categoria
@@ -567,6 +624,16 @@ def editar_lancamento_caixa(id):
 
         current_app.logger.info(f"[CAIXA-EDIT] commit-ok id={id}")
         flash('Lançamento atualizado com sucesso!', 'success')
+    except InvalidOperation as e:
+        # Defesa em profundidade: se mesmo após o ``_converter_valor_brl_estrito``
+        # algum outro Decimal(...) do fluxo lançar conversão (não previsto hoje),
+        # devolvemos mensagem amigável em vez de "[<class 'decimal.ConversionSyntax'>]".
+        db.session.rollback()
+        current_app.logger.error(
+            f"[CAIXA-EDIT] decimal_conversion id={id} type={e.__class__.__name__}",
+            exc_info=True,
+        )
+        flash('Valor inválido. Verifique a formatação do número.', 'error')
     except Exception as e:
         db.session.rollback()
         msg = str(e) or repr(e) or e.__class__.__name__
