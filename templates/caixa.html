@@ -168,7 +168,18 @@
                             <th class="w-12 px-6 py-3">
                                 <input type="checkbox" onchange="alternarTodosGrupo(this, '{{ grupo.id_html }}')" data-grupo-id="{{ grupo.id_html }}" class="check-mestre-grupo w-4 h-4 text-emerald-600 bg-gray-100 border-gray-300 rounded focus:ring-emerald-500 dark:bg-gray-700 dark:border-gray-600">
                             </th>
-                            <th class="px-6 py-3">Data</th>
+                            <th class="px-6 py-3">
+                                <button type="button"
+                                        class="ordenar-data-btn inline-flex items-center gap-1.5 uppercase font-bold text-inherit hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors cursor-pointer select-none"
+                                        data-grupo-id="{{ grupo.id_html }}"
+                                        data-sort-order="none"
+                                        title="Clique para ordenar por data">
+                                    <span>Data</span>
+                                    <svg class="ordenar-data-icone w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l4-4 4 4m0 6l-4 4-4-4"></path>
+                                    </svg>
+                                </button>
+                            </th>
                             <th class="px-6 py-3">Descrição</th>
                             <th class="px-6 py-3">Categoria</th>
                             <th class="px-6 py-3">
@@ -768,6 +779,100 @@ function confirmarExclusaoMassa() {
         if (el && el.classList && el.classList.contains('filtro-forma-select')) {
             aplicarFiltroForma(el.value);
         }
+    });
+})();
+
+// ======================================================================
+// Ordenação client-side por Data (cabeçalho "Data")
+// ----------------------------------------------------------------------
+// 100% no cliente. Cada grupo (mês) tem o seu próprio botão de sort, com
+// estado independente: nenhum / asc / desc, alternando a cada clique.
+// Usa o atributo data-lanc-data (formato ISO YYYY-MM-DD), que permite
+// comparação cronológica via string sort sem precisar de new Date(...) —
+// mais rápido, sem fuso/locale e sem ambiguidade. Linhas sem
+// data-lanc-id (totalizadores eventuais) são preservadas no fim.
+// ======================================================================
+(function() {
+    var ICONE_NEUTRO = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l4-4 4 4m0 6l-4 4-4-4"></path>';
+    var ICONE_ASC = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>';
+    var ICONE_DESC = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>';
+
+    function atualizarIcone(btn, ordem) {
+        var svg = btn.querySelector('.ordenar-data-icone');
+        if (!svg) return;
+        if (ordem === 'asc') {
+            svg.innerHTML = ICONE_ASC;
+            svg.classList.remove('text-gray-400');
+            svg.classList.add('text-emerald-500');
+        } else if (ordem === 'desc') {
+            svg.innerHTML = ICONE_DESC;
+            svg.classList.remove('text-gray-400');
+            svg.classList.add('text-emerald-500');
+        } else {
+            svg.innerHTML = ICONE_NEUTRO;
+            svg.classList.remove('text-emerald-500');
+            svg.classList.add('text-gray-400');
+        }
+    }
+
+    function ordenarTabelaPorData(grupoId, ordem) {
+        var tabela = document.querySelector('#container-tabela-' + grupoId + ' table.caixa-tabela');
+        if (!tabela) return;
+        var tbody = tabela.querySelector('tbody');
+        if (!tbody) return;
+
+        var todas = Array.prototype.slice.call(tbody.children);
+        var linhasDados = todas.filter(function(tr) { return tr.hasAttribute('data-lanc-data'); });
+        var linhasOutras = todas.filter(function(tr) { return !tr.hasAttribute('data-lanc-data'); });
+
+        // Comparação por string ISO (YYYY-MM-DD) é cronológica e estável.
+        linhasDados.sort(function(a, b) {
+            var da = a.getAttribute('data-lanc-data') || '';
+            var db = b.getAttribute('data-lanc-data') || '';
+            if (da < db) return ordem === 'asc' ? -1 : 1;
+            if (da > db) return ordem === 'asc' ? 1 : -1;
+            return 0;
+        });
+
+        // Re-anexa: linhas de dados ordenadas + outras (totalizadores) preservadas no fim.
+        linhasDados.forEach(function(tr) { tbody.appendChild(tr); });
+        linhasOutras.forEach(function(tr) { tbody.appendChild(tr); });
+
+        // Aplica o mesmo sort aos cards do grupo, para manter consistência visual
+        // entre tabela e cards (mesma fonte de dados).
+        var containerCards = document.getElementById('container-cards-' + grupoId);
+        if (containerCards) {
+            var cards = Array.prototype.slice.call(containerCards.children);
+            var cardsDados = cards.filter(function(c) { return c.hasAttribute('data-lanc-data'); });
+            var cardsOutros = cards.filter(function(c) { return !c.hasAttribute('data-lanc-data'); });
+            cardsDados.sort(function(a, b) {
+                var da = a.getAttribute('data-lanc-data') || '';
+                var db = b.getAttribute('data-lanc-data') || '';
+                if (da < db) return ordem === 'asc' ? -1 : 1;
+                if (da > db) return ordem === 'asc' ? 1 : -1;
+                return 0;
+            });
+            cardsDados.forEach(function(c) { containerCards.appendChild(c); });
+            cardsOutros.forEach(function(c) { containerCards.appendChild(c); });
+        }
+    }
+
+    document.addEventListener('click', function(ev) {
+        var btn = ev.target.closest('.ordenar-data-btn');
+        if (!btn) return;
+        ev.preventDefault();
+
+        var ordemAtual = btn.getAttribute('data-sort-order') || 'none';
+        // none → desc (mais recentes primeiro, default mais útil) → asc → desc → asc ...
+        var proxima;
+        if (ordemAtual === 'desc') proxima = 'asc';
+        else proxima = 'desc';
+
+        btn.setAttribute('data-sort-order', proxima);
+        atualizarIcone(btn, proxima);
+
+        var grupoId = btn.getAttribute('data-grupo-id');
+        if (grupoId) ordenarTabelaPorData(grupoId, proxima);
     });
 })();
 </script>
