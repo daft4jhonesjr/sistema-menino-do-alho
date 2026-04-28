@@ -162,13 +162,13 @@
         </button>
         <div id="{{ grupo.id_html }}" class="transition-all duration-300 {% if chave != mes_atual_str %}hidden{% endif %}">
             <div id="container-tabela-{{ grupo.id_html }}" class="container-tabela-caixa overflow-x-auto w-full pb-2">
-                <table class="caixa-tabela w-full min-w-max text-left whitespace-nowrap">
+                <table class="caixa-tabela no-hide-cols w-full text-left">
                     <thead class="bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-xs uppercase font-bold border-b border-gray-100 dark:border-gray-700">
                         <tr>
-                            <th class="w-12 px-6 py-3">
+                            <th class="w-12 px-6 py-3 whitespace-nowrap">
                                 <input type="checkbox" onchange="alternarTodosGrupo(this, '{{ grupo.id_html }}')" data-grupo-id="{{ grupo.id_html }}" class="check-mestre-grupo w-4 h-4 text-emerald-600 bg-gray-100 border-gray-300 rounded focus:ring-emerald-500 dark:bg-gray-700 dark:border-gray-600">
                             </th>
-                            <th class="px-6 py-3">
+                            <th class="px-6 py-3 whitespace-nowrap">
                                 <button type="button"
                                         class="ordenar-data-btn inline-flex items-center gap-1.5 uppercase font-bold text-inherit hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors cursor-pointer select-none"
                                         data-grupo-id="{{ grupo.id_html }}"
@@ -180,9 +180,9 @@
                                     </svg>
                                 </button>
                             </th>
-                            <th class="px-6 py-3">Descrição</th>
-                            <th class="px-6 py-3">Categoria</th>
-                            <th class="px-6 py-3">
+                            <th class="px-6 py-3 whitespace-normal">Descrição</th>
+                            <th class="px-6 py-3 whitespace-nowrap">Categoria</th>
+                            <th class="px-6 py-3 whitespace-nowrap">
                                 <div class="flex items-center gap-1.5">
                                     <span>Conta/Pagamento</span>
                                     <label class="relative inline-flex items-center cursor-pointer group" title="Filtrar por forma de pagamento">
@@ -200,9 +200,9 @@
                                     </label>
                                 </div>
                             </th>
-                            <th class="px-6 py-3 text-center">Status Cheque</th>
-                            <th class="px-6 py-3 text-right">Valor</th>
-                            <th class="px-6 py-3 text-center">Ações</th>
+                            <th class="px-6 py-3 text-center whitespace-nowrap">Status Cheque</th>
+                            <th class="px-6 py-3 text-right whitespace-nowrap">Valor</th>
+                            <th class="px-6 py-3 text-center whitespace-nowrap">Ações</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100 dark:divide-gray-700 text-sm">
@@ -215,14 +215,14 @@
                         {% set row_class = "border-l-4 border-l-transparent hover:bg-gray-100 dark:hover:bg-gray-700" ~ (" bg-white dark:bg-gray-800" if loop.index is odd else " bg-gray-50/60 dark:bg-gray-800/50") %}
                         {% endif %}
                         <tr class="{{ row_class }} transition-colors duration-200 text-gray-700 dark:text-gray-300 border-b border-gray-100 dark:border-gray-800" data-lanc-id="{{ l.id }}" data-lanc-data="{{ l.data.strftime('%Y-%m-%d') }}" data-lanc-desc="{{ l.descricao|e }}" data-lanc-categoria="{{ l.categoria|e }}" data-lanc-tipo="{{ l.tipo }}" data-lanc-forma="{{ l.forma_pagamento|e }}" data-lanc-valor="{{ l.valor }}">
-                            <td class="px-6 py-3" data-label="Selecionar">
+                            <td class="px-6 py-3 whitespace-nowrap" data-label="Selecionar">
                                 <input type="checkbox" name="lancamento_ids" value="{{ l.id }}" onchange="atualizarBarraMassa()" class="check-item-caixa item-grupo-{{ grupo.id_html }} w-4 h-4 text-emerald-600 bg-gray-100 border-gray-300 rounded focus:ring-emerald-500 dark:bg-gray-700 dark:border-gray-600">
                             </td>
-                            <td class="px-6 py-3 text-gray-500 dark:text-gray-400" data-label="Data">{{ l.data.strftime('%d/%m/%Y') }}</td>
-                            <td class="px-6 py-3 font-medium text-gray-900 dark:text-gray-100" data-label="Descrição">{{ l.descricao }}</td>
-                            <td class="px-6 py-3 text-gray-500 dark:text-gray-400" data-label="Categoria"><span class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-xs">{{ l.categoria }}</span></td>
-                            <td class="px-6 py-3" data-label="Conta/Pagamento"><span class="bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-2 py-1 rounded text-xs font-bold">{{ l.forma_pagamento }}</span></td>
-                            <td class="px-6 py-3 text-center" data-label="Status Cheque">
+                            <td class="px-6 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap" data-label="Data">{{ l.data.strftime('%d/%m/%Y') }}</td>
+                            <td class="px-6 py-3 font-medium text-gray-900 dark:text-gray-100 whitespace-normal break-words" data-label="Descrição">{{ l.descricao }}</td>
+                            <td class="px-6 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap" data-label="Categoria"><span class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-xs">{{ l.categoria }}</span></td>
+                            <td class="px-6 py-3 whitespace-nowrap" data-label="Conta/Pagamento"><span class="bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-2 py-1 rounded text-xs font-bold">{{ l.forma_pagamento }}</span></td>
+                            <td class="px-6 py-3 text-center whitespace-nowrap" data-label="Status Cheque">
                                 {% if (l.forma_pagamento or '')|lower == 'cheque' %}
                                 <button type="button"
                                         class="btn-toggle-status-cheque inline-flex items-center px-2 py-1 rounded text-xs font-bold uppercase border transition-colors {% if (l.status_envio or 'Não Enviado') == 'Enviado' %}bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800{% else %}bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800{% endif %}"
@@ -235,10 +235,10 @@
                                 <span class="text-gray-400 dark:text-gray-500 text-xs">—</span>
                                 {% endif %}
                             </td>
-                            <td class="px-6 py-3 text-right font-bold valor-financeiro {% if l.tipo == 'ENTRADA' %}text-emerald-600 dark:text-emerald-400{% else %}text-red-600 dark:text-red-400{% endif %}" data-label="Valor">
+                            <td class="px-6 py-3 text-right font-bold valor-financeiro whitespace-nowrap {% if l.tipo == 'ENTRADA' %}text-emerald-600 dark:text-emerald-400{% else %}text-red-600 dark:text-red-400{% endif %}" data-label="Valor">
                                 {% if l.tipo == 'ENTRADA' %}+ {% else %}- {% endif %}{{ l.valor|formato_moeda }}
                             </td>
-                            <td class="px-6 py-3 text-center" data-label="Ações">
+                            <td class="px-6 py-3 text-center whitespace-nowrap" data-label="Ações">
                                 <button type="button" onclick="abrirModalEditar(this.closest('[data-lanc-id]'))" class="text-amber-500 hover:text-amber-600 dark:hover:text-amber-400 transition-colors p-2.5 md:p-1 mr-1" title="Editar Lançamento">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
                                 </button>

@@ -1174,11 +1174,13 @@
             var tables = document.querySelectorAll('table');
 
             tables.forEach(function(table, tableIndex) {
-                var disableResize =
+                var disableHide =
+                    table.classList.contains('no-hide-cols') ||
                     table.classList.contains('no-resize') ||
+                    table.getAttribute('data-disable-hide-cols') === 'true' ||
                     table.getAttribute('data-disable-resize') === 'true' ||
                     table.classList.contains('tabela-produtos');
-                if (disableResize) return;
+                if (disableHide) return;
 
                 var ths = table.querySelectorAll('th');
                 var tableId = table.getAttribute('data-table-id');
