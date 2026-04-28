@@ -181,7 +181,23 @@
                                 </button>
                             </th>
                             <th class="px-6 py-3 whitespace-normal">Descrição</th>
-                            <th class="px-6 py-3 whitespace-nowrap">Categoria</th>
+                            <th class="px-6 py-3 whitespace-nowrap">
+                                <div class="flex items-center gap-1.5">
+                                    <span>Categoria</span>
+                                    <label class="relative inline-flex items-center cursor-pointer group" title="Filtrar por categoria">
+                                        <svg class="w-3.5 h-3.5 text-gray-400 group-hover:text-emerald-500 transition-colors filtro-categoria-icone" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path>
+                                        </svg>
+                                        <select aria-label="Filtrar por categoria"
+                                                class="filtro-categoria-select absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                                            <option value="">Todos</option>
+                                            <option value="Entrada Cliente">Entrada Cliente</option>
+                                            <option value="Saída Pessoal">Saída Pessoal</option>
+                                            <option value="Saída Fornecedor">Saída Fornecedor</option>
+                                        </select>
+                                    </label>
+                                </div>
+                            </th>
                             <th class="px-6 py-3 whitespace-nowrap">
                                 <div class="flex items-center gap-1.5">
                                     <span>Conta/Pagamento</span>
@@ -731,55 +747,118 @@ function confirmarExclusaoMassa() {
 })();
 
 // ======================================================================
-// Filtro client-side por Forma de Pagamento (cabeçalho "Conta/Pagamento")
+// Filtros client-side compostos no cabeçalho (Conta/Pagamento + Categoria)
 // ----------------------------------------------------------------------
 // 100% no cliente. Não recarrega a página, não bate no servidor.
-// Cada grupo (mês) tem o seu próprio <select> no <th> — todos ficam
-// sincronizados (mudou um, propaga pros outros). Filtra simultaneamente
-// linhas da tabela e cards (mobile/desktop alternativo) usando o atributo
-// data-lanc-forma, que é mais robusto que ler texto da célula.
+// Cada grupo (mês) tem o seu próprio par de <select> nos <th> — todos os
+// selects da mesma dimensão ficam sincronizados (mudou um, propaga para
+// os outros). Filtra simultaneamente linhas da tabela e cards (modo card
+// alternativo) usando os atributos data-lanc-forma e data-lanc-categoria,
+// mais robustos do que ler texto da célula. Filtros são compostos com AND:
+// uma linha só aparece se PASSAR em ambos (ou se ambos estiverem em "Todos").
 // ======================================================================
 (function() {
-    function aplicarFiltroForma(valor) {
-        var alvo = (valor || '').trim().toLowerCase();
+    var estado = { forma: '', categoria: '' };
+
+    function aplicarFiltrosCompostos() {
+        var alvoForma = (estado.forma || '').trim().toLowerCase();
+        var alvoCat = (estado.categoria || '').trim().toLowerCase();
+
+        function linhaPassa(el) {
+            // Só atua em elementos que tenham AMBOS os atributos (linhas/cards
+            // de lançamento). Linhas sem data-lanc-* — totalizadores ou
+            // separadores eventuais — ficam intactas.
+            if (!el.hasAttribute('data-lanc-forma') && !el.hasAttribute('data-lanc-categoria')) {
+                return null; // não aplicável
+            }
+            var forma = (el.getAttribute('data-lanc-forma') || '').trim().toLowerCase();
+            var categoria = (el.getAttribute('data-lanc-categoria') || '').trim().toLowerCase();
+            var okForma = (!alvoForma) || (forma === alvoForma);
+            var okCat = (!alvoCat) || (categoria === alvoCat);
+            return okForma && okCat;
+        }
 
         // Linhas das tabelas (todos os grupos)
-        var linhas = document.querySelectorAll('table.caixa-tabela tbody tr[data-lanc-forma]');
+        var linhas = document.querySelectorAll('table.caixa-tabela tbody tr');
         linhas.forEach(function(tr) {
-            var forma = (tr.getAttribute('data-lanc-forma') || '').trim().toLowerCase();
-            tr.style.display = (!alvo || forma === alvo) ? '' : 'none';
+            var passou = linhaPassa(tr);
+            if (passou === null) return; // preserva linhas que não são de dados
+            tr.style.display = passou ? '' : 'none';
         });
 
         // Cards (modo card alternativo)
-        var cards = document.querySelectorAll('.container-cards-caixa > [data-lanc-forma]');
+        var cards = document.querySelectorAll('.container-cards-caixa > *');
         cards.forEach(function(card) {
-            var forma = (card.getAttribute('data-lanc-forma') || '').trim().toLowerCase();
-            card.style.display = (!alvo || forma === alvo) ? '' : 'none';
+            var passou = linhaPassa(card);
+            if (passou === null) return;
+            card.style.display = passou ? '' : 'none';
         });
 
-        // Sincroniza todos os selects (um por grupo) para refletir o estado
-        var selects = document.querySelectorAll('select.filtro-forma-select');
-        selects.forEach(function(s) { if (s.value !== valor) s.value = valor; });
+        // Sincroniza todos os selects da mesma dimensão (um por grupo)
+        document.querySelectorAll('select.filtro-forma-select').forEach(function(s) {
+            if (s.value !== estado.forma) s.value = estado.forma;
+        });
+        document.querySelectorAll('select.filtro-categoria-select').forEach(function(s) {
+            if (s.value !== estado.categoria) s.value = estado.categoria;
+        });
 
-        // Feedback visual: ícones do funil ficam coloridos quando há filtro ativo
-        var icones = document.querySelectorAll('.filtro-forma-icone');
-        icones.forEach(function(svg) {
-            if (alvo) {
-                svg.classList.add('text-emerald-500');
-                svg.classList.remove('text-gray-400');
-            } else {
-                svg.classList.add('text-gray-400');
-                svg.classList.remove('text-emerald-500');
-            }
+        // Feedback visual nos ícones do funil
+        function pintarIcones(seletor, ativo) {
+            document.querySelectorAll(seletor).forEach(function(svg) {
+                if (ativo) {
+                    svg.classList.add('text-emerald-500');
+                    svg.classList.remove('text-gray-400');
+                } else {
+                    svg.classList.add('text-gray-400');
+                    svg.classList.remove('text-emerald-500');
+                }
+            });
+        }
+        pintarIcones('.filtro-forma-icone', !!alvoForma);
+        pintarIcones('.filtro-categoria-icone', !!alvoCat);
+    }
+
+    // Auto-popular categorias inéditas: se algum lançamento histórico tiver
+    // categoria fora do padrão (ex.: "Outros", "Imposto"), adiciona dinamicamente
+    // como <option> em todos os selects de categoria, para o usuário poder filtrar.
+    function popularCategoriasDinamicas() {
+        var existentes = new Set();
+        document.querySelectorAll('[data-lanc-categoria]').forEach(function(el) {
+            var c = (el.getAttribute('data-lanc-categoria') || '').trim();
+            if (c) existentes.add(c);
+        });
+        document.querySelectorAll('select.filtro-categoria-select').forEach(function(sel) {
+            var jaTem = new Set();
+            Array.prototype.forEach.call(sel.options, function(o) { jaTem.add(o.value); });
+            existentes.forEach(function(c) {
+                if (!jaTem.has(c)) {
+                    var opt = document.createElement('option');
+                    opt.value = c;
+                    opt.textContent = c;
+                    sel.appendChild(opt);
+                }
+            });
         });
     }
 
     document.addEventListener('change', function(ev) {
         var el = ev.target;
-        if (el && el.classList && el.classList.contains('filtro-forma-select')) {
-            aplicarFiltroForma(el.value);
+        if (!el || !el.classList) return;
+        if (el.classList.contains('filtro-forma-select')) {
+            estado.forma = el.value;
+            aplicarFiltrosCompostos();
+        } else if (el.classList.contains('filtro-categoria-select')) {
+            estado.categoria = el.value;
+            aplicarFiltrosCompostos();
         }
     });
+
+    // Roda no DOMContentLoaded para popular categorias eventualmente inéditas
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', popularCategoriasDinamicas);
+    } else {
+        popularCategoriasDinamicas();
+    }
 })();
 
 // ======================================================================
