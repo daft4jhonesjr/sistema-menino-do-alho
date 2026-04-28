@@ -335,3 +335,149 @@ def recuperar_saldos():
         200,
         {'Content-Type': 'text/plain; charset=utf-8'},
     )
+
+
+@master_bp.route('/admin/inspect_venda/<int:venda_id>', methods=['GET'])
+@login_required
+def inspect_venda(venda_id):
+    """Dump cru de uma Venda + LancamentoCaixa relacionados.
+
+    Diagnóstico para descobrir o padrão real de ``descricao`` no banco
+    quando o regex ``Venda #N -%`` não casa. Faz três buscas:
+
+        1. A venda em si (escopo do tenant atual).
+        2. Lançamentos cuja ``descricao`` contém o número da venda como
+           substring (case-insensitive, captura variações como
+           "Venda #1891", "Venda 1891", "venda1891", "venda nro 1891" etc).
+        3. Lançamentos cujo ``valor`` é igual ao total da venda
+           (heurística para casos em que a descrição perdeu qualquer
+           referência ao ID).
+
+    Retorno: texto puro com TODOS os campos relevantes,
+    ``descricao`` impressa com ``repr()`` para revelar caracteres ocultos
+    (espaços não-quebráveis, traços diferentes do ASCII, etc).
+
+    Multi-tenant: lê apenas dentro do ``empresa_id`` do usuário logado.
+    """
+    eid = empresa_id_atual()
+
+    venda = query_tenant(Venda).filter_by(id=venda_id).first()
+    if venda is None:
+        return (
+            f'Venda {venda_id} NAO encontrada no tenant {eid}.',
+            404,
+            {'Content-Type': 'text/plain; charset=utf-8'},
+        )
+
+    valor_total = Decimal(str(venda.calcular_total() or Decimal('0.00')))
+
+    # 1) por substring do ID na descrição (varia: "1891", "#1891", " 1891 " etc)
+    lancs_por_substring = (
+        LancamentoCaixa.query
+        .filter(LancamentoCaixa.empresa_id == eid)
+        .filter(LancamentoCaixa.descricao.ilike(f'%{venda_id}%'))
+        .order_by(LancamentoCaixa.data.desc(), LancamentoCaixa.id.desc())
+        .all()
+    )
+
+    # 2) por valor exato (qualquer tipo, qualquer descricao)
+    lancs_por_valor = (
+        LancamentoCaixa.query
+        .filter(LancamentoCaixa.empresa_id == eid)
+        .filter(LancamentoCaixa.valor == valor_total)
+        .order_by(LancamentoCaixa.data.desc(), LancamentoCaixa.id.desc())
+        .limit(50)
+        .all()
+    )
+
+    # 3) por venda_id direto (FK, se preenchida)
+    try:
+        lancs_por_fk = (
+            LancamentoCaixa.query
+            .filter(LancamentoCaixa.empresa_id == eid)
+            .filter(LancamentoCaixa.venda_id == venda_id)
+            .all()
+        )
+    except Exception:
+        lancs_por_fk = []
+
+    def _fmt_lanc(lc):
+        return (
+            f'  id={lc.id}'
+            f' | data={lc.data}'
+            f' | tipo={lc.tipo!r}'
+            f' | valor={lc.valor}'
+            f' | forma={lc.forma_pagamento!r}'
+            f' | categoria={lc.categoria!r}'
+            f' | venda_id={getattr(lc, "venda_id", None)}'
+            f'\n      descricao_repr={lc.descricao!r}'
+        )
+
+    linhas = [
+        f'=== INSPECT Venda #{venda_id} (tenant {eid}) ===',
+        '',
+        '--- VENDA (campos brutos) ---',
+        f'  id              = {venda.id}',
+        f'  empresa_id      = {venda.empresa_id}',
+        f'  cliente_id      = {venda.cliente_id}',
+        f'  produto_id      = {venda.produto_id}',
+        f'  preco_venda     = {venda.preco_venda}',
+        f'  quantidade      = {venda.quantidade_venda}',
+        f'  valor_total     = {valor_total}',
+        f'  valor_pago      = {venda.valor_pago}',
+        f'  situacao        = {venda.situacao!r}',
+        f'  forma_pagamento = {venda.forma_pagamento!r}',
+        f'  data_venda      = {venda.data_venda}',
+        f'  data_vencimento = {venda.data_vencimento}',
+        f'  nf              = {venda.nf!r}',
+        f'  tipo_operacao   = {venda.tipo_operacao!r}',
+        '',
+        f'--- LANCAMENTOS por venda_id (FK) ({len(lancs_por_fk)}) ---',
+    ]
+    if lancs_por_fk:
+        for lc in lancs_por_fk:
+            linhas.append(_fmt_lanc(lc))
+    else:
+        linhas.append('  (nenhum)')
+
+    linhas.extend([
+        '',
+        f'--- LANCAMENTOS com substring "{venda_id}" na descricao ({len(lancs_por_substring)}) ---',
+    ])
+    if lancs_por_substring:
+        for lc in lancs_por_substring:
+            linhas.append(_fmt_lanc(lc))
+    else:
+        linhas.append('  (nenhum)')
+
+    linhas.extend([
+        '',
+        f'--- LANCAMENTOS com valor == {valor_total} ({len(lancs_por_valor)}) ---',
+    ])
+    if lancs_por_valor:
+        for lc in lancs_por_valor:
+            linhas.append(_fmt_lanc(lc))
+    else:
+        linhas.append('  (nenhum)')
+
+    linhas.extend([
+        '',
+        '--- DICAS DE INTERPRETACAO ---',
+        '  - descricao_repr usa repr() para revelar:',
+        '      * aspas/caracteres ocultos',
+        '      * traços não-ASCII (— vs - vs –)',
+        '      * espaços não-quebráveis (\\xa0)',
+        '      * quebras de linha (\\n, \\r)',
+        '  - Padrao esperado pelo regex atual: "Venda #N - <cliente>"',
+        '    (espaco, traco ASCII, espaco). Se o que aparecer for diferente',
+        '    (ex: "Venda#N", "Venda N", "venda nro N", "Venda #N — <cliente>"),',
+        '    o regex precisa ser ajustado para tolerar essas variações.',
+    ])
+
+    output = '\n'.join(linhas)
+    logging.info(
+        '[INSPECT-VENDA] empresa=%s id=%s fk=%d substr=%d valor=%d',
+        eid, venda_id, len(lancs_por_fk),
+        len(lancs_por_substring), len(lancs_por_valor),
+    )
+    return output, 200, {'Content-Type': 'text/plain; charset=utf-8'}
