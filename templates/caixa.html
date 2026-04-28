@@ -171,7 +171,24 @@
                             <th class="px-6 py-3">Data</th>
                             <th class="px-6 py-3">Descrição</th>
                             <th class="px-6 py-3">Categoria</th>
-                            <th class="px-6 py-3">Conta/Pagamento</th>
+                            <th class="px-6 py-3">
+                                <div class="flex items-center gap-1.5">
+                                    <span>Conta/Pagamento</span>
+                                    <label class="relative inline-flex items-center cursor-pointer group" title="Filtrar por forma de pagamento">
+                                        <svg class="w-3.5 h-3.5 text-gray-400 group-hover:text-emerald-500 transition-colors filtro-forma-icone" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path>
+                                        </svg>
+                                        <select aria-label="Filtrar por forma de pagamento"
+                                                class="filtro-forma-select absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                                            <option value="">Todos</option>
+                                            <option value="Pix">Pix</option>
+                                            <option value="Dinheiro">Dinheiro</option>
+                                            <option value="Cheque">Cheque</option>
+                                            <option value="Boleto">Boleto</option>
+                                        </select>
+                                    </label>
+                                </div>
+                            </th>
                             <th class="px-6 py-3 text-center">Status Cheque</th>
                             <th class="px-6 py-3 text-right">Valor</th>
                             <th class="px-6 py-3 text-center">Ações</th>
@@ -700,6 +717,58 @@ function confirmarExclusaoMassa() {
             }
         }, 300);
     }
+})();
+
+// ======================================================================
+// Filtro client-side por Forma de Pagamento (cabeçalho "Conta/Pagamento")
+// ----------------------------------------------------------------------
+// 100% no cliente. Não recarrega a página, não bate no servidor.
+// Cada grupo (mês) tem o seu próprio <select> no <th> — todos ficam
+// sincronizados (mudou um, propaga pros outros). Filtra simultaneamente
+// linhas da tabela e cards (mobile/desktop alternativo) usando o atributo
+// data-lanc-forma, que é mais robusto que ler texto da célula.
+// ======================================================================
+(function() {
+    function aplicarFiltroForma(valor) {
+        var alvo = (valor || '').trim().toLowerCase();
+
+        // Linhas das tabelas (todos os grupos)
+        var linhas = document.querySelectorAll('table.caixa-tabela tbody tr[data-lanc-forma]');
+        linhas.forEach(function(tr) {
+            var forma = (tr.getAttribute('data-lanc-forma') || '').trim().toLowerCase();
+            tr.style.display = (!alvo || forma === alvo) ? '' : 'none';
+        });
+
+        // Cards (modo card alternativo)
+        var cards = document.querySelectorAll('.container-cards-caixa > [data-lanc-forma]');
+        cards.forEach(function(card) {
+            var forma = (card.getAttribute('data-lanc-forma') || '').trim().toLowerCase();
+            card.style.display = (!alvo || forma === alvo) ? '' : 'none';
+        });
+
+        // Sincroniza todos os selects (um por grupo) para refletir o estado
+        var selects = document.querySelectorAll('select.filtro-forma-select');
+        selects.forEach(function(s) { if (s.value !== valor) s.value = valor; });
+
+        // Feedback visual: ícones do funil ficam coloridos quando há filtro ativo
+        var icones = document.querySelectorAll('.filtro-forma-icone');
+        icones.forEach(function(svg) {
+            if (alvo) {
+                svg.classList.add('text-emerald-500');
+                svg.classList.remove('text-gray-400');
+            } else {
+                svg.classList.add('text-gray-400');
+                svg.classList.remove('text-emerald-500');
+            }
+        });
+    }
+
+    document.addEventListener('change', function(ev) {
+        var el = ev.target;
+        if (el && el.classList && el.classList.contains('filtro-forma-select')) {
+            aplicarFiltroForma(el.value);
+        }
+    });
 })();
 </script>
 

@@ -630,11 +630,33 @@ def deletar_caixa(id):
 
 @caixa_bp.route('/caixa/deletar_massa', methods=['POST'])
 def deletar_massa_caixa():
-    """Deleta múltiplos lançamentos com ressincronização de vendas afetadas (admin only)."""
+    """Deleta múltiplos lançamentos com ressincronização de vendas afetadas (admin only).
+
+    Padrão robusto (alinhado com ``adicionar_caixa``/``editar_lancamento_caixa``):
+    - Rollback defensivo no início (limpa sessão suja vinda do pool).
+    - Logs ``[CAIXA-MASSA-DEL]`` ``start``/``commit-ok``/``commit-fail``/
+      ``exception``/``redirecting`` para correlacionar requests no Render.
+    - ``exc_info=True`` no logger preserva traceback completo.
+    - ``msg = str(e) or repr(e) or e.__class__.__name__`` evita flash com
+      ``"()"`` quando a exceção tem ``str()`` vazia.
+
+    Frontend: o template envia via submit nativo de ``<form id="form-excluir-massa">``,
+    sem AJAX. Logo o ``redirect 302 → GET /caixa`` é o caminho correto.
+    """
     @admin_required
     def _impl():
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+
         deletar_tudo = request.form.get('deletar_tudo') == '1'
         ids = request.form.getlist('lancamento_ids')
+
+        current_app.logger.info(
+            f"[CAIXA-MASSA-DEL] start | deletar_tudo={deletar_tudo} "
+            f"qtd_ids={len(ids)}"
+        )
 
         if deletar_tudo:
             try:
@@ -647,17 +669,33 @@ def deletar_massa_caixa():
                 _resincronizar_vendas_por_ids(venda_ids)
                 ok, err = _safe_db_commit()
                 if not ok:
+                    current_app.logger.warning(
+                        f"[CAIXA-MASSA-DEL] commit-fail (deletar_tudo) err={err}"
+                    )
                     flash(err or 'Erro ao excluir lançamentos.', 'error')
                 else:
+                    current_app.logger.info(
+                        f"[CAIXA-MASSA-DEL] commit-ok (deletar_tudo) "
+                        f"count={count} vendas_ressync={len(venda_ids)}"
+                    )
                     flash(f'{count} lançamentos apagados com sucesso!', 'success')
             except Exception as e:
                 db.session.rollback()
-                flash(f'Erro ao excluir lançamentos: {str(e)}', 'error')
+                msg = str(e) or repr(e) or e.__class__.__name__
+                current_app.logger.error(
+                    f"[CAIXA-MASSA-DEL] exception (deletar_tudo) "
+                    f"type={e.__class__.__name__} msg={msg!r}",
+                    exc_info=True,
+                )
+                flash(f'Erro ao excluir lançamentos: {msg}', 'error')
+            current_app.logger.info(f"[CAIXA-MASSA-DEL] redirecting (deletar_tudo)")
             return redirect(url_for('caixa.caixa'))
 
         if not ids:
+            current_app.logger.info(f"[CAIXA-MASSA-DEL] redirecting (nenhum_id)")
             flash('Nenhum lançamento selecionado para exclusão.', 'error')
             return redirect(url_for('caixa.caixa'))
+
         try:
             ids_int = [int(x) for x in ids]
             lancamentos = query_tenant(LancamentoCaixa).filter(
@@ -671,12 +709,26 @@ def deletar_massa_caixa():
             _resincronizar_vendas_por_ids(venda_ids)
             ok, err = _safe_db_commit()
             if not ok:
+                current_app.logger.warning(
+                    f"[CAIXA-MASSA-DEL] commit-fail count={count} err={err}"
+                )
                 flash(err or 'Erro ao excluir lançamentos.', 'error')
             else:
+                current_app.logger.info(
+                    f"[CAIXA-MASSA-DEL] commit-ok count={count} "
+                    f"vendas_ressync={len(venda_ids)}"
+                )
                 flash(f'{count} lançamentos apagados com sucesso!', 'success')
         except Exception as e:
             db.session.rollback()
-            flash(f'Erro ao excluir lançamentos: {str(e)}', 'error')
+            msg = str(e) or repr(e) or e.__class__.__name__
+            current_app.logger.error(
+                f"[CAIXA-MASSA-DEL] exception type={e.__class__.__name__} msg={msg!r}",
+                exc_info=True,
+            )
+            flash(f'Erro ao excluir lançamentos: {msg}', 'error')
+
+        current_app.logger.info(f"[CAIXA-MASSA-DEL] redirecting")
         return redirect(url_for('caixa.caixa'))
 
     return _impl()
