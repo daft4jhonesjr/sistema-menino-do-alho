@@ -323,6 +323,21 @@ def upload_imagem_cheque():
 @caixa_bp.route('/caixa/gaveta/salvar', methods=['POST'])
 @caixa_bp.route('/caixa/salvar_gaveta', methods=['POST'])
 def salvar_contagem_gaveta():
+    """Persiste contagem de gaveta (dinheiro + cheques) do usuário atual.
+
+    Rota AJAX que devolve JSON. Padrão robusto: rollback defensivo,
+    ``_safe_db_commit``, tracing ``[CAIXA-GAVETA]``, ``exc_info=True``
+    no logger. Mensagem do JSON é genérica para o usuário; ``str(e)``
+    real fica nos logs.
+    """
+    usuario_id = getattr(current_user, 'id', None)
+    current_app.logger.info(f"[CAIXA-GAVETA] start usuario_id={usuario_id}")
+
+    try:
+        db.session.rollback()
+    except Exception:
+        pass
+
     payload = request.get_json(silent=True) or {}
     dinheiro = _normalizar_itens_contagem(payload.get('dinheiro', []), incluir_nome=False)
     cheques = _normalizar_itens_contagem(payload.get('cheques', []), incluir_nome=True)
@@ -343,10 +358,36 @@ def salvar_contagem_gaveta():
                 empresa_id=empresa_id_atual(),
             )
             db.session.add(novo)
-        db.session.commit()
+
+        ok, err = _safe_db_commit()
+        if not ok:
+            current_app.logger.warning(
+                f"[CAIXA-GAVETA] commit-fail usuario_id={usuario_id} err={err}"
+            )
+            current_app.logger.info(
+                f"[CAIXA-GAVETA] returning-json usuario_id={usuario_id} ok=false"
+            )
+            return jsonify(ok=False, mensagem='Erro ao salvar contagem de gaveta.'), 500
+
+        current_app.logger.info(
+            f"[CAIXA-GAVETA] commit-ok usuario_id={usuario_id} "
+            f"qtd_dinheiro={len(dinheiro)} qtd_cheques={len(cheques)}"
+        )
+        current_app.logger.info(
+            f"[CAIXA-GAVETA] returning-json usuario_id={usuario_id} ok=true"
+        )
         return jsonify(ok=True, mensagem='Contagem de gaveta salva com sucesso.')
-    except Exception:
+    except Exception as e:
         db.session.rollback()
+        msg = str(e) or repr(e) or e.__class__.__name__
+        current_app.logger.error(
+            f"[CAIXA-GAVETA] exception usuario_id={usuario_id} "
+            f"type={e.__class__.__name__} msg={msg!r}",
+            exc_info=True,
+        )
+        current_app.logger.info(
+            f"[CAIXA-GAVETA] returning-json usuario_id={usuario_id} ok=false (exception)"
+        )
         return jsonify(ok=False, mensagem='Erro ao salvar contagem de gaveta.'), 500
 
 
@@ -486,18 +527,24 @@ def editar_lancamento_caixa(id):
     - ``exc_info=True`` no logger preserva o traceback nos logs do Render
       para diagnóstico.
     """
+    current_app.logger.info(f"[CAIXA-EDIT] start | id={id}")
+
     try:
         db.session.rollback()
     except Exception:
         pass
 
     lancamento = query_tenant(LancamentoCaixa).filter_by(id=id).first_or_404()
-    current_app.logger.info(f"[CAIXA-EDIT] start | id={id}")
 
     try:
         data_raw = request.form.get('data')
         if not data_raw:
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
             flash('Data é obrigatória.', 'error')
+            current_app.logger.info(f"[CAIXA-EDIT] redirecting (data_obrigatoria) id={id}")
             return redirect(url_for('caixa.caixa'))
         lancamento.data = datetime.strptime(data_raw, '%Y-%m-%d').date()
         lancamento.valor = _limpar_valor_moeda(request.form.get('valor'))
@@ -515,6 +562,7 @@ def editar_lancamento_caixa(id):
         if not ok:
             current_app.logger.warning(f"[CAIXA-EDIT] commit-fail id={id} err={err}")
             flash(err or 'Erro ao atualizar lançamento. Tente novamente.', 'error')
+            current_app.logger.info(f"[CAIXA-EDIT] redirecting (commit_fail) id={id}")
             return redirect(url_for('caixa.caixa'))
 
         current_app.logger.info(f"[CAIXA-EDIT] commit-ok id={id}")
@@ -528,44 +576,111 @@ def editar_lancamento_caixa(id):
         )
         flash(f'Erro ao atualizar lançamento: {msg}', 'error')
 
+    current_app.logger.info(f"[CAIXA-EDIT] redirecting id={id}")
     return redirect(url_for('caixa.caixa'))
 
 
 @caixa_bp.route('/caixa/cheque/<int:id>/alternar_status', methods=['POST'])
 def alternar_status_envio_cheque(id):
-    """Alterna status de envio físico do cheque entre 'Não Enviado' e 'Enviado'."""
-    lancamento = query_tenant(LancamentoCaixa).filter_by(id=id).first_or_404()
-    forma = (lancamento.forma_pagamento or '').lower()
-    if 'cheque' not in forma:
-        flash('Apenas lançamentos em cheque possuem status de envio.', 'warning')
-        return redirect(url_for('caixa.caixa'))
+    """Alterna status de envio físico do cheque entre 'Não Enviado' e 'Enviado'.
 
-    atual = (lancamento.status_envio or 'Não Enviado').strip()
-    lancamento.status_envio = 'Enviado' if atual != 'Enviado' else 'Não Enviado'
+    Padrão robusto (alinhado com ``adicionar_caixa``/``deletar_caixa``):
+    rollback defensivo, ``_safe_db_commit``, tracing ``[CAIXA-CHEQUE]``,
+    ``exc_info=True`` no logger.
+    """
+    current_app.logger.info(f"[CAIXA-CHEQUE] start id={id}")
+
     try:
-        db.session.commit()
-        flash('Status de envio do cheque atualizado com sucesso!', 'success')
-    except Exception:
         db.session.rollback()
-        flash('Erro ao atualizar status de envio do cheque.', 'error')
+    except Exception:
+        pass
+
+    try:
+        lancamento = query_tenant(LancamentoCaixa).filter_by(id=id).first_or_404()
+        forma = (lancamento.forma_pagamento or '').lower()
+        if 'cheque' not in forma:
+            flash('Apenas lançamentos em cheque possuem status de envio.', 'warning')
+            current_app.logger.info(f"[CAIXA-CHEQUE] redirecting (nao_eh_cheque) id={id}")
+            return redirect(url_for('caixa.caixa'))
+
+        atual = (lancamento.status_envio or 'Não Enviado').strip()
+        novo_status = 'Enviado' if atual != 'Enviado' else 'Não Enviado'
+        lancamento.status_envio = novo_status
+
+        ok, err = _safe_db_commit()
+        if not ok:
+            current_app.logger.warning(
+                f"[CAIXA-CHEQUE] commit-fail id={id} novo_status={novo_status} err={err}"
+            )
+            flash(err or 'Erro ao atualizar status de envio do cheque.', 'error')
+        else:
+            current_app.logger.info(
+                f"[CAIXA-CHEQUE] commit-ok id={id} novo_status={novo_status}"
+            )
+            flash('Status de envio do cheque atualizado com sucesso!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        msg = str(e) or repr(e) or e.__class__.__name__
+        current_app.logger.error(
+            f"[CAIXA-CHEQUE] exception id={id} type={e.__class__.__name__} msg={msg!r}",
+            exc_info=True,
+        )
+        flash(f'Erro ao atualizar status de envio do cheque: {msg}', 'error')
+
+    current_app.logger.info(f"[CAIXA-CHEQUE] redirecting id={id}")
     return redirect(url_for('caixa.caixa'))
 
 
 @caixa_bp.route('/caixa/<int:id>/toggle_status_cheque', methods=['POST'])
 def toggle_status_cheque(id):
-    """Variante AJAX do alternar_status_envio_cheque (retorna JSON)."""
-    lancamento = query_tenant(LancamentoCaixa).filter_by(id=id).first_or_404()
-    forma = str(lancamento.forma_pagamento or '').strip().lower()
-    if 'cheque' not in forma:
-        return jsonify({'success': False, 'message': 'Apenas lançamentos em cheque podem alterar status.'}), 400
+    """Variante AJAX do alternar_status_envio_cheque (retorna JSON).
 
-    atual = str(lancamento.status_envio or 'Não Enviado').strip()
-    lancamento.status_envio = 'Enviado' if atual != 'Enviado' else 'Não Enviado'
+    Padrão robusto: rollback defensivo, ``_safe_db_commit``, tracing
+    ``[CAIXA-CHEQUE-AJAX]``, ``exc_info=True`` no logger. JSON devolvido
+    ao cliente mantém mensagem genérica para o usuário; o ``str(e)`` real
+    fica nos logs do servidor.
+    """
+    current_app.logger.info(f"[CAIXA-CHEQUE-AJAX] start id={id}")
+
     try:
-        db.session.commit()
-        return jsonify({'success': True, 'novo_status': lancamento.status_envio})
-    except Exception:
         db.session.rollback()
+    except Exception:
+        pass
+
+    try:
+        lancamento = query_tenant(LancamentoCaixa).filter_by(id=id).first_or_404()
+        forma = str(lancamento.forma_pagamento or '').strip().lower()
+        if 'cheque' not in forma:
+            current_app.logger.info(
+                f"[CAIXA-CHEQUE-AJAX] returning-json id={id} reason=nao_eh_cheque"
+            )
+            return jsonify({'success': False, 'message': 'Apenas lançamentos em cheque podem alterar status.'}), 400
+
+        atual = str(lancamento.status_envio or 'Não Enviado').strip()
+        novo_status = 'Enviado' if atual != 'Enviado' else 'Não Enviado'
+        lancamento.status_envio = novo_status
+
+        ok, err = _safe_db_commit()
+        if not ok:
+            current_app.logger.warning(
+                f"[CAIXA-CHEQUE-AJAX] commit-fail id={id} novo_status={novo_status} err={err}"
+            )
+            current_app.logger.info(f"[CAIXA-CHEQUE-AJAX] returning-json id={id} ok=false")
+            return jsonify({'success': False, 'message': 'Erro ao atualizar status do cheque.'}), 500
+
+        current_app.logger.info(
+            f"[CAIXA-CHEQUE-AJAX] commit-ok id={id} novo_status={novo_status}"
+        )
+        current_app.logger.info(f"[CAIXA-CHEQUE-AJAX] returning-json id={id} ok=true")
+        return jsonify({'success': True, 'novo_status': novo_status})
+    except Exception as e:
+        db.session.rollback()
+        msg = str(e) or repr(e) or e.__class__.__name__
+        current_app.logger.error(
+            f"[CAIXA-CHEQUE-AJAX] exception id={id} type={e.__class__.__name__} msg={msg!r}",
+            exc_info=True,
+        )
+        current_app.logger.info(f"[CAIXA-CHEQUE-AJAX] returning-json id={id} ok=false (exception)")
         return jsonify({'success': False, 'message': 'Erro ao atualizar status do cheque.'}), 500
 
 
@@ -610,7 +725,20 @@ def _resincronizar_vendas_por_ids(venda_ids):
 
 @caixa_bp.route('/caixa/deletar/<int:id>', methods=['POST'])
 def deletar_caixa(id):
-    """Deleta um lançamento e ressincroniza ``valor_pago``/``situacao`` da venda."""
+    """Deleta um lançamento e ressincroniza ``valor_pago``/``situacao`` da venda.
+
+    Padrão robusto (alinhado com ``adicionar_caixa``/``deletar_massa_caixa``):
+    rollback defensivo, ``_safe_db_commit``, tracing ``[CAIXA-DEL]``,
+    ``exc_info=True`` no logger e ``msg = str(e) or repr(e) or
+    e.__class__.__name__`` para nunca cair em flash com ``"()"``.
+    """
+    current_app.logger.info(f"[CAIXA-DEL] start id={id}")
+
+    try:
+        db.session.rollback()
+    except Exception:
+        pass
+
     try:
         lancamento = query_tenant(LancamentoCaixa).filter_by(id=id).first_or_404()
         venda_ids = _coletar_vendas_afetadas([lancamento])
@@ -619,12 +747,25 @@ def deletar_caixa(id):
         _resincronizar_vendas_por_ids(venda_ids)
         ok, err = _safe_db_commit()
         if not ok:
+            current_app.logger.warning(
+                f"[CAIXA-DEL] commit-fail id={id} err={err}"
+            )
             flash(err or 'Erro ao remover lançamento.', 'error')
         else:
+            current_app.logger.info(
+                f"[CAIXA-DEL] commit-ok id={id} vendas_ressync={len(venda_ids)}"
+            )
             flash('Lançamento removido do caixa.', 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'Erro ao remover lançamento: {str(e)}', 'error')
+        msg = str(e) or repr(e) or e.__class__.__name__
+        current_app.logger.error(
+            f"[CAIXA-DEL] exception id={id} type={e.__class__.__name__} msg={msg!r}",
+            exc_info=True,
+        )
+        flash(f'Erro ao remover lançamento: {msg}', 'error')
+
+    current_app.logger.info(f"[CAIXA-DEL] redirecting id={id}")
     return redirect(url_for('caixa.caixa'))
 
 
@@ -736,14 +877,44 @@ def deletar_massa_caixa():
 
 @caixa_bp.route('/caixa/importar', methods=['POST'])
 def importar_caixa():
-    """Importa lançamentos a partir de CSV/TSV/TXT (5 colunas posicionais)."""
+    """Importa lançamentos a partir de CSV/TSV/TXT (5 colunas posicionais).
+
+    Padrão robusto:
+    - Rollback defensivo no início (sessão suja vinda do pool em produção).
+    - Tracing ``[CAIXA-IMPORT]`` em start/parsed/batch-commit-ok/
+      batch-commit-fail/commit-final-ok/exception/redirecting.
+    - **Commits em batches de ``BATCH_SIZE`` linhas** evitam transação
+      única longa, que em CSVs grandes causa escalonamento de locks no
+      Postgres e timeout do worker do Gunicorn (Render). Falha em um
+      batch faz rollback só do batch e segue, alinhado ao espírito do
+      código original (``erros = []`` por linha — importação parcial).
+    - ``msg = str(e) or repr(e) or e.__class__.__name__`` em flash.
+    - ``exc_info=True`` no logger para traceback completo nos logs.
+    """
+    BATCH_SIZE = 100
+
+    arquivo_filename = ''
+    if 'arquivo' in request.files:
+        arquivo_filename = (request.files['arquivo'].filename or '')
+
+    current_app.logger.info(
+        f"[CAIXA-IMPORT] start filename={arquivo_filename!r}"
+    )
+
+    try:
+        db.session.rollback()
+    except Exception:
+        pass
+
     if 'arquivo' not in request.files:
         flash('Nenhum arquivo enviado.', 'error')
+        current_app.logger.info(f"[CAIXA-IMPORT] redirecting (sem_arquivo)")
         return redirect(url_for('caixa.caixa'))
 
     arquivo = request.files['arquivo']
     if arquivo.filename == '':
         flash('Nenhum arquivo selecionado.', 'error')
+        current_app.logger.info(f"[CAIXA-IMPORT] redirecting (filename_vazio)")
         return redirect(url_for('caixa.caixa'))
 
     fn = arquivo.filename.lower()
@@ -769,8 +940,11 @@ def importar_caixa():
             linhas_sucesso = 0
             linhas_duplicadas = 0
             erros = []
+            adicionados_no_batch = 0
+            total_lidas = 0
 
             for i, linha in enumerate(leitor, start=1):
+                total_lidas = i
                 if not linha or all(c.strip() == '' for c in linha):
                     continue
 
@@ -836,13 +1010,60 @@ def importar_caixa():
                     )
                     db.session.add(novo_lancamento)
                     linhas_sucesso += 1
+                    adicionados_no_batch += 1
+
+                    if adicionados_no_batch >= BATCH_SIZE:
+                        ok, err = _safe_db_commit()
+                        if not ok:
+                            current_app.logger.warning(
+                                f"[CAIXA-IMPORT] batch-commit-fail "
+                                f"ate_linha={i} err={err}"
+                            )
+                            try:
+                                db.session.rollback()
+                            except Exception:
+                                pass
+                            erros.append(f"Batch ate linha {i}: {err}")
+                        else:
+                            current_app.logger.info(
+                                f"[CAIXA-IMPORT] batch-commit-ok "
+                                f"ate_linha={i} acumulado_sucesso={linhas_sucesso}"
+                            )
+                        adicionados_no_batch = 0
 
                 except Exception as e:
                     erros.append(f"Linha {i}: Erro nos dados -> {str(e)}")
                     continue
 
+            current_app.logger.info(
+                f"[CAIXA-IMPORT] parsed total_lidas={total_lidas} "
+                f"sucesso={linhas_sucesso} duplicadas={linhas_duplicadas} "
+                f"erros={len(erros)}"
+            )
+
+            # Commit final: o que sobrou no último batch incompleto.
+            if adicionados_no_batch > 0:
+                ok, err = _safe_db_commit()
+                if not ok:
+                    current_app.logger.warning(
+                        f"[CAIXA-IMPORT] commit-final-fail "
+                        f"sobra={adicionados_no_batch} err={err}"
+                    )
+                    try:
+                        db.session.rollback()
+                    except Exception:
+                        pass
+                    erros.append(f"Commit final: {err}")
+                    # Compensa: lançamentos que estavam no batch final
+                    # não chegaram a persistir.
+                    linhas_sucesso -= adicionados_no_batch
+                    adicionados_no_batch = 0
+
             if linhas_sucesso > 0:
-                db.session.commit()
+                current_app.logger.info(
+                    f"[CAIXA-IMPORT] commit-final-ok success={linhas_sucesso} "
+                    f"dup={linhas_duplicadas} err={len(erros)}"
+                )
                 msg = f'{linhas_sucesso} novos lançamentos importados!'
                 if linhas_duplicadas > 0:
                     msg += f' ({linhas_duplicadas} ignorados pois já existiam).'
@@ -852,7 +1073,10 @@ def importar_caixa():
             elif linhas_duplicadas > 0:
                 flash(f'Nenhum dado novo. Todos os {linhas_duplicadas} lançamentos da planilha já estavam no sistema!', 'info')
             else:
-                db.session.rollback()
+                try:
+                    db.session.rollback()
+                except Exception:
+                    pass
                 msg_erro = erros[0] if erros else "Formato de colunas inválido. Esperado: Descrição, Valor, Data, Categoria, Forma (5 colunas)."
                 flash(f'Falha na importação. {msg_erro}', 'error')
                 if len(erros) > 1:
@@ -860,8 +1084,15 @@ def importar_caixa():
 
         except Exception as e:
             db.session.rollback()
-            flash(f'Erro fatal ao processar o arquivo: {str(e)}', 'error')
+            msg = str(e) or repr(e) or e.__class__.__name__
+            current_app.logger.error(
+                f"[CAIXA-IMPORT] exception filename={arquivo_filename!r} "
+                f"type={e.__class__.__name__} msg={msg!r}",
+                exc_info=True,
+            )
+            flash(f'Erro fatal ao processar o arquivo: {msg}', 'error')
     else:
         flash('Por favor, envie um arquivo .csv, .tsv ou .txt válido.', 'error')
 
+    current_app.logger.info(f"[CAIXA-IMPORT] redirecting filename={arquivo_filename!r}")
     return redirect(url_for('caixa.caixa'))
