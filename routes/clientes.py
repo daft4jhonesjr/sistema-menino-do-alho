@@ -492,12 +492,21 @@ def receber_lote_cliente(id):
            fatiado entre N vendas, todos os lançamentos exibem o valor
            original do lote, dando rastreabilidade ao operador.
         3. Se a forma é BOLETO, cria também o ``Repasse Lote: R$ X``
-           (SAIDA).
+           (SAIDA por venda) — EXCETO quando a triangulação está
+           ativa (ver passo 5), pra não duplicar saídas.
         4. Faz ``flush()`` para que os lançamentos estejam visíveis na query
            do resync, e chama ``_resincronizar_pagamento_venda(venda)`` para
            CADA venda afetada — assim o ``valor_pago`` e a ``situacao``
            viram PARCIAL/PAGO automaticamente, ativando o badge laranja
            "Saldo devedor" na tela de Vendas.
+        5. Triangulação opcional (``repassar_fornecedor=1``): cliente
+           pagou direto na conta do fornecedor do usuário. Cria UMA
+           SAIDA única do valor total efetivamente aplicado, com
+           descrição ``Repasse Direto (Origem: Lote <cliente>) -
+           Fornecedor: <nome>``. Como as ENTRADAs por venda continuam
+           (necessárias pro resync), entrada e saída se cancelam no
+           saldo — o cliente fica quitado e o caixa do usuário fica
+           neutro, refletindo a realidade.
 
     Não atualiza ``venda.valor_pago`` nem ``venda.situacao`` manualmente:
     delega tudo ao resync, que é a fonte única da verdade.
@@ -513,6 +522,19 @@ def receber_lote_cliente(id):
         flash('Informe um valor recebido maior que zero.', 'error')
         return redirect(url_for('clientes.listar_clientes'))
     forma_pgto = request.form.get('forma_pagamento', 'Dinheiro')
+
+    # Triangulação (Repasse Direto para Fornecedor): cliente pagou via PIX
+    # diretamente na conta do fornecedor do usuário. As vendas precisam
+    # ser quitadas (ENTRADA por venda, padrão de sempre), MAS o saldo em
+    # conta do usuário não pode inflar — então geramos UMA SAIDA única
+    # do valor total. Quando essa flag está ativa, suprimimos o repasse
+    # automático por-venda do fluxo Boleto, porque seriam duas saídas
+    # para o mesmo dinheiro.
+    repassar_fornecedor = (request.form.get('repassar_fornecedor') or '').strip() in ('1', 'on', 'true')
+    fornecedor_repasse = (request.form.get('fornecedor_repasse') or '').strip()
+    if repassar_fornecedor and not fornecedor_repasse:
+        flash('Informe o nome do fornecedor para o repasse direto.', 'error')
+        return redirect(url_for('clientes.listar_clientes'))
 
     # Data do pagamento (retroativa): permite lançamentos de valores que entraram no caixa em datas anteriores.
     data_pagamento_raw = (request.form.get('data_pagamento') or '').strip()
@@ -575,7 +597,12 @@ def receber_lote_cliente(id):
             )
             db.session.add(novo_lanc)
 
-            if 'boleto' in forma_pgto.lower():
+            # Repasse automático do Boleto (saída por-venda).
+            # IMPORTANTE: se "Repassar valor direto para Fornecedor"
+            # estiver marcado, NÃO criamos esse repasse por-venda — a
+            # SAIDA única do valor total (criada após este loop) já
+            # cobre o caso, e duplicar inflaria o saldo negativamente.
+            if 'boleto' in forma_pgto.lower() and not repassar_fornecedor:
                 repasse_lanc = LancamentoCaixa(
                     data=data_pagamento,
                     descricao=f"Venda #{venda.id} - {cliente.nome_cliente} (Repasse {_marcador_lote[1:-1]})",
@@ -589,6 +616,33 @@ def receber_lote_cliente(id):
                 db.session.add(repasse_lanc)
 
             vendas_afetadas.append(venda)
+
+        # Triangulação: o cliente pagou direto na conta do fornecedor,
+        # então o dinheiro nunca entrou de fato no caixa do usuário.
+        # Para que as vendas sejam quitadas (entradas por venda) MAS o
+        # saldo em conta não infle, registramos UMA saída única do
+        # valor total efetivamente aplicado. Usamos `valor_aplicado`
+        # (não `valor_recebido`) para evitar saída maior que entradas
+        # caso parte do dinheiro tenha "sobrado" sem venda para
+        # quitar — nesse caso o usuário pode complementar o lançamento
+        # manualmente no Caixa.
+        if repassar_fornecedor and vendas_afetadas:
+            valor_aplicado_repasse = valor_recebido - valor_restante
+            if valor_aplicado_repasse > Decimal('0.00'):
+                saida_repasse = LancamentoCaixa(
+                    data=data_pagamento,
+                    descricao=(
+                        f"Repasse Direto (Origem: Lote {cliente.nome_cliente}) "
+                        f"- Fornecedor: {fornecedor_repasse}"
+                    ),
+                    tipo='SAIDA',
+                    categoria='Saída Fornecedor',
+                    forma_pagamento=forma_pgto,
+                    valor=valor_aplicado_repasse,
+                    usuario_id=current_user.id,
+                    empresa_id=empresa_id_atual(),
+                )
+                db.session.add(saida_repasse)
 
         # Flush é OBRIGATÓRIO antes do resync: o resync soma os LancamentoCaixa
         # do banco via query, então os INSERTs precisam estar visíveis.
@@ -628,28 +682,40 @@ def receber_lote_cliente(id):
         detalhe_status.append(f'{qtd_parciais} parcial(is)')
     sufixo_status = f' ({", ".join(detalhe_status)})' if detalhe_status else ''
 
+    sufixo_repasse = (
+        f' Saída de R$ {valor_aplicado:,.2f} registrada para "{fornecedor_repasse}" (triangulação).'
+        if repassar_fornecedor and valor_aplicado > Decimal('0.00')
+        else ''
+    )
+
     if valor_restante > Decimal('0.00'):
         flash(
             f'Abatimento de R$ {valor_aplicado:,.2f} aplicado em '
             f'{len(vendas_afetadas)} venda(s){sufixo_status}. '
-            f'Sobrou R$ {valor_restante:,.2f} (não havia mais saldo devedor).',
+            f'Sobrou R$ {valor_restante:,.2f} (não havia mais saldo devedor).'
+            f'{sufixo_repasse}',
             'success',
         )
     else:
         flash(
             f'Abatimento de R$ {valor_aplicado:,.2f} aplicado em '
             f'{len(vendas_afetadas)} venda(s){sufixo_status} para '
-            f'{cliente.nome_cliente}.',
+            f'{cliente.nome_cliente}.{sufixo_repasse}',
             'success',
         )
 
+    log_repasse = (
+        f" Triangulação: SAIDA R$ {valor_aplicado:.2f} para '{fornecedor_repasse}'."
+        if repassar_fornecedor and valor_aplicado > Decimal('0.00')
+        else ''
+    )
     registrar_log(
         'PAGAR', 'CLIENTES',
         f"Abatimento em lote: R$ {valor_aplicado:.2f} ({forma_pgto}) "
         f"distribuído em {len(vendas_afetadas)} venda(s) do cliente "
         f"{cliente.nome_cliente} (#{cliente.id}). "
         f"Liquidadas: {qtd_pagas}, Parciais: {qtd_parciais}, "
-        f"Sobra: R$ {valor_restante:.2f}.",
+        f"Sobra: R$ {valor_restante:.2f}.{log_repasse}",
     )
 
     return redirect(url_for('clientes.listar_clientes'))

@@ -237,7 +237,7 @@
                     <input type="date" id="abater_data_pagamento" name="data_pagamento" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100" required>
                     <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">O lançamento no caixa será registrado nesta data.</p>
                 </div>
-                <div class="mb-6">
+                <div class="mb-4">
                     <label for="abater_forma_pagamento" class="block text-sm font-bold mb-2 text-gray-700 dark:text-gray-300">Forma de Pagamento:</label>
                     <select id="abater_forma_pagamento" name="forma_pagamento" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                         <option value="Dinheiro">💵 Dinheiro (Espécie)</option>
@@ -246,6 +246,26 @@
                         <option value="Boleto">📄 Boleto Bancário</option>
                     </select>
                 </div>
+
+                {# Triangulação: cliente pagou direto para o fornecedor do
+                   usuário. Quita as vendas (ENTRADA por venda) MAS gera
+                   uma SAÍDA única do valor total, para que o saldo em
+                   conta não seja inflado. Ver routes/clientes.py
+                   receber_lote_cliente. #}
+                <div class="mb-4 p-3 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20">
+                    <label class="flex items-start gap-3 cursor-pointer select-none">
+                        <input type="checkbox" id="abater_repassar_fornecedor" name="repassar_fornecedor" value="1" class="mt-0.5 h-5 w-5 rounded border-amber-400 text-amber-600 focus:ring-amber-500">
+                        <span class="flex-1">
+                            <span class="block text-sm font-bold text-amber-800 dark:text-amber-200">Repassar valor direto para Fornecedor (Triangulação)</span>
+                            <span class="block text-xs text-amber-700 dark:text-amber-300 mt-0.5">Marque se o cliente pagou direto na conta do seu fornecedor. As vendas serão quitadas, mas o valor NÃO ficará no seu caixa.</span>
+                        </span>
+                    </label>
+                    <div id="abater_repasse_extra" class="hidden mt-3">
+                        <label for="abater_fornecedor_repasse" class="block text-xs font-bold mb-1 text-amber-800 dark:text-amber-200">Nome do Fornecedor / Observação <span class="text-red-600">*</span></label>
+                        <input type="text" id="abater_fornecedor_repasse" name="fornecedor_repasse" maxlength="120" placeholder="Ex.: Frigorífico XYZ" autocapitalize="words" autocomplete="off" class="w-full px-3 py-2 border border-amber-300 dark:border-amber-700 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 dark:bg-gray-700 dark:text-gray-100 text-sm">
+                    </div>
+                </div>
+
                 <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-2">
                     <i data-lucide="check" class="w-5 h-5"></i>Processar Abatimento
                 </button>
@@ -523,6 +543,28 @@ function toggleDropdownNovoCliente(event) {
     var nomeAbater = document.getElementById('modal-abater-cliente-nome');
     var inputValorAbater = document.getElementById('abater_valor_recebido');
     var inputDataAbater = document.getElementById('abater_data_pagamento');
+    var chkRepassarFornecedor = document.getElementById('abater_repassar_fornecedor');
+    var wrapRepasseExtra = document.getElementById('abater_repasse_extra');
+    var inputFornecedorRepasse = document.getElementById('abater_fornecedor_repasse');
+
+    // Mantém o campo "Nome do Fornecedor" visível e required apenas quando
+    // o checkbox de triangulação está marcado. Isso evita que o navegador
+    // bloqueie o submit por causa de um required em campo escondido.
+    function atualizarVisibilidadeRepasse() {
+        if (!chkRepassarFornecedor || !wrapRepasseExtra || !inputFornecedorRepasse) return;
+        if (chkRepassarFornecedor.checked) {
+            wrapRepasseExtra.classList.remove('hidden');
+            inputFornecedorRepasse.required = true;
+            inputFornecedorRepasse.focus();
+        } else {
+            wrapRepasseExtra.classList.add('hidden');
+            inputFornecedorRepasse.required = false;
+            inputFornecedorRepasse.value = '';
+        }
+    }
+    if (chkRepassarFornecedor) {
+        chkRepassarFornecedor.addEventListener('change', atualizarVisibilidadeRepasse);
+    }
 
     function dataHojeISO() {
         var d = new Date();
@@ -551,6 +593,8 @@ function toggleDropdownNovoCliente(event) {
         }
         if (inputValorAbater) inputValorAbater.value = '';
         if (inputDataAbater) inputDataAbater.value = dataHojeISO();
+        if (chkRepassarFornecedor) chkRepassarFornecedor.checked = false;
+        atualizarVisibilidadeRepasse();
         if (wrapAbater) {
             wrapAbater.classList.remove('hidden');
             travarFundo();
