@@ -235,7 +235,13 @@
                                 <input type="checkbox" name="lancamento_ids" value="{{ l.id }}" onchange="atualizarBarraMassa()" class="check-item-caixa item-grupo-{{ grupo.id_html }} w-4 h-4 text-emerald-600 bg-gray-100 border-gray-300 rounded focus:ring-emerald-500 dark:bg-gray-700 dark:border-gray-600">
                             </td>
                             <td class="px-6 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap" data-label="Data">{{ l.data.strftime('%d/%m/%Y') }}</td>
-                            <td class="px-6 py-3 font-medium text-gray-900 dark:text-gray-100 whitespace-normal break-words" data-label="Descrição">{{ l.descricao }}</td>
+                            <td class="px-6 py-3 font-medium text-gray-900 dark:text-gray-100 whitespace-normal break-words" data-label="Descrição">
+                                {% set _desc_split = l.descricao|extrair_lote_caixa %}
+                                <div>{{ _desc_split.principal or l.descricao }}</div>
+                                {% if _desc_split.lote %}
+                                <div class="text-xs text-gray-500 dark:text-gray-400 font-normal mt-0.5">{{ _desc_split.lote }}</div>
+                                {% endif %}
+                            </td>
                             <td class="px-6 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap" data-label="Categoria"><span class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-xs">{{ l.categoria }}</span></td>
                             <td class="px-6 py-3 whitespace-nowrap" data-label="Conta/Pagamento"><span class="bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-2 py-1 rounded text-xs font-bold">{{ l.forma_pagamento }}</span></td>
                             <td class="px-6 py-3 text-center whitespace-nowrap" data-label="Status Cheque">
@@ -284,9 +290,15 @@
                         </span>
                     </div>
 
+                    {% set _desc_split_card = l.descricao|extrair_lote_caixa %}
                     <h3 class="text-base font-bold text-slate-800 dark:text-white mb-1 leading-tight truncate" title="{{ l.descricao }}">
-                        {{ l.descricao }}
+                        {{ _desc_split_card.principal or l.descricao }}
                     </h3>
+                    {% if _desc_split_card.lote %}
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mb-1 leading-tight">
+                        {{ _desc_split_card.lote }}
+                    </p>
+                    {% endif %}
                     <p class="text-xs text-slate-500 dark:text-slate-400 mb-2 flex items-center gap-1">
                         🏷️ {{ l.categoria }}
                     </p>

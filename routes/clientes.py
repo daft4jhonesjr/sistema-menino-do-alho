@@ -482,11 +482,17 @@ def receber_lote_cliente(id):
            mais nova (FIFO). Pula vendas marcadas como PERDA.
         2. Para cada venda enquanto sobrar dinheiro, calcula o quanto pode
            ser abatido (até o saldo devedor) e cria um ``LancamentoCaixa``
-           ENTRADA com descrição ``Venda #N - <cliente> (Abatimento)``.
+           ENTRADA com descrição
+           ``Venda #N - <cliente> (Lote: R$ <valor_total_pago>)``.
            Esse padrão de descrição é o que ``_resincronizar_pagamento_venda``
-           usa para somar o ``valor_pago`` da venda — por isso é OBRIGATÓRIO
-           manter o prefixo ``Venda #N -`` exato.
-        3. Se a forma é BOLETO, cria também o ``Repasse Abatimento`` (SAIDA).
+           usa (regex ``Venda #(\\d+)``) para somar o ``valor_pago`` da
+           venda — por isso é OBRIGATÓRIO manter o prefixo ``Venda #N -``
+           exato. O sufixo ``(Lote: R$ X)`` é puramente para auditoria
+           visual no Caixa Diário: quando um pagamento de R$ 20.000 é
+           fatiado entre N vendas, todos os lançamentos exibem o valor
+           original do lote, dando rastreabilidade ao operador.
+        3. Se a forma é BOLETO, cria também o ``Repasse Lote: R$ X``
+           (SAIDA).
         4. Faz ``flush()`` para que os lançamentos estejam visíveis na query
            do resync, e chama ``_resincronizar_pagamento_venda(venda)`` para
            CADA venda afetada — assim o ``valor_pago`` e a ``situacao``
@@ -529,6 +535,17 @@ def receber_lote_cliente(id):
     valor_restante = Decimal(str(valor_recebido or Decimal('0.00')))
     vendas_afetadas = []
 
+    # Pré-formata o valor TOTAL pago pelo cliente em formato BR ("20.000,00").
+    # Esse marcador "(Lote: R$ X,XX)" entra na descrição de TODOS os
+    # LancamentoCaixa gerados nesta requisição — independentemente do
+    # fatiamento do dinheiro entre N vendas. Permite ao operador, ao
+    # olhar o Caixa Diário, lembrar que esses lançamentos vieram de UM
+    # único pagamento real do cliente. Não interfere no regex
+    # ``_RE_MARCADOR_VENDA = r'Venda #(\d+)'`` (que casa apenas o prefixo).
+    _valor_lote_int, _valor_lote_dec = divmod(int((valor_recebido * 100)), 100)
+    _valor_lote_fmt = f"{_valor_lote_int:,}".replace(',', '.') + f",{_valor_lote_dec:02d}"
+    _marcador_lote = f"(Lote: R$ {_valor_lote_fmt})"
+
     try:
         for venda in vendas_abertas:
             if valor_restante <= Decimal('0.00'):
@@ -548,7 +565,7 @@ def receber_lote_cliente(id):
 
             novo_lanc = LancamentoCaixa(
                 data=data_pagamento,
-                descricao=f"Venda #{venda.id} - {cliente.nome_cliente} (Abatimento)",
+                descricao=f"Venda #{venda.id} - {cliente.nome_cliente} {_marcador_lote}",
                 tipo='ENTRADA',
                 categoria='Entrada Cliente',
                 forma_pagamento=forma_pgto,
@@ -561,7 +578,7 @@ def receber_lote_cliente(id):
             if 'boleto' in forma_pgto.lower():
                 repasse_lanc = LancamentoCaixa(
                     data=data_pagamento,
-                    descricao=f"Venda #{venda.id} - {cliente.nome_cliente} (Repasse Abatimento)",
+                    descricao=f"Venda #{venda.id} - {cliente.nome_cliente} (Repasse {_marcador_lote[1:-1]})",
                     tipo='SAIDA',
                     categoria='Saída Fornecedor',
                     forma_pagamento=forma_pgto,

@@ -2615,6 +2615,44 @@ def formato_moeda(value):
         return 'R$ 0,00'
 
 
+@app.template_filter('extrair_lote_caixa')
+def extrair_lote_caixa(descricao):
+    """Separa descrição de ``LancamentoCaixa`` em (principal, lote).
+
+    Caso de uso: lançamentos criados por ``receber_lote_cliente`` carregam
+    um marcador de auditoria ``(Lote: R$ X,XX)`` no fim da descrição,
+    para que o operador veja, no Caixa Diário, o valor TOTAL pago pelo
+    cliente — mesmo quando o sistema fatia esse total entre N vendas
+    (3 lançamentos de R$ 6.000, 8.400 e 5.600 vindos de um PIX único de
+    R$ 20.000). Reconhece também ``(Repasse Lote: R$ X,XX)`` (SAIDA do
+    boleto fatiado para o fornecedor).
+
+    Returns:
+        dict: ``{'principal': str, 'lote': str|None}``
+            * ``principal`` = descrição sem o sufixo do lote (string limpa
+              para a primeira linha).
+            * ``lote`` = texto curto pronto para destacar (ex.
+              ``"Lote: R$ 20.000,00"`` ou ``"Repasse Lote: R$ 20.000,00"``)
+              ou ``None`` se não há marcador.
+
+    Não levanta exceção: descrição vazia/None → ``{'principal': '', 'lote': None}``.
+    """
+    if not descricao:
+        return {'principal': '', 'lote': None}
+    s = str(descricao)
+    m = re.search(r'\((Repasse\s+)?Lote:\s*R\$\s*[\d\.,]+\)\s*$', s)
+    if not m:
+        return {'principal': s, 'lote': None}
+    inicio = m.start()
+    principal = s[:inicio].rstrip()
+    # m.group(0) é a string completa "(Repasse Lote: R$ X)" / "(Lote: R$ X)"
+    # Removemos os parênteses externos para o destaque ficar mais limpo.
+    lote = m.group(0).strip()
+    if lote.startswith('(') and lote.endswith(')'):
+        lote = lote[1:-1]
+    return {'principal': principal, 'lote': lote}
+
+
 @app.template_filter('format_cnpj')
 def format_cnpj(value):
     """Formata CNPJ (14 dígitos) como 00.000.000/0001-00 ou CPF (11 dígitos) como 000.000.000-00.
