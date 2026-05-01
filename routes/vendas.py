@@ -67,6 +67,7 @@ from services.files_utils import _deletar_cloudinary_seguro
 from services.vendas_services import (
     _vendas_do_pedido, _apagar_lancamentos_caixa_por_vendas,
     _produto_com_lock,
+    _resincronizar_pagamento_venda,
 )
 from services.csv_utils import (
     _msg_linha, _strip_quotes,
@@ -1466,6 +1467,17 @@ def editar_venda(id):
             elif not status_pago and lancamentos_existentes:
                 for lanc in lancamentos_existentes:
                     db.session.delete(lanc)
+
+            # Blindagem anti-fantasma: ressincroniza valor_pago/situacao de
+            # TODAS as vendas do pedido_alvo. Em pedidos compostos (várias
+            # vendas com mesma NF), o marcador no caixa usa só o ID da 1ª
+            # venda (venda_id_busca), mas valor_pago é por venda. Sem este
+            # flush+loop, deletar lançamentos pelo formulário deixava o
+            # valor_pago antigo "fantasma" nas vendas individuais, gerando
+            # buckets inconsistentes em /admin/diagnosticar_saldos.
+            db.session.flush()
+            for v_alvo in vendas_do_pedido_alvo:
+                _resincronizar_pagamento_venda(v_alvo)
 
             db.session.commit()
 

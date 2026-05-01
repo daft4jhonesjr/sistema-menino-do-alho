@@ -9,6 +9,10 @@ Cadastro público de empresas NÃO existe — novos tenants nascem só aqui.
 Endpoints:
     * master.master_admin                    GET/POST /master-admin
     * master.master_toggle_empresa_ativo     POST     /master-admin/empresa/<id>/toggle_ativo
+    * master.diagnosticar_saldos             GET      /admin/diagnosticar_saldos
+    * master.recuperar_saldos                GET      /admin/recuperar_saldos
+    * master.limpar_valor_pago_fantasma      GET      /admin/limpar_valor_pago_fantasma
+    * master.inspect_venda                   GET      /admin/inspect_venda/<venda_id>
 """
 import logging
 from decimal import Decimal
@@ -402,6 +406,109 @@ def recuperar_saldos():
         f'Sucesso (modo MÃO ÚNICA)! {len(vendas)} vendas recalculadas. '
         f'{alteradas} tiveram a situação ou valor_pago alterado. '
         f'Nenhuma venda PAGO foi rebaixada.',
+        200,
+        {'Content-Type': 'text/plain; charset=utf-8'},
+    )
+
+
+@master_bp.route('/admin/limpar_valor_pago_fantasma', methods=['GET'])
+@login_required
+def limpar_valor_pago_fantasma():
+    """FAXINA: zera o ``valor_pago`` de Vendas PENDENTE com ``valor_pago > 0``.
+
+    Cenário-alvo: venda foi marcada PAGO em algum momento (gerou ou não
+    ``LancamentoCaixa``), depois algum fluxo destrutivo rebaixou para
+    PENDENTE sem ressincronizar ``valor_pago`` — ex.: ``editar_venda``
+    deletando lançamentos antes da blindagem desta safra. O resultado é
+    uma venda com ``situacao='PENDENTE'`` e ``valor_pago > 0``, que entope
+    a UI da listagem (Total a Receber subestimado, badge laranja
+    "Pago: X" sem contraparte no caixa).
+
+    Estratégia: aplica ``_resincronizar_pagamento_venda`` (versão ORIGINAL,
+    bidirecional). Para essas vendas a soma dos lançamentos no caixa é
+    zero (ou bem menor que ``valor_pago``), então o resync vai zerar
+    ``valor_pago`` e manter ``situacao='PENDENTE'`` (não rebaixa nem
+    promove — o status já estava PENDENTE).
+
+    Segurança: SÓ toca em vendas PENDENTE com ``valor_pago > 0``.
+    Vendas PAGO/PARCIAL não são afetadas (a versão ``_seguro`` em
+    ``recuperar_saldos`` continua sendo a rota apropriada para promover
+    histórico legado).
+
+    Multi-tenant: ``query_tenant(Venda)`` escopa para o tenant logado.
+    """
+    eid = empresa_id_atual()
+    fantasmas = query_tenant(Venda).filter(
+        Venda.situacao == 'PENDENTE',
+        Venda.valor_pago > Decimal('0.00'),
+    ).all()
+
+    logging.info(
+        '[FAXINA-FANTASMA] start empresa=%s candidatas=%d',
+        eid, len(fantasmas),
+    )
+
+    corrigidas = 0
+    detalhes = []
+    for venda in fantasmas:
+        valor_pago_antes = Decimal(str(venda.valor_pago or Decimal('0.00')))
+        try:
+            mudou = _resincronizar_pagamento_venda(venda)
+        except Exception as e:
+            logging.error(
+                '[FAXINA-FANTASMA] falha-resync empresa=%s venda_id=%d err=%s',
+                eid, venda.id, e,
+            )
+            db.session.rollback()
+            return (
+                f'ERRO ao ressincronizar Venda #{venda.id}: {e}. '
+                f'Faxina abortada antes do commit. {corrigidas} já estavam '
+                f'corrigidas em memória, mas NADA foi persistido (rollback).',
+                500,
+                {'Content-Type': 'text/plain; charset=utf-8'},
+            )
+
+        valor_pago_depois = Decimal(str(venda.valor_pago or Decimal('0.00')))
+        if mudou and valor_pago_depois < valor_pago_antes:
+            corrigidas += 1
+            detalhes.append(
+                f"  Venda #{venda.id}: valor_pago R$ {valor_pago_antes:.2f} "
+                f"→ R$ {valor_pago_depois:.2f} (situacao={venda.situacao})"
+            )
+
+    ok, err = _safe_db_commit()
+    if not ok:
+        logging.error(
+            '[FAXINA-FANTASMA] commit falhou empresa=%s err=%s',
+            eid, err,
+        )
+        return (
+            f'ERRO ao gravar faxina: {err or "erro desconhecido"}. '
+            f'{len(fantasmas)} vendas analisadas mas não persistidas.',
+            500,
+            {'Content-Type': 'text/plain; charset=utf-8'},
+        )
+
+    logging.info(
+        '[FAXINA-FANTASMA] done empresa=%s candidatas=%d corrigidas=%d',
+        eid, len(fantasmas), corrigidas,
+    )
+
+    linhas = [
+        f"Faxina concluída (empresa={eid}).",
+        f"Vendas PENDENTE com valor_pago>0 analisadas: {len(fantasmas)}",
+        f"Vendas com valor_pago corrigido para zero (ou para a soma real "
+        f"dos lançamentos): {corrigidas}",
+        "",
+    ]
+    if detalhes:
+        linhas.append("Detalhamento:")
+        linhas.extend(detalhes)
+    else:
+        linhas.append("Nada a corrigir — nenhum fantasma encontrado.")
+
+    return (
+        '\n'.join(linhas),
         200,
         {'Content-Type': 'text/plain; charset=utf-8'},
     )
