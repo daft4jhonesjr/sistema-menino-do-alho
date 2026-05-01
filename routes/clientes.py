@@ -43,6 +43,7 @@ from services.auth_utils import tenant_required, admin_required, _is_ajax
 from services.db_utils import query_tenant, empresa_id_atual
 from services.cache_utils import limpar_cache_dashboard
 from services.config_helpers import registrar_log
+from services.vendas_services import _resincronizar_pagamento_venda
 from services.csv_utils import (
     _msg_linha, _strip_quotes,
     _parse_clientes_raw_tsv, _sanitizar_cnpj_importacao,
@@ -474,7 +475,27 @@ def importar_clientes():
 
 @clientes_bp.route('/cliente/<int:id>/receber_lote', methods=['POST'])
 def receber_lote_cliente(id):
-    """Abatimento Inteligente: recebe valor em lote e abate nas vendas pendentes mais antigas."""
+    """Abatimento Inteligente: recebe valor em lote e abate nas vendas pendentes mais antigas.
+
+    Fluxo:
+        1. Busca vendas PENDENTE/PARCIAL do cliente, da mais antiga para a
+           mais nova (FIFO). Pula vendas marcadas como PERDA.
+        2. Para cada venda enquanto sobrar dinheiro, calcula o quanto pode
+           ser abatido (até o saldo devedor) e cria um ``LancamentoCaixa``
+           ENTRADA com descrição ``Venda #N - <cliente> (Abatimento)``.
+           Esse padrão de descrição é o que ``_resincronizar_pagamento_venda``
+           usa para somar o ``valor_pago`` da venda — por isso é OBRIGATÓRIO
+           manter o prefixo ``Venda #N -`` exato.
+        3. Se a forma é BOLETO, cria também o ``Repasse Abatimento`` (SAIDA).
+        4. Faz ``flush()`` para que os lançamentos estejam visíveis na query
+           do resync, e chama ``_resincronizar_pagamento_venda(venda)`` para
+           CADA venda afetada — assim o ``valor_pago`` e a ``situacao``
+           viram PARCIAL/PAGO automaticamente, ativando o badge laranja
+           "Saldo devedor" na tela de Vendas.
+
+    Não atualiza ``venda.valor_pago`` nem ``venda.situacao`` manualmente:
+    delega tudo ao resync, que é a fonte única da verdade.
+    """
     valor_raw = (request.form.get('valor_recebido') or '').strip()
     valor_str = valor_raw.replace('.', '').replace(',', '.')
     try:
@@ -500,61 +521,118 @@ def receber_lote_cliente(id):
 
     cliente = query_tenant(Cliente).filter_by(id=id).first_or_404()
 
-    # Busca vendas PENDENTES ou PARCIAIS, da mais velha para a mais nova
     vendas_abertas = query_tenant(Venda).filter(
         Venda.cliente_id == id,
-        Venda.situacao.in_(['PENDENTE', 'PARCIAL'])
-    ).order_by(Venda.data_venda.asc()).all()
+        Venda.situacao.in_(['PENDENTE', 'PARCIAL']),
+    ).order_by(Venda.data_venda.asc(), Venda.id.asc()).all()
 
     valor_restante = Decimal(str(valor_recebido or Decimal('0.00')))
+    vendas_afetadas = []
 
-    for venda in vendas_abertas:
-        if valor_restante <= 0:
-            break
+    try:
+        for venda in vendas_abertas:
+            if valor_restante <= Decimal('0.00'):
+                break
 
-        venda.valor_pago = Decimal(str(venda.valor_pago or Decimal('0.00')))
-        valor_total_venda = Decimal(str(venda.calcular_total() or Decimal('0.00')))
-        valor_falta = valor_total_venda - Decimal(str(venda.valor_pago or Decimal('0.00')))
+            if str(getattr(venda, 'tipo_operacao', 'VENDA') or 'VENDA').upper() == 'PERDA':
+                continue
 
-        if valor_restante >= valor_falta:
-            valor_abatido = valor_falta
-            venda.valor_pago = valor_total_venda
-            venda.situacao = 'PAGO'
-            valor_restante -= valor_falta
-        else:
-            valor_abatido = valor_restante
-            venda.valor_pago = Decimal(str(venda.valor_pago or Decimal('0.00'))) + Decimal(str(valor_restante))
-            venda.situacao = 'PARCIAL'
-            valor_restante = 0
+            valor_pago_atual = Decimal(str(venda.valor_pago or Decimal('0.00')))
+            valor_total_venda = Decimal(str(venda.calcular_total() or Decimal('0.00')))
+            valor_falta = valor_total_venda - valor_pago_atual
+            if valor_falta <= Decimal('0.00'):
+                continue
 
-        # Respeita a data de pagamento informada (permite lançamentos retroativos).
-        data_lancamento_caixa = data_pagamento
-        novo_lanc = LancamentoCaixa(
-            data=data_lancamento_caixa,
-            descricao=f"Venda #{venda.id} - {cliente.nome_cliente} (Abatimento)",
-            tipo='ENTRADA',
-            categoria='Entrada Cliente',
-            forma_pagamento=forma_pgto,
-            valor=valor_abatido,
-            usuario_id=current_user.id,
-            empresa_id=empresa_id_atual(),
-        )
-        db.session.add(novo_lanc)
+            valor_abatido = min(valor_restante, valor_falta)
+            valor_restante -= valor_abatido
 
-        if 'boleto' in forma_pgto.lower():
-            repasse_lanc = LancamentoCaixa(
-                data=data_lancamento_caixa,
-                descricao=f"Venda #{venda.id} - {cliente.nome_cliente} (Repasse Abatimento)",
-                tipo='SAIDA',
-                categoria='Saída Fornecedor',
+            novo_lanc = LancamentoCaixa(
+                data=data_pagamento,
+                descricao=f"Venda #{venda.id} - {cliente.nome_cliente} (Abatimento)",
+                tipo='ENTRADA',
+                categoria='Entrada Cliente',
                 forma_pagamento=forma_pgto,
                 valor=valor_abatido,
                 usuario_id=current_user.id,
                 empresa_id=empresa_id_atual(),
             )
-            db.session.add(repasse_lanc)
+            db.session.add(novo_lanc)
 
-    db.session.commit()
-    limpar_cache_dashboard()
-    flash(f'Abatimento de R$ {valor_recebido:,.2f} processado com sucesso para {cliente.nome_cliente}!', 'success')
+            if 'boleto' in forma_pgto.lower():
+                repasse_lanc = LancamentoCaixa(
+                    data=data_pagamento,
+                    descricao=f"Venda #{venda.id} - {cliente.nome_cliente} (Repasse Abatimento)",
+                    tipo='SAIDA',
+                    categoria='Saída Fornecedor',
+                    forma_pagamento=forma_pgto,
+                    valor=valor_abatido,
+                    usuario_id=current_user.id,
+                    empresa_id=empresa_id_atual(),
+                )
+                db.session.add(repasse_lanc)
+
+            vendas_afetadas.append(venda)
+
+        # Flush é OBRIGATÓRIO antes do resync: o resync soma os LancamentoCaixa
+        # do banco via query, então os INSERTs precisam estar visíveis.
+        db.session.flush()
+
+        # Resync de TODAS as vendas afetadas: fonte única da verdade para
+        # valor_pago e situacao. Garante que o badge laranja "Saldo devedor"
+        # apareça na listagem de Vendas para PARCIAIS e que PAGOs sumam do
+        # filtro "Pendentes".
+        for venda in vendas_afetadas:
+            _resincronizar_pagamento_venda(venda)
+
+        db.session.commit()
+        limpar_cache_dashboard()
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.exception('Falha em receber_lote_cliente')
+        flash(f'Erro ao processar abatimento: {exc}', 'error')
+        return redirect(url_for('clientes.listar_clientes'))
+
+    if not vendas_afetadas:
+        flash(
+            f'Nenhuma venda em aberto encontrada para {cliente.nome_cliente}. '
+            'Nenhum lançamento foi criado.',
+            'warning',
+        )
+        return redirect(url_for('clientes.listar_clientes'))
+
+    valor_aplicado = valor_recebido - valor_restante
+    qtd_pagas = sum(1 for v in vendas_afetadas if (v.situacao or '').upper() == 'PAGO')
+    qtd_parciais = sum(1 for v in vendas_afetadas if (v.situacao or '').upper() == 'PARCIAL')
+
+    detalhe_status = []
+    if qtd_pagas:
+        detalhe_status.append(f'{qtd_pagas} liquidada(s)')
+    if qtd_parciais:
+        detalhe_status.append(f'{qtd_parciais} parcial(is)')
+    sufixo_status = f' ({", ".join(detalhe_status)})' if detalhe_status else ''
+
+    if valor_restante > Decimal('0.00'):
+        flash(
+            f'Abatimento de R$ {valor_aplicado:,.2f} aplicado em '
+            f'{len(vendas_afetadas)} venda(s){sufixo_status}. '
+            f'Sobrou R$ {valor_restante:,.2f} (não havia mais saldo devedor).',
+            'success',
+        )
+    else:
+        flash(
+            f'Abatimento de R$ {valor_aplicado:,.2f} aplicado em '
+            f'{len(vendas_afetadas)} venda(s){sufixo_status} para '
+            f'{cliente.nome_cliente}.',
+            'success',
+        )
+
+    registrar_log(
+        'PAGAR', 'CLIENTES',
+        f"Abatimento em lote: R$ {valor_aplicado:.2f} ({forma_pgto}) "
+        f"distribuído em {len(vendas_afetadas)} venda(s) do cliente "
+        f"{cliente.nome_cliente} (#{cliente.id}). "
+        f"Liquidadas: {qtd_pagas}, Parciais: {qtd_parciais}, "
+        f"Sobra: R$ {valor_restante:.2f}.",
+    )
+
     return redirect(url_for('clientes.listar_clientes'))
