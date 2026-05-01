@@ -13,6 +13,7 @@ Endpoints:
     * master.recuperar_saldos                GET      /admin/recuperar_saldos
     * master.limpar_valor_pago_fantasma      GET      /admin/limpar_valor_pago_fantasma
     * master.inspect_venda                   GET      /admin/inspect_venda/<venda_id>
+    * master.auditar_lote_cliente            GET      /admin/auditar_lote_cliente/<cliente_id>
 """
 import logging
 from decimal import Decimal
@@ -24,7 +25,7 @@ from flask_login import login_required
 from werkzeug.security import generate_password_hash
 from sqlalchemy import func
 
-from models import db, Empresa, Usuario, Venda, LancamentoCaixa, PERFIL_DONO
+from models import db, Empresa, Usuario, Venda, LancamentoCaixa, Cliente, PERFIL_DONO
 from services.auth_utils import master_required
 from services.db_utils import _safe_db_commit, query_tenant, empresa_id_atual
 from services.vendas_services import (
@@ -656,5 +657,300 @@ def inspect_venda(venda_id):
         '[INSPECT-VENDA] empresa=%s id=%s fk=%d substr=%d valor=%d',
         eid, venda_id, len(lancs_por_fk),
         len(lancs_por_substring), len(lancs_por_valor),
+    )
+    return output, 200, {'Content-Type': 'text/plain; charset=utf-8'}
+
+
+def _parse_valor_br(valor_raw):
+    """Parser de moeda BR idêntico ao usado em receber_lote_cliente.
+
+    Aceita ``"30.000,00"``, ``"30000"``, ``"30000.00"``. Retorna
+    ``(Decimal, None)`` em sucesso ou ``(None, msg_erro)``.
+    """
+    s = (valor_raw or '').strip()
+    if not s:
+        return None, 'parametro ?valor=... ausente. Ex: ?valor=30000,00'
+    valor_str = s.replace('.', '').replace(',', '.')
+    try:
+        v = Decimal(valor_str)
+    except Exception:
+        return None, f'valor invalido: {valor_raw!r}. Use formato BR: 30.000,00'
+    if v <= Decimal('0.00'):
+        return None, f'valor deve ser > 0. Recebido: {v}'
+    return v, None
+
+
+@master_bp.route('/admin/auditar_lote_cliente/<int:cliente_id>', methods=['GET'])
+@login_required
+def auditar_lote_cliente(cliente_id):
+    """Raio-X READ-ONLY do que aconteceria num receber_lote_cliente.
+
+    URL: ``GET /admin/auditar_lote_cliente/<cliente_id>?valor=30000,00``
+
+    Espelha EXATAMENTE a query, ordenação e algoritmo de
+    ``routes/clientes.py::receber_lote_cliente``, sem efeito colateral
+    algum (zero ``db.session.add/flush/commit``). O objetivo é responder
+    a três perguntas, em ordem:
+
+    1. **Estado real** — para cada venda em aberto do cliente, qual é o
+       ``valor_pago`` que está na coluna do banco vs. qual é a soma real
+       dos ``LancamentoCaixa`` ENTRADA com descrição
+       ``Venda #N -%``. Se houver diff, esta é uma "bomba-relógio":
+       quando o resync (``_resincronizar_pagamento_venda``) rodar ao
+       fim de um lote real, ele vai sobrescrever o ``valor_pago`` com
+       a soma dos lançamentos, podendo rebaixar/promover a venda de
+       forma surpreendente para o operador.
+
+    2. **Simulação do loop** — para o ``valor`` informado, percorre
+       FIFO e mostra a decisão tomada em cada iteração: se aplicou (com
+       quanto), se pulou (e por quê: PERDA / valor_falta<=0 /
+       valor_restante<=0).
+
+    3. **Conclusão** — quanto seria de fato distribuído, quanto sobraria,
+       e quais vendas (caso existam) foram puladas dentro do alcance
+       do FIFO por causa de diff banco-vs-lançamentos.
+
+    Multi-tenant: usa ``query_tenant`` + filtra ``LancamentoCaixa`` pelo
+    mesmo ``empresa_id`` da venda, idêntico ao ``_resincronizar_pagamento_venda``.
+
+    Sem nenhuma escrita no banco — pode rodar em produção a qualquer hora.
+    """
+    eid = empresa_id_atual()
+
+    cliente = query_tenant(Cliente).filter_by(id=cliente_id).first()
+    if cliente is None:
+        return (
+            f'Cliente {cliente_id} NAO encontrado no tenant {eid}.',
+            404,
+            {'Content-Type': 'text/plain; charset=utf-8'},
+        )
+
+    valor_recebido, erro_parse = _parse_valor_br(request.args.get('valor'))
+    if erro_parse:
+        return (
+            f'ERRO no parametro: {erro_parse}\n\n'
+            f'Uso: GET /admin/auditar_lote_cliente/{cliente_id}?valor=30000,00',
+            400,
+            {'Content-Type': 'text/plain; charset=utf-8'},
+        )
+
+    # Espelha EXATAMENTE a query de receber_lote_cliente. Qualquer
+    # divergencia aqui invalida o raio-x.
+    vendas_abertas = query_tenant(Venda).filter(
+        Venda.cliente_id == cliente_id,
+        Venda.situacao.in_(['PENDENTE', 'PARCIAL']),
+    ).order_by(Venda.data_venda.asc(), Venda.id.asc()).all()
+
+    # ---- BLOCO 1: estado real de cada venda ----
+    bloco1 = []
+    bloco1.append('=' * 78)
+    bloco1.append('RAIO-X DE DISTRIBUICAO EM LOTE - read-only')
+    bloco1.append('=' * 78)
+    bloco1.append(f'Empresa (tenant)           : {eid}')
+    bloco1.append(f'Cliente                    : #{cliente.id} - {cliente.nome_cliente}')
+    bloco1.append(f'CNPJ                       : {cliente.cnpj or "(vazio)"}')
+    bloco1.append(f'Valor recebido (simulacao) : R$ {valor_recebido:,.2f}')
+    bloco1.append(f'Vendas em aberto           : {len(vendas_abertas)}  (PENDENTE+PARCIAL, FIFO data->id)')
+    bloco1.append('')
+
+    if not vendas_abertas:
+        bloco1.append('Nenhuma venda em aberto. Nada a auditar.')
+        return ('\n'.join(bloco1), 200, {'Content-Type': 'text/plain; charset=utf-8'})
+
+    bloco1.append('--- TABELA 1: estado real (banco vs. caixa) ---')
+    bloco1.append(
+        f'{"#":>4}  {"id":>6}  {"data":<10}  {"sit":<8}  '
+        f'{"total":>12}  {"vpago_banco":>12}  {"sum_lanc":>12}  '
+        f'{"diff":>10}  {"falta":>10}  flag'
+    )
+    bloco1.append('-' * 110)
+
+    # Snapshot do estado pra reusar na simulacao (NUNCA reler do banco
+    # durante o loop — queremos congelar a foto).
+    snapshots = []
+    qtd_bombas = 0
+    qtd_perdas_na_fila = 0
+
+    for idx, venda in enumerate(vendas_abertas, start=1):
+        valor_total = Decimal(str(venda.calcular_total() or Decimal('0.00')))
+        valor_pago_banco = Decimal(str(venda.valor_pago or Decimal('0.00')))
+
+        # Soma real dos LancamentoCaixa que o resync usaria.
+        # IDENTICO a _resincronizar_pagamento_venda em app.py.
+        eid_v = getattr(venda, 'empresa_id', None)
+        q = LancamentoCaixa.query.filter(
+            LancamentoCaixa.tipo == 'ENTRADA',
+            LancamentoCaixa.descricao.like(f"Venda #{venda.id} -%"),
+        )
+        if eid_v is not None:
+            q = q.filter(LancamentoCaixa.empresa_id == eid_v)
+        sum_lanc = Decimal(str(
+            q.with_entities(func.coalesce(func.sum(LancamentoCaixa.valor), 0)).scalar() or 0
+        ))
+
+        diff = valor_pago_banco - sum_lanc
+        valor_falta = valor_total - valor_pago_banco
+        eh_perda = str(getattr(venda, 'tipo_operacao', 'VENDA') or 'VENDA').upper() == 'PERDA'
+
+        flags = []
+        if eh_perda:
+            flags.append('PERDA')
+            qtd_perdas_na_fila += 1
+        if abs(diff) > Decimal('0.01'):
+            flags.append('BOMBA(diff!=0)')
+            qtd_bombas += 1
+        if valor_falta <= Decimal('0.00'):
+            flags.append('SEM_FALTA(pulada-loop)')
+        flag_str = ','.join(flags) if flags else '-'
+
+        snap = {
+            'idx': idx,
+            'id': venda.id,
+            'data': venda.data_venda,
+            'situacao': venda.situacao,
+            'eh_perda': eh_perda,
+            'valor_total': valor_total,
+            'valor_pago_banco': valor_pago_banco,
+            'sum_lanc': sum_lanc,
+            'diff': diff,
+            'valor_falta': valor_falta,
+            'flags': flag_str,
+        }
+        snapshots.append(snap)
+
+        bloco1.append(
+            f'{idx:>4}  {venda.id:>6}  {str(venda.data_venda):<10}  {(venda.situacao or "?"):<8}  '
+            f'{valor_total:>12,.2f}  {valor_pago_banco:>12,.2f}  {sum_lanc:>12,.2f}  '
+            f'{diff:>+10,.2f}  {valor_falta:>+10,.2f}  {flag_str}'
+        )
+
+    # ---- BLOCO 2: alerta de bombas-relogio ----
+    bloco2 = []
+    bloco2.append('')
+    bloco2.append('--- BOMBAS-RELOGIO (diff banco vs. lancamentos) ---')
+    bombas = [s for s in snapshots if abs(s['diff']) > Decimal('0.01')]
+    if not bombas:
+        bloco2.append('Nenhuma. valor_pago do banco bate com a soma dos LancamentoCaixa para todas as vendas.')
+    else:
+        bloco2.append(
+            f'ATENCAO: {len(bombas)} venda(s) tem divergencia entre coluna valor_pago e soma '
+            f'real dos lancamentos. O resync do receber_lote_cliente vai SOBRESCREVER '
+            f'venda.valor_pago com sum_lanc — possivelmente rebaixando ou promovendo a '
+            f'venda de forma inesperada para o operador. Lista:'
+        )
+        for s in bombas:
+            sentido = 'banco MAIOR que caixa (fantasma de pagamento)' if s['diff'] > 0 else 'banco MENOR que caixa (lancamento orfao)'
+            bloco2.append(
+                f'  Venda #{s["id"]} ({s["situacao"]}, total R$ {s["valor_total"]:,.2f}): '
+                f'banco={s["valor_pago_banco"]:,.2f}  caixa={s["sum_lanc"]:,.2f}  '
+                f'diff={s["diff"]:+,.2f}  -> {sentido}'
+            )
+
+    # ---- BLOCO 3: simulacao FIFO do loop real ----
+    bloco3 = []
+    bloco3.append('')
+    bloco3.append('--- SIMULACAO PASSO-A-PASSO (espelho do loop em receber_lote_cliente) ---')
+    bloco3.append(f'Valor inicial: R$ {valor_recebido:,.2f}')
+    bloco3.append('')
+
+    valor_restante = Decimal(str(valor_recebido))
+    aplicacoes = []
+    pulos = []
+
+    for s in snapshots:
+        if valor_restante <= Decimal('0.00'):
+            bloco3.append(
+                f'  [{s["idx"]:>2}] Venda #{s["id"]}: STOP — valor_restante esgotado '
+                f'antes desta venda. (break)'
+            )
+            break
+
+        if s['eh_perda']:
+            bloco3.append(
+                f'  [{s["idx"]:>2}] Venda #{s["id"]}: PULA (tipo_operacao=PERDA)'
+            )
+            pulos.append((s, 'PERDA'))
+            continue
+
+        if s['valor_falta'] <= Decimal('0.00'):
+            motivo = (
+                'valor_falta<=0; venda ja parece quitada pelo valor_pago do BANCO. '
+                'Mas atencao: se ha BOMBA(diff!=0), o resync apos o lote real pode '
+                'sobrescrever esse estado e rebaixa-la — vide bloco anterior.'
+            )
+            bloco3.append(
+                f'  [{s["idx"]:>2}] Venda #{s["id"]}: PULA — {motivo}'
+            )
+            pulos.append((s, 'SEM_FALTA'))
+            continue
+
+        valor_abatido = min(valor_restante, s['valor_falta'])
+        novo_restante = valor_restante - valor_abatido
+        bloco3.append(
+            f'  [{s["idx"]:>2}] Venda #{s["id"]} ({s["situacao"]}): '
+            f'falta={s["valor_falta"]:,.2f}, abate={valor_abatido:,.2f}, '
+            f'restante apos: {novo_restante:,.2f}'
+            + (f'  [QUITA: novo valor_pago efetivo cobre o total]' if valor_abatido >= s['valor_falta'] else '  [PARCIAL]')
+        )
+        aplicacoes.append({
+            'snap': s,
+            'abatido': valor_abatido,
+            'quita': valor_abatido >= s['valor_falta'],
+        })
+        valor_restante = novo_restante
+
+    # Vendas que sequer foram visitadas (loop quebrou antes).
+    visitadas = len(aplicacoes) + len(pulos)
+    nao_visitadas = snapshots[visitadas:] if valor_restante <= Decimal('0.00') else []
+
+    # ---- BLOCO 4: conclusao ----
+    valor_aplicado = valor_recebido - valor_restante
+
+    bloco4 = []
+    bloco4.append('')
+    bloco4.append('--- CONCLUSAO ---')
+    bloco4.append(f'Valor recebido (entrada)     : R$ {valor_recebido:>12,.2f}')
+    bloco4.append(f'Valor distribuido (aplicado) : R$ {valor_aplicado:>12,.2f}  em {len(aplicacoes)} venda(s)')
+    bloco4.append(f'Sobra (sem destino)          : R$ {valor_restante:>12,.2f}')
+    bloco4.append(f'Vendas puladas               : {len(pulos)}  ({sum(1 for _,m in pulos if m=="PERDA")} PERDA, {sum(1 for _,m in pulos if m=="SEM_FALTA")} sem_falta)')
+    bloco4.append(f'Vendas nao-visitadas (FIFO)  : {len(nao_visitadas)}  (loop parou antes)')
+    bloco4.append(f'Bombas-relogio detectadas    : {qtd_bombas}')
+
+    if qtd_bombas > 0 and len(aplicacoes) > 0:
+        bloco4.append('')
+        bloco4.append(
+            'AVISO: existem bombas-relogio na fila. Apos o lote REAL, o resync vai '
+            'sobrescrever venda.valor_pago para CADA venda afetada nesta lista de '
+            'aplicacoes (o resync soma lancamentos, nao acumula). Para vendas que tinham '
+            'diff>0 (banco>caixa), isso pode REBAIXA-LAS para PARCIAL/PENDENTE mesmo '
+            'apos receber abate hoje. Recomendado: rodar /admin/limpar_valor_pago_fantasma '
+            'ANTES de processar lotes grandes neste cliente, ou processar a partir das '
+            'vendas que estao integras (sem bomba na fila).'
+        )
+
+    if valor_restante > Decimal('0.00') and nao_visitadas:
+        bloco4.append('')
+        bloco4.append(
+            'INCONSISTENCIA logica detectada: ha sobra E vendas nao-visitadas. '
+            'Isso nao deveria acontecer — investigar.'
+        )
+    elif valor_restante > Decimal('0.00'):
+        soma_falta_total = sum(
+            (s['valor_falta'] for s in snapshots if s['valor_falta'] > Decimal('0.00') and not s['eh_perda']),
+            Decimal('0.00')
+        )
+        bloco4.append('')
+        bloco4.append(
+            f'Sobra esperada: a fila inteira foi visitada e a soma de valor_falta valido '
+            f'foi R$ {soma_falta_total:,.2f}, menor que o valor recebido R$ '
+            f'{valor_recebido:,.2f}. Cliente nao tem divida suficiente para absorver o lote.'
+        )
+
+    output = '\n'.join(bloco1 + bloco2 + bloco3 + bloco4) + '\n'
+    logging.info(
+        '[AUDIT-LOTE] empresa=%s cliente=%s valor=%s vendas=%d bombas=%d '
+        'aplicado=%s sobra=%s puladas=%d',
+        eid, cliente_id, valor_recebido, len(vendas_abertas), qtd_bombas,
+        valor_aplicado, valor_restante, len(pulos),
     )
     return output, 200, {'Content-Type': 'text/plain; charset=utf-8'}
