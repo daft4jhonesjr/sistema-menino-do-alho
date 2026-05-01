@@ -404,19 +404,59 @@ def listar_vendas():
         if total_valor_pedido <= 0 and pedido['tem_item_perda']:
             pedido['situacao'] = 'PERDA'
         else:
-            situacoes_financeiras = [
-                str(v.situacao or '').strip().upper()
-                for v in vendas_do_pedido
+            # Classificacao do pedido virtual (cliente+nf+data) a partir
+            # das Vendas filhas. Regra anterior usava `any(s == 'PENDENTE')`
+            # como gatilho para PENDENTE — o que rebaixava o pedido inteiro
+            # quando UMA filha continuava intocada apos um abatimento em
+            # lote, mesmo que outras irmas ja tivessem sido pagas. Isso
+            # mascarava o saldo devedor real (badge laranja sumia, valor
+            # cheio aparecia). A regra correta olha o agregado financeiro:
+            # se ha pagamento em qualquer filha (com tolerancia de 1 centavo
+            # para arredondamento), o pedido e PARCIAL (ou PAGO se cobrir
+            # todo o valor financeiro).
+            vendas_financeiras = [
+                v for v in vendas_do_pedido
                 if str(getattr(v, 'tipo_operacao', 'VENDA') or 'VENDA').upper() != 'PERDA'
             ]
-            if not situacoes_financeiras:
-                situacoes_financeiras = [str(v.situacao or '').strip().upper() for v in vendas_do_pedido]
-            if any(s == 'PENDENTE' for s in situacoes_financeiras):
-                pedido['situacao'] = 'PENDENTE'
-            elif any(s == 'PARCIAL' for s in situacoes_financeiras):
+            # Fallback de seguranca: se nao ha vendas financeiras (pedido
+            # so de PERDA mas com valor>0, caso atipico), reusa todas para
+            # nao deixar situacao indefinida.
+            if not vendas_financeiras:
+                vendas_financeiras = list(vendas_do_pedido)
+
+            total_valor_financeiro = sum(
+                float(v.calcular_total() or 0) for v in vendas_financeiras
+            )
+            total_pago_financeiro = sum(
+                float(getattr(v, 'valor_pago', None) or 0) for v in vendas_financeiras
+            )
+
+            situacoes_financeiras = [
+                str(v.situacao or '').strip().upper() for v in vendas_financeiras
+            ]
+            todas_pagas = situacoes_financeiras and all(
+                s == 'PAGO' for s in situacoes_financeiras
+            )
+
+            # PAGO: todas as filhas marcadas PAGO. Mantemos o sinal
+            # tradicional (situacao da venda) como condicao primaria
+            # porque o resync ja garante que situacao=='PAGO' implica
+            # valor_pago ~ total. Tolerancia financeira como guarda
+            # secundaria contra arredondamento.
+            if todas_pagas or (
+                total_valor_financeiro > 0
+                and total_pago_financeiro >= total_valor_financeiro - 0.01
+            ):
+                pedido['situacao'] = 'PAGO'
+            elif total_pago_financeiro > 0.01:
+                # Qualquer filha tocada (PARCIAL explicito ou irma PAGO
+                # enquanto outra ainda nao foi liquidada) -> pedido e PARCIAL.
+                # Esse e o caso classico do receber_lote_cliente em pedido
+                # multi-linha: V_a vira PAGO, V_b PARCIAL, V_c PENDENTE
+                # intocada -> pedido total e PARCIAL com saldo devedor real.
                 pedido['situacao'] = 'PARCIAL'
             else:
-                pedido['situacao'] = 'PAGO'
+                pedido['situacao'] = 'PENDENTE'
         if 'total_valor_pago' not in pedido:
             pedido['total_valor_pago'] = sum(float(getattr(v, 'valor_pago', None) or 0) for v in pedido.get('vendas', []))
         # Saldo devedor do pedido (face - já pago, nunca negativo). Usado pela
