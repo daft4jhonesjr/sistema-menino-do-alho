@@ -472,6 +472,44 @@
     </div>
 </div>
 
+{# Modal de confirmação para exclusão em massa do Caixa Diário.
+   Substitui o window.confirm() nativo (linha histórica em
+   confirmarExclusaoMassa) por uma UI alinhada à identidade visual do
+   sistema. Padrão idêntico aos outros modais do template (z-50, hidden
+   por default, click no backdrop fecha). #}
+<div id="modal-confirmar-excluir-massa-caixa" class="fixed inset-0 z-50 hidden bg-black/60 flex items-center justify-center p-4" role="dialog" aria-labelledby="modal-confirmar-excluir-massa-titulo" aria-modal="true" onclick="if(event.target===this){fecharModalConfirmarExcluirMassa();}">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
+        <div class="px-6 pt-6 pb-2 flex items-start gap-4">
+            <div class="flex-shrink-0 w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/40 flex items-center justify-center">
+                <svg class="w-6 h-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                </svg>
+            </div>
+            <div class="flex-1">
+                <h3 id="modal-confirmar-excluir-massa-titulo" class="text-lg font-bold text-gray-900 dark:text-white mb-2">
+                    Apagar lançamentos selecionados
+                </h3>
+                <p class="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
+                    Atenção: você está prestes a apagar definitivamente
+                    <strong id="modal-confirmar-excluir-massa-qtd" class="text-red-600 dark:text-red-400 font-bold">0</strong>
+                    lançamento(s) do caixa. O saldo será recalculado. Deseja continuar?
+                </p>
+            </div>
+        </div>
+        <div class="px-6 py-4 bg-gray-50 dark:bg-gray-900/40 rounded-b-xl flex justify-end gap-3 border-t border-gray-100 dark:border-gray-700">
+            <button type="button" onclick="fecharModalConfirmarExcluirMassa();" class="px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
+                Cancelar
+            </button>
+            <button type="button" id="modal-confirmar-excluir-massa-ok" class="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                </svg>
+                Apagar Selecionados
+            </button>
+        </div>
+    </div>
+</div>
+
 <script>
 window.CAIXA_DELETE_URL = "{{ url_for('caixa.deletar_caixa', id=0) }}".replace('/0', '/');
 window.CAIXA_CSRF_TOKEN = "{{ csrf_token() }}";
@@ -739,12 +777,57 @@ function confirmarExclusaoUnica(id) {
         }
     });
 }
+function fecharModalConfirmarExcluirMassa() {
+    var modal = document.getElementById('modal-confirmar-excluir-massa-caixa');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    if (typeof liberarFundo === 'function') liberarFundo();
+}
+
 function confirmarExclusaoMassa() {
     var qtd = document.querySelectorAll('.check-item-caixa:checked').length;
-    if (confirm('Atenção: Você está prestes a apagar definitivamente ' + qtd + ' lançamento(s) do caixa. O saldo será recalculado. Deseja continuar?')) {
-        document.getElementById('form-excluir-massa').submit();
+    if (qtd === 0) return;
+
+    var modal = document.getElementById('modal-confirmar-excluir-massa-caixa');
+    var spanQtd = document.getElementById('modal-confirmar-excluir-massa-qtd');
+    var btnOk = document.getElementById('modal-confirmar-excluir-massa-ok');
+    var form = document.getElementById('form-excluir-massa');
+
+    // Fallback defensivo: se o modal não estiver no DOM por algum motivo
+    // (template antigo em cache, erro de render parcial), não trava o
+    // usuário — usa o confirm nativo para garantir que a exclusão ainda
+    // possa ser feita.
+    if (!modal || !spanQtd || !btnOk || !form) {
+        if (window.confirm('Atenção: Você está prestes a apagar definitivamente ' + qtd + ' lançamento(s) do caixa. O saldo será recalculado. Deseja continuar?')) {
+            if (form) form.submit();
+        }
+        return;
     }
+
+    spanQtd.textContent = qtd;
+
+    // Substitui o handler a cada abertura para evitar acúmulo de
+    // listeners (cloneNode é mais simples que removeEventListener com
+    // referências nomeadas).
+    var btnOkNovo = btnOk.cloneNode(true);
+    btnOk.parentNode.replaceChild(btnOkNovo, btnOk);
+    btnOkNovo.addEventListener('click', function() {
+        btnOkNovo.disabled = true;
+        btnOkNovo.classList.add('opacity-60', 'cursor-not-allowed');
+        form.submit();
+    });
+
+    modal.classList.remove('hidden');
+    if (typeof travarFundo === 'function') travarFundo();
 }
+
+document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Escape') return;
+    var modal = document.getElementById('modal-confirmar-excluir-massa-caixa');
+    if (modal && !modal.classList.contains('hidden')) {
+        fecharModalConfirmarExcluirMassa();
+    }
+});
 
 (function() {
     var params = new URLSearchParams(window.location.search);
