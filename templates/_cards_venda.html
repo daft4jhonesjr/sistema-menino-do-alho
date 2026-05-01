@@ -38,7 +38,12 @@
     </div>
     <div class="text-sm text-gray-600 dark:text-gray-300 mb-3">
         <p class="text-gray-500 dark:text-gray-400">📦 {{ pedido.total_quantidade }} itens</p>
+        {% if pedido.situacao == 'PARCIAL' and pedido.total_valor_pago and pedido.total_valor_pago > 0 %}
+        <p class="font-bold text-orange-600 dark:text-orange-400 text-lg mt-1 valor-financeiro">{{ pedido.total_saldo_devedor|formato_moeda }}</p>
+        <p class="text-[10px] text-gray-500 dark:text-gray-400 -mt-1">(Total: {{ pedido.total_valor|formato_moeda }} | Pago: {{ pedido.total_valor_pago|formato_moeda }})</p>
+        {% else %}
         <p class="font-bold text-emerald-600 dark:text-emerald-400 text-lg mt-1 valor-financeiro">{{ pedido.total_valor|formato_moeda }}</p>
+        {% endif %}
         <p class="text-xs mt-1">📅 Venc.: {% if pedido.data_vencimento %}{{ pedido.data_vencimento.strftime('%d/%m/%Y') }}{% else %}---{% endif %}</p>
         {% if pedido.forma_pagamento %}
         <p class="text-xs mt-1"><span class="text-gray-500 dark:text-gray-400 uppercase">Forma Pagto:</span> <span class="px-2 py-0.5 rounded {% if pedido.forma_pagamento|upper == 'BOLETO' %}bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300{% else %}bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300{% endif %}">{{ pedido.forma_pagamento }}</span></p>

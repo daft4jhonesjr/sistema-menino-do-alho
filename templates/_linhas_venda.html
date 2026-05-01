@@ -34,7 +34,16 @@
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{% if pedido.nf and pedido.nf != '-' %}<span onclick="copiarParaClipboard('{{ pedido.nf }}', this)" class="cursor-pointer hover:text-emerald-600 dark:hover:text-emerald-400 hover:underline transition-all" title="Clique para copiar a NF">{{ pedido.nf }}</span>{% else %}<span class="text-gray-400 dark:text-gray-500">-</span>{% endif %}</td>
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 text-right valor-financeiro">{% if pedido.total_quantidade and pedido.total_quantidade != 0 %}{{ (pedido.total_valor / pedido.total_quantidade)|formato_moeda }}{% else %}<span class="text-gray-400 dark:text-gray-500">---</span>{% endif %}</td>
     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100 text-right">{{ pedido.total_quantidade }}</td>
-    <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 dark:text-gray-100 text-right valor-financeiro">{{ pedido.total_valor|formato_moeda }}</td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 dark:text-gray-100 text-right valor-financeiro">
+        {% if pedido.situacao == 'PARCIAL' and pedido.total_valor_pago and pedido.total_valor_pago > 0 %}
+            <span class="text-orange-700 dark:text-orange-400">{{ pedido.total_saldo_devedor|formato_moeda }}</span>
+            <span class="block text-[10px] font-normal text-gray-500 dark:text-gray-400 mt-0.5">
+                (Total: {{ pedido.total_valor|formato_moeda }} | Pago: {{ pedido.total_valor_pago|formato_moeda }})
+            </span>
+        {% else %}
+            {{ pedido.total_valor|formato_moeda }}
+        {% endif %}
+    </td>
     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-right valor-financeiro {% if pedido.total_lucro >= 0 %}text-emerald-600 dark:text-emerald-400{% else %}text-red-600 dark:text-red-400{% endif %}">{{ pedido.total_lucro|formato_moeda }}</td>
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
         {% if pedido.data_vencimento %}

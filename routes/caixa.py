@@ -590,13 +590,24 @@ def adicionar_caixa():
             ))
         for lanc in lancamentos:
             db.session.add(lanc)
+        # Ressincroniza vendas referenciadas pela descrição "Venda #N -%"
+        # ANTES do commit, em uma única transação. Sem isso, lançar
+        # pagamento via /caixa/adicionar não atualiza Venda.valor_pago
+        # nem Venda.situacao — venda permanece PENDENTE no banco mesmo
+        # com pagamento no caixa. Helpers definidos mais abaixo neste
+        # arquivo ([_coletar_vendas_afetadas, _resincronizar_vendas_por_ids]).
+        venda_ids_split = _coletar_vendas_afetadas(lancamentos)
+        if venda_ids_split:
+            db.session.flush()
+            _resincronizar_vendas_por_ids(venda_ids_split)
         ok, err = _safe_db_commit()
         if not ok:
             current_app.logger.warning(f"[CAIXA-ADD] commit-fail (split) err={err}")
             flash(err or "Erro ao adicionar lançamentos.", "error")
             return redirect(url_for('caixa.caixa', setor=setor))
         current_app.logger.info(
-            f"[CAIXA-ADD] commit-ok (split) ids={[l.id for l in lancamentos]}"
+            f"[CAIXA-ADD] commit-ok (split) ids={[l.id for l in lancamentos]} "
+            f"vendas_ressync={len(venda_ids_split)}"
         )
         flash('Lançamentos divididos adicionados com sucesso!', 'success')
     else:
@@ -614,13 +625,18 @@ def adicionar_caixa():
             empresa_id=empresa_id_atual(),
         )
         db.session.add(novo_lancamento)
+        venda_ids_simples = _coletar_vendas_afetadas([novo_lancamento])
+        if venda_ids_simples:
+            db.session.flush()
+            _resincronizar_vendas_por_ids(venda_ids_simples)
         ok, err = _safe_db_commit()
         if not ok:
             current_app.logger.warning(f"[CAIXA-ADD] commit-fail err={err}")
             flash(err or "Erro ao adicionar lançamento.", "error")
             return redirect(url_for('caixa.caixa', setor=setor))
         current_app.logger.info(
-            f"[CAIXA-ADD] commit-ok id={novo_lancamento.id} valor={novo_valor}"
+            f"[CAIXA-ADD] commit-ok id={novo_lancamento.id} valor={novo_valor} "
+            f"vendas_ressync={len(venda_ids_simples)}"
         )
         flash('Lançamento adicionado com sucesso!', 'success')
     current_app.logger.info(f"[CAIXA-ADD] redirecting setor={setor}")
@@ -652,6 +668,12 @@ def editar_lancamento_caixa(id):
         pass
 
     lancamento = query_tenant(LancamentoCaixa).filter_by(id=id).first_or_404()
+
+    # Captura vínculo PRÉ-edição (descrição "Venda #N -%" ou venda_id se
+    # preenchido). Se o usuário tirar o marcador da descrição, mudar
+    # tipo ENTRADA→SAIDA, ou alterar valor, a venda original ainda
+    # precisa ser ressincronizada — caso contrário fica PAGO órfão.
+    venda_ids_pre = _coletar_vendas_afetadas([lancamento])
 
     try:
         data_raw = request.form.get('data')
@@ -696,6 +718,17 @@ def editar_lancamento_caixa(id):
         else:
             lancamento.status_envio = None
 
+        # Captura vínculo PÓS-edição e ressincroniza a UNIÃO (PRE ∪ POS).
+        # Cobre os 3 cenários de mutação:
+        #   - quebra de vínculo (PRE > 0, POS = 0): venda volta a PENDENTE
+        #   - revínculo p/ outra venda (PRE != POS): ambas são realinhadas
+        #   - mesma venda mas valor mudou: recalcula valor_pago/situacao
+        venda_ids_pos = _coletar_vendas_afetadas([lancamento])
+        venda_ids_para_ressync = venda_ids_pre | venda_ids_pos
+        if venda_ids_para_ressync:
+            db.session.flush()
+            _resincronizar_vendas_por_ids(venda_ids_para_ressync)
+
         ok, err = _safe_db_commit()
         if not ok:
             current_app.logger.warning(f"[CAIXA-EDIT] commit-fail id={id} err={err}")
@@ -703,7 +736,9 @@ def editar_lancamento_caixa(id):
             current_app.logger.info(f"[CAIXA-EDIT] redirecting (commit_fail) id={id}")
             return redirect(url_for('caixa.caixa'))
 
-        current_app.logger.info(f"[CAIXA-EDIT] commit-ok id={id}")
+        current_app.logger.info(
+            f"[CAIXA-EDIT] commit-ok id={id} vendas_ressync={len(venda_ids_para_ressync)}"
+        )
         flash('Lançamento atualizado com sucesso!', 'success')
     except InvalidOperation as e:
         # Defesa em profundidade: se mesmo após o ``_converter_valor_brl_estrito``

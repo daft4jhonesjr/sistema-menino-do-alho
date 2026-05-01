@@ -418,6 +418,13 @@ def listar_vendas():
                 pedido['situacao'] = 'PAGO'
         if 'total_valor_pago' not in pedido:
             pedido['total_valor_pago'] = sum(float(getattr(v, 'valor_pago', None) or 0) for v in pedido.get('vendas', []))
+        # Saldo devedor do pedido (face - já pago, nunca negativo). Usado pela
+        # listagem para mostrar "Valor a Receber" em pedidos PARCIAIS e pelo
+        # totalizador "Total a Receber" no rodapé. Bate com a lógica do extrato.
+        pedido['total_saldo_devedor'] = max(
+            float(pedido.get('total_valor') or 0) - float(pedido.get('total_valor_pago') or 0),
+            0.0,
+        )
         dv = None
         for vv in pedido.get('vendas', []):
             if getattr(vv, 'data_vencimento', None) is not None:
@@ -480,6 +487,16 @@ def listar_vendas():
         db.session.commit()
     except Exception:
         db.session.rollback()
+
+    # Total a Receber: soma dos saldos devedores de TODOS os pedidos
+    # PENDENTE/PARCIAL (não paginado) — bate com a lógica do extrato.
+    # Calculado aqui porque ``pedidos_agrupados`` já tem ``situacao`` e
+    # ``total_saldo_devedor`` consolidados.
+    total_geral_a_receber = sum(
+        float(p.get('total_saldo_devedor') or 0)
+        for p in pedidos_agrupados
+        if str(p.get('situacao') or '').strip().upper() in ('PENDENTE', 'PARCIAL')
+    )
 
     page = request.args.get('page', 1, type=int)
     per_page = 20
@@ -570,6 +587,7 @@ def listar_vendas():
         filtro=filtro,
         filtro_vencidos=filtro_vencidos,
         graficos_data=graficos_data,
+        total_geral_a_receber=total_geral_a_receber,
     )
 
 

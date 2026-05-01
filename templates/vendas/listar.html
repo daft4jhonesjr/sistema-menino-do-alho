@@ -721,6 +721,15 @@
                 </tbody>
             </table>
         </div>
+        {# Totalizador "Total a Receber" — soma do saldo devedor de todos os
+           pedidos PENDENTE/PARCIAL (não paginado). Bate com a soma do extrato
+           do cliente, que usa a mesma fórmula (total - valor_pago). #}
+        {% if total_geral_a_receber and total_geral_a_receber > 0 %}
+        <div class="px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border-t border-amber-200 dark:border-amber-800 flex justify-end items-center gap-3">
+            <span class="text-xs font-semibold text-amber-800 dark:text-amber-300 uppercase tracking-wider">Total a Receber (Pendentes + Parciais):</span>
+            <span class="text-lg font-bold text-amber-900 dark:text-amber-200 valor-financeiro">{{ total_geral_a_receber|formato_moeda }}</span>
+        </div>
+        {% endif %}
     </div>
 
     <!-- Vista em Cards (Grade) -->
