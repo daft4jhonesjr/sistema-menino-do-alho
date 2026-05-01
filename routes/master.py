@@ -23,7 +23,10 @@ from sqlalchemy import func
 from models import db, Empresa, Usuario, Venda, LancamentoCaixa, PERFIL_DONO
 from services.auth_utils import master_required
 from services.db_utils import _safe_db_commit, query_tenant, empresa_id_atual
-from services.vendas_services import _resincronizar_pagamento_venda
+from services.vendas_services import (
+    _resincronizar_pagamento_venda,
+    _resincronizar_pagamento_venda_seguro,
+)
 
 
 master_bp = Blueprint('master', __name__)
@@ -147,22 +150,36 @@ def master_toggle_empresa_ativo(empresa_id):
 
 
 def _classificar_resync_dry_run(venda):
-    """Calcula qual seria a nova ``situacao`` da venda SEM mutar nada.
+    """Simula o que ``_resincronizar_pagamento_venda_seguro`` faria SEM
+    mutar nada.
 
-    Replica a lógica de ``_resincronizar_pagamento_venda`` em modo
-    estritamente read-only: faz a mesma SELECT + agregação, mas devolve
-    apenas a tupla ``(situacao_atual, situacao_calculada, total_pago,
-    valor_total)``. Não toca em ``venda.valor_pago`` nem em
-    ``venda.situacao``.
+    Replica a lógica de mão única em modo estritamente read-only: lê os
+    lançamentos, aplica os mesmos guarda-costas (PAGO nunca rebaixa,
+    valor_pago só cresce) e devolve a classificação simulada. Não toca
+    em ``venda.valor_pago`` nem em ``venda.situacao``.
 
     Returns:
-        tuple: (situacao_atual, situacao_calculada, total_pago, valor_total)
-        ou (situacao_atual, 'PERDA', None, None) se for venda de perda.
+        tuple: ``(situacao_atual, situacao_calculada, total_pago,
+        valor_total, ajusta_valor_pago)`` onde ``ajusta_valor_pago``
+        é True quando o resync seguro só corrigiria ``valor_pago``
+        (mantendo ``situacao``). Para vendas de perda devolve
+        ``(situacao_atual, 'PERDA', None, None, False)``.
     """
     situacao_atual = (venda.situacao or '').strip().upper()
 
     if str(getattr(venda, 'tipo_operacao', '') or '').strip().upper() == 'PERDA':
-        return situacao_atual, 'PERDA', None, None
+        return situacao_atual, 'PERDA', None, None, False
+
+    valor_total = Decimal(str(venda.calcular_total() or Decimal('0.00')))
+    valor_pago_atual = Decimal(str(venda.valor_pago or Decimal('0.00')))
+
+    # GUARDA-COSTAS 1 (espelha _resincronizar_pagamento_venda_seguro):
+    # PAGO nunca regride. Diferenciamos só dois sub-casos para o
+    # diagnóstico: já consistente vs. precisa ajustar valor_pago.
+    if situacao_atual == 'PAGO':
+        if valor_pago_atual >= (valor_total - Decimal('0.01')):
+            return situacao_atual, 'PAGO', valor_pago_atual, valor_total, False
+        return situacao_atual, 'PAGO', valor_pago_atual, valor_total, True
 
     eid = getattr(venda, 'empresa_id', None)
     q = LancamentoCaixa.query.filter(
@@ -178,32 +195,47 @@ def _classificar_resync_dry_run(venda):
     if total_pago < Decimal('0.00'):
         total_pago = Decimal('0.00')
 
-    valor_total = Decimal(str(venda.calcular_total() or Decimal('0.00')))
-    if total_pago <= Decimal('0.01'):
+    # GUARDA-COSTAS 2: valor_pago só cresce.
+    novo_valor_pago = max(total_pago, valor_pago_atual)
+
+    if situacao_atual == 'PARCIAL':
+        # PARCIAL nunca cai pra PENDENTE; pode subir pra PAGO.
+        if novo_valor_pago >= (valor_total - Decimal('0.01')):
+            situacao_calc = 'PAGO'
+        else:
+            situacao_calc = 'PARCIAL'
+        return situacao_atual, situacao_calc, novo_valor_pago, valor_total, False
+
+    # PENDENTE (ou status vazio): pode subir livremente.
+    if novo_valor_pago <= Decimal('0.01'):
         situacao_calc = 'PENDENTE'
-    elif total_pago < (valor_total - Decimal('0.01')):
+    elif novo_valor_pago < (valor_total - Decimal('0.01')):
         situacao_calc = 'PARCIAL'
     else:
         situacao_calc = 'PAGO'
 
-    return situacao_atual, situacao_calc, total_pago, valor_total
+    return situacao_atual, situacao_calc, novo_valor_pago, valor_total, False
 
 
 @master_bp.route('/admin/diagnosticar_saldos', methods=['GET'])
 @login_required
 def diagnosticar_saldos():
-    """DRY-RUN: classifica vendas do tenant em buckets sem alterar o banco.
+    """DRY-RUN MÃO ÚNICA: classifica vendas do tenant em buckets sem
+    alterar o banco.
 
-    Para cada venda do tenant atual, simula o que aconteceria se
-    ``_resincronizar_pagamento_venda`` fosse chamado: recalcula
-    ``valor_pago`` somando ``LancamentoCaixa`` com ``tipo='ENTRADA'`` e
-    ``descricao LIKE 'Venda #N -%'``, e reclassifica a situação. NÃO
-    persiste nada no banco — termina com ``rollback()``.
+    Simula o que ``_resincronizar_pagamento_venda_seguro`` faria. Como
+    a versão segura **nunca rebaixa** uma venda, os buckets de PERIGO
+    do diagnóstico antigo (PAGO→PENDENTE etc.) são impossíveis aqui:
+    eles aparecem como SEM_MUDANCA ou como PAGO_AJUSTE_VALOR_PAGO
+    (quando ``situacao='PAGO'`` e ``valor_pago=0``, o caso clássico de
+    venda marcada via badge/CSV legado — só corrige ``valor_pago``).
+
+    NÃO persiste nada no banco — termina com ``rollback()``.
 
     Output em texto puro, com:
         - total avaliadas
-        - contagem por bucket (PENDENTE→PAGO, PAGO→PENDENTE, etc.)
-        - amostra dos primeiros 20 IDs em cada bucket de risco/recuperação
+        - contagem por bucket
+        - amostra dos primeiros 20 IDs em cada bucket relevante
 
     Use antes de ``/admin/recuperar_saldos`` para entender o impacto.
     """
@@ -211,12 +243,11 @@ def diagnosticar_saldos():
     vendas = query_tenant(Venda).all()
 
     buckets = {
-        'PENDENTE_PARA_PAGO': [],      # recuperação esperada
-        'PENDENTE_PARA_PARCIAL': [],   # recuperação parcial
-        'PARCIAL_PARA_PAGO': [],       # recuperação completa
-        'PAGO_PARA_PENDENTE': [],      # PERIGO: regex não casa
-        'PAGO_PARA_PARCIAL': [],       # PERIGO: pagamento sumiu
-        'PARCIAL_PARA_PENDENTE': [],   # PERIGO: pagamento sumiu
+        'PENDENTE_PARA_PAGO': [],         # recuperação completa
+        'PENDENTE_PARA_PARCIAL': [],      # recuperação parcial
+        'PARCIAL_PARA_PAGO': [],          # promoção a PAGO
+        'PARCIAL_AJUSTE_VALOR_PAGO': [],  # PARCIAL: só sobe valor_pago
+        'PAGO_AJUSTE_VALOR_PAGO': [],     # PAGO mas valor_pago=0 (badge/CSV)
         'SEM_MUDANCA': [],
         'PERDA': [],
         'OUTROS': [],
@@ -224,14 +255,40 @@ def diagnosticar_saldos():
 
     try:
         for venda in vendas:
-            sit_atual, sit_calc, total_pago, valor_total = _classificar_resync_dry_run(venda)
-            chave = f"{sit_atual}_PARA_{sit_calc}"
+            (sit_atual, sit_calc, total_pago, valor_total,
+             ajusta_valor_pago) = _classificar_resync_dry_run(venda)
+
             if sit_calc == 'PERDA':
                 buckets['PERDA'].append(venda.id)
-            elif sit_atual == sit_calc:
+                continue
+
+            if sit_atual == 'PAGO':
+                if ajusta_valor_pago:
+                    buckets['PAGO_AJUSTE_VALOR_PAGO'].append(venda.id)
+                else:
+                    buckets['SEM_MUDANCA'].append(venda.id)
+                continue
+
+            if sit_atual == 'PARCIAL':
+                if sit_calc == 'PAGO':
+                    buckets['PARCIAL_PARA_PAGO'].append(venda.id)
+                elif sit_calc == 'PARCIAL':
+                    valor_pago_atual = Decimal(str(venda.valor_pago or Decimal('0.00')))
+                    if total_pago is not None and total_pago > valor_pago_atual:
+                        buckets['PARCIAL_AJUSTE_VALOR_PAGO'].append(venda.id)
+                    else:
+                        buckets['SEM_MUDANCA'].append(venda.id)
+                else:
+                    buckets['SEM_MUDANCA'].append(venda.id)
+                continue
+
+            # PENDENTE (ou status vazio)
+            if sit_calc == 'PAGO':
+                buckets['PENDENTE_PARA_PAGO'].append(venda.id)
+            elif sit_calc == 'PARCIAL':
+                buckets['PENDENTE_PARA_PARCIAL'].append(venda.id)
+            elif sit_calc == 'PENDENTE':
                 buckets['SEM_MUDANCA'].append(venda.id)
-            elif chave in buckets:
-                buckets[chave].append(venda.id)
             else:
                 buckets['OUTROS'].append(
                     f"{venda.id}({sit_atual}->{sit_calc})"
@@ -250,37 +307,45 @@ def diagnosticar_saldos():
         sufixo = f" ... (+{len(lista) - n})" if len(lista) > n else ''
         return ', '.join(str(x) for x in head) + sufixo
 
+    total_promocoes = (
+        len(buckets['PENDENTE_PARA_PAGO'])
+        + len(buckets['PENDENTE_PARA_PARCIAL'])
+        + len(buckets['PARCIAL_PARA_PAGO'])
+    )
+    total_ajustes = (
+        len(buckets['PAGO_AJUSTE_VALOR_PAGO'])
+        + len(buckets['PARCIAL_AJUSTE_VALOR_PAGO'])
+    )
+
     linhas = [
-        '=== DIAGNÓSTICO DE SALDOS (DRY-RUN — sem alterações no banco) ===',
+        '=== DIAGNÓSTICO DE SALDOS (DRY-RUN — MÃO ÚNICA — sem alterações no banco) ===',
         f'Empresa (tenant): {eid}',
         f'Total de vendas avaliadas: {len(vendas)}',
         '',
-        '--- RECUPERAÇÃO esperada (resync vai CONSERTAR) ---',
-        f'  PENDENTE -> PAGO     : {len(buckets["PENDENTE_PARA_PAGO"]):>5}  IDs: {_amostra(buckets["PENDENTE_PARA_PAGO"])}',
-        f'  PENDENTE -> PARCIAL  : {len(buckets["PENDENTE_PARA_PARCIAL"]):>5}  IDs: {_amostra(buckets["PENDENTE_PARA_PARCIAL"])}',
-        f'  PARCIAL  -> PAGO     : {len(buckets["PARCIAL_PARA_PAGO"]):>5}  IDs: {_amostra(buckets["PARCIAL_PARA_PAGO"])}',
+        '--- PROMOÇÕES de situação (resync vai SUBIR status) ---',
+        f'  PENDENTE -> PAGO         : {len(buckets["PENDENTE_PARA_PAGO"]):>5}  IDs: {_amostra(buckets["PENDENTE_PARA_PAGO"])}',
+        f'  PENDENTE -> PARCIAL      : {len(buckets["PENDENTE_PARA_PARCIAL"]):>5}  IDs: {_amostra(buckets["PENDENTE_PARA_PARCIAL"])}',
+        f'  PARCIAL  -> PAGO         : {len(buckets["PARCIAL_PARA_PAGO"]):>5}  IDs: {_amostra(buckets["PARCIAL_PARA_PAGO"])}',
         '',
-        '--- PERIGO (resync vai REGREDIR — ABORTAR se houver) ---',
-        f'  PAGO    -> PENDENTE : {len(buckets["PAGO_PARA_PENDENTE"]):>5}  IDs: {_amostra(buckets["PAGO_PARA_PENDENTE"])}',
-        f'  PAGO    -> PARCIAL  : {len(buckets["PAGO_PARA_PARCIAL"]):>5}  IDs: {_amostra(buckets["PAGO_PARA_PARCIAL"])}',
-        f'  PARCIAL -> PENDENTE : {len(buckets["PARCIAL_PARA_PENDENTE"]):>5}  IDs: {_amostra(buckets["PARCIAL_PARA_PENDENTE"])}',
+        '--- AJUSTES de valor_pago (status preservado) ---',
+        f'  PAGO    + valor_pago=0   : {len(buckets["PAGO_AJUSTE_VALOR_PAGO"]):>5}  IDs: {_amostra(buckets["PAGO_AJUSTE_VALOR_PAGO"])}',
+        f'  PARCIAL  sobe valor_pago : {len(buckets["PARCIAL_AJUSTE_VALOR_PAGO"]):>5}  IDs: {_amostra(buckets["PARCIAL_AJUSTE_VALOR_PAGO"])}',
         '',
         '--- INALTERADAS ---',
-        f'  Sem mudança         : {len(buckets["SEM_MUDANCA"]):>5}',
-        f'  PERDA (ignoradas)   : {len(buckets["PERDA"]):>5}',
-        f'  Outros casos        : {len(buckets["OUTROS"]):>5}  Detalhe: {_amostra(buckets["OUTROS"])}',
+        f'  Sem mudança             : {len(buckets["SEM_MUDANCA"]):>5}',
+        f'  PERDA (ignoradas)       : {len(buckets["PERDA"]):>5}',
+        f'  Outros casos            : {len(buckets["OUTROS"]):>5}  Detalhe: {_amostra(buckets["OUTROS"])}',
         '',
         '--- DECISÃO ---',
-        ('  OK aplicar /admin/recuperar_saldos.'
-         if (len(buckets["PAGO_PARA_PENDENTE"]) + len(buckets["PAGO_PARA_PARCIAL"]) + len(buckets["PARCIAL_PARA_PENDENTE"])) == 0
-         else '  PARAR. Há vendas pagas que regrediriam. Investigar descrições antes de aplicar.'),
+        f'  Total de promoções     : {total_promocoes}',
+        f'  Total de ajustes       : {total_ajustes}',
+        '  Modo MÃO ÚNICA: nenhuma venda PAGO/PARCIAL será rebaixada.',
+        '  OK aplicar /admin/recuperar_saldos.',
     ]
     output = '\n'.join(linhas)
     logging.info(
-        '[DIAG-SALDOS] empresa=%s total=%d pend_para_pago=%d pago_para_pend=%d',
-        eid, len(vendas),
-        len(buckets['PENDENTE_PARA_PAGO']),
-        len(buckets['PAGO_PARA_PENDENTE']),
+        '[DIAG-SALDOS-SEGURO] empresa=%s total=%d promocoes=%d ajustes=%d',
+        eid, len(vendas), total_promocoes, total_ajustes,
     )
     return output, 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
@@ -288,15 +353,19 @@ def diagnosticar_saldos():
 @master_bp.route('/admin/recuperar_saldos', methods=['GET'])
 @login_required
 def recuperar_saldos():
-    """APLICA: ressincroniza ``valor_pago``/``situacao`` das vendas do tenant.
+    """APLICA (MÃO ÚNICA): só promove ``situacao`` (PENDENTE → PARCIAL →
+    PAGO). Nunca rebaixa.
 
-    Para cada venda do tenant atual, chama ``_resincronizar_pagamento_venda``
-    (que soma ``LancamentoCaixa`` com descrição ``Venda #N -%`` e
-    reclassifica a situação) e persiste tudo num único commit no final.
+    Usa ``_resincronizar_pagamento_venda_seguro``, que respeita o
+    histórico legado: vendas já marcadas como PAGO **não** regridem
+    para PENDENTE mesmo quando não existem ``LancamentoCaixa`` com
+    descrição ``Venda #N -%`` (caso comum em vendas marcadas pelo
+    badge ``atualizar_situacao_rapida`` ou importadas via CSV).
+
+    Persiste tudo num único commit no final.
 
     USO RECOMENDADO: rode antes ``GET /admin/diagnosticar_saldos`` para
-    confirmar que não há vendas pagas que regredirão. Esta rota não
-    pergunta antes de aplicar.
+    estimar o impacto. Esta rota não pergunta antes de aplicar.
 
     Multi-tenant: ``query_tenant(Venda)`` garante escopo do usuário logado.
     """
@@ -307,7 +376,7 @@ def recuperar_saldos():
     for venda in vendas:
         situacao_antes = venda.situacao
         valor_pago_antes = venda.valor_pago
-        if _resincronizar_pagamento_venda(venda):
+        if _resincronizar_pagamento_venda_seguro(venda):
             if (venda.situacao != situacao_antes
                     or venda.valor_pago != valor_pago_antes):
                 alteradas += 1
@@ -315,7 +384,7 @@ def recuperar_saldos():
     ok, err = _safe_db_commit()
     if not ok:
         logging.error(
-            '[RECUPERAR-SALDOS] commit falhou empresa=%s err=%s',
+            '[RECUPERAR-SALDOS-SEGURO] commit falhou empresa=%s err=%s',
             eid, err,
         )
         return (
@@ -326,12 +395,13 @@ def recuperar_saldos():
         )
 
     logging.info(
-        '[RECUPERAR-SALDOS] empresa=%s total=%d alteradas=%d',
+        '[RECUPERAR-SALDOS-SEGURO] empresa=%s total=%d alteradas=%d',
         eid, len(vendas), alteradas,
     )
     return (
-        f'Sucesso! {len(vendas)} vendas recalculadas. '
-        f'{alteradas} tiveram a situação ou valor_pago alterado.',
+        f'Sucesso (modo MÃO ÚNICA)! {len(vendas)} vendas recalculadas. '
+        f'{alteradas} tiveram a situação ou valor_pago alterado. '
+        f'Nenhuma venda PAGO foi rebaixada.',
         200,
         {'Content-Type': 'text/plain; charset=utf-8'},
     )

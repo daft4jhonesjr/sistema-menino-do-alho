@@ -22,6 +22,11 @@ Estas funções são **inerentemente cross-blueprint** — usadas por
   PARCIAL/PAGO. **Use sempre** após criar/editar/deletar lançamentos
   de caixa que afetam vendas — substitui a lógica frágil de
   delta-a-delta. Não faz commit; o chamador agrupa a transação.
+* ``_resincronizar_pagamento_venda_seguro(venda)`` — variante MÃO
+  ÚNICA do anterior: só promove (PENDENTE → PARCIAL → PAGO), nunca
+  rebaixa. Use em rotas administrativas de recuperação de saldos
+  sobre histórico legado (vendas marcadas como PAGO via badge/CSV
+  que não geraram lançamento no caixa).
 """
 
 from app import (
@@ -29,6 +34,7 @@ from app import (
     _apagar_lancamentos_caixa_por_vendas,
     _produto_com_lock,
     _resincronizar_pagamento_venda,
+    _resincronizar_pagamento_venda_seguro,
 )
 
 __all__ = [
@@ -36,4 +42,5 @@ __all__ = [
     '_apagar_lancamentos_caixa_por_vendas',
     '_produto_com_lock',
     '_resincronizar_pagamento_venda',
+    '_resincronizar_pagamento_venda_seguro',
 ]

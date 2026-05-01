@@ -3996,6 +3996,94 @@ def _resincronizar_pagamento_venda(venda):
         raise
 
 
+def _resincronizar_pagamento_venda_seguro(venda):
+    """Versão MÃO ÚNICA de ``_resincronizar_pagamento_venda``.
+
+    Diferença essencial: este resync **só promove** a situação da venda
+    (PENDENTE → PARCIAL → PAGO) e **nunca rebaixa**. Foi criado para
+    rotas administrativas de recuperação de saldos sobre histórico
+    legado, onde existem vendas marcadas como PAGO via badge/CSV/banco
+    direto que nunca geraram ``LancamentoCaixa`` com o padrão
+    ``Venda #N -%``. A função tradicional iria zerar essas vendas; esta
+    aqui respeita a intenção registrada em ``situacao``.
+
+    Regras:
+        * Vendas PERDA: ignoradas (return False).
+        * Já PAGO + valor_pago coerente com total: nada a fazer.
+        * Já PAGO + valor_pago zerado: confia em ``situacao``, sobe
+          ``valor_pago`` para o total. Não rebaixa status.
+        * PARCIAL: pode subir para PAGO (se a soma do caixa cobrir o
+          total) e ``valor_pago`` só pode crescer. Nunca cai para
+          PENDENTE, mesmo que o caixa não tenha lançamentos.
+        * PENDENTE: pode subir livremente para PARCIAL ou PAGO conforme
+          os lançamentos do caixa.
+
+    NÃO faz commit — chamador agrupa.
+
+    Returns:
+        bool: True se houve mudança em ``valor_pago`` ou ``situacao``;
+        False se nada foi alterado (ou venda inválida/PERDA).
+    """
+    if venda is None or getattr(venda, 'id', None) is None:
+        return False
+    if str(getattr(venda, 'tipo_operacao', '') or '').strip().upper() == 'PERDA':
+        return False
+
+    situacao_atual = (venda.situacao or '').strip().upper()
+    valor_total = Decimal(str(venda.calcular_total() or Decimal('0.00')))
+    valor_pago_atual = Decimal(str(venda.valor_pago or Decimal('0.00')))
+
+    # GUARDA-COSTAS 1: vendas já PAGO nunca regridem.
+    # Se valor_pago bate com total (tolerância 1 centavo), nada a fazer.
+    # Se valor_pago está zerado/baixo (caso clássico do badge/CSV legado
+    # que marcou PAGO sem registrar pagamento), corrige só o valor_pago
+    # para refletir a intenção registrada em ``situacao``.
+    if situacao_atual == 'PAGO':
+        if valor_pago_atual >= (valor_total - Decimal('0.01')):
+            return False
+        venda.valor_pago = valor_total
+        return True
+
+    try:
+        eid = getattr(venda, 'empresa_id', None)
+        q = LancamentoCaixa.query.filter(
+            LancamentoCaixa.tipo == 'ENTRADA',
+            LancamentoCaixa.descricao.like(f"Venda #{venda.id} -%"),
+        )
+        if eid is not None:
+            q = q.filter(LancamentoCaixa.empresa_id == eid)
+        total_pago = Decimal(str(q.with_entities(
+            func.coalesce(func.sum(LancamentoCaixa.valor), 0)
+        ).scalar() or 0))
+        if total_pago < Decimal('0.00'):
+            total_pago = Decimal('0.00')
+
+        # GUARDA-COSTAS 2: valor_pago só pode crescer nesta operação.
+        novo_valor_pago = max(total_pago, valor_pago_atual)
+
+        if situacao_atual == 'PARCIAL':
+            if novo_valor_pago >= (valor_total - Decimal('0.01')):
+                venda.valor_pago = valor_total
+                venda.situacao = 'PAGO'
+                return True
+            if novo_valor_pago > valor_pago_atual:
+                venda.valor_pago = novo_valor_pago
+                return True
+            return False
+
+        # PENDENTE (ou status vazio): pode subir livremente.
+        if novo_valor_pago <= Decimal('0.01'):
+            return False
+        venda.valor_pago = novo_valor_pago
+        if novo_valor_pago >= (valor_total - Decimal('0.01')):
+            venda.situacao = 'PAGO'
+        else:
+            venda.situacao = 'PARCIAL'
+        return True
+    except Exception:
+        raise
+
+
 @app.route('/sw.js')
 def service_worker():
     """Serve o Service Worker com o tipo MIME correto."""
