@@ -16,6 +16,7 @@ Estado atual:
     * ``vendas_bp``      → /vendas, /vendas/novo, /vendas/editar, /vendas/excluir,
                            /vendas/importar, /vendas/exportar_relatorio,
                            /vendas/<id>/atualizar_situacao_rapida,
+                           /venda/<id>/receber_pagamento,
                            /venda/excluir_item, /venda/atualizar_status,
                            /venda/adicionar_item, /venda/recibo,
                            /processar_carrinho, /add_venda, /api/pedidos,

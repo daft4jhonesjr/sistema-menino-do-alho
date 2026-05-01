@@ -914,10 +914,14 @@
                         '<td class="px-4 py-3 text-sm font-medium text-right whitespace-nowrap valor-financeiro ' + lucroClass + '">' + lucroStr + '</td>' +
                         '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">' + (v.empresa || '-') + '</td>' +
                         '<td class="px-4 py-3 whitespace-nowrap">' +
-                            '<select onchange="atualizarSituacaoInline(this, ' + vendaId + ')" class="px-3 py-1 text-xs font-bold rounded-full outline-none cursor-pointer appearance-none text-center transition-colors border-0 ' + sitClass + '">' +
+                            // PARCIAL não é selecionável aqui — é estado derivado de pagamento
+                            // parcial registrado pelo botão "Receber Pagamento" da listagem de vendas.
+                            // Mantemos como <option disabled> só quando a venda já está PARCIAL,
+                            // pra indicar visualmente o estado sem permitir selecioná-lo.
+                            '<select onchange="atualizarSituacaoInline(this, ' + vendaId + ')" data-situacao-anterior="' + sit + '" class="px-3 py-1 text-xs font-bold rounded-full outline-none cursor-pointer appearance-none text-center transition-colors border-0 ' + sitClass + '">' +
                                 '<option value="PENDENTE"' + (sit === 'PENDENTE' ? ' selected' : '') + '>PENDENTE</option>' +
                                 '<option value="PAGO"' + (sit === 'PAGO' ? ' selected' : '') + '>PAGO</option>' +
-                                '<option value="PARCIAL"' + (sit === 'PARCIAL' ? ' selected' : '') + '>PARCIAL</option>' +
+                                (sit === 'PARCIAL' ? '<option value="PARCIAL" selected disabled>PARCIAL</option>' : '') +
                                 '<option value="PERDA"' + (sit === 'PERDA' ? ' selected' : '') + '>PERDA</option>' +
                             '</select>' +
                         '</td>' +
@@ -969,12 +973,22 @@
             return;
         }
         var novaSituacao = String(selectElement && selectElement.value ? selectElement.value : 'PENDENTE').toUpperCase();
+        var situacaoAnterior = selectElement.getAttribute('data-situacao-anterior') || 'PENDENTE';
         var baseClasses = ['bg-emerald-100', 'text-emerald-800', 'bg-orange-100', 'text-orange-800', 'bg-red-100', 'text-red-800', 'bg-amber-100', 'text-amber-800'];
         baseClasses.forEach(function(c) { selectElement.classList.remove(c); });
         if (novaSituacao === 'PAGO') selectElement.classList.add('bg-emerald-100', 'text-emerald-800');
         else if (novaSituacao === 'PARCIAL') selectElement.classList.add('bg-orange-100', 'text-orange-800');
         else if (novaSituacao === 'PERDA') selectElement.classList.add('bg-red-100', 'text-red-800');
         else selectElement.classList.add('bg-amber-100', 'text-amber-800');
+
+        function reverter() {
+            selectElement.value = situacaoAnterior;
+            baseClasses.forEach(function(c) { selectElement.classList.remove(c); });
+            if (situacaoAnterior === 'PAGO') selectElement.classList.add('bg-emerald-100', 'text-emerald-800');
+            else if (situacaoAnterior === 'PARCIAL') selectElement.classList.add('bg-orange-100', 'text-orange-800');
+            else if (situacaoAnterior === 'PERDA') selectElement.classList.add('bg-red-100', 'text-red-800');
+            else selectElement.classList.add('bg-amber-100', 'text-amber-800');
+        }
 
         try {
             var headers = Object.assign({ 'Content-Type': 'application/json' }, window.getCsrfHeaders ? window.getCsrfHeaders() : {});
@@ -983,7 +997,17 @@
                 headers: headers,
                 body: JSON.stringify({ situacao: novaSituacao })
             });
-            if (!response.ok) throw new Error('Falha ao atualizar');
+            if (!response.ok) {
+                var msg = 'Falha ao atualizar.';
+                try {
+                    var data = await response.json();
+                    if (data && data.mensagem) msg = data.mensagem;
+                } catch (e) { /* mensagem genérica */ }
+                alert(msg);
+                reverter();
+                return;
+            }
+            selectElement.setAttribute('data-situacao-anterior', novaSituacao);
         } catch (error) {
             alert('Erro ao atualizar a situação no banco de dados. A página será recarregada.');
             window.location.reload();

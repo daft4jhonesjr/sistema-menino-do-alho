@@ -15,6 +15,7 @@ Rotas extraídas do legado ``app.py`` (Fase 3 da refatoração):
     * POST /vendas/excluir/<id>                     excluir_venda
     * POST /venda/atualizar_status/<id_venda>       atualizar_status_venda
     * POST /vendas/<id>/atualizar_situacao_rapida   atualizar_situacao_rapida
+    * POST /venda/<id>/receber_pagamento            receber_pagamento_venda
     * GET  /venda/recibo/<id>                       recibo_venda
     * GET  /api/pedidos                             api_pedidos
     * POST /vendas/deletar_massa                    vendas_deletar_massa
@@ -33,7 +34,7 @@ permanecem em ``app.py`` e são importados via late import porque são usados
 por documentos e pelo módulo de processamento automático de PDFs.
 """
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from math import ceil
 import csv
 import io
@@ -67,6 +68,7 @@ from services.files_utils import _deletar_cloudinary_seguro
 from services.vendas_services import (
     _vendas_do_pedido, _apagar_lancamentos_caixa_por_vendas,
     _produto_com_lock,
+    _resincronizar_pagamento_venda,
 )
 from services.csv_utils import (
     _msg_linha, _strip_quotes,
@@ -1627,8 +1629,19 @@ def atualizar_status_venda(id_venda):
         return redirect(url_for('vendas.listar_vendas'))
     atual = vendas_financeiras[0].situacao if vendas_financeiras else 'PENDENTE'
     novo = 'PAGO' if atual == 'PENDENTE' else 'PENDENTE'
+    # Sincroniza ``situacao`` E ``valor_pago`` em UM SÓ ponto para evitar
+    # o bug histórico do badge: virar PAGO mexendo só em ``situacao`` e
+    # deixar ``valor_pago=0``. Isso entupia o ``recuperar_saldos`` com
+    # vendas no bucket ``PAGO_AJUSTE_VALOR_PAGO`` toda vez que o usuário
+    # clicava no badge. Ao reverter para PENDENTE, zeramos ``valor_pago``
+    # — o lançamento de caixa associado é deletado abaixo (``elif not
+    # status_pago``), então o saldo lógico bate.
     for v in vendas_financeiras:
         v.situacao = novo
+        if novo == 'PAGO':
+            v.valor_pago = Decimal(str(v.calcular_total() or Decimal('0.00')))
+        else:
+            v.valor_pago = Decimal('0.00')
     # --- INTEGRAÇÃO COM CAIXA (PILOTO AUTOMÁTICO V4) ---
     lancamentos_existentes = query_tenant(LancamentoCaixa).filter(
         LancamentoCaixa.descricao.like(f"Venda #{venda.id} -%")
@@ -1702,21 +1715,105 @@ def atualizar_status_venda(id_venda):
 
 @vendas_bp.route('/vendas/<int:id>/atualizar_situacao_rapida', methods=['POST'])
 def atualizar_situacao_rapida(id):
+    """Mudança rápida de situação via select no modal de edição.
+
+    Aceita: PENDENTE, PAGO, PERDA.
+
+    **NÃO aceita PARCIAL** — o estado PARCIAL é uma derivação automática
+    da soma de ``LancamentoCaixa`` vs total da venda. Forçar PARCIAL
+    pelo select cria venda com ``valor_pago=0`` mas ``situacao='PARCIAL'``,
+    que é fisicamente impossível e quebra ``recuperar_saldos``. O fluxo
+    correto para criar PARCIAL é o botão "Receber Pagamento" na listagem,
+    que aceita um valor e gera o ``LancamentoCaixa``.
+
+    Mudança PENDENTE → PAGO: cria ``LancamentoCaixa`` de ENTRADA e seta
+    ``valor_pago = total``. Espelha a lógica de ``atualizar_status_venda``
+    (sem iterar pelos itens do pedido — esta rota é por venda individual).
+
+    Mudança PAGO → PENDENTE: deleta o(s) ``LancamentoCaixa`` associado(s)
+    pela descrição ``Venda #N -%`` e zera ``valor_pago``.
+    """
     try:
         data = request.get_json(silent=True) or {}
         nova_situacao = str(data.get('situacao') or '').strip().upper()
-        if nova_situacao not in ('PENDENTE', 'PAGO', 'PARCIAL', 'PERDA'):
+        if nova_situacao == 'PARCIAL':
+            return jsonify({
+                'status': 'erro',
+                'mensagem': (
+                    'Para registrar pagamento parcial, use o botão '
+                    '"Receber Pagamento" na linha da venda. Ele permite '
+                    'informar o valor recebido e gera o lançamento no caixa.'
+                ),
+            }), 400
+        if nova_situacao not in ('PENDENTE', 'PAGO', 'PERDA'):
             return jsonify({'status': 'erro', 'mensagem': 'Situação inválida.'}), 400
 
         venda = query_tenant(Venda).filter_by(id=id).first_or_404()
         if not _usuario_pode_gerenciar_venda(venda):
             return jsonify({'status': 'erro', 'mensagem': 'Acesso negado.'}), 403
         _assumir_ownership_venda_orfa(venda)
+
+        situacao_atual = (venda.situacao or '').strip().upper()
         venda.situacao = nova_situacao
+
         if nova_situacao == 'PERDA':
             venda.forma_pagamento = None
             venda.preco_venda = Decimal('0')
             venda.tipo_operacao = 'PERDA'
+            venda.valor_pago = Decimal('0.00')
+        elif nova_situacao == 'PAGO':
+            valor_total = Decimal(str(venda.calcular_total() or Decimal('0.00')))
+            venda.valor_pago = valor_total
+            # Cria lançamento no caixa só se ainda não existir um casando
+            # ``Venda #N -%``. Evita duplicar quando o usuário alterna o
+            # select PAGO → PAGO (idempotência defensiva).
+            if valor_total > Decimal('0.00') and situacao_atual != 'PAGO':
+                lancamentos_existentes = query_tenant(LancamentoCaixa).filter(
+                    LancamentoCaixa.descricao.like(f"Venda #{venda.id} -%")
+                ).all()
+                if not lancamentos_existentes:
+                    cliente = query_tenant(Cliente).filter_by(id=venda.cliente_id).first()
+                    nome_cliente = cliente.nome_cliente if cliente else 'Cliente Avulso'
+                    forma_pgto = (
+                        data.get('forma_pagamento')
+                        or venda.forma_pagamento
+                        or 'Dinheiro'
+                    )
+                    forma_pgto_upper = str(forma_pgto or '').upper()
+                    data_venc = getattr(venda, 'data_vencimento', None)
+                    data_lanc = data_venc if ('BOLETO' in forma_pgto_upper and data_venc) else date.today()
+                    novo_lanc = LancamentoCaixa(
+                        data=data_lanc,
+                        descricao=f"Venda #{venda.id} - {nome_cliente}",
+                        tipo='ENTRADA',
+                        categoria='Entrada Cliente',
+                        forma_pagamento=forma_pgto,
+                        valor=valor_total,
+                        usuario_id=current_user.id,
+                        empresa_id=empresa_id_atual(),
+                    )
+                    db.session.add(novo_lanc)
+                    if 'boleto' in str(forma_pgto or '').lower():
+                        repasse_lanc = LancamentoCaixa(
+                            data=data_lanc,
+                            descricao=f"Venda #{venda.id} - {nome_cliente} (Repasse Fornecedor)",
+                            tipo='SAIDA',
+                            categoria='Saída Fornecedor',
+                            forma_pagamento=forma_pgto,
+                            valor=valor_total,
+                            usuario_id=current_user.id,
+                            empresa_id=empresa_id_atual(),
+                        )
+                        db.session.add(repasse_lanc)
+        else:  # PENDENTE
+            # Reabre a cobrança: deleta lançamentos da venda e zera valor_pago.
+            if situacao_atual in ('PAGO', 'PARCIAL'):
+                lancamentos_existentes = query_tenant(LancamentoCaixa).filter(
+                    LancamentoCaixa.descricao.like(f"Venda #{venda.id} -%")
+                ).all()
+                for lanc in lancamentos_existentes:
+                    db.session.delete(lanc)
+            venda.valor_pago = Decimal('0.00')
 
         db.session.commit()
         limpar_cache_dashboard()
@@ -1725,6 +1822,171 @@ def atualizar_situacao_rapida(id):
         db.session.rollback()
         current_app.logger.exception('Falha ao atualizar situação rápida da venda')
         return jsonify({'status': 'erro', 'mensagem': str(e)}), 500
+
+
+@vendas_bp.route('/venda/<int:id>/receber_pagamento', methods=['POST'])
+def receber_pagamento_venda(id):
+    """Recebe um pagamento (parcial ou total) para uma venda específica.
+
+    Espelha a UX do modal "Receber Pagamento Inteligente" da listagem
+    de clientes, mas escopado a UMA venda em vez de iterar pelas vendas
+    pendentes do cliente. Esse é o caminho oficial para criar/atualizar
+    o estado PARCIAL.
+
+    Aceita JSON ou form-data com:
+        valor (str ou número): valor recebido. Aceita formato BR
+            ("1.000,00"), formato US ("1000.00") ou número puro.
+        forma_pagamento (str, opcional): default "Dinheiro".
+        data_pagamento (str AAAA-MM-DD, opcional): default hoje.
+
+    Fluxo:
+        1. Calcula saldo devedor (``total - valor_pago``).
+        2. Se ``valor_recebido > saldo_devedor``, trata como pagamento
+           total (não cria troco).
+        3. Cria ``LancamentoCaixa`` ENTRADA com descrição
+           ``Venda #N - <cliente> (Abatimento)``. Se forma=BOLETO,
+           cria também o ``Repasse Abatimento`` (espelhando
+           ``receber_lote_cliente``).
+        4. Chama ``_resincronizar_pagamento_venda(venda)`` que recalcula
+           ``valor_pago`` (agora bate com a soma do caixa) e atualiza
+           ``situacao`` para PARCIAL ou PAGO.
+
+    Retorna JSON com a nova situação, valor_pago e saldo devedor para
+    o frontend atualizar a linha sem F5.
+    """
+    try:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+
+        venda = query_tenant(Venda).filter_by(id=id).first_or_404()
+        if not _usuario_pode_gerenciar_venda(venda):
+            return jsonify({'ok': False, 'mensagem': 'Acesso negado.'}), 403
+        _assumir_ownership_venda_orfa(venda)
+
+        if str(getattr(venda, 'tipo_operacao', 'VENDA') or 'VENDA').upper() == 'PERDA':
+            return jsonify({
+                'ok': False,
+                'mensagem': 'Vendas marcadas como PERDA/QUEBRA não recebem pagamento.',
+            }), 400
+
+        situacao_atual = (venda.situacao or '').strip().upper()
+        if situacao_atual == 'PAGO':
+            return jsonify({
+                'ok': False,
+                'mensagem': 'Esta venda já está PAGA.',
+            }), 400
+
+        payload = request.get_json(silent=True) or {}
+        if not payload and request.form:
+            payload = request.form.to_dict()
+
+        valor_raw = str(payload.get('valor') or '').strip()
+        valor_str = valor_raw.replace('R$', '').replace(' ', '').strip()
+        if ',' in valor_str:
+            valor_str = valor_str.replace('.', '').replace(',', '.')
+        try:
+            valor_recebido = Decimal(valor_str) if valor_str else Decimal('0.00')
+        except (InvalidOperation, ValueError):
+            return jsonify({
+                'ok': False,
+                'mensagem': 'Valor inválido. Use o formato 1.000,00.',
+            }), 400
+        if valor_recebido <= Decimal('0.00'):
+            return jsonify({
+                'ok': False,
+                'mensagem': 'Informe um valor maior que zero.',
+            }), 400
+
+        forma_pgto = (payload.get('forma_pagamento') or 'Dinheiro').strip() or 'Dinheiro'
+
+        data_pgto_raw = (payload.get('data_pagamento') or '').strip()
+        if data_pgto_raw:
+            try:
+                data_pagamento = date.fromisoformat(data_pgto_raw)
+            except ValueError:
+                return jsonify({
+                    'ok': False,
+                    'mensagem': 'Data inválida. Use AAAA-MM-DD.',
+                }), 400
+        else:
+            data_pagamento = date.today()
+
+        valor_total = Decimal(str(venda.calcular_total() or Decimal('0.00')))
+        valor_pago_atual = Decimal(str(venda.valor_pago or Decimal('0.00')))
+        saldo_devedor = valor_total - valor_pago_atual
+        if saldo_devedor <= Decimal('0.00'):
+            return jsonify({
+                'ok': False,
+                'mensagem': 'Esta venda já está totalmente paga.',
+            }), 400
+
+        valor_abatido = min(valor_recebido, saldo_devedor)
+
+        cliente = query_tenant(Cliente).filter_by(id=venda.cliente_id).first()
+        nome_cliente = cliente.nome_cliente if cliente else 'Cliente Avulso'
+
+        novo_lanc = LancamentoCaixa(
+            data=data_pagamento,
+            descricao=f"Venda #{venda.id} - {nome_cliente} (Abatimento)",
+            tipo='ENTRADA',
+            categoria='Entrada Cliente',
+            forma_pagamento=forma_pgto,
+            valor=valor_abatido,
+            usuario_id=current_user.id,
+            empresa_id=empresa_id_atual(),
+        )
+        db.session.add(novo_lanc)
+
+        if 'boleto' in forma_pgto.lower():
+            repasse_lanc = LancamentoCaixa(
+                data=data_pagamento,
+                descricao=f"Venda #{venda.id} - {nome_cliente} (Repasse Abatimento)",
+                tipo='SAIDA',
+                categoria='Saída Fornecedor',
+                forma_pagamento=forma_pgto,
+                valor=valor_abatido,
+                usuario_id=current_user.id,
+                empresa_id=empresa_id_atual(),
+            )
+            db.session.add(repasse_lanc)
+
+        db.session.flush()
+        _resincronizar_pagamento_venda(venda)
+        db.session.commit()
+        limpar_cache_dashboard()
+
+        registrar_log(
+            'PAGAR', 'VENDAS',
+            f"Pagamento de R$ {valor_abatido:.2f} ({forma_pgto}) registrado "
+            f"na Venda #{venda.id} (Cliente: {nome_cliente}, NF: {venda.nf or '-'}). "
+            f"Nova situação: {venda.situacao}.",
+        )
+
+        novo_valor_pago = Decimal(str(venda.valor_pago or Decimal('0.00')))
+        novo_saldo = max(valor_total - novo_valor_pago, Decimal('0.00'))
+
+        return jsonify({
+            'ok': True,
+            'mensagem': f'Pagamento de R$ {valor_abatido:.2f} registrado.',
+            'venda': {
+                'id': venda.id,
+                'situacao': venda.situacao,
+                'valor_total': float(valor_total),
+                'valor_pago': float(novo_valor_pago),
+                'saldo_devedor': float(novo_saldo),
+                'valor_abatido': float(valor_abatido),
+            },
+        }), 200
+    except Exception as e:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        current_app.logger.exception('Falha ao receber pagamento da venda')
+        msg = str(e) or repr(e) or e.__class__.__name__
+        return jsonify({'ok': False, 'mensagem': f'Erro ao registrar pagamento: {msg}'}), 500
 
 
 @vendas_bp.route('/venda/recibo/<int:id>')

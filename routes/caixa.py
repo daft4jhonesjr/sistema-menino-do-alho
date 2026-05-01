@@ -1125,6 +1125,13 @@ def importar_caixa():
             erros = []
             adicionados_no_batch = 0
             total_lidas = 0
+            # Conjunto de IDs de venda referenciadas em descrições do tipo
+            # ``Venda #N``. Ressincronizamos no FIM da importação (depois
+            # do commit final), porque commits em batch já gravaram os
+            # ``LancamentoCaixa`` — ``_resincronizar_pagamento_venda`` lê
+            # do banco. Agrupar num set evita recalcular a mesma venda
+            # várias vezes quando o CSV traz N parcelas da mesma.
+            venda_ids_para_ressync = set()
 
             for i, linha in enumerate(leitor, start=1):
                 total_lidas = i
@@ -1195,6 +1202,14 @@ def importar_caixa():
                     linhas_sucesso += 1
                     adicionados_no_batch += 1
 
+                    if tipo_lancamento == 'ENTRADA':
+                        match = _RE_MARCADOR_VENDA.search(descricao or '')
+                        if match:
+                            try:
+                                venda_ids_para_ressync.add(int(match.group(1)))
+                            except (TypeError, ValueError):
+                                pass
+
                     if adicionados_no_batch >= BATCH_SIZE:
                         ok, err = _safe_db_commit()
                         if not ok:
@@ -1241,6 +1256,43 @@ def importar_caixa():
                     # não chegaram a persistir.
                     linhas_sucesso -= adicionados_no_batch
                     adicionados_no_batch = 0
+
+            # Ressincroniza vendas referenciadas pelas descrições
+            # importadas. Sem isso, o CSV traria os pagamentos para
+            # ``LancamentoCaixa`` mas as ``Venda`` ficariam PENDENTE
+            # com valor cheio. Faz num commit dedicado, porque os
+            # ``LancamentoCaixa`` já estão persistidos pelos batches
+            # anteriores (``_resincronizar_pagamento_venda`` faz SELECT,
+            # então precisa do estado committado).
+            if venda_ids_para_ressync:
+                try:
+                    _resincronizar_vendas_por_ids(venda_ids_para_ressync)
+                    ok_rs, err_rs = _safe_db_commit()
+                    if not ok_rs:
+                        current_app.logger.warning(
+                            f"[CAIXA-IMPORT] ressync-commit-fail "
+                            f"vendas={len(venda_ids_para_ressync)} err={err_rs}"
+                        )
+                        try:
+                            db.session.rollback()
+                        except Exception:
+                            pass
+                    else:
+                        current_app.logger.info(
+                            f"[CAIXA-IMPORT] ressync-commit-ok "
+                            f"vendas_ressync={len(venda_ids_para_ressync)}"
+                        )
+                except Exception as e_rs:
+                    try:
+                        db.session.rollback()
+                    except Exception:
+                        pass
+                    current_app.logger.error(
+                        f"[CAIXA-IMPORT] ressync-exception "
+                        f"vendas={len(venda_ids_para_ressync)} "
+                        f"type={e_rs.__class__.__name__} msg={str(e_rs)!r}",
+                        exc_info=True,
+                    )
 
             if linhas_sucesso > 0:
                 current_app.logger.info(
