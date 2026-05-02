@@ -291,17 +291,59 @@ def dashboard():
      .order_by(desc('lucro_total')) \
      .limit(10).all()
 
-    # KPI 3: Financeiro - Pendente
-    total_pendente = db.session.query(
-        func.sum(Venda.preco_venda * Venda.quantidade_venda)
-    ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id) \
-     .filter(Venda.situacao == 'PENDENTE', filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
+    # KPI 3 e 4: Financeiro - Pendente e Pago.
+    # ---------------------------------------------------------------
+    # Antes da correção, o card "Pendente" filtrava só situacao == 'PENDENTE'
+    # e somava o valor cheio da venda — vendas PARCIAL (pagamento em lote
+    # via receber_lote_cliente) sumiam do KPI, e o saldo devedor real
+    # (total - valor_pago) nunca aparecia. O card "Pago" tinha o
+    # problema oposto: filtrava só 'PAGO' estrito, ignorando o
+    # valor_pago de PARCIAIS. Resultado: parte do dinheiro real
+    # desaparecia entre os dois cards quando havia pagamentos parciais.
+    #
+    # Regra correta:
+    #   * Pendente = SUM(valor cheio) das PENDENTE + SUM(saldo devedor)
+    #     das PARCIAL.
+    #   * Pago     = SUM(valor cheio) das PAGO + SUM(valor_pago) das
+    #     PARCIAL. (Para PAGO mantemos o valor cheio porque o resync
+    #     canonico ja garante valor_pago ~ total; vendas com bug
+    #     historico de valor_pago=0 mas situacao=PAGO continuam
+    #     contabilizadas pelo valor real, alinhado ao
+    #     _resincronizar_pagamento_venda_seguro.)
+    #
+    # Exclui PERDA explicitamente (defensivo: protege contra dado
+    # historico onde uma PERDA pode estar com situacao indevida).
+    valor_venda_expr = Venda.preco_venda * Venda.quantidade_venda
+    saldo_devedor_expr = valor_venda_expr - func.coalesce(Venda.valor_pago, 0)
+    filtro_sem_perda = func.upper(func.coalesce(Venda.tipo_operacao, 'VENDA')) != 'PERDA'
 
-    # KPI 4: Financeiro - Pago
-    total_pago = db.session.query(
-        func.sum(Venda.preco_venda * Venda.quantidade_venda)
+    total_pendente = db.session.query(
+        func.coalesce(func.sum(case(
+            (Venda.situacao == 'PENDENTE', valor_venda_expr),
+            (Venda.situacao == 'PARCIAL', saldo_devedor_expr),
+            else_=0,
+        )), 0)
     ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id) \
-     .filter(Venda.situacao == 'PAGO', filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
+     .filter(
+        Venda.situacao.in_(['PENDENTE', 'PARCIAL']),
+        filtro_sem_perda,
+        filtro_tenant_venda, filtro_ano_venda,
+        filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome,
+     ).scalar() or 0
+
+    total_pago = db.session.query(
+        func.coalesce(func.sum(case(
+            (Venda.situacao == 'PAGO', valor_venda_expr),
+            (Venda.situacao == 'PARCIAL', func.coalesce(Venda.valor_pago, 0)),
+            else_=0,
+        )), 0)
+    ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id) \
+     .filter(
+        Venda.situacao.in_(['PAGO', 'PARCIAL']),
+        filtro_sem_perda,
+        filtro_tenant_venda, filtro_ano_venda,
+        filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome,
+     ).scalar() or 0
 
     # KPI 5: Lucro total
     total_lucro = db.session.query(
@@ -337,18 +379,36 @@ def dashboard():
             'prejuizo_valor': abs(v.calcular_lucro()),
         })
 
-    # KPI 6: Faturamento por Fornecedor (dinâmico)
+    # KPI 6: Faturamento por Fornecedor (dinâmico).
+    # Mesma lógica dos KPIs 3 e 4, agora segmentada por empresa_faturadora.
+    # `total` continua sendo o faturamento bruto (valor cheio de TODAS as
+    # vendas, inclusive PARCIAIS), porque o card mostra "Faturado X /
+    # Recebido Y / A Receber Z" — total != pago + pendente quando há
+    # PARCIAIS, e isso é proposital: o faturamento é o que foi vendido,
+    # enquanto pago/pendente são fatias do que já entrou ou ainda falta.
+    # PERDA fica fora de tudo (faturamento, pago e pendente).
     empresa_norm = func.upper(func.coalesce(Venda.empresa_faturadora, 'NENHUM'))
     valor_venda = Venda.preco_venda * Venda.quantidade_venda
+    saldo_devedor = valor_venda - func.coalesce(Venda.valor_pago, 0)
     situacao_upper = func.upper(func.coalesce(Venda.situacao, ''))
 
     rows_faturamento = db.session.query(
         empresa_norm.label('empresa'),
-        func.sum(valor_venda).label('total'),
-        func.sum(case((situacao_upper == 'PAGO', valor_venda), else_=0)).label('pago'),
-        func.sum(case((situacao_upper == 'PENDENTE', valor_venda), else_=0)).label('pendente'),
+        func.coalesce(func.sum(valor_venda), 0).label('total'),
+        func.coalesce(func.sum(case(
+            (situacao_upper == 'PAGO', valor_venda),
+            (situacao_upper == 'PARCIAL', func.coalesce(Venda.valor_pago, 0)),
+            else_=0,
+        )), 0).label('pago'),
+        func.coalesce(func.sum(case(
+            (situacao_upper == 'PENDENTE', valor_venda),
+            (situacao_upper == 'PARCIAL', saldo_devedor),
+            else_=0,
+        )), 0).label('pendente'),
     ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id).filter(
-        filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome
+        filtro_tenant_venda, filtro_ano_venda,
+        filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome,
+        filtro_sem_perda,
     ).group_by(empresa_norm).all()
 
     faturamento_geral = sum(float(r.total or 0) for r in rows_faturamento)
@@ -629,9 +689,15 @@ def api_dashboard_detalhes(filtro):
         filtro_lower = filtro_norm.lower()
 
         if filtro_lower == 'pendente':
-            query = query.filter(Venda.situacao == 'PENDENTE')
+            # Inclui PARCIAL para coerência com o KPI 'Financeiro - Pendente'.
+            # Vendas parcialmente pagas continuam tendo saldo devedor e
+            # devem aparecer na lista do drill-down.
+            query = query.filter(Venda.situacao.in_(['PENDENTE', 'PARCIAL']))
         elif filtro_lower == 'pago':
-            query = query.filter(Venda.situacao == 'PAGO')
+            # Inclui PARCIAL: parte do dinheiro já foi recebida, então
+            # a venda também conta como pagamento (parcial) — coerente
+            # com o KPI 'Financeiro - Pago'.
+            query = query.filter(Venda.situacao.in_(['PAGO', 'PARCIAL']))
         elif filtro_lower == 'avulsa':
             query = query.filter(
                 or_(
@@ -652,12 +718,24 @@ def api_dashboard_detalhes(filtro):
         ).order_by(Venda.data_venda.desc(), Venda.id.desc()).all()
         vendas_lista = []
         for venda in vendas:
+            valor_total_v = float(venda.preco_venda * venda.quantidade_venda)
+            valor_pago_v = float(getattr(venda, 'valor_pago', None) or 0)
+            sit_v = (venda.situacao or '').upper()
+            # Para PARCIAIS no drill-down 'pendente', exibe saldo
+            # devedor real; no drill-down 'pago', exibe valor já pago.
+            # Para PENDENTE puro ou PAGO puro, mantém valor cheio.
+            if filtro_lower == 'pendente' and sit_v == 'PARCIAL':
+                valor_exibido = valor_total_v - valor_pago_v
+            elif filtro_lower == 'pago' and sit_v == 'PARCIAL':
+                valor_exibido = valor_pago_v
+            else:
+                valor_exibido = valor_total_v
             vendas_lista.append({
                 'id': venda.id,
                 'cliente': venda.cliente.nome_cliente if venda.cliente else 'Cliente Desconhecido',
                 'descricao': venda.produto.nome_produto if venda.produto else 'Produto Desconhecido',
                 'data': venda.data_venda.strftime('%d/%m/%Y'),
-                'valor': float(venda.preco_venda * venda.quantidade_venda),
+                'valor': valor_exibido,
                 'status': venda.situacao,
             })
         return jsonify({'vendas': vendas_lista})
