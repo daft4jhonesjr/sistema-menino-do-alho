@@ -45,7 +45,7 @@ from flask import (
     flash, jsonify, session, current_app, Response,
 )
 from flask_login import current_user
-from sqlalchemy import asc, desc, extract, func, or_
+from sqlalchemy import asc, case, desc, func, or_
 from sqlalchemy.orm import joinedload
 import pandas as pd
 from werkzeug.utils import secure_filename
@@ -63,6 +63,7 @@ from services.cache_utils import limpar_cache_dashboard
 from services.config_helpers import (
     registrar_log, get_hoje_brasil,
 )
+from services.query_utils import filtro_ano_data_venda
 from services.files_utils import _deletar_cloudinary_seguro
 from services.vendas_services import (
     _vendas_do_pedido, _apagar_lancamentos_caixa_por_vendas,
@@ -215,9 +216,13 @@ def listar_vendas():
 
     ano_ativo = session.get('ano_ativo', datetime.now().year)
 
+    # Range em vez de extract('year', ...) preserva o uso do índice
+    # composto ix_vendas_empresa_data (extract aplica função sobre a
+    # coluna e mata o index lookup no planner).
+    _ano_ini, _ano_fim = filtro_ano_data_venda(ano_ativo, Venda.data_venda)
     subq_ids = db.session.query(Venda.id).filter(
         Venda.empresa_id == empresa_id_atual(),
-        extract('year', Venda.data_venda) == ano_ativo,
+        _ano_ini, _ano_fim,
     )
     filtro_bacalhau_expr = or_(
         Produto.nome_produto.ilike('%bacalhau%'),
@@ -232,7 +237,30 @@ def listar_vendas():
         subq_ids = subq_ids.filter(Venda.produto_id == produto_id)
     if cliente_id:
         subq_ids = subq_ids.filter(Venda.cliente_id == cliente_id)
-    subq_ids_select = subq_ids.order_by(desc(Venda.data_venda), desc(Venda.id)).limit(1000).with_entities(Venda.id)
+
+    # Limite dinâmico baseado na página solicitada. A "paginação real
+    # em SQL" é difícil de fazer aqui sem perder semântica das
+    # ordenações derivadas (vencimento/situação/forma_pagamento que
+    # dependem de campos consolidados em Python depois do agrupamento
+    # virtual). Em vez disso reduzimos o teto agressivamente:
+    #
+    # * default=400 cobre as ~20 primeiras páginas (per_page=20) com
+    #   folga, em vez do 1000 anterior que era largura morta.
+    # * usuários que paginam para o fundo ganham elasticidade via
+    #   `?page=N` — somamos N*per_page*3 ao teto, com cap em 2000.
+    # * filtros estreitos (cliente_id ou produto_id) também recebem
+    #   teto menor: a probabilidade do conjunto resultante ser
+    #   pequeno é alta.
+    _page_param = max(1, request.args.get('page', 1, type=int) or 1)
+    _per_page_default = 20
+    _limite_base = 400 if not (cliente_id or produto_id) else 600
+    _limite_dinamico = min(2000, max(_limite_base, _page_param * _per_page_default * 3))
+    subq_ids_select = (
+        subq_ids
+        .order_by(desc(Venda.data_venda), desc(Venda.id))
+        .limit(_limite_dinamico)
+        .with_entities(Venda.id)
+    )
 
     query = query_tenant(Venda).options(
         joinedload(Venda.cliente),
@@ -301,22 +329,11 @@ def listar_vendas():
         pedidos_dict[pedido_key]['total_lucro'] += float(venda.calcular_lucro())
         pedidos_dict[pedido_key]['total_valor_pago'] = pedidos_dict[pedido_key].get('total_valor_pago', 0) + float(getattr(venda, 'valor_pago', None) or 0)
 
-    pedidos_agrupados = []
-    pedidos_keys_vistos = set()
-    for venda in vendas_raw:
-        cnpj_cliente = venda.cliente.cnpj or ''
-        is_consumidor_final = cnpj_cliente in ('0', '00000000000000', '')
-        data_venda_normalizada = venda.data_venda.date() if hasattr(venda.data_venda, 'date') else venda.data_venda
-        if is_consumidor_final:
-            avulso_norm = str(getattr(venda, 'cliente_avulso', '') or '').strip().upper()
-            pedido_key = (venda.cliente_id, data_venda_normalizada, avulso_norm)
-        else:
-            nf_normalizada = str(venda.nf).strip() if venda.nf else ''
-            pedido_key = (venda.cliente_id, nf_normalizada, data_venda_normalizada)
-
-        if pedido_key not in pedidos_keys_vistos:
-            pedidos_agrupados.append(pedidos_dict[pedido_key])
-            pedidos_keys_vistos.add(pedido_key)
+    # Loop 2 removido: dict do Python (3.7+) preserva ordem de inserção,
+    # então `pedidos_dict.values()` já devolve os pedidos na mesma ordem
+    # em que foram vistos pela primeira vez no loop acima — exatamente
+    # o que o segundo loop fazia recalculando a chave de cada venda.
+    pedidos_agrupados = list(pedidos_dict.values())
 
     if not ordenar_por and ordem_data in ('crescente', 'decrescente'):
         reverse_order = (ordem_data == 'decrescente')
@@ -358,29 +375,27 @@ def listar_vendas():
         cb, cn = None, None
         doc_boleto, doc_nf = None, None
 
+        # Listagem é GET puro: NÃO mutar o estado das vendas aqui (sem
+        # `v.caminho_boleto = None` + `db.session.flush()`). A "limpeza"
+        # de caminhos órfãos foi extraída para uma rotina de manutenção
+        # offline — toda vez que isso era feito inline forçava round-trip
+        # ao banco em cada listagem, sem benefício pro usuário do GET.
+        # Aqui apenas escolhemos o primeiro caminho que casa com um doc
+        # existente; caminhos órfãos são simplesmente ignorados na
+        # exibição do pedido.
         for v in pedido.get('vendas', []):
             caminho_b = (v.caminho_boleto or '').strip()
-            if caminho_b:
-                doc = _docs_por_caminho.get(caminho_b)
-                if doc:
-                    cb = caminho_b
-                    doc_boleto = doc
-                    break
-                else:
-                    v.caminho_boleto = None
-                    db.session.flush()
+            if caminho_b and _docs_por_caminho.get(caminho_b):
+                cb = caminho_b
+                doc_boleto = _docs_por_caminho[caminho_b]
+                break
 
         for v in pedido.get('vendas', []):
             caminho_n = (v.caminho_nf or '').strip()
-            if caminho_n:
-                doc = _docs_por_caminho.get(caminho_n)
-                if doc:
-                    cn = caminho_n
-                    doc_nf = doc
-                    break
-                else:
-                    v.caminho_nf = None
-                    db.session.flush()
+            if caminho_n and _docs_por_caminho.get(caminho_n):
+                cn = caminho_n
+                doc_nf = _docs_por_caminho[caminho_n]
+                break
 
         pedido['caminho_boleto'] = cb
         pedido['caminho_nf'] = cn
@@ -524,10 +539,11 @@ def listar_vendas():
     if filtro_vencidos:
         pedidos_agrupados = [p for p in pedidos_agrupados if p.get('is_vencido_para_abatimento')]
 
-    try:
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
+    # Sem `db.session.commit()` aqui: esta é uma rota GET de listagem
+    # e não deveria alterar estado do banco. O commit antigo era um
+    # acidente herdado dos `v.caminho_boleto/nf = None` + `flush()` que
+    # foram removidos acima — sem mutações pendentes não há nada para
+    # commitar, e qualquer erro em SELECT é capturado pelo Flask.
 
     # Total a Receber: soma dos saldos devedores de TODOS os pedidos
     # PENDENTE/PARCIAL (não paginado) — bate com a lógica do extrato.
@@ -571,6 +587,11 @@ def listar_vendas():
     is_ajax = request.args.get('ajax', type=int) == 1
 
     if is_ajax:
+        # Caminho AJAX (paginação/filtro/ordenação) só precisa do HTML
+        # das linhas e cards — NÃO carrega listas auxiliares (clientes,
+        # produtos, todos_*) nem agrega `graficos_data`. Tudo isso é
+        # responsabilidade do caminho non-AJAX abaixo (primeira
+        # renderização da página).
         rows_html = render_template('_linhas_venda.html', pedidos=pedidos_paginados, current_page=page)
         cards_html = render_template('_cards_venda.html', pedidos=pedidos_paginados)
         return jsonify(rows=rows_html, cards=cards_html)
@@ -589,27 +610,75 @@ def listar_vendas():
     todos_clientes = query_tenant(Cliente).order_by(Cliente.nome_cliente).limit(500).all()
     todos_produtos = query_tenant(Produto).order_by(Produto.nome_produto).limit(500).all()
 
+    # Agregações dos gráficos via 3 GROUP BY no banco em vez de iterar
+    # `vendas_raw` em Python. Como `vendas_raw` é construído a partir de
+    # `Venda.id.in_(subq_ids_select)` + filtro de forma de pagamento,
+    # reaplicamos exatamente os mesmos filtros aqui para manter a
+    # equivalência. Substitui um loop O(N) com `calcular_total()` por
+    # 3 SUM/COUNT indexados (usa ix_vendas_empresa_situacao e cia).
     graficos_data = {'situacao': {}, 'pagamento': {}, 'empresa': {}}
-    for v in vendas_raw:
-        total_venda = float(v.calcular_total() or 0)
+    _valor_total_expr = Venda.preco_venda * Venda.quantidade_venda
+    _filtro_perda_grafico = func.upper(func.coalesce(Venda.tipo_operacao, 'VENDA')) != 'PERDA'
 
-        situacao = str(v.situacao or '').strip()
-        if situacao:
-            bucket = graficos_data['situacao'].setdefault(situacao, {'count': 0, 'total': 0.0})
-            bucket['count'] += 1
-            bucket['total'] += total_venda
+    def _query_grafico_base():
+        q = db.session.query(Venda).filter(Venda.id.in_(subq_ids_select))
+        if forma_pagto != 'TODAS':
+            q = q.filter(func.upper(func.coalesce(Venda.forma_pagamento, '')) == forma_pagto)
+        return q
 
-        forma_pag = str(v.forma_pagamento or '').strip()
-        if forma_pag:
-            bucket = graficos_data['pagamento'].setdefault(forma_pag, {'count': 0, 'total': 0.0})
-            bucket['count'] += 1
-            bucket['total'] += total_venda
+    # Situação (PENDENTE/PAGO/PARCIAL/PERDA)
+    rows_situacao = _query_grafico_base().with_entities(
+        Venda.situacao,
+        func.count(Venda.id),
+        func.coalesce(
+            func.sum(case((_filtro_perda_grafico, _valor_total_expr), else_=0)),
+            0,
+        ),
+    ).group_by(Venda.situacao).all()
+    for situacao, count_v, total_v in rows_situacao:
+        situacao_norm = str(situacao or '').strip()
+        if not situacao_norm:
+            continue
+        graficos_data['situacao'][situacao_norm] = {
+            'count': int(count_v or 0),
+            'total': float(total_v or 0),
+        }
 
-        empresa = str(v.empresa_faturadora or '').strip()
-        if empresa:
-            bucket = graficos_data['empresa'].setdefault(empresa, {'count': 0, 'total': 0.0})
-            bucket['count'] += 1
-            bucket['total'] += total_venda
+    # Forma de pagamento
+    rows_forma = _query_grafico_base().with_entities(
+        Venda.forma_pagamento,
+        func.count(Venda.id),
+        func.coalesce(
+            func.sum(case((_filtro_perda_grafico, _valor_total_expr), else_=0)),
+            0,
+        ),
+    ).group_by(Venda.forma_pagamento).all()
+    for forma, count_v, total_v in rows_forma:
+        forma_norm = str(forma or '').strip()
+        if not forma_norm:
+            continue
+        graficos_data['pagamento'][forma_norm] = {
+            'count': int(count_v or 0),
+            'total': float(total_v or 0),
+        }
+
+    # Empresa faturadora
+    rows_empresa = _query_grafico_base().with_entities(
+        Venda.empresa_faturadora,
+        func.count(Venda.id),
+        func.coalesce(
+            func.sum(case((_filtro_perda_grafico, _valor_total_expr), else_=0)),
+            0,
+        ),
+    ).group_by(Venda.empresa_faturadora).all()
+    for empresa, count_v, total_v in rows_empresa:
+        empresa_norm = str(empresa or '').strip()
+        if not empresa_norm:
+            continue
+        graficos_data['empresa'][empresa_norm] = {
+            'count': int(count_v or 0),
+            'total': float(total_v or 0),
+        }
 
     return render_template(
         'vendas/listar.html',
@@ -671,12 +740,11 @@ def exportar_relatorio_vendas():
     if not colunas:
         colunas = ordem_padrao_colunas
 
+    _ini_export, _fim_export = filtro_ano_data_venda(ano_ativo, Venda.data_venda)
     query = query_tenant(Venda).options(
         joinedload(Venda.cliente),
         joinedload(Venda.produto),
-    ).filter(
-        extract('year', Venda.data_venda) == ano_ativo
-    )
+    ).filter(_ini_export, _fim_export)
 
     if filtro_empresa != 'TODAS':
         query = query.filter(func.upper(func.coalesce(Venda.empresa_faturadora, 'NENHUM')) == filtro_empresa)
@@ -685,7 +753,13 @@ def exportar_relatorio_vendas():
     if filtro_forma_pagamento != 'TODAS':
         query = query.filter(func.upper(func.coalesce(Venda.forma_pagamento, '')) == filtro_forma_pagamento)
     if filtro_mes is not None:
-        query = query.filter(extract('month', Venda.data_venda) == filtro_mes)
+        # Range do mês dentro do ano ativo (preserva índice em data_venda).
+        _mes_ini = date(int(ano_ativo), int(filtro_mes), 1)
+        if int(filtro_mes) == 12:
+            _mes_fim = date(int(ano_ativo) + 1, 1, 1)
+        else:
+            _mes_fim = date(int(ano_ativo), int(filtro_mes) + 1, 1)
+        query = query.filter(Venda.data_venda >= _mes_ini, Venda.data_venda < _mes_fim)
 
     vendas = query.order_by(Venda.data_venda.desc(), Venda.id.desc()).all()
     if not _e_admin_tenant():

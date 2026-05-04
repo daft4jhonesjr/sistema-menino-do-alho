@@ -412,6 +412,9 @@ class Venda(db.Model):
         # Histórico cronológico de um cliente dentro da empresa
         # (ficha do cliente e cobrança).
         db.Index('ix_vendas_empresa_cliente_data', 'empresa_id', 'cliente_id', 'data_venda'),
+        # Filtros por tipo_operacao (VENDA/PERDA) por empresa — usado
+        # nos KPIs do dashboard com `tipo_operacao != 'PERDA'`.
+        db.Index('ix_vendas_empresa_tipo_operacao', 'empresa_id', 'tipo_operacao'),
     )
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
@@ -432,7 +435,7 @@ class Venda(db.Model):
     valor_pago = db.Column(db.Numeric(10, 2), default=Decimal('0.00'))  # Valor já pago (para abatimento parcial)
     status_entrega = db.Column(db.String(50), default='PENDENTE', index=True)
     forma_pagamento = db.Column(db.String(50), nullable=True, index=True)
-    tipo_operacao = db.Column(db.String(20), default='VENDA', nullable=False, server_default='VENDA')
+    tipo_operacao = db.Column(db.String(20), default='VENDA', nullable=False, server_default='VENDA', index=True)
     lucro_percentual = db.Column(db.Numeric(6, 2), nullable=True)
     cliente_avulso = db.Column(db.String(100), nullable=True)
     caminho_boleto = db.Column(db.String(500), nullable=True, index=True)

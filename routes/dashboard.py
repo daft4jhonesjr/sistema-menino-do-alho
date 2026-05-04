@@ -34,7 +34,7 @@ from flask import (
     flash, jsonify, session, current_app,
 )
 from flask_login import current_user
-from sqlalchemy import func, desc, case, or_, extract
+from sqlalchemy import and_, case, desc, func, or_
 from sqlalchemy.orm import joinedload
 
 from extensions import cache
@@ -47,6 +47,7 @@ from services.db_utils import (
 )
 from services.cache_utils import _dashboard_cache_key
 from services.documentos_services import _listar_documentos_recem_chegados
+from services.query_utils import filtro_ano_data_venda
 
 
 dashboard_bp = Blueprint('dashboard', __name__)
@@ -76,6 +77,29 @@ def _exigir_tenant_em_todas_rotas():
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers exclusivos do dashboard
 # ─────────────────────────────────────────────────────────────────────────────
+
+def _radar_recompra_cache_key():
+    """Chave de cache do Radar de Recompra, segmentada por tenant.
+
+    Reaproveita a mesma versão usada pelo dashboard
+    (``dashboard_cache_version``) para que ``limpar_cache_dashboard()``
+    também invalide o radar — toda mutação que afeta vendas/clientes
+    derruba os dois caches juntos.
+    """
+    try:
+        versao = cache.get('dashboard_cache_version') or '0'
+    except Exception:
+        versao = '0'
+    try:
+        emp = empresa_id_atual()
+    except Exception:
+        emp = None
+    if emp:
+        scope = f"emp:{emp}"
+    else:
+        scope = f"u:{getattr(current_user, 'id', 'anon')}"
+    return f"radar_recompra:v{versao}:{scope}"
+
 
 def _categoria_produto(nome_produto_bruto):
     """Agrupa produtos em categorias mestras para o Radar de Recompra."""
@@ -233,7 +257,10 @@ def dashboard():
     ano_ativo = session.get('ano_ativo', datetime.now().year)
 
     filtro_tenant_venda = Venda.empresa_id == empresa_id_atual()
-    filtro_ano_venda = extract('year', Venda.data_venda) == ano_ativo
+    # Range em vez de extract('year', ...) para usar ix_vendas_empresa_data.
+    # Tupla porque o range vira duas expressões (>= e <); todos os
+    # consumidores fazem `.filter(..., *filtro_ano_venda, ...)`.
+    filtro_ano_venda = filtro_ano_data_venda(ano_ativo, Venda.data_venda)
     filtro_sem_bacalhau_tipo = ~Produto.tipo.ilike('%BACALHAU%')
     filtro_sem_bacalhau_nome = ~Produto.nome_produto.ilike('%BACALHAU%')
 
@@ -274,7 +301,7 @@ def dashboard():
         func.sum((Venda.preco_venda - Produto.preco_custo) * Venda.quantidade_venda).label('lucro_total')
     ).join(Venda, Cliente.id == Venda.cliente_id) \
      .join(Produto, Venda.produto_id == Produto.id) \
-     .filter(filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome) \
+     .filter(filtro_tenant_venda, *filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome) \
      .group_by(Cliente.id, Cliente.nome_cliente) \
      .order_by(desc('lucro_total')) \
      .limit(10).all()
@@ -286,7 +313,7 @@ def dashboard():
         func.sum(Venda.preco_venda * Venda.quantidade_venda).label('total_vendido'),
         func.sum((Venda.preco_venda - Produto.preco_custo) * Venda.quantidade_venda).label('lucro_total')
     ).join(Venda, Produto.id == Venda.produto_id) \
-     .filter(filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome) \
+     .filter(filtro_tenant_venda, *filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome) \
      .group_by(Produto.id, Produto.nome_produto) \
      .order_by(desc('lucro_total')) \
      .limit(10).all()
@@ -316,56 +343,68 @@ def dashboard():
     valor_venda_expr = Venda.preco_venda * Venda.quantidade_venda
     saldo_devedor_expr = valor_venda_expr - func.coalesce(Venda.valor_pago, 0)
     filtro_sem_perda = func.upper(func.coalesce(Venda.tipo_operacao, 'VENDA')) != 'PERDA'
-
-    total_pendente = db.session.query(
-        func.coalesce(func.sum(case(
-            (Venda.situacao == 'PENDENTE', valor_venda_expr),
-            (Venda.situacao == 'PARCIAL', saldo_devedor_expr),
-            else_=0,
-        )), 0)
-    ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id) \
-     .filter(
-        Venda.situacao.in_(['PENDENTE', 'PARCIAL']),
-        filtro_sem_perda,
-        filtro_tenant_venda, filtro_ano_venda,
-        filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome,
-     ).scalar() or 0
-
-    total_pago = db.session.query(
-        func.coalesce(func.sum(case(
-            (Venda.situacao == 'PAGO', valor_venda_expr),
-            (Venda.situacao == 'PARCIAL', func.coalesce(Venda.valor_pago, 0)),
-            else_=0,
-        )), 0)
-    ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id) \
-     .filter(
-        Venda.situacao.in_(['PAGO', 'PARCIAL']),
-        filtro_sem_perda,
-        filtro_tenant_venda, filtro_ano_venda,
-        filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome,
-     ).scalar() or 0
-
-    # KPI 5: Lucro total
-    total_lucro = db.session.query(
-        func.sum((Venda.preco_venda - Produto.preco_custo) * Venda.quantidade_venda)
-    ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id) \
-     .filter(filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
-
-    # KPI 5b: Prejuízo
     prejuizo_expr = (Venda.preco_venda - Produto.preco_custo) * Venda.quantidade_venda
-    total_prejuizo = db.session.query(
-        func.sum(func.abs(prejuizo_expr))
-    ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id) \
-     .filter(prejuizo_expr < 0, filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
-    qtd_caixas_prejuizo = db.session.query(
-        func.sum(Venda.quantidade_venda)
-    ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id) \
-     .filter(prejuizo_expr < 0, filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
+    lucro_expr = (Venda.preco_venda - Produto.preco_custo) * Venda.quantidade_venda
+
+    # CONSOLIDAÇÃO: 7 agregações que compartilhavam exatamente o mesmo
+    # WHERE (tenant + ano + ~bacalhau) viraram UMA query com vários
+    # CASE WHEN. Antes: 7 round-trips ao banco. Agora: 1.
+    # Filtros que antes eram `WHERE Venda.situacao IN (...)` foram
+    # absorvidos no CASE WHEN (o CASE retorna 0 fora das condições, o
+    # SUM ignora). Idem `prejuizo_expr < 0`.
+    kpis_consolidados = db.session.query(
+        func.coalesce(func.sum(case(
+            (
+                and_(filtro_sem_perda, Venda.situacao == 'PENDENTE'),
+                valor_venda_expr,
+            ),
+            (
+                and_(filtro_sem_perda, Venda.situacao == 'PARCIAL'),
+                saldo_devedor_expr,
+            ),
+            else_=0,
+        )), 0).label('pendente'),
+        func.coalesce(func.sum(case(
+            (
+                and_(filtro_sem_perda, Venda.situacao == 'PAGO'),
+                valor_venda_expr,
+            ),
+            (
+                and_(filtro_sem_perda, Venda.situacao == 'PARCIAL'),
+                func.coalesce(Venda.valor_pago, 0),
+            ),
+            else_=0,
+        )), 0).label('pago'),
+        func.coalesce(func.sum(lucro_expr), 0).label('lucro'),
+        func.coalesce(func.sum(case(
+            (prejuizo_expr < 0, func.abs(prejuizo_expr)),
+            else_=0,
+        )), 0).label('prejuizo'),
+        func.coalesce(func.sum(case(
+            (prejuizo_expr < 0, Venda.quantidade_venda),
+            else_=0,
+        )), 0).label('qtd_caixas_prejuizo'),
+        func.coalesce(func.sum(valor_venda_expr), 0).label('vendas'),
+        func.count(func.distinct(
+            func.concat(Venda.cliente_id, '-', Venda.nf, '-', func.date(Venda.data_venda))
+        )).label('pedidos'),
+    ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id).filter(
+        filtro_tenant_venda, *filtro_ano_venda,
+        filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome,
+    ).one()
+
+    total_pendente = float(kpis_consolidados.pendente or 0)
+    total_pago = float(kpis_consolidados.pago or 0)
+    total_lucro = float(kpis_consolidados.lucro or 0)
+    total_prejuizo = float(kpis_consolidados.prejuizo or 0)
+    qtd_caixas_prejuizo = int(kpis_consolidados.qtd_caixas_prejuizo or 0)
+    total_vendas = float(kpis_consolidados.vendas or 0)
+    total_pedidos = int(kpis_consolidados.pedidos or 0)
 
     vendas_com_prejuizo = query_tenant(Venda).options(
         joinedload(Venda.cliente), joinedload(Venda.produto)
     ).join(Produto, Venda.produto_id == Produto.id) \
-     .filter(prejuizo_expr < 0, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome) \
+     .filter(prejuizo_expr < 0, *filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome) \
      .order_by(Venda.data_venda.desc()).all()
     detalhes_prejuizo = []
     for v in vendas_com_prejuizo:
@@ -406,7 +445,7 @@ def dashboard():
             else_=0,
         )), 0).label('pendente'),
     ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id).filter(
-        filtro_tenant_venda, filtro_ano_venda,
+        filtro_tenant_venda, *filtro_ano_venda,
         filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome,
         filtro_sem_perda,
     ).group_by(empresa_norm).all()
@@ -434,13 +473,7 @@ def dashboard():
 
     faturamento_por_fornecedor.sort(key=lambda x: x['faturamento'], reverse=True)
 
-    # KPI 7: Total de Vendas
-    total_vendas = db.session.query(
-        func.sum(Venda.preco_venda * Venda.quantidade_venda)
-    ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id) \
-     .filter(filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
-
-    # KPI 8: Margem
+    # KPI 8: Margem (sobre total_vendas/total_lucro já consolidados acima)
     margem_porcentagem = (float(total_lucro) / float(total_vendas) * 100) if total_vendas and float(total_vendas) > 0 else 0
 
     # KPI 8b: Média Mensal
@@ -453,15 +486,7 @@ def dashboard():
         _meses_divisao = 1
     media_lucro_mensal = float(total_lucro) / _meses_divisao if _meses_divisao > 0 else 0
 
-    # KPI 9: Total de Pedidos
-    total_pedidos = db.session.query(
-        func.count(func.distinct(
-            func.concat(Venda.cliente_id, '-', Venda.nf, '-', func.date(Venda.data_venda))
-        ))
-    ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id) \
-     .filter(filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome).scalar() or 0
-
-    # KPI 10: Ticket Médio
+    # KPI 10: Ticket Médio (total_pedidos já consolidado acima)
     ticket_medio = (float(total_vendas) / float(total_pedidos)) if total_pedidos and total_pedidos > 0 else 0
 
     # KPI 11: Evolução Mensal
@@ -483,7 +508,7 @@ def dashboard():
         qtd_cafe.label('qtd_cafe'),
         qtd_sacola.label('qtd_sacola'),
     ).join(Produto, Venda.produto_id == Produto.id) \
-     .filter(filtro_tenant_venda, filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome) \
+     .filter(filtro_tenant_venda, *filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome) \
      .group_by(coluna_mes) \
      .order_by(coluna_mes).all()
 
@@ -531,7 +556,11 @@ def dashboard():
             })
 
     faturamento_total = float(total_pendente) + float(total_pago)
-    alertas_recompra = get_radar_recompra()
+    # Radar de recompra é carregado de forma lazy via fetch ao endpoint
+    # /api/dashboard/radar_recompra (ver dashboard.html). Mantemos a
+    # variável apenas para compatibilidade com possíveis callers do
+    # template que ainda referenciem a chave.
+    alertas_recompra = None
 
     return render_template(
         'dashboard.html',
@@ -682,9 +711,10 @@ def api_dashboard_detalhes(filtro):
 
     try:
         ano_ativo = session.get('ano_ativo', datetime.now().year)
-        filtro_ano_venda = extract('year', Venda.data_venda) == ano_ativo
+        # Range em vez de extract('year', ...) — usa ix_vendas_empresa_data.
+        _ini_ano, _fim_ano = filtro_ano_data_venda(ano_ativo, Venda.data_venda)
 
-        query = query_tenant(Venda).filter(filtro_ano_venda)
+        query = query_tenant(Venda).filter(_ini_ano, _fim_ano)
         filtro_norm = (filtro or '').strip()
         filtro_lower = filtro_norm.lower()
 
@@ -713,9 +743,25 @@ def api_dashboard_detalhes(filtro):
         else:
             return jsonify({'erro': 'Filtro vazio.'}), 400
 
+        # Paginação defensiva: drill-down já vinha trazendo TODAS as
+        # vendas filtradas (`.all()` sem teto), o que em tenants
+        # grandes podia retornar milhares de linhas para o modal.
+        # Aceita `?page=N&per_page=M` (default 100, máx 500).
+        try:
+            _page = max(1, int(request.args.get('page', 1) or 1))
+        except (TypeError, ValueError):
+            _page = 1
+        try:
+            _per_page = int(request.args.get('per_page', 100) or 100)
+        except (TypeError, ValueError):
+            _per_page = 100
+        _per_page = max(20, min(_per_page, 500))
+        _offset = (_page - 1) * _per_page
+
         vendas = query.options(
             joinedload(Venda.cliente), joinedload(Venda.produto)
-        ).order_by(Venda.data_venda.desc(), Venda.id.desc()).all()
+        ).order_by(Venda.data_venda.desc(), Venda.id.desc()) \
+         .limit(_per_page).offset(_offset).all()
         vendas_lista = []
         for venda in vendas:
             valor_total_v = float(venda.preco_venda * venda.quantidade_venda)
@@ -738,7 +784,15 @@ def api_dashboard_detalhes(filtro):
                 'valor': valor_exibido,
                 'status': venda.situacao,
             })
-        return jsonify({'vendas': vendas_lista})
+        return jsonify({
+            'vendas': vendas_lista,
+            'pagination': {
+                'page': _page,
+                'per_page': _per_page,
+                'returned': len(vendas_lista),
+                'has_next': len(vendas_lista) >= _per_page,
+            },
+        })
     except Exception as e:
         db.session.rollback()
         traceback.print_exc()
@@ -790,20 +844,68 @@ def ultimo_pagamento_cliente():
     return jsonify({'forma_pagamento': None})
 
 
+@dashboard_bp.route('/api/dashboard/radar_recompra')
+@cache.cached(timeout=900, key_prefix=_radar_recompra_cache_key)
+def api_radar_recompra():
+    """Endpoint lazy do Radar de Recompra do Dashboard.
+
+    Antes este cálculo (até 365 dias de vendas processadas em Python
+    para inferir cadência de recompra por cliente×categoria) rodava
+    síncrono no rebuild do /dashboard, dominando o tempo de cold paint.
+    Agora o template carrega via fetch após o paint inicial, e
+    cacheamos por 15 min com a mesma versão de chave do dashboard
+    (toda mutação que invalida o dashboard invalida o radar também).
+    """
+    try:
+        return jsonify({'alertas': get_radar_recompra()})
+    except Exception:
+        current_app.logger.exception('Falha ao calcular radar de recompra')
+        return jsonify({'alertas': []}), 200
+
+
 @dashboard_bp.route('/api/cobrancas_pendentes')
 def api_cobrancas_pendentes():
-    """Indica se há cobranças pendentes — usado pelas push notifications."""
+    """Indica se há cobranças pendentes — usado pelas push notifications.
+
+    Caminho rápido (admin/DONO/MASTER): soma o saldo devedor 100% em
+    SQL via ``SUM((preco_venda*quantidade) - COALESCE(valor_pago, 0))``,
+    com filtros por situacao/ano direto no banco. Substitui o loop
+    Python que hidratava a venda inteira em memória.
+
+    Caminho seguro (FUNCIONARIO): a regra de permissão envolve
+    documentos por-venda e não é trivial converter em JOIN — mantemos
+    o fallback Python original. Funcionários costumam ter conjuntos
+    pequenos de vendas visíveis, então o custo permanece aceitável.
+    """
     from decimal import Decimal
 
     try:
         ano_ativo = session.get('ano_ativo', datetime.now().year)
+        _ini_ano, _fim_ano = filtro_ano_data_venda(ano_ativo, Venda.data_venda)
+
+        if _e_admin_tenant():
+            # Caminho SQL puro — sem hidratação de objetos.
+            valor_venda_expr = Venda.preco_venda * Venda.quantidade_venda
+            saldo_dev = valor_venda_expr - func.coalesce(Venda.valor_pago, 0)
+            total_db = query_tenant(Venda).with_entities(
+                func.coalesce(func.sum(saldo_dev), 0)
+            ).filter(
+                _ini_ano, _fim_ano,
+                Venda.situacao.in_(['PENDENTE', 'PARCIAL']),
+            ).scalar()
+            total = Decimal(str(total_db or 0))
+            return jsonify({
+                'has_pendentes': total > Decimal('0.00'),
+                'total': float(total),
+            })
+
         vendas = query_tenant(Venda).filter(
-            extract('year', Venda.data_venda) == ano_ativo,
+            _ini_ano, _fim_ano,
             Venda.situacao.in_(['PENDENTE', 'PARCIAL'])
         ).all()
         total = Decimal('0.00')
         for v in vendas:
-            if not _e_admin_tenant() and not _usuario_pode_gerenciar_venda(v):
+            if not _usuario_pode_gerenciar_venda(v):
                 continue
             total += Decimal(str(v.calcular_total() or Decimal('0.00'))) - Decimal(str(getattr(v, 'valor_pago', None) or Decimal('0.00')))
         return jsonify({'has_pendentes': total > Decimal('0.00'), 'total': float(total)})
@@ -821,14 +923,33 @@ def api_detalhes_mes(ano, mes):
         if mes < 1 or mes > 12:
             return jsonify({'erro': 'Mês inválido. Use valores de 1 a 12.'}), 400
 
-        vendas_mes = query_tenant(Venda).options(
-            joinedload(Venda.cliente), joinedload(Venda.produto)
-        ).filter(
-            extract('year', Venda.data_venda) == ano,
-            extract('month', Venda.data_venda) == mes
-        ).order_by(Venda.data_venda, Venda.id).all()
+        # Range fixo do mês — preserva uso do índice em data_venda
+        # (extract('year') + extract('month') aplicariam função sobre a
+        # coluna e quebrariam o lookup pelo índice composto).
+        from datetime import date as _date
+        mes_ini = _date(int(ano), int(mes), 1)
+        if int(mes) == 12:
+            mes_fim = _date(int(ano) + 1, 1, 1)
+        else:
+            mes_fim = _date(int(ano), int(mes) + 1, 1)
+        # Totais agregados em SQL (1 round-trip) em vez de iterar
+        # `vendas_mes` em Python.
+        valor_venda_expr = Venda.preco_venda * Venda.quantidade_venda
+        lucro_expr = (Venda.preco_venda - Produto.preco_custo) * Venda.quantidade_venda
+        agg = db.session.query(
+            func.coalesce(func.sum(valor_venda_expr), 0),
+            func.coalesce(func.sum(lucro_expr), 0),
+            func.count(Venda.id),
+        ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id).filter(
+            Venda.empresa_id == empresa_id_atual(),
+            Venda.data_venda >= mes_ini,
+            Venda.data_venda < mes_fim,
+        ).one()
+        total_vendido = float(agg[0] or 0)
+        total_lucro = float(agg[1] or 0)
+        total_count = int(agg[2] or 0)
 
-        if not vendas_mes:
+        if total_count == 0:
             meses_pt = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
                         'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
             return jsonify({
@@ -838,33 +959,42 @@ def api_detalhes_mes(ano, mes):
                 'vendas': [],
             })
 
-        total_vendido = sum(float(v.preco_venda * v.quantidade_venda) for v in vendas_mes)
-        total_lucro = sum(float(v.calcular_lucro()) for v in vendas_mes)
-
-        clientes_dict = {}
-        for venda in vendas_mes:
-            cliente_id = venda.cliente_id
-            cliente_nome = venda.cliente.nome_cliente if venda.cliente else 'Cliente Desconhecido'
-
-            if cliente_id not in clientes_dict:
-                clientes_dict[cliente_id] = {
-                    'nome': cliente_nome,
-                    'qtd_compras': 0,
-                    'total_gasto': 0.0,
-                }
-
-            clientes_dict[cliente_id]['qtd_compras'] += 1
-            clientes_dict[cliente_id]['total_gasto'] += float(venda.preco_venda * venda.quantidade_venda)
+        # Top clientes via GROUP BY no SQL (limitado a 50; antes
+        # hidratava todas as vendas e agrupava em Python).
+        rows_top_clientes = db.session.query(
+            Cliente.nome_cliente,
+            func.count(Venda.id),
+            func.coalesce(func.sum(valor_venda_expr), 0),
+        ).select_from(Venda).join(Cliente, Venda.cliente_id == Cliente.id).filter(
+            Venda.empresa_id == empresa_id_atual(),
+            Venda.data_venda >= mes_ini,
+            Venda.data_venda < mes_fim,
+        ).group_by(Cliente.id, Cliente.nome_cliente) \
+         .order_by(desc(func.sum(valor_venda_expr))) \
+         .limit(50).all()
 
         top_clientes = [
             {
-                'nome': dados['nome'],
-                'qtd_compras': dados['qtd_compras'],
-                'total_gasto': dados['total_gasto'],
+                'nome': nome or 'Cliente Desconhecido',
+                'qtd_compras': int(qtd or 0),
+                'total_gasto': float(gasto or 0),
             }
-            for _cliente_id, dados in clientes_dict.items()
+            for nome, qtd, gasto in rows_top_clientes
         ]
-        top_clientes.sort(key=lambda x: x['total_gasto'], reverse=True)
+
+        # Lista detalhada com LIMIT defensivo para o modal (antes
+        # carregava milhares em meses cheios).
+        try:
+            _per_page = int(request.args.get('per_page', 500) or 500)
+        except (TypeError, ValueError):
+            _per_page = 500
+        _per_page = max(50, min(_per_page, 1000))
+        vendas_mes = query_tenant(Venda).options(
+            joinedload(Venda.cliente), joinedload(Venda.produto)
+        ).filter(
+            Venda.data_venda >= mes_ini,
+            Venda.data_venda < mes_fim,
+        ).order_by(Venda.data_venda, Venda.id).limit(_per_page).all()
 
         vendas_lista = []
         for venda in vendas_mes:
@@ -896,7 +1026,12 @@ def api_detalhes_mes(ano, mes):
             },
             'top_clientes': top_clientes,
             'vendas': vendas_lista,
-            'total_vendas': len(vendas_lista),
+            # `total_vendas` mantém o significado original (contagem
+            # total no mês, não só na página retornada). `vendas`
+            # pode ter sido cortada em `_per_page`; clientes que
+            # precisarem de tudo devem paginar.
+            'total_vendas': total_count,
+            'truncated': total_count > len(vendas_lista),
         })
 
     except Exception as e:

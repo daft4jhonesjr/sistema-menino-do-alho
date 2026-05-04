@@ -147,14 +147,60 @@ def _processar_linhas_clientes_upsert(linhas, erros_detalhados, sucesso_ref, err
 
 @clientes_bp.route('/clientes')
 def listar_clientes():
+    """Listagem de clientes com paginação SQL + busca server-side opcional.
+
+    Mudanças de performance:
+    * Paginação backend via ``?page=`` e ``?per_page=`` (default 200,
+      máx 500). Antes carregava 500 clientes a cada visita,
+      independentemente do que o usuário ia ver.
+    * Busca server-side via ``?q=`` (ilike) — usa o índice em
+      ``Cliente.nome_cliente`` e em ``Cliente.razao_social``. Antes a
+      única busca era client-side em JS, que dependia de ter os 500
+      clientes carregados no HTML.
+
+    O template antigo continua funcional: se o caller não passar
+    ``?q=`` nem ``?page=``, recebe a primeira página (200 clientes)
+    com a mesma ordenação default, e a busca client-side já existente
+    funciona dentro desses 200.
+    """
     ordem_param = (request.args.get('ordem') or '').strip().lower()
+    q = (request.args.get('q') or '').strip()
+    try:
+        page = max(1, int(request.args.get('page', 1) or 1))
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        per_page = int(request.args.get('per_page', 200) or 200)
+    except (TypeError, ValueError):
+        per_page = 200
+    per_page = max(20, min(per_page, 500))
+
+    base = query_tenant(Cliente)
+    if q:
+        like = f"%{q}%"
+        base = base.filter(or_(
+            Cliente.nome_cliente.ilike(like),
+            Cliente.razao_social.ilike(like),
+            Cliente.cnpj.ilike(like),
+        ))
+
     if ordem_param in ('desc', 'id_decrescente'):
         ordem = 'id_decrescente'
-        clientes = query_tenant(Cliente).order_by(Cliente.id.desc()).limit(500).all()
+        base = base.order_by(Cliente.id.desc())
     else:
         ordem = 'id_crescente'
-        clientes = query_tenant(Cliente).order_by(Cliente.id.asc()).limit(500).all()
-    return render_template('clientes/listar.html', clientes=clientes, ordem=ordem)
+        base = base.order_by(Cliente.id.asc())
+
+    clientes = base.limit(per_page).offset((page - 1) * per_page).all()
+    return render_template(
+        'clientes/listar.html',
+        clientes=clientes,
+        ordem=ordem,
+        q=q,
+        page=page,
+        per_page=per_page,
+        has_next=len(clientes) >= per_page,
+    )
 
 
 @clientes_bp.route('/clientes/novo', methods=['GET', 'POST'])
