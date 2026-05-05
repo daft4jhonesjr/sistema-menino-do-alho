@@ -59,11 +59,17 @@
         <a href="{{ url_for('documentos.ver_nf_venda', id=pedido.primeira_venda_id) }}" target="_blank" rel="noopener noreferrer" class="p-1.5 rounded text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-transform hover:scale-110" title="Visualizar Nota Fiscal">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
         </a>
+        <button type="button" class="btn-desvincular-doc p-1.5 rounded text-gray-400 hover:text-red-600 dark:text-gray-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 transition-transform hover:scale-110 bg-transparent border-none cursor-pointer" title="Desvincular Nota Fiscal deste pedido" data-venda-id="{{ pedido.primeira_venda_id }}" data-tipo="NF" data-cliente="{{ pedido.cliente_nome }}" data-nf="{{ pedido.nf or '' }}">
+            <i data-lucide="unlink" class="w-5 h-5"></i>
+        </button>
         {% endif %}
         {% if pedido.caminho_boleto %}
         <a href="{{ url_for('documentos.ver_boleto_venda', id=pedido.primeira_venda_id) }}" target="_blank" rel="noopener noreferrer" class="p-1.5 rounded text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-transform hover:scale-110" title="Visualizar Boleto">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
         </a>
+        <button type="button" class="btn-desvincular-doc p-1.5 rounded text-gray-400 hover:text-red-600 dark:text-gray-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 transition-transform hover:scale-110 bg-transparent border-none cursor-pointer" title="Desvincular Boleto deste pedido" data-venda-id="{{ pedido.primeira_venda_id }}" data-tipo="BOLETO" data-cliente="{{ pedido.cliente_nome }}" data-nf="{{ pedido.nf or '' }}">
+            <i data-lucide="unlink" class="w-5 h-5"></i>
+        </button>
         {% endif %}
         <a href="{{ url_for('vendas.recibo_venda', id=pedido.primeira_venda_id) }}" target="_blank" rel="noopener noreferrer" class="p-1.5 rounded text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-transform hover:scale-110" title="Imprimir Recibo"><i data-lucide="printer" class="w-5 h-5"></i></a>
         {% set v0 = pedido.vendas[0] if pedido.vendas else None %}

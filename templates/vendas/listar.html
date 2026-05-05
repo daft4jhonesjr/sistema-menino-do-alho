@@ -2981,6 +2981,61 @@ function toggleAnaliseVendas(event) {
     });
 })();
 
+// Desvincular Documento (Boleto / NF) — quebra a relação sem excluir o documento.
+// Funciona tanto na tabela desktop (_linhas_venda.html) quanto nos cards mobile
+// (_cards_venda.html) via delegação no document.
+(function() {
+    document.addEventListener('click', function(ev) {
+        var btn = ev.target.closest('.btn-desvincular-doc');
+        if (!btn) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+
+        var vendaId = btn.getAttribute('data-venda-id');
+        var tipo = (btn.getAttribute('data-tipo') || '').toUpperCase();
+        if (!vendaId || (tipo !== 'BOLETO' && tipo !== 'NF')) return;
+
+        var rotuloDoc = (tipo === 'BOLETO') ? 'boleto' : 'nota fiscal';
+        var cliente = btn.getAttribute('data-cliente') || '';
+        var nf = btn.getAttribute('data-nf') || '';
+        var detalhe = cliente ? ('\nCliente: ' + cliente + (nf ? ' / NF: ' + nf : '')) : '';
+
+        if (!confirm('Tem certeza que deseja desvincular este ' + rotuloDoc + ' do pedido?' + detalhe + '\n\nO documento NÃO será excluído — apenas o vínculo com este pedido será removido.')) {
+            return;
+        }
+
+        btn.disabled = true;
+        btn.style.opacity = '0.5';
+
+        var headers = Object.assign(
+            { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            window.getCsrfHeaders ? window.getCsrfHeaders() : {}
+        );
+
+        fetch('/venda/' + encodeURIComponent(vendaId) + '/desvincular_documento', {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({ tipo: tipo })
+        })
+            .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, body: d }; }); })
+            .then(function(res) {
+                if (res.ok && res.body && res.body.ok) {
+                    window.location.reload();
+                } else {
+                    var msg = (res.body && (res.body.mensagem || res.body.erro)) || 'Erro ao desvincular documento.';
+                    alert(msg);
+                    btn.disabled = false;
+                    btn.style.opacity = '1';
+                }
+            })
+            .catch(function() {
+                alert('Erro na comunicação com o servidor.');
+                btn.disabled = false;
+                btn.style.opacity = '1';
+            });
+    });
+})();
+
 // Filtro dinâmico por Empresa (tabela + cards, sem recarregar)
 // Usa classe CSS dedicada para não conflitar com o toggle hidden do expandir/recolher
 (function() {

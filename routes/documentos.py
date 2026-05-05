@@ -18,6 +18,7 @@ Rotas extraídas do legado ``app.py`` (Fase 3 da refatoração):
     * POST /admin/arquivos/deletar_massa         admin_arquivos_deletar_massa
     * GET/POST /admin/reprocessar-vencimentos    admin_reprocessar_vencimentos (master)
     * POST /documento/<id>/vincular              vincular_documento_venda
+    * POST /venda/<id>/desvincular_documento     desvincular_documento_venda
     * GET  /admin/raio_x                         raio_x               (master)
     * POST /admin/resgatar_orfaos                resgatar_orfaos      (master)
     * POST /admin/forcar_leitura_pasta           forcar_leitura_pasta (master)
@@ -1005,6 +1006,106 @@ def vincular_documento_venda(id):
         return jsonify(ok=True, sucesso=True, mensagem=msg, doc_id=documento.id)
     flash(msg, 'success')
     return redirect(url_for('dashboard.dashboard'))
+
+
+@documentos_bp.route('/venda/<int:venda_id>/desvincular_documento', methods=['POST'])
+def desvincular_documento_venda(venda_id):
+    """Quebra o vínculo entre um documento (boleto ou NF) e um pedido.
+
+    Não exclui o ``Documento`` em si — apenas:
+      * zera ``Documento.venda_id`` do(s) documento(s) ligado(s) ao pedido;
+      * limpa ``caminho_boleto`` / ``caminho_nf`` em todas as vendas do
+        pedido (mantém o agrupamento Cliente+NF+Data sincronizado, simétrico
+        ao ``vincular_documento_venda``);
+      * zera ``Venda.data_vencimento`` quando estava herdada do boleto, para
+        que a próxima vinculação possa propagar a data correta.
+
+    Espera ``tipo`` no corpo (form ou JSON) com um de: ``BOLETO`` | ``NF``.
+    Resposta: JSON quando AJAX, redirect+flash em fluxo navegado.
+    """
+    venda = query_tenant(Venda).filter_by(id=venda_id).first_or_404()
+    if not _usuario_pode_gerenciar_venda(venda):
+        return _resposta_sem_permissao()
+
+    payload = request.get_json(silent=True) or {}
+    tipo = (request.form.get('tipo') or payload.get('tipo') or '').strip().upper()
+    if tipo not in ('BOLETO', 'NF'):
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify(ok=False, mensagem='Tipo inválido (use BOLETO ou NF).'), 400
+        flash('Tipo de documento inválido.', 'error')
+        return redirect(request.referrer or url_for('vendas.listar_vendas'))
+
+    try:
+        vendas_pedido = _vendas_do_pedido(venda)
+        # Coleta caminhos atuais antes de limpar — usados para localizar o
+        # Documento no banco (a FK Documento.venda_id pode estar NULL em
+        # vínculos órfãos, então casamos por caminho_arquivo também).
+        caminhos_alvo = set()
+        for vv in vendas_pedido:
+            if tipo == 'BOLETO':
+                cb = (vv.caminho_boleto or '').strip()
+                if cb:
+                    caminhos_alvo.add(cb)
+            else:
+                cn = (vv.caminho_nf or '').strip()
+                if cn:
+                    caminhos_alvo.add(cn)
+
+        # 1) Quebra a FK Documento.venda_id em todos os docs ligados ao pedido
+        #    (filtra por tipo + venda_id explícito + caminhos coletados).
+        docs_q = query_documentos_tenant().filter(
+            Documento.tipo == tipo,
+        )
+        venda_ids_pedido = [v.id for v in vendas_pedido]
+        if venda_ids_pedido and caminhos_alvo:
+            docs_q = docs_q.filter(or_(
+                Documento.venda_id.in_(venda_ids_pedido),
+                Documento.caminho_arquivo.in_(list(caminhos_alvo)),
+            ))
+        elif venda_ids_pedido:
+            docs_q = docs_q.filter(Documento.venda_id.in_(venda_ids_pedido))
+        elif caminhos_alvo:
+            docs_q = docs_q.filter(Documento.caminho_arquivo.in_(list(caminhos_alvo)))
+        else:
+            docs_q = docs_q.filter(False)
+
+        documentos_afetados = docs_q.all()
+        for doc in documentos_afetados:
+            doc.venda_id = None
+
+        # 2) Limpa os campos espelhados em todas as vendas do pedido.
+        for vv in vendas_pedido:
+            if tipo == 'BOLETO':
+                vv.caminho_boleto = None
+                # data_vencimento herdada do boleto: zerar para evitar que
+                # um boleto antigo mantenha o pedido aparentando vencido.
+                vv.data_vencimento = None
+            else:
+                vv.caminho_nf = None
+
+        db.session.commit()
+        limpar_cache_dashboard()
+    except Exception as e:
+        db.session.rollback()
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return erro_json(
+                e,
+                'Erro ao desvincular documento.',
+                chave_mensagem='mensagem',
+                contexto='desvincular_documento_venda',
+            )
+        erro_flash(
+            e,
+            'Erro ao desvincular documento.',
+            contexto='desvincular_documento_venda',
+        )
+        return redirect(request.referrer or url_for('vendas.listar_vendas'))
+
+    msg = 'Boleto desvinculado do pedido.' if tipo == 'BOLETO' else 'Nota fiscal desvinculada do pedido.'
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify(ok=True, sucesso=True, mensagem=msg, tipo=tipo, removidos=len(documentos_afetados))
+    flash(msg, 'success')
+    return redirect(request.referrer or url_for('vendas.listar_vendas'))
 
 
 @documentos_bp.route('/admin/raio_x', methods=['GET'])
