@@ -489,6 +489,10 @@ Se for uma atualização de um banco existente:
 python migrations/criar_indices_performance.py
 python migrations/add_notificacoes_usuario.py
 python migrations/add_telefone_cliente.py
+# Substitui o UNIQUE global de TipoProduto.nome e Fornecedor.nome
+# por UniqueConstraint(empresa_id, nome). Idempotente; aborta se houver
+# duplicatas pré-existentes.
+python migrations/uniqueconstraint_tenant.py
 ```
 
 ### Verificação do Ambiente

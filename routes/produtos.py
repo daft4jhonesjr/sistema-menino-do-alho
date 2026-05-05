@@ -786,8 +786,12 @@ def novo_fornecedor():
         db.session.add(fornecedor)
         db.session.commit()
         flash('Fornecedor cadastrado com sucesso!', 'success')
+    except IntegrityError:
+        db.session.rollback()
+        flash('Já existe um fornecedor com este nome nesta empresa.', 'warning')
     except Exception:
         db.session.rollback()
+        current_app.logger.exception('Falha ao cadastrar fornecedor')
         flash('Erro ao cadastrar fornecedor.', 'error')
     return redirect(url_for('produtos.listar_produtos'))
 
@@ -828,8 +832,12 @@ def editar_fornecedor(id):
         fornecedor.tipos_produtos = tipos_selecionados
         db.session.commit()
         flash('Fornecedor atualizado com sucesso!', 'success')
+    except IntegrityError:
+        db.session.rollback()
+        flash('Já existe outro fornecedor com este nome nesta empresa.', 'warning')
     except Exception:
         db.session.rollback()
+        current_app.logger.exception('Falha ao atualizar fornecedor')
         flash('Erro ao atualizar fornecedor.', 'error')
 
     return redirect(url_for('produtos.listar_produtos'))
@@ -867,9 +875,13 @@ def editar_fornecedor_ajax(id):
         fornecedor.tipos_produtos = tipos_selecionados
         db.session.commit()
         return jsonify({'success': True, 'tipos': [t.nome for t in tipos_selecionados]})
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': 'Já existe outro fornecedor com este nome nesta empresa.'}), 400
     except Exception:
         db.session.rollback()
-        return jsonify({'success': False, 'error': 'Erro no banco de dados. Verifique se o nome já existe.'}), 500
+        current_app.logger.exception('Falha ao atualizar fornecedor (AJAX)')
+        return jsonify({'success': False, 'error': 'Erro no banco de dados. Tente novamente.'}), 500
 
 
 @produtos_bp.route('/fornecedores/<int:id>/excluir', methods=['POST'])
@@ -906,8 +918,12 @@ def novo_tipo_produto():
         db.session.add(novo)
         db.session.commit()
         flash('Tipo cadastrado com sucesso!', 'success')
+    except IntegrityError:
+        db.session.rollback()
+        flash('Já existe um tipo com este nome nesta empresa.', 'warning')
     except Exception:
         db.session.rollback()
+        current_app.logger.exception('Falha ao cadastrar tipo de produto')
         flash('Erro ao cadastrar tipo.', 'error')
     return redirect(url_for('produtos.listar_produtos'))
 
@@ -964,8 +980,12 @@ def editar_tipo(id):
                 tipo.set_config(_extrair_config_atributos_form(request.form))
             db.session.commit()
             flash('Tipo atualizado com sucesso!', 'success')
+        except IntegrityError:
+            db.session.rollback()
+            flash('Já existe outro tipo com este nome nesta empresa.', 'warning')
         except Exception:
             db.session.rollback()
+            current_app.logger.exception('Falha ao atualizar tipo de produto')
             flash('Erro ao atualizar tipo.', 'error')
         return redirect(url_for('produtos.listar_produtos'))
 

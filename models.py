@@ -272,6 +272,12 @@ class Fornecedor(db.Model):
     """
 
     __tablename__ = "fornecedores"
+    __table_args__ = (
+        db.UniqueConstraint(
+            'empresa_id', 'nome',
+            name='uq_fornecedor_empresa_nome',
+        ),
+    )
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     empresa_id = db.Column(
@@ -280,8 +286,7 @@ class Fornecedor(db.Model):
         nullable=True,
         index=True,
     )
-    # TODO Fase 2: remover unique=True e trocar por UniqueConstraint(empresa_id, nome).
-    nome = db.Column(db.String(100), nullable=False, unique=True, index=True)
+    nome = db.Column(db.String(100), nullable=False, index=True)
     razao_social = db.Column(db.String(150), nullable=True)
     cnpj = db.Column(db.String(20), nullable=True)
     endereco = db.Column(db.String(255), nullable=True)
@@ -296,6 +301,12 @@ class Fornecedor(db.Model):
 class TipoProduto(db.Model):
     """Tipo simples de produto para seleção no cadastro de entrada."""
     __tablename__ = "tipos_produto"
+    __table_args__ = (
+        db.UniqueConstraint(
+            'empresa_id', 'nome',
+            name='uq_tipo_produto_empresa_nome',
+        ),
+    )
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     empresa_id = db.Column(
@@ -304,8 +315,7 @@ class TipoProduto(db.Model):
         nullable=True,
         index=True,
     )
-    # TODO Fase 2: remover unique=True e trocar por UniqueConstraint(empresa_id, nome).
-    nome = db.Column(db.String(100), nullable=False, unique=True, index=True)
+    nome = db.Column(db.String(100), nullable=False, index=True)
 
     # JSON serializado (Text para portabilidade SQLite/Postgres).
     # Estrutura: {"usa_nacionalidade": bool, "usa_caminhoneiro": bool,
