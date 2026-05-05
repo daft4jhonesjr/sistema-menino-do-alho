@@ -42,7 +42,7 @@ from decimal import Decimal, InvalidOperation
 
 from flask import (
     Blueprint, render_template, request, redirect, url_for,
-    flash, jsonify, current_app,
+    flash, jsonify, current_app, session,
 )
 from flask_login import current_user
 from sqlalchemy import event, func, case
@@ -59,6 +59,8 @@ from services.files_utils import _arquivo_imagem_permitido
 from services.config_helpers import _EXTERNAL_TIMEOUT
 from services.vendas_services import _resincronizar_pagamento_venda
 from services.error_utils import erro_json
+from services.query_utils import filtro_ano_data_venda
+from services.cache_utils import limpar_cache_dashboard
 
 
 caixa_bp = Blueprint('caixa', __name__)
@@ -77,6 +79,61 @@ def _exigir_tenant_em_todas_rotas():
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers exclusivos do caixa
 # ─────────────────────────────────────────────────────────────────────────────
+
+def _redirect_caixa(setor=None, lanc=None, abrir_mes=None, destaque_id=None):
+    """Devolve um ``redirect`` para ``GET /caixa`` com query string de feedback.
+
+    A tela do Caixa tem cards de mês colapsados por padrão (apenas o mês
+    atual abre automático). Após uma mutação (criar/editar/deletar) o
+    usuário precisa enxergar o item tocado, mesmo que esteja em mês
+    antigo. Aqui propagamos:
+
+    * ``setor``        — preserva a aba GERAL/BACALHAU em que o usuário
+      estava;
+    * ``abrir_mes``    — chave ``YYYY-MM`` que o JS do template usa para
+      expandir automaticamente aquele card do mês;
+    * ``destaque_id``  — id do ``LancamentoCaixa`` para o JS dar scroll +
+      anel de destaque temporário na linha/card correspondente.
+
+    O atalho ``lanc=<LancamentoCaixa>`` deriva ambos a partir do objeto
+    em uma única linha. Sempre que possível, prefira passar ``lanc``.
+    """
+    args = {}
+    if setor:
+        args['setor'] = setor
+    if lanc is not None:
+        data = getattr(lanc, 'data', None)
+        if data is not None:
+            args['abrir_mes'] = data.strftime('%Y-%m')
+        lanc_id = getattr(lanc, 'id', None)
+        if lanc_id:
+            args['destaque_id'] = lanc_id
+    if abrir_mes:
+        args['abrir_mes'] = abrir_mes
+    if destaque_id:
+        args['destaque_id'] = destaque_id
+    return redirect(url_for('caixa.caixa', **args))
+
+
+def _invalidar_cache_dashboard_seguro():
+    """Invalida o cache do Dashboard sem propagar exceções.
+
+    Mutações no Caixa afetam o card "Saldo do Caixa" do Dashboard, que
+    usa ``@cache.cached(timeout=300, ...)``. Sem invalidar o cache, o
+    saldo no painel inicial fica defasado por até 5 minutos. Como a
+    invalidação envolve I/O com o backend de cache, envolvemos numa
+    salvaguarda para que falha de cache nunca derrube o flash de
+    sucesso da rota chamadora.
+    """
+    try:
+        limpar_cache_dashboard()
+    except Exception as exc:
+        current_app.logger.warning(
+            f"[CAIXA-CACHE] limpar_cache_dashboard falhou: "
+            f"{exc.__class__.__name__}: {exc}",
+            exc_info=True,
+        )
+
 
 def _normalizar_valor_brl(v):
     """Normaliza valor monetário BRL "sujo" para string em formato Decimal.
@@ -287,6 +344,19 @@ def caixa():
     if setor_atual not in ('GERAL', 'BACALHAU'):
         setor_atual = 'GERAL'
 
+    # Filtro por ano ativo (mesmo padrão de Vendas/Produtos): em vez de
+    # ``.limit(500)``, recortamos a janela ao ano selecionado pelo usuário
+    # no seletor global. Isto:
+    #   * elimina a "ilusão de dados sumindo" que ocorria quando o setor
+    #     ultrapassava 500 lançamentos e o ORDER BY data DESC LIMIT 500
+    #     deixava meses inteiros antigos de fora;
+    #   * mantém a query bounded pelo range de datas do ano (usa o índice
+    #     ``ix_lancamentos_caixa_empresa_data``);
+    #   * é coerente com o restante do sistema fiscal (saldo do mês reinicia
+    #     em janeiro do ano ativo).
+    ano_ativo = session.get('ano_ativo', datetime.now().year)
+    _ini_ano, _fim_ano = filtro_ano_data_venda(ano_ativo, LancamentoCaixa.data)
+
     # P0 (perf): consolidamos os 4 SUMs separados em 1 única query com
     # CASE WHEN. Antes: 4 round-trips ao Postgres por GET /caixa, cada um
     # com filtro pesado em ``lancamentos_caixa``. Depois do redirect do
@@ -296,6 +366,8 @@ def caixa():
     _filtro_base = (
         (LancamentoCaixa.empresa_id == _eid)
         & (LancamentoCaixa.setor == setor_atual)
+        & (LancamentoCaixa.data >= date(int(ano_ativo), 1, 1))
+        & (LancamentoCaixa.data < date(int(ano_ativo) + 1, 1, 1))
     )
     _agg = db.session.query(
         func.coalesce(func.sum(case(
@@ -321,9 +393,13 @@ def caixa():
     total_saidas = _agg.total_saidas or 0.0
     saldo_atual = Decimal(str(total_entradas or Decimal('0.00'))) - Decimal(str(total_saidas or Decimal('0.00')))
 
-    lancamentos = query_tenant(LancamentoCaixa).filter_by(setor=setor_atual).order_by(
-        LancamentoCaixa.data.desc(), LancamentoCaixa.id.desc()
-    ).limit(500).all()
+    lancamentos = (
+        query_tenant(LancamentoCaixa)
+        .filter_by(setor=setor_atual)
+        .filter(_ini_ano, _fim_ano)
+        .order_by(LancamentoCaixa.data.desc(), LancamentoCaixa.id.desc())
+        .all()
+    )
     meses_pt = {1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril', 5: 'Maio', 6: 'Junho',
                 7: 'Julho', 8: 'Agosto', 9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'}
     lancamentos_agrupados = {}
@@ -403,6 +479,15 @@ def caixa():
     except Exception:
         contagem_gaveta_estado = {'dinheiro': [], 'cheques': []}
 
+    # Feedback visual pós-mutação: a rota POST de adicionar/editar/deletar
+    # propaga ?abrir_mes=YYYY-MM&destaque_id=N para que o template possa
+    # auto-expandir o card do mês correspondente e dar destaque na linha
+    # recém-tocada. Saneamos os valores aqui (regex/cast) para o template
+    # nunca receber payload arbitrário.
+    abrir_mes_raw = (request.args.get('abrir_mes') or '').strip()
+    abrir_mes = abrir_mes_raw if re.match(r'^\d{4}-\d{2}$', abrir_mes_raw) else ''
+    destaque_id = request.args.get('destaque_id', type=int) or 0
+
     return render_template(
         'caixa.html',
         lancamentos_agrupados=lancamentos_agrupados,
@@ -416,6 +501,9 @@ def caixa():
         hoje=hoje,
         ontem=ontem,
         contagem_gaveta_estado=contagem_gaveta_estado,
+        abrir_mes=abrir_mes,
+        destaque_id=destaque_id,
+        ano_ativo=ano_ativo,
     )
 
 
@@ -611,11 +699,23 @@ def adicionar_caixa():
             current_app.logger.warning(f"[CAIXA-ADD] commit-fail (split) err={err}")
             flash(err or "Erro ao adicionar lançamentos.", "error")
             return redirect(url_for('caixa.caixa', setor=setor))
+        _invalidar_cache_dashboard_seguro()
         current_app.logger.info(
             f"[CAIXA-ADD] commit-ok (split) ids={[l.id for l in lancamentos]} "
             f"vendas_ressync={len(venda_ids_split)}"
         )
         flash('Lançamentos divididos adicionados com sucesso!', 'success')
+        # Aviso leve quando o lançamento ficou fora do ano ativo da sessão:
+        # o usuário não verá o item até trocar o seletor de ano.
+        _ano_sessao = session.get('ano_ativo', datetime.now().year)
+        if int(_ano_sessao) != nova_data.year:
+            flash(
+                f'Lançamentos salvos em {nova_data.year}. Troque o seletor '
+                f'de ano para visualizá-los.',
+                'warning',
+            )
+        _primeiro_lanc = lancamentos[0] if lancamentos else None
+        return _redirect_caixa(setor=setor, lanc=_primeiro_lanc)
     else:
         novo_valor = _limpar_valor_moeda(request.form.get('valor'))
         novo_lancamento = LancamentoCaixa(
@@ -640,13 +740,21 @@ def adicionar_caixa():
             current_app.logger.warning(f"[CAIXA-ADD] commit-fail err={err}")
             flash(err or "Erro ao adicionar lançamento.", "error")
             return redirect(url_for('caixa.caixa', setor=setor))
+        _invalidar_cache_dashboard_seguro()
         current_app.logger.info(
             f"[CAIXA-ADD] commit-ok id={novo_lancamento.id} valor={novo_valor} "
             f"vendas_ressync={len(venda_ids_simples)}"
         )
         flash('Lançamento adicionado com sucesso!', 'success')
-    current_app.logger.info(f"[CAIXA-ADD] redirecting setor={setor}")
-    return redirect(url_for('caixa.caixa', setor=setor))
+        _ano_sessao = session.get('ano_ativo', datetime.now().year)
+        if int(_ano_sessao) != nova_data.year:
+            flash(
+                f'Lançamento salvo em {nova_data.year}. Troque o seletor '
+                f'de ano para visualizá-lo.',
+                'warning',
+            )
+        current_app.logger.info(f"[CAIXA-ADD] redirecting setor={setor}")
+        return _redirect_caixa(setor=setor, lanc=novo_lancamento)
 
 
 @caixa_bp.route('/caixa/editar/<int:id>', methods=['POST'])
@@ -742,10 +850,20 @@ def editar_lancamento_caixa(id):
             current_app.logger.info(f"[CAIXA-EDIT] redirecting (commit_fail) id={id}")
             return redirect(url_for('caixa.caixa'))
 
+        _invalidar_cache_dashboard_seguro()
         current_app.logger.info(
             f"[CAIXA-EDIT] commit-ok id={id} vendas_ressync={len(venda_ids_para_ressync)}"
         )
         flash('Lançamento atualizado com sucesso!', 'success')
+        _ano_sessao = session.get('ano_ativo', datetime.now().year)
+        if lancamento.data and int(_ano_sessao) != lancamento.data.year:
+            flash(
+                f'Lançamento salvo em {lancamento.data.year}. Troque o seletor '
+                f'de ano para visualizá-lo.',
+                'warning',
+            )
+        current_app.logger.info(f"[CAIXA-EDIT] redirecting id={id}")
+        return _redirect_caixa(setor=lancamento.setor, lanc=lancamento)
     except InvalidOperation as e:
         # Defesa em profundidade: se mesmo após o ``_converter_valor_brl_estrito``
         # algum outro Decimal(...) do fluxo lançar conversão (não previsto hoje),
@@ -803,6 +921,7 @@ def alternar_status_envio_cheque(id):
             )
             flash(err or 'Erro ao atualizar status de envio do cheque.', 'error')
         else:
+            _invalidar_cache_dashboard_seguro()
             current_app.logger.info(
                 f"[CAIXA-CHEQUE] commit-ok id={id} novo_status={novo_status}"
             )
@@ -857,6 +976,7 @@ def toggle_status_cheque(id):
             current_app.logger.info(f"[CAIXA-CHEQUE-AJAX] returning-json id={id} ok=false")
             return jsonify({'success': False, 'message': 'Erro ao atualizar status do cheque.'}), 500
 
+        _invalidar_cache_dashboard_seguro()
         current_app.logger.info(
             f"[CAIXA-CHEQUE-AJAX] commit-ok id={id} novo_status={novo_status}"
         )
@@ -928,8 +1048,17 @@ def deletar_caixa(id):
     except Exception:
         pass
 
+    setor_redirect = None
+    abrir_mes_redirect = None
     try:
         lancamento = query_tenant(LancamentoCaixa).filter_by(id=id).first_or_404()
+        # Capturamos setor + mês ANTES do delete; depois do flush a instância
+        # sai do banco e ``lancamento.data`` pode virar ``None`` em alguns
+        # backends, então registramos as strings derivadas em variáveis locais
+        # para o redirect manter o usuário no contexto certo.
+        setor_redirect = lancamento.setor
+        if lancamento.data is not None:
+            abrir_mes_redirect = lancamento.data.strftime('%Y-%m')
         venda_ids = _coletar_vendas_afetadas([lancamento])
         db.session.delete(lancamento)
         db.session.flush()
@@ -941,6 +1070,7 @@ def deletar_caixa(id):
             )
             flash(err or 'Erro ao remover lançamento.', 'error')
         else:
+            _invalidar_cache_dashboard_seguro()
             current_app.logger.info(
                 f"[CAIXA-DEL] commit-ok id={id} vendas_ressync={len(venda_ids)}"
             )
@@ -955,7 +1085,7 @@ def deletar_caixa(id):
         flash(f'Erro ao remover lançamento: {msg}', 'error')
 
     current_app.logger.info(f"[CAIXA-DEL] redirecting id={id}")
-    return redirect(url_for('caixa.caixa'))
+    return _redirect_caixa(setor=setor_redirect, abrir_mes=abrir_mes_redirect)
 
 
 @caixa_bp.route('/caixa/deletar_massa', methods=['POST'])
@@ -1004,6 +1134,7 @@ def deletar_massa_caixa():
                     )
                     flash(err or 'Erro ao excluir lançamentos.', 'error')
                 else:
+                    _invalidar_cache_dashboard_seguro()
                     current_app.logger.info(
                         f"[CAIXA-MASSA-DEL] commit-ok (deletar_tudo) "
                         f"count={count} vendas_ressync={len(venda_ids)}"
@@ -1044,6 +1175,7 @@ def deletar_massa_caixa():
                 )
                 flash(err or 'Erro ao excluir lançamentos.', 'error')
             else:
+                _invalidar_cache_dashboard_seguro()
                 current_app.logger.info(
                     f"[CAIXA-MASSA-DEL] commit-ok count={count} "
                     f"vendas_ressync={len(venda_ids)}"
@@ -1301,6 +1433,7 @@ def importar_caixa():
                     )
 
             if linhas_sucesso > 0:
+                _invalidar_cache_dashboard_seguro()
                 current_app.logger.info(
                     f"[CAIXA-IMPORT] commit-final-ok success={linhas_sucesso} "
                     f"dup={linhas_duplicadas} err={len(erros)}"

@@ -513,6 +513,12 @@
 <script>
 window.CAIXA_DELETE_URL = "{{ url_for('caixa.deletar_caixa', id=0) }}".replace('/0', '/');
 window.CAIXA_CSRF_TOKEN = "{{ csrf_token() }}";
+// Feedback visual pós-mutação: o backend (adicionar/editar/deletar)
+// propaga ?abrir_mes=YYYY-MM&destaque_id=N e o template injeta os
+// valores aqui para o JS abaixo expandir o card do mês e destacar a
+// linha recém-tocada.
+window.CAIXA_ABRIR_MES = {{ (abrir_mes or '')|tojson }};
+window.CAIXA_DESTAQUE_ID = {{ (destaque_id or 0)|tojson }};
 
 // Função de Máscara de Moeda (BRL)
 function aplicarMascaraMoeda(input) {
@@ -604,6 +610,55 @@ document.addEventListener('DOMContentLoaded', function() {
             btnSubmit.classList.add('opacity-50', 'cursor-not-allowed');
             btnSubmit.innerHTML = '<span class="animate-spin inline-block mr-2">⏳</span> Salvando...';
         });
+    }
+
+    // Auto-expand do mês e destaque da linha após mutação.
+    // Lê CAIXA_ABRIR_MES (ex.: "2026-01") e CAIXA_DESTAQUE_ID setados pelo
+    // template a partir da query string (?abrir_mes=...&destaque_id=...).
+    // Degrada graciosamente: se o card do mês não existir (ex.: usuário
+    // mudou de ano antes do redirect chegar), apenas não faz nada.
+    try {
+        var abrirMes = window.CAIXA_ABRIR_MES || '';
+        var destaqueId = parseInt(window.CAIXA_DESTAQUE_ID || 0, 10) || 0;
+        if (abrirMes && /^\d{4}-\d{2}$/.test(abrirMes)) {
+            var mesId = 'mes-' + abrirMes;
+            var iconeId = 'icon-' + mesId;
+            var conteudoMes = document.getElementById(mesId);
+            if (conteudoMes && conteudoMes.classList.contains('hidden')) {
+                if (typeof window.toggleMesCaixa === 'function') {
+                    window.toggleMesCaixa(mesId, iconeId);
+                } else {
+                    conteudoMes.classList.remove('hidden');
+                    var icone = document.getElementById(iconeId);
+                    if (icone) icone.classList.add('rotate-180');
+                }
+            }
+        }
+        if (destaqueId > 0) {
+            // Pequeno delay para o accordion terminar a transição antes do scroll.
+            setTimeout(function() {
+                var alvos = document.querySelectorAll('[data-lanc-id="' + destaqueId + '"]');
+                if (!alvos.length) return;
+                alvos.forEach(function(el) {
+                    el.classList.add('ring-2', 'ring-emerald-500', 'ring-offset-2', 'transition-shadow', 'duration-700');
+                });
+                try {
+                    alvos[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                } catch (_) {
+                    alvos[0].scrollIntoView();
+                }
+                setTimeout(function() {
+                    alvos.forEach(function(el) {
+                        el.classList.remove('ring-2', 'ring-emerald-500', 'ring-offset-2');
+                    });
+                }, 3000);
+            }, 120);
+        }
+    } catch (e) {
+        // Silencioso por design: feedback visual nunca pode quebrar a UI.
+        if (window.console && console.warn) {
+            console.warn('[CAIXA] feedback visual falhou:', e);
+        }
     }
 });
 function atualizarTipoPorCategoria(categoriaSelect, tipoInputId) {
