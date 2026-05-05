@@ -187,7 +187,9 @@ class Produto(db.Model):
     Produto/lote com estoque. Possui vendas e fotos.
 
     Attributes:
-        tipo: ALHO, SACOLA, CAFE, BACALHAU, OUTROS.
+        tipo: nome em UPPERCASE de algum TipoProduto cadastrado pela empresa
+            (lista dinâmica e multi-tenant), ou 'OUTROS' como fallback quando
+            o tipo informado não bate com nenhum TipoProduto.
         estoque_atual: Saldo atual (CheckConstraint >= 0).
         fotos: Relacionamento com ProdutoFoto (até 5).
     """

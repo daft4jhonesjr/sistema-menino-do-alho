@@ -108,21 +108,52 @@ def _exigir_tenant_em_todas_rotas():
 # Helpers exclusivos de produtos
 # ============================================================
 
-def _normalizar_tipo_ui(s):
-    """Normaliza tipo para agrupamento na UI: CAFÉ -> CAFE. Retorna ALHO, SACOLA, CAFE, BACALHAU ou OUTROS."""
+_ACENTOS_MAP = str.maketrans({
+    'Á': 'A', 'À': 'A', 'Ã': 'A', 'Â': 'A',
+    'É': 'E', 'Ê': 'E',
+    'Í': 'I',
+    'Ó': 'O', 'Ô': 'O', 'Õ': 'O',
+    'Ú': 'U',
+    'Ç': 'C',
+})
+
+
+def _strip_acentos(s):
+    """Uppercase + remoção de acentos comuns em PT-BR. None/vazio -> ''."""
     if not s:
+        return ''
+    return str(s).strip().upper().translate(_ACENTOS_MAP)
+
+
+def _carregar_tipos_cadastrados_set():
+    """Carrega o set de TipoProduto.nome (uppercase, sem acento) da empresa atual.
+    Centraliza a query para reuso entre os call sites do _normalizar_tipo_ui."""
+    return {
+        _strip_acentos(t.nome)
+        for t in query_tenant(TipoProduto).all()
+        if t.nome
+    }
+
+
+def _normalizar_tipo_ui(s, tipos_cadastrados=None):
+    """Normaliza tipo respeitando os TipoProduto cadastrados pela empresa.
+
+    Retorna o nome canônico (uppercase, sem acento) do tipo se ele estiver
+    na lista de tipos cadastrados; caso contrário, devolve 'OUTROS'.
+
+    ``tipos_cadastrados`` é um ``set`` (ou iterável) com os nomes já
+    normalizados via ``_strip_acentos``. Se ``None``, a função consulta
+    o banco — pattern útil em scripts e em call sites isolados que não
+    têm o set pré-carregado. Para evitar N+1 query em listagens grandes,
+    sempre prefira passar ``tipos_cadastrados`` pré-carregado.
+    """
+    t = _strip_acentos(s)
+    if not t:
         return 'OUTROS'
-    t = str(s).strip().upper()
-    t = t.replace('É', 'E').replace('Ê', 'E').replace('Á', 'A').replace('À', 'A').replace('Ã', 'A').replace('Â', 'A')
-    t = t.replace('Í', 'I').replace('Ó', 'O').replace('Ô', 'O').replace('Õ', 'O').replace('Ú', 'U').replace('Ç', 'C')
-    if t == 'ALHO':
-        return 'ALHO'
-    if t == 'SACOLA':
-        return 'SACOLA'
-    if t == 'CAFE':
-        return 'CAFE'
-    if t == 'BACALHAU':
-        return 'BACALHAU'
+    if tipos_cadastrados is None:
+        tipos_cadastrados = _carregar_tipos_cadastrados_set()
+    if t in tipos_cadastrados:
+        return t
     return 'OUTROS'
 
 
@@ -318,6 +349,13 @@ def listar_produtos():
     # TOTAIS GLOBAIS: Calcular usando TODOS os produtos (sem paginação)
     produtos_todos = query_ordenada.all()
 
+    # Carrega TipoProduto da empresa UMA vez para reutilizar nos buckets de
+    # agrupamento (evita N+1 query no _normalizar_tipo_ui).
+    tipos_cadastrados_objs = query_tenant(TipoProduto).order_by(TipoProduto.nome).all()
+    tipos_cadastrados_set = {
+        _strip_acentos(t.nome) for t in tipos_cadastrados_objs if t.nome
+    }
+
     # Otimização: Calcular quantidade_vendida para todos os produtos de uma vez usando query agregada
     # Isso evita Query N+1 ao chamar produto.quantidade_vendida() para cada produto
     quantidade_vendida_por_produto = {}
@@ -349,7 +387,7 @@ def listar_produtos():
     produtos_por_tipo_todos = {}
     reverse_order = (ordem_data == 'decrescente')
     for item in produtos_com_entrada_todos:
-        tipo_key = _normalizar_tipo_ui(item['produto'].tipo)
+        tipo_key = _normalizar_tipo_ui(item['produto'].tipo, tipos_cadastrados_set)
         if tipo_key not in produtos_por_tipo_todos:
             produtos_por_tipo_todos[tipo_key] = []
         produtos_por_tipo_todos[tipo_key].append(item)
@@ -438,7 +476,7 @@ def listar_produtos():
     # Agrupar apenas produtos paginados para exibição
     produtos_por_tipo = {}
     for item in produtos_com_entrada_real:
-        tipo_key = _normalizar_tipo_ui(item['produto'].tipo)
+        tipo_key = _normalizar_tipo_ui(item['produto'].tipo, tipos_cadastrados_set)
         if tipo_key not in produtos_por_tipo:
             produtos_por_tipo[tipo_key] = []
         produtos_por_tipo[tipo_key].append(item)
@@ -462,12 +500,10 @@ def listar_produtos():
     # Ordem dinâmica multi-tenant: primeiro os TipoProduto cadastrados da empresa
     # (na ordem alfabética do cadastro), depois quaisquer tipos que apareçam em
     # produtos mas não estejam cadastrados (legado), e por fim "OUTROS" como
-    # categoria especial coringa no final.
+    # categoria especial coringa no final. Reusa a lista já carregada acima.
     tipos_cadastrados = [
-        (t.nome or '').strip().upper()
-        for t in query_tenant(TipoProduto).order_by(TipoProduto.nome).all()
+        _strip_acentos(t.nome) for t in tipos_cadastrados_objs if t.nome
     ]
-    tipos_cadastrados = [t for t in tipos_cadastrados if t]
 
     tipos_em_produtos = [k for k in produtos_por_tipo.keys() if k]
     nao_cadastrados = sorted(
@@ -1391,6 +1427,7 @@ def importar_produtos():
                 ignorados = 0
                 erros_detalhados = []
                 outros_nomes = []
+                tipos_cadastrados_set_import = _carregar_tipos_cadastrados_set()
                 for idx, row in df.iterrows():
                     linha_num = (idx + 1) if is_raw else (idx + 2)
                     v = _row_get(row, 'nome_produto', 'produto', 'nome')
@@ -1399,7 +1436,7 @@ def importar_produtos():
                         nome_produto_arquivo = None
                     try:
                         tipo_raw = _strip_quotes(_row_get(row, 'tipo', 'categoria') or '').upper()
-                        tipo = _normalizar_tipo_ui(tipo_raw)
+                        tipo = _normalizar_tipo_ui(tipo_raw, tipos_cadastrados_set_import)
                         nacionalidade = _strip_quotes(_row_get(row, 'nacionalidade', 'origem') or '')
                         marca = _strip_quotes(_row_get(row, 'marca') or '')
                         tamanho_raw = _row_get(row, 'tamanho', 'classificacao')
