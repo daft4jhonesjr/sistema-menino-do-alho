@@ -971,6 +971,7 @@ def editar_tipo(id):
             flash('Já existe outro tipo com este nome.', 'warning')
             return redirect(url_for('produtos.listar_produtos'))
 
+        nome_antigo = (tipo.nome or '').strip().upper()
         try:
             tipo.nome = novo_nome
             # Só altera config se o form trouxer os campos novos (permite rotas legadas
@@ -978,8 +979,30 @@ def editar_tipo(id):
             if 'usa_nacionalidade' in request.form or 'usa_tamanho' in request.form \
                     or 'usa_marca' in request.form or 'usa_caminhoneiro' in request.form:
                 tipo.set_config(_extrair_config_atributos_form(request.form))
+
+            # Cascata: produtos guardam tipo como string (não FK rígida). Se o
+            # nome mudou, propaga em massa para evitar que produtos fiquem
+            # apontando para o nome antigo e caiam em "OUTROS" no agrupamento.
+            produtos_atualizados = 0
+            if nome_antigo and nome_antigo != novo_nome:
+                produtos_atualizados = query_tenant(Produto).filter(
+                    func.upper(Produto.tipo) == nome_antigo
+                ).update({'tipo': novo_nome}, synchronize_session=False)
+
             db.session.commit()
-            flash('Tipo atualizado com sucesso!', 'success')
+
+            try:
+                limpar_cache_dashboard()
+            except Exception:
+                current_app.logger.exception('Falha ao limpar cache do dashboard apos editar tipo')
+
+            if produtos_atualizados:
+                flash(
+                    f'Tipo atualizado com sucesso! {produtos_atualizados} produto(s) reclassificados.',
+                    'success',
+                )
+            else:
+                flash('Tipo atualizado com sucesso!', 'success')
         except IntegrityError:
             db.session.rollback()
             flash('Já existe outro tipo com este nome nesta empresa.', 'warning')
