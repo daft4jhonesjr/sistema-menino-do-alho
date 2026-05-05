@@ -42,6 +42,7 @@ from models import db, Cliente, Venda, LancamentoCaixa
 from services.auth_utils import tenant_required, admin_required, _is_ajax
 from services.db_utils import query_tenant, empresa_id_atual
 from services.cache_utils import limpar_cache_dashboard
+from services.error_utils import erro_json, erro_flash
 from services.config_helpers import registrar_log
 from services.vendas_services import _resincronizar_pagamento_venda
 from services.csv_utils import (
@@ -288,8 +289,7 @@ def editar_cliente(id):
 
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"ERRO CRÍTICO NA EDIÇÃO DE CLIENTE {id}: {str(e)}")
-        flash(f'Erro interno ao processar cliente: {str(e)}', 'error')
+        erro_flash(e, 'Erro interno ao processar cliente. Tente novamente.', contexto=f'editar_cliente:{id}')
         return redirect(url_for('clientes.listar_clientes'))
 
 
@@ -397,7 +397,13 @@ def bulk_delete_clientes():
         return jsonify({'ok': True, 'mensagem': f'{len(ids)} cliente(s) excluído(s) com sucesso.', 'excluidos': len(ids)})
     except Exception as e:
         db.session.rollback()
-        return jsonify({'ok': False, 'mensagem': str(e)}), 500
+        return erro_json(
+            e,
+            'Falha ao excluir clientes em massa.',
+            extras={'ok': False},
+            chave_mensagem='mensagem',
+            contexto='bulk_delete_clientes',
+        )
 
 
 @clientes_bp.route('/clientes/importar', methods=['GET', 'POST'])

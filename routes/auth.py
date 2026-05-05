@@ -42,6 +42,7 @@ from services.db_utils import empresa_id_atual, _safe_db_commit
 from services.config_helpers import (
     get_config, _logs_file, _EXTERNAL_TIMEOUT,
 )
+from services.error_utils import erro_json, erro_flash
 from services.files_utils import _arquivo_imagem_permitido
 
 
@@ -193,8 +194,13 @@ def limpar_logs_erros():
             pass
         return jsonify({'status': 'sucesso'})
     except Exception as e:
-        current_app.logger.error(f"Erro ao limpar logs: {str(e)}\n{traceback.format_exc()}")
-        return jsonify({'status': 'erro', 'mensagem': str(e)}), 500
+        return erro_json(
+            e,
+            'Falha ao limpar arquivo de logs.',
+            extras={'status': 'erro'},
+            chave_mensagem='mensagem',
+            contexto='limpar_logs_erros',
+        )
 
 
 @auth_bp.route('/perfil', methods=['GET', 'POST'])
@@ -232,7 +238,7 @@ def perfil():
                     current_user.profile_image_url = upload_result['secure_url']
                     flash('Foto de perfil atualizada com sucesso!', 'success')
                 except Exception as e:
-                    flash(f'Erro ao fazer upload da imagem: {str(e)}', 'error')
+                    erro_flash(e, 'Erro ao fazer upload da imagem de perfil.', contexto='perfil_upload_imagem')
             else:
                 flash('Cloudinary não configurado. Não foi possível enviar a foto.', 'error')
 
@@ -420,6 +426,45 @@ def atualizar_codigo_cadastro():
         return redirect(url_for("auth.gerenciar_usuarios"))
 
     return _atualizar()
+
+
+@auth_bp.route('/gerenciar_usuarios/trocar_minha_senha', methods=['POST'])
+@login_required
+def trocar_minha_senha():
+    """Troca a senha do próprio usuário logado a partir do painel de
+    gerenciamento de usuários.
+
+    Esta é a alternativa segura à raiz das senhas chumbadas/CLI: permite
+    que cada usuário rotacione a própria credencial direto pela UI. Como
+    é autosserviço, exige apenas ``@login_required`` (não amarra a
+    ``tenant_required``/``admin_required``); o link/card só fica visível
+    na tela de gerenciar_usuarios, que já é admin-only.
+    """
+    nova_senha = (request.form.get('nova_senha') or '')
+    confirmar = (request.form.get('confirmar_senha') or '')
+
+    if not nova_senha or not confirmar:
+        flash('Informe a nova senha e a confirmação.', 'error')
+        return redirect(url_for('auth.gerenciar_usuarios'))
+
+    if nova_senha != confirmar:
+        flash('A nova senha e a confirmação não conferem.', 'error')
+        return redirect(url_for('auth.gerenciar_usuarios'))
+
+    if len(nova_senha) < 6:
+        flash('A nova senha deve ter no mínimo 6 caracteres.', 'error')
+        return redirect(url_for('auth.gerenciar_usuarios'))
+
+    try:
+        current_user.password_hash = generate_password_hash(nova_senha)
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        erro_flash(exc, 'Erro ao atualizar a senha. Tente novamente.', contexto='trocar_minha_senha')
+        return redirect(url_for('auth.gerenciar_usuarios'))
+
+    flash('Senha atualizada com sucesso.', 'success')
+    return redirect(url_for('auth.gerenciar_usuarios'))
 
 
 @auth_bp.route('/gerenciar_usuarios/editar_completo/<int:id>', methods=['POST'])

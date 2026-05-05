@@ -1,8 +1,33 @@
 # Relatório de Código Morto (Auditoria Estática)
 
-Data: 2026-03-17  
-Escopo principal: `app.py`, `models.py`, `templates/`, `requirements.txt`  
+Data: 2026-03-17 (atualização: 2026-05-04)
+Escopo principal: `app.py`, `models.py`, `templates/`, `requirements.txt`
 Método: varredura estática por AST + busca textual (sem execução funcional)
+
+---
+
+## 0) Atualização — Auditoria de Segurança & Limpeza (2026-05-04)
+
+Itens **removidos do repositório** pela auditoria de segurança/limpeza:
+
+- `achar_codigo.py` — script de busca textual local, sem uso em produção.
+- `espiar_banco.py`, `visualizar_banco.py` — inspetores SQLite locais; sistema usa Postgres.
+- `backup.py` — sistema de backup SQLite legado, já marcado como removido em `app.py`.
+- `promover.py` — script CLI que promovia o **primeiro usuário do banco** a admin, sem confirmação. Risco operacional alto — funcionalidade já existe na tela de gerenciamento de usuários.
+- `limpar_vinculos.py` — duplicava a rota `/admin/limpar_vinculos_quebrados`.
+- `teste_seguranca.sh` — duplicado de `roteiro_validacao_seguranca.sh`.
+
+Itens **movidos** para isolar scripts de manutenção:
+
+- `init_db.py`, `criar_master.py`, `resetar_senha.py`, `migrar_dados.py` → `scripts_dev/` (com `README.md` explicando uso por env vars).
+- `reset_db.py`, `migrate_recreate_db.py` → `scripts_seed/` (com guard `CONFIRMO_DROP_PROD=YES_I_KNOW` e bloqueio fora de localhost).
+
+Credenciais hardcoded **removidas** dos scripts:
+
+- Senha real do Neon Postgres em `migrar_dados.py:12` (rotacionar a senha do banco também é obrigatório).
+- Senha do admin Jhones em `resetar_senha.py:17` (rotacionar a senha em produção também).
+- Senhas previsíveis (`'123456'`, `'admin123'`) em `criar_master.py` e `init_db.py`.
+- Bootstrap em `app.py` parou de gerar senha automática e logá-la — exige `ADMIN_INITIAL_PASS`.
 
 ---
 

@@ -41,6 +41,7 @@ from sqlalchemy import event
 from sqlalchemy.engine import Engine
 import pytz
 from functools import wraps
+import hmac
 from sqlalchemy import func, desc, asc, text, or_, extract, case, cast, inspect
 from sqlalchemy.orm import joinedload, contains_eager, selectinload
 from sqlalchemy.exc import IntegrityError, OperationalError
@@ -3288,7 +3289,8 @@ def popular_fornecedores_iniciais():
         db.session.commit()
 
 
-# Bootstrap do banco: NÃO executa na importação se SKIP_DB_BOOTSTRAP=1 (usado pelo migrate_recreate_db.py)
+# Bootstrap do banco: NÃO executa na importação se SKIP_DB_BOOTSTRAP=1
+# (usado por scripts_seed/migrate_recreate_db.py e scripts_dev/criar_master.py).
 if not os.environ.get('SKIP_DB_BOOTSTRAP'):
     with app.app_context():
         db.create_all()
@@ -3689,22 +3691,25 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
                 db.session.commit()
             except (OperationalError, Exception):
                 db.session.rollback()
-        # Jhones sempre admin; criar se não existir
+        # Jhones sempre admin; criar se não existir.
+        # IMPORTANTE: NUNCA logar a senha gerada — em produção o log da Render
+        # fica acessível via painel e isso é um vazamento. Exigimos que o
+        # operador defina ADMIN_INITIAL_PASS no ambiente; sem ela o bootstrap
+        # apenas avisa e segue sem criar o admin.
         u = Usuario.query.filter_by(username='Jhones').first()
         if not u:
-            import secrets as _secrets
             admin_pass = os.environ.get('ADMIN_INITIAL_PASS')
             if not admin_pass:
-                admin_pass = _secrets.token_urlsafe(12)
-                app.logger.info(f"\n{'='*60}")
-                app.logger.info(f"  ATENÇÃO: Senha do admin gerada automaticamente:")
-                app.logger.info(f"  Usuário: Jhones")
-                app.logger.info(f"  Senha:   {admin_pass}")
-                app.logger.info(f"  Altere imediatamente em Configurações > Usuários.")
-                app.logger.info(f"{'='*60}\n")
-            u = Usuario(username='Jhones', password_hash=generate_password_hash(admin_pass), role='admin')
-            db.session.add(u)
-            db.session.commit()
+                app.logger.warning(
+                    "ADMIN_INITIAL_PASS não definida; usuário admin 'Jhones' "
+                    "NÃO foi criado. Defina a env var e reinicie o serviço, "
+                    "ou rode `python init_db.py` em ambiente controlado."
+                )
+            else:
+                u = Usuario(username='Jhones', password_hash=generate_password_hash(admin_pass), role='admin')
+                db.session.add(u)
+                db.session.commit()
+                app.logger.info("Usuário admin 'Jhones' criado a partir de ADMIN_INITIAL_PASS.")
 
 
 
@@ -4128,20 +4133,36 @@ def service_worker():
     return send_file('static/sw.js', mimetype='application/javascript')
 
 
-@app.route('/api/disparar_relatorio', methods=['POST'])
-def disparar_relatorio():
-    """Envia relatório financeiro mensal por e-mail para admins cadastrados.
-    Protegido por token (header X-CRON-TOKEN ou body/query token)."""
+def _validar_cron_token():
+    """Valida o token de cron via header ``X-CRON-TOKEN``.
+
+    Retorna ``None`` em sucesso ou uma resposta Flask de erro caso
+    contrário. Aceitar token APENAS via header (não via query string ou
+    form/body) evita vazamento em logs de servidor, proxies e referer.
+    Comparação com ``hmac.compare_digest`` para mitigar timing attacks.
+    """
     if not CRON_SECRET:
         return jsonify({'erro': 'CRON_SECRET não configurado no ambiente.'}), 503
-    token = (
-        request.headers.get('X-CRON-TOKEN')
-        or (request.get_json(silent=True) or {}).get('token')
-        or request.form.get('token')
-        or request.args.get('token')
-    )
-    if token != CRON_SECRET:
+    token = request.headers.get('X-CRON-TOKEN') or ''
+    if not hmac.compare_digest(token, CRON_SECRET):
         return jsonify({'erro': 'Acesso negado'}), 403
+    return None
+
+
+@app.route('/api/disparar_relatorio', methods=['POST'])
+@limiter.limit("5 per hour")
+def disparar_relatorio():
+    """Envia relatório financeiro mensal por e-mail para admins cadastrados.
+
+    Protegido por token via header ``X-CRON-TOKEN`` (rate-limit 5/h por IP).
+    Multi-tenant: aceita ``empresa_id`` no body JSON para limitar o escopo
+    do relatório a um tenant específico; sem ele, gera por tenant
+    individualmente para evitar agregados globais que vazariam dados
+    cross-tenant.
+    """
+    erro = _validar_cron_token()
+    if erro is not None:
+        return erro
 
     if not MAIL_USERNAME or not MAIL_PASSWORD:
         return jsonify({'erro': 'Credenciais de e-mail não configuradas (MAIL_USERNAME / MAIL_PASSWORD)'}), 500
@@ -4156,34 +4177,32 @@ def disparar_relatorio():
                 7: 'Julho', 8: 'Agosto', 9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'}
     mes_ano_str = f"{meses_pt.get(mes_passado, '')} de {ano_passado}"
 
-    vendas_mes = Venda.query.filter(
-        extract('month', Venda.data_venda) == mes_passado,
-        extract('year', Venda.data_venda) == ano_passado
-    ).options(joinedload(Venda.produto)).all()
+    # Escopo opcional por tenant. Sem ``empresa_id`` no body, geramos o
+    # relatório separadamente para cada tenant — cada admin só recebe os
+    # números da própria empresa, evitando vazamento cross-tenant.
+    body = request.get_json(silent=True) or {}
+    empresa_id_filtro = body.get('empresa_id')
 
-    faturamento_total = sum(v.calcular_total() for v in vendas_mes)
-    lucro_total = sum(v.calcular_lucro() for v in vendas_mes)
-    qtd_vendas = len(vendas_mes)
-    ticket_medio = faturamento_total / qtd_vendas if qtd_vendas > 0 else 0
-
-    faturamento_fmt = formato_moeda(faturamento_total)
-    lucro_fmt = formato_moeda(lucro_total)
-    ticket_fmt = formato_moeda(ticket_medio)
-
-    admins = Usuario.query.filter(
+    admins_query = Usuario.query.filter(
         Usuario.role == 'admin',
         Usuario.email.isnot(None),
-        Usuario.email != ''
-    ).all()
-    admins_jhones = Usuario.query.filter(
-        Usuario.username == 'Jhones',
-        Usuario.email.isnot(None),
-        Usuario.email != ''
-    ).all()
-    todos_admins = {a.id: a for a in admins + admins_jhones}
+        Usuario.email != '',
+    )
+    if empresa_id_filtro is not None:
+        try:
+            empresa_id_filtro = int(empresa_id_filtro)
+        except (TypeError, ValueError):
+            return jsonify({'erro': 'empresa_id inválido.'}), 400
+        admins_query = admins_query.filter(Usuario.empresa_id == empresa_id_filtro)
+    admins = admins_query.all()
 
-    if not todos_admins:
+    if not admins:
         return jsonify({'msg': 'Nenhum administrador com e-mail cadastrado.'}), 200
+
+    # Agrupa admins por ``empresa_id`` para emitir relatórios isolados.
+    admins_por_empresa: dict = {}
+    for a in admins:
+        admins_por_empresa.setdefault(a.empresa_id, []).append(a)
 
     try:
         server = smtplib.SMTP(MAIL_SERVER, MAIL_PORT, timeout=_EXTERNAL_TIMEOUT)
@@ -4191,29 +4210,47 @@ def disparar_relatorio():
         server.login(MAIL_USERNAME, MAIL_PASSWORD)
 
         enviados = 0
-        for admin in todos_admins.values():
-            msg = MIMEMultipart('alternative')
-            msg['Subject'] = f"📈 Relatório Mensal: {mes_ano_str} — Menino do Alho"
-            msg['From'] = MAIL_USERNAME
-            msg['To'] = admin.email
+        for eid, admins_eid in admins_por_empresa.items():
+            vendas_mes_q = Venda.query.filter(
+                extract('month', Venda.data_venda) == mes_passado,
+                extract('year', Venda.data_venda) == ano_passado,
+            )
+            if eid is not None:
+                vendas_mes_q = vendas_mes_q.filter(Venda.empresa_id == eid)
+            vendas_mes = vendas_mes_q.options(joinedload(Venda.produto)).all()
 
-            corpo_html = render_template('emails/relatorio.html',
-                                         nome=admin.nome or admin.username,
-                                         mes_ano=mes_ano_str,
-                                         faturamento=faturamento_fmt,
-                                         lucro=lucro_fmt,
-                                         qtd_vendas=qtd_vendas,
-                                         ticket_medio=ticket_fmt)
+            faturamento_total = sum(v.calcular_total() for v in vendas_mes)
+            lucro_total = sum(v.calcular_lucro() for v in vendas_mes)
+            qtd_vendas = len(vendas_mes)
+            ticket_medio = faturamento_total / qtd_vendas if qtd_vendas > 0 else 0
 
-            msg.attach(MIMEText(corpo_html, 'html'))
-            server.send_message(msg)
-            enviados += 1
+            faturamento_fmt = formato_moeda(faturamento_total)
+            lucro_fmt = formato_moeda(lucro_total)
+            ticket_fmt = formato_moeda(ticket_medio)
+
+            for admin in admins_eid:
+                msg = MIMEMultipart('alternative')
+                msg['Subject'] = f"📈 Relatório Mensal: {mes_ano_str} — Menino do Alho"
+                msg['From'] = MAIL_USERNAME
+                msg['To'] = admin.email
+
+                corpo_html = render_template('emails/relatorio.html',
+                                             nome=admin.nome or admin.username,
+                                             mes_ano=mes_ano_str,
+                                             faturamento=faturamento_fmt,
+                                             lucro=lucro_fmt,
+                                             qtd_vendas=qtd_vendas,
+                                             ticket_medio=ticket_fmt)
+
+                msg.attach(MIMEText(corpo_html, 'html'))
+                server.send_message(msg)
+                enviados += 1
 
         server.quit()
         return jsonify({'msg': f'Relatórios enviados com sucesso para {enviados} admin(s).'}), 200
     except Exception as e:
-        app.logger.error(f"Erro ao enviar relatório por e-mail: {e}")
-        return jsonify({'erro': str(e)}), 500
+        from services.error_utils import erro_json
+        return erro_json(e, 'Falha ao enviar relatório por e-mail.', contexto='disparar_relatorio')
 
 
 @app.route('/api/backup_diario', methods=['GET', 'POST'])
@@ -4233,17 +4270,9 @@ def backup_diario_email():
         BACKUP_DEST_EMAIL – (opcional) e-mail de destino fixo; se ausente,
                             envia para todos os admins com e-mail cadastrado.
     """
-    if not CRON_SECRET:
-        return jsonify({'erro': 'CRON_SECRET não configurado no ambiente.'}), 503
-
-    token = (
-        request.headers.get('X-CRON-TOKEN')
-        or (request.get_json(silent=True) or {}).get('token')
-        or request.form.get('token')
-        or request.args.get('token')
-    )
-    if token != CRON_SECRET:
-        return jsonify({'erro': 'Acesso negado'}), 403
+    erro = _validar_cron_token()
+    if erro is not None:
+        return erro
 
     if not MAIL_USERNAME or not MAIL_PASSWORD:
         return jsonify({'erro': 'Credenciais de e-mail não configuradas (MAIL_USERNAME / MAIL_PASSWORD).'}), 500
@@ -4259,10 +4288,18 @@ def backup_diario_email():
             'destinatarios': enviados,
         }), 200
     except RuntimeError as e:
+        # RuntimeError aqui carrega mensagem de negócio (ex.: "nenhum admin
+        # com e-mail cadastrado") — pode ir para o cliente.
         return jsonify({'erro': str(e)}), 404
     except Exception as e:
-        current_app.logger.error(f"Erro no backup diário por e-mail: {e}")
-        return jsonify({'status': 'erro', 'mensagem': str(e)}), 500
+        from services.error_utils import erro_json
+        return erro_json(
+            e,
+            'Falha ao gerar backup diário por e-mail.',
+            extras={'status': 'erro'},
+            chave_mensagem='mensagem',
+            contexto='backup_diario_email',
+        )
 
 
 @app.route('/api/vapid-public-key', methods=['GET'])
@@ -4347,6 +4384,11 @@ def push_unsubscribe():
 
     sub = PushSubscription.query.filter_by(endpoint=endpoint).first()
     if sub:
+        # Bloqueia IDOR: só permite remover a própria subscription. Sem essa
+        # checagem, qualquer usuário autenticado conseguiria silenciar push
+        # de outro só conhecendo o endpoint (que circula em logs/proxy).
+        if sub.user_id is not None and sub.user_id != current_user.id:
+            return jsonify({'erro': 'Acesso negado.'}), 403
         try:
             db.session.delete(sub)
             db.session.commit()
@@ -4357,6 +4399,17 @@ def push_unsubscribe():
             return jsonify({'erro': 'Erro ao remover inscrição.'}), 500
 
     return jsonify({'status': 'não encontrado'}), 404
+
+
+def _debug_routes_habilitadas() -> bool:
+    """Endpoints com prefixo ``/debug`` só ficam ativos quando
+    ``ENABLE_DEBUG_ROUTES=1``. Em produção mantenha desligado por padrão.
+    """
+    return os.environ.get('ENABLE_DEBUG_ROUTES') == '1'
+
+
+def _resposta_debug_desabilitado():
+    return jsonify({'erro': 'Endpoint de debug desabilitado neste ambiente.'}), 404
 
 
 @app.route('/api/debug/testar_push', methods=['POST'])
@@ -4370,9 +4423,13 @@ def debug_testar_push():
     de teste via pywebpush e remove automaticamente subscriptions expiradas
     (HTTP 404/410). Útil para validar o fluxo de ponta a ponta.
 
+    Só responde quando ``ENABLE_DEBUG_ROUTES=1`` no ambiente.
+
     Returns:
         JSON com ``status``, ``mensagem`` e detalhes do dispositivo testado.
     """
+    if not _debug_routes_habilitadas():
+        return _resposta_debug_desabilitado()
     vapid_private_key = pad_base64(VAPID_PRIVATE_KEY)
     vapid_public_key = pad_base64(VAPID_PUBLIC_KEY)
 
@@ -4478,17 +4535,9 @@ def enviar_frase_diaria():
     Protegido por CRON_SECRET. Projetado para ser disparado diariamente
     às 6h por um cron job externo (cron-job.org).
     """
-    if not CRON_SECRET:
-        return jsonify({'erro': 'CRON_SECRET não configurado no ambiente.'}), 503
-
-    token = (
-        request.headers.get('X-CRON-TOKEN')
-        or (request.get_json(silent=True) or {}).get('token')
-        or request.form.get('token')
-        or request.args.get('token')
-    )
-    if token != CRON_SECRET:
-        return jsonify({'erro': 'Acesso negado'}), 403
+    erro = _validar_cron_token()
+    if erro is not None:
+        return erro
 
     if not MAIL_USERNAME or not MAIL_PASSWORD:
         return jsonify({'erro': 'Credenciais de e-mail não configuradas.'}), 500

@@ -139,10 +139,9 @@ menino_do_alho_sistema_gestao/
 ├── logs/                     # Logs rotativos do sistema (não versionado)
 │   └── erros_sistema.log
 │
-├── init_db.py                # Script para inicializar o banco zerado
-├── reset_db.py               # Reset completo do banco (CUIDADO)
-├── promover.py               # Promove um usuário para admin via CLI
-└── resetar_senha.py          # Redefine senha de um usuário via CLI
+├── scripts_dev/              # Scripts CLI utilitários (init_db, criar_master, etc.)
+│   └── README.md             # Documentação de uso (vars de ambiente exigidas)
+└── scripts_seed/             # Operações destrutivas (drop_all) com guard CONFIRMO_DROP_PROD
 ```
 
 ---
@@ -465,10 +464,12 @@ VAPID_CLAIM_EMAIL=mailto:admin@exemplo.com
 **5. Inicializar o banco de dados**
 
 ```bash
-python init_db.py
+ADMIN_INITIAL_PASS="senha_forte_aqui" python scripts_dev/init_db.py
 ```
 
-O script cria todas as tabelas e insere o usuário admin inicial. A senha do admin é impressa no console se `ADMIN_INITIAL_PASS` não estiver definida.
+O script cria todas as tabelas e o usuário admin inicial. **Sem
+`ADMIN_INITIAL_PASS` no ambiente, o admin NÃO é criado** (medida de
+segurança contra senhas previsíveis em logs).
 
 **6. Rodar o servidor de desenvolvimento**
 
@@ -496,11 +497,9 @@ python migrations/add_telefone_cliente.py
 # Testar se o banco foi criado corretamente
 python -c "from app import app, db; app.app_context().push(); print([t for t in db.engine.table_names()])"
 
-# Promover um usuário existente para admin
-python promover.py --username <nome_do_usuario>
-
-# Resetar a senha de um usuário
-python resetar_senha.py --username <nome_do_usuario> --senha <nova_senha>
+# Resetar a senha de um usuário (uso emergencial)
+RESET_USERNAME="<nome>" RESET_PASSWORD="<nova_senha_forte>" \
+    python scripts_dev/resetar_senha.py
 ```
 
 ---
@@ -509,9 +508,10 @@ python resetar_senha.py --username <nome_do_usuario> --senha <nova_senha>
 
 | Variável | Obrigatória | Descrição |
 |---|---|---|
-| `SECRET_KEY` | **Sim (produção)** | Chave de assinatura de sessões Flask |
+| `SECRET_KEY` | **Sim (produção)** | Chave de assinatura de sessões Flask. Em produção (`RENDER=true`/`FLASK_ENV=production`), a falta dispara `RuntimeError` no boot |
 | `DATABASE_URL` | **Sim (produção)** | URI PostgreSQL. Sem ela, usa SQLite local |
-| `ADMIN_INITIAL_PASS` | Não | Senha do admin no bootstrap. Gerada aleatoriamente se ausente |
+| `ADMIN_INITIAL_PASS` | Não | Senha do admin Jhones no bootstrap. **Sem ela, o admin NÃO é criado** — evita logar senha gerada |
+| `CRON_SECRET` | Não | Token aceito apenas via header `X-CRON-TOKEN` nos endpoints de cron |
 | `CLOUDINARY_CLOUD_NAME` | Não* | Nome do cloud Cloudinary |
 | `CLOUDINARY_API_KEY` | Não* | API Key do Cloudinary |
 | `CLOUDINARY_API_SECRET` | Não* | API Secret do Cloudinary |
@@ -519,7 +519,9 @@ python resetar_senha.py --username <nome_do_usuario> --senha <nova_senha>
 | `VAPID_PRIVATE_KEY` | Não | Chave privada VAPID para Web Push |
 | `VAPID_PUBLIC_KEY` | Não | Chave pública VAPID para Web Push |
 | `VAPID_CLAIM_EMAIL` | Não | Email de contato para notificações push |
+| `ENABLE_DEBUG_ROUTES` | Não | Se `1`, registra os endpoints `/debug/*` (off por padrão em produção) |
 | `SKIP_DB_BOOTSTRAP` | Não | Se `1`, pula a inicialização do banco no startup |
+| `CONFIRMO_DROP_PROD` | Não | `YES_I_KNOW` libera scripts destrutivos em `scripts_seed/` fora de `localhost` |
 
 > *Sem as credenciais do Cloudinary, uploads de imagens e PDFs funcionam apenas localmente (sem URL pública).
 
@@ -555,18 +557,25 @@ gunicorn ... --log-level debug --error-logfile -
 
 ## 10. Scripts Utilitários
 
+Todos os scripts CLI ficam fora da raiz para reduzir a chance de execução
+acidental e exigem variáveis de ambiente para evitar credenciais
+chumbadas. Veja `scripts_dev/README.md` e `scripts_seed/README.md` para
+detalhes completos.
+
 | Script | Descrição | Uso |
 |---|---|---|
-| `init_db.py` | Cria todas as tabelas e o usuário admin inicial | `python init_db.py` |
-| `reset_db.py` | **DESTRÓI** e recria o banco do zero | `python reset_db.py` ⚠️ |
-| `promover.py` | Promove usuário para role `admin` | `python promover.py --username Nome` |
-| `resetar_senha.py` | Redefine senha de um usuário | `python resetar_senha.py` |
-| `backup.py` | Exporta dados para CSV de backup | `python backup.py` |
-| `visualizar_banco.py` | Lista conteúdo das tabelas principais | `python visualizar_banco.py` |
-| `espiar_banco.py` | Inspeção rápida de registros específicos | `python espiar_banco.py` |
-| `achar_codigo.py` | Busca o código de cadastro atual | `python achar_codigo.py` |
-| `limpar_vinculos.py` | Remove vínculos incorretos de documentos | `python limpar_vinculos.py` |
-| `migrar_dados.py` | Migração de dados entre schemas | `python migrar_dados.py` |
+| `scripts_dev/init_db.py` | Cria tabelas e (com `ADMIN_INITIAL_PASS`) o admin Jhones | `ADMIN_INITIAL_PASS=… python scripts_dev/init_db.py` |
+| `scripts_dev/criar_master.py` | Cria o usuário Super Admin (MASTER) | `MASTER_PASSWORD=… python scripts_dev/criar_master.py` |
+| `scripts_dev/resetar_senha.py` | Redefine senha de um usuário | `RESET_USERNAME=… RESET_PASSWORD=… python scripts_dev/resetar_senha.py` |
+| `scripts_dev/migrar_dados.py` | Migração one-shot SQLite → Postgres (referência) | `POSTGRES_URL=… python scripts_dev/migrar_dados.py` |
+| `scripts_seed/reset_db.py` | **DESTRÓI** e recria o banco. Bloqueado fora de localhost sem `CONFIRMO_DROP_PROD=YES_I_KNOW` | `python scripts_seed/reset_db.py` ⚠️ |
+| `scripts_seed/migrate_recreate_db.py` | Mesmo guard do `reset_db` para reaplicar schema | `python scripts_seed/migrate_recreate_db.py` ⚠️ |
+
+Scripts removidos na auditoria de segurança/limpeza:
+`promover.py`, `backup.py`, `visualizar_banco.py`, `espiar_banco.py`,
+`achar_codigo.py`, `limpar_vinculos.py`, `teste_seguranca.sh`. As
+funcionalidades úteis foram absorvidas por rotas no painel ou
+substituídas por scripts mais seguros nas pastas acima.
 
 ---
 

@@ -60,6 +60,7 @@ from services.db_utils import (
     query_tenant, query_documentos_tenant, empresa_id_atual,
 )
 from services.cache_utils import limpar_cache_dashboard
+from services.error_utils import erro_json
 from services.config_helpers import (
     registrar_log, get_hoje_brasil,
 )
@@ -1019,7 +1020,13 @@ def logistica_bulk_update():
         return jsonify({'success': True, 'atualizados': atualizados})
     except Exception as e:
         db.session.rollback()
-        return jsonify({'success': False, 'message': str(e)}), 500
+        return erro_json(
+            e,
+            'Falha ao atualizar status dos pedidos.',
+            extras={'success': False},
+            chave_mensagem='message',
+            contexto='atualizar_status_lote',
+        )
 
 
 @vendas_bp.route('/vendas/novo', methods=['GET', 'POST'])
@@ -1325,9 +1332,18 @@ def processar_carrinho():
         db.session.commit()
         limpar_cache_dashboard()
         return jsonify(ok=True, mensagem=f'{processados} venda(s) registrada(s) com sucesso.', processados=processados)
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify(ok=False, mensagem=str(e)), 400
     except Exception as e:
         db.session.rollback()
-        return jsonify(ok=False, mensagem=str(e)), 500
+        return erro_json(
+            e,
+            'Falha ao adicionar item à venda.',
+            extras={'ok': False},
+            chave_mensagem='mensagem',
+            contexto='venda_adicionar_item_pre',
+        )
 
 
 @vendas_bp.route('/venda/adicionar_item', methods=['POST'])
@@ -1647,7 +1663,14 @@ def excluir_item_venda(id):
     except Exception as e:
         db.session.rollback()
         if _is_ajax():
-            return jsonify(ok=False, mensagem=str(e)), 500
+            return erro_json(
+                e,
+                'Falha ao remover item da venda.',
+                extras={'ok': False},
+                chave_mensagem='mensagem',
+                contexto='excluir_item_venda',
+            )
+        current_app.logger.error('Falha ao remover item da venda', exc_info=True)
         flash('Erro ao remover item.', 'error')
     return redirect(url_for('vendas.listar_vendas'))
 
@@ -1944,8 +1967,13 @@ def atualizar_situacao_rapida(id):
         return jsonify({'status': 'sucesso'}), 200
     except Exception as e:
         db.session.rollback()
-        current_app.logger.exception('Falha ao atualizar situação rápida da venda')
-        return jsonify({'status': 'erro', 'mensagem': str(e)}), 500
+        return erro_json(
+            e,
+            'Falha ao atualizar situação da venda.',
+            extras={'status': 'erro'},
+            chave_mensagem='mensagem',
+            contexto='atualizar_situacao_rapida',
+        )
 
 
 @vendas_bp.route('/venda/recibo/<int:id>')
@@ -2031,8 +2059,13 @@ def vendas_deletar_massa():
         return jsonify({'ok': True, 'mensagem': f'{len(vendas)} registro(s) excluído(s). Estoque restaurado e {lancamentos_removidos} lançamento(s) de caixa removido(s).', 'excluidos': len(vendas)})
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Erro na exclusão em massa de vendas: {e}")
-        return jsonify({'ok': False, 'mensagem': str(e)}), 500
+        return erro_json(
+            e,
+            'Falha na exclusão em massa de vendas.',
+            extras={'ok': False},
+            chave_mensagem='mensagem',
+            contexto='bulk_delete_vendas',
+        )
 
 
 @vendas_bp.route('/vendas/importar', methods=['GET', 'POST'])

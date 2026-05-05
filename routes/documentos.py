@@ -45,7 +45,6 @@ import html
 import io
 import os
 import re
-import traceback
 import urllib.parse
 import urllib.request
 
@@ -72,6 +71,7 @@ from services.auth_utils import (
 )
 from services.db_utils import query_tenant, query_documentos_tenant
 from services.cache_utils import limpar_cache_dashboard
+from services.error_utils import erro_json, erro_flash
 from services.config_helpers import _EXTERNAL_TIMEOUT
 from services.files_utils import _deletar_cloudinary_seguro
 from services.vendas_services import _vendas_do_pedido
@@ -119,6 +119,15 @@ def _exigir_tenant_em_todas_rotas():
 # ============================================================
 # Helpers exclusivos de documentos
 # ============================================================
+
+def _debug_routes_habilitadas() -> bool:
+    """Endpoints de debug só ficam ativos quando ``ENABLE_DEBUG_ROUTES=1``."""
+    return os.environ.get('ENABLE_DEBUG_ROUTES') == '1'
+
+
+def _resposta_debug_desabilitado():
+    return jsonify({'erro': 'Endpoint de debug desabilitado neste ambiente.'}), 404
+
 
 def _extrair_texto_raw_pdfplumber(arquivo_pdf):
     """Extrai texto com a mesma abordagem usada no processamento:
@@ -169,62 +178,65 @@ def visualizar_documento(id):
 
 
 @documentos_bp.route('/arquivos/<int:id>/debug_texto', methods=['GET'])
+@master_required
 def debug_texto_arquivo(id):
     """Raio-X: exibe o texto bruto extraído do PDF para depuração de regex.
 
     MASTER-only por design: a ferramenta acessa qualquer documento do SaaS
     para debug de OCR/regex; abrir para DONO reabriria a brecha cross-tenant.
+
+    Só responde quando ``ENABLE_DEBUG_ROUTES=1`` no ambiente.
     """
-    @master_required
-    def _impl():
-        documento = Documento.query.get_or_404(id)
-        try:
-            texto_extraido = ""
-            if documento.url_arquivo:
-                with urllib.request.urlopen(documento.url_arquivo, timeout=_EXTERNAL_TIMEOUT) as resp:
-                    conteudo_pdf = resp.read()
-                pdf_buffer = io.BytesIO(conteudo_pdf)
-                try:
-                    texto_extraido = _extrair_texto_raw_pdfplumber(pdf_buffer)
-                finally:
-                    pdf_buffer.close()
+    if not _debug_routes_habilitadas():
+        return _resposta_debug_desabilitado()
+
+    documento = Documento.query.get_or_404(id)
+    try:
+        texto_extraido = ""
+        if documento.url_arquivo:
+            with urllib.request.urlopen(documento.url_arquivo, timeout=_EXTERNAL_TIMEOUT) as resp:
+                conteudo_pdf = resp.read()
+            pdf_buffer = io.BytesIO(conteudo_pdf)
+            try:
+                texto_extraido = _extrair_texto_raw_pdfplumber(pdf_buffer)
+            finally:
+                pdf_buffer.close()
+        else:
+            path = (documento.caminho_arquivo or '').strip()
+            if not path:
+                return "<html><body><h3>Debug</h3><p>Documento sem URL/Caminho de arquivo.</p></body></html>", 404
+            nome_seguro = os.path.basename(path)
+            if os.path.isfile(path):
+                caminho_local = path
             else:
-                path = (documento.caminho_arquivo or '').strip()
-                if not path:
-                    return "<html><body><h3>Debug</h3><p>Documento sem URL/Caminho de arquivo.</p></body></html>", 404
-                nome_seguro = os.path.basename(path)
-                if os.path.isfile(path):
-                    caminho_local = path
-                else:
-                    base_dir = os.path.join(current_app.root_path, 'documentos_entrada')
-                    candidatos = [
-                        os.path.join(base_dir, 'boletos', nome_seguro),
-                        os.path.join(base_dir, 'notas_fiscais', nome_seguro),
-                        os.path.join(base_dir, 'bonificacoes', nome_seguro),
-                    ]
-                    caminho_local = next((c for c in candidatos if os.path.isfile(c)), None)
-                if not caminho_local:
-                    return "<html><body><h3>Debug</h3><p>Arquivo PDF não encontrado localmente.</p></body></html>", 404
-                texto_extraido = _extrair_texto_raw_pdfplumber(caminho_local)
+                base_dir = os.path.join(current_app.root_path, 'documentos_entrada')
+                candidatos = [
+                    os.path.join(base_dir, 'boletos', nome_seguro),
+                    os.path.join(base_dir, 'notas_fiscais', nome_seguro),
+                    os.path.join(base_dir, 'bonificacoes', nome_seguro),
+                ]
+                caminho_local = next((c for c in candidatos if os.path.isfile(c)), None)
+            if not caminho_local:
+                return "<html><body><h3>Debug</h3><p>Arquivo PDF não encontrado localmente.</p></body></html>", 404
+            texto_extraido = _extrair_texto_raw_pdfplumber(caminho_local)
 
-            texto_escapado = html.escape(texto_extraido or "(sem texto extraído)")
-            return (
-                "<html><body>"
-                "<h3>Texto Extraído (Raio-X)</h3>"
-                f"<p><strong>Documento ID:</strong> {documento.id}</p>"
-                f"<p><strong>Tipo:</strong> {html.escape(str(documento.tipo or '-'))}</p>"
-                f"<pre style='white-space: pre-wrap; word-break: break-word;'>{texto_escapado}</pre>"
-                "</body></html>"
-            )
-        except Exception as e:
-            return (
-                "<html><body>"
-                "<h3>Erro no Debug de Texto</h3>"
-                f"<pre>{html.escape(str(e))}</pre>"
-                "</body></html>"
-            ), 500
-
-    return _impl()
+        texto_escapado = html.escape(texto_extraido or "(sem texto extraído)")
+        return (
+            "<html><body>"
+            "<h3>Texto Extraído (Raio-X)</h3>"
+            f"<p><strong>Documento ID:</strong> {documento.id}</p>"
+            f"<p><strong>Tipo:</strong> {html.escape(str(documento.tipo or '-'))}</p>"
+            f"<pre style='white-space: pre-wrap; word-break: break-word;'>{texto_escapado}</pre>"
+            "</body></html>"
+        )
+    except Exception:
+        current_app.logger.error('Erro em debug_texto_arquivo', exc_info=True)
+        return (
+            "<html><body>"
+            "<h3>Erro no Debug de Texto</h3>"
+            "<p>Falha interna ao extrair texto do PDF. Verifique os logs do servidor.</p>"
+            "</body></html>"
+        ), 500
 
 
 @documentos_bp.route('/arquivo/<int:id>/deletar', methods=['POST'])
@@ -455,8 +467,12 @@ def upload_documento():
         return jsonify({'mensagem': 'Sucesso'}), 200
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Erro ao guardar ficheiro em documentos_entrada/{subpasta}: {e}")
-        return jsonify({'mensagem': str(e)}), 500
+        return erro_json(
+            e,
+            'Falha ao guardar arquivo. Verifique os logs do servidor.',
+            chave_mensagem='mensagem',
+            contexto=f'upload_documento({subpasta})',
+        )
 
 
 @documentos_bp.route('/api/receber_automatico', methods=['POST'])
@@ -513,7 +529,13 @@ def api_receber_automatico():
                     url_arquivo = resultado_nuvem.get('secure_url')
                     public_id = resultado_nuvem.get('public_id')
                 except Exception as e:
-                    return jsonify({'status': 'erro', 'mensagem': f'Falha no upload Cloudinary: {str(e)}'}), 500
+                    return erro_json(
+                        e,
+                        'Falha no upload do arquivo para o Cloudinary.',
+                        extras={'status': 'erro'},
+                        chave_mensagem='mensagem',
+                        contexto='api_receber_automatico:cloudinary',
+                    )
 
             caminho_relativo = None
             if not url_arquivo:
@@ -547,7 +569,13 @@ def api_receber_automatico():
             }), 200
         except Exception as e:
             db.session.rollback()
-            return jsonify({'status': 'erro', 'mensagem': str(e)}), 500
+            return erro_json(
+                e,
+                'Falha ao registrar arquivo recebido.',
+                extras={'status': 'erro'},
+                chave_mensagem='mensagem',
+                contexto='api_receber_automatico:registrar',
+            )
 
     return _impl()
 
@@ -635,8 +663,7 @@ def api_bot_upload():
 
         except Exception as e:
             db.session.rollback()
-            current_app.logger.error(f"Erro no bot upload: {e}")
-            return jsonify({'erro': str(e)}), 500
+            return erro_json(e, 'Falha ao processar upload do bot.', contexto='api_bot_upload')
 
     return _impl()
 
@@ -760,7 +787,13 @@ def upload_massa_arquivos():
         limpar_cache_dashboard()
         return jsonify({'success': True, 'mensagem': msg, 'erros': erros_processamento})
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return erro_json(
+            e,
+            'Falha ao processar upload em massa.',
+            extras={'success': False},
+            chave_mensagem='error',
+            contexto='upload_massa_arquivos',
+        )
 
 
 @documentos_bp.route('/admin/arquivos/deletar_massa', methods=['POST'])
@@ -1025,7 +1058,7 @@ def resgatar_orfaos():
             flash(f'Recuperados {count} documento(s) órfão(s).', 'success')
         except Exception as e:
             db.session.rollback()
-            flash(f'Erro ao resgatar órfãos: {str(e)}', 'error')
+            erro_flash(e, 'Erro ao resgatar documentos órfãos.', contexto='resgatar_orfaos')
         return redirect(url_for('dashboard.dashboard'))
 
     return _impl()
@@ -1110,7 +1143,12 @@ def forcar_leitura_pasta():
                             current_app.logger.warning(f"Aviso: não foi possível remover {caminho_full}: {rm_err}")
         except Exception as e:
             db.session.rollback()
-            return jsonify({'erro': str(e), 'ressuscitados': 0}), 500
+            return erro_json(
+                e,
+                'Falha ao ressuscitar arquivos da pasta.',
+                extras={'ressuscitados': 0},
+                contexto='forcar_leitura_pasta',
+            )
         return jsonify({
             'ressuscitados': ressuscitados,
             'mensagem': f'{ressuscitados} arquivo(s) ressuscitado(s) e inserido(s) no banco.',
@@ -1140,7 +1178,12 @@ def limpar_fantasmas():
             db.session.commit()
         except Exception as e:
             db.session.rollback()
-            return jsonify({'erro': str(e), 'removidos': 0}), 500
+            return erro_json(
+                e,
+                'Falha ao limpar documentos fantasmas.',
+                extras={'removidos': 0},
+                contexto='limpar_fantasmas',
+            )
         return jsonify({'removidos': removidos, 'mensagem': f'{removidos} fantasma(s) removido(s) do banco.'})
 
     return _impl()
@@ -1192,8 +1235,7 @@ def limpar_vinculos_quebrados():
             current_app.logger.debug(f"DEBUG LIMPEZA: {limpos_boleto} boletos, {limpos_nf} NFs e {limpos_docs} documentos órfãos limpos")
         except Exception as e:
             db.session.rollback()
-            flash(f'Erro ao limpar vínculos: {str(e)}', 'error')
-            current_app.logger.error(f"DEBUG LIMPEZA ERRO: {str(e)}")
+            erro_flash(e, 'Erro ao limpar vínculos quebrados.', contexto='limpar_vinculos_quebrados')
 
         return redirect(url_for('dashboard.dashboard'))
 
@@ -1205,7 +1247,11 @@ def debug_testar_log():
     """Endpoint de debug para testar criação de arquivo de log.
 
     MASTER-only: escreve arquivo no filesystem do servidor.
+    Só responde quando ``ENABLE_DEBUG_ROUTES=1`` no ambiente.
     """
+    if not _debug_routes_habilitadas():
+        return _resposta_debug_desabilitado()
+
     @master_required
     def _impl():
         try:
@@ -1219,7 +1265,8 @@ def debug_testar_log():
                 'tamanho': os.path.getsize(log_path) if os.path.exists(log_path) else 0,
             })
         except Exception as e:
-            return jsonify({'sucesso': False, 'erro': str(e), 'traceback': traceback.format_exc()}), 500
+            current_app.logger.error('Erro em debug_testar_log', exc_info=True)
+            return jsonify({'sucesso': False, 'erro': 'Falha interna ao testar log. Verifique os logs do servidor.'}), 500
 
     return _impl()
 
@@ -1229,7 +1276,11 @@ def debug_vincular():
     """Endpoint de debug para diagnóstico de vínculos - retorna todos os logs em JSON.
 
     Restrito a admin do tenant (decorator ``admin_required`` aplicado dinamicamente).
+    Só responde quando ``ENABLE_DEBUG_ROUTES=1`` no ambiente.
     """
+    if not _debug_routes_habilitadas():
+        return _resposta_debug_desabilitado()
+
     @admin_required
     def _impl():
         try:
@@ -1246,12 +1297,12 @@ def debug_vincular():
                 'logs_completos': resultado.get('logs', []),
             }
             return jsonify(resposta)
-        except Exception as e:
+        except Exception:
             db.session.rollback()
+            current_app.logger.error('Erro em debug_vincular', exc_info=True)
             return jsonify({
                 'sucesso': False,
-                'erro': str(e),
-                'traceback': traceback.format_exc(),
+                'erro': 'Falha ao processar diagnóstico. Verifique os logs do servidor.',
                 'timestamp': datetime.now().isoformat(),
             }), 500
 

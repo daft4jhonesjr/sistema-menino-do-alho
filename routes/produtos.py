@@ -64,6 +64,7 @@ from services.auth_utils import (
 )
 from services.db_utils import query_tenant, empresa_id_atual, _safe_db_commit
 from services.cache_utils import limpar_cache_dashboard
+from services.error_utils import erro_json
 from services.config_helpers import (
     registrar_log, _EXTERNAL_TIMEOUT,
 )
@@ -1311,7 +1312,13 @@ def produtos_atualizar_tipo_batch():
         db.session.commit()
     except Exception as e:
         db.session.rollback()
-        return jsonify({'ok': False, 'mensagem': str(e)}), 500
+        return erro_json(
+            e,
+            'Falha ao atualizar tipo dos produtos.',
+            extras={'ok': False},
+            chave_mensagem='mensagem',
+            contexto='alterar_tipo_produtos_em_massa',
+        )
     return jsonify({'ok': True, 'mensagem': f'{ok_count} produto(s) atualizado(s).', 'atualizados': ok_count})
 
 

@@ -58,6 +58,7 @@ from services.config_helpers import get_hoje_brasil
 from services.files_utils import _arquivo_imagem_permitido
 from services.config_helpers import _EXTERNAL_TIMEOUT
 from services.vendas_services import _resincronizar_pagamento_venda
+from services.error_utils import erro_json
 
 
 caixa_bp = Blueprint('caixa', __name__)
@@ -434,7 +435,12 @@ def upload_imagem_cheque():
         upload_result = cloudinary.uploader.upload(file, folder='cheques_gaveta', timeout=_EXTERNAL_TIMEOUT)
         return jsonify({'url': upload_result.get('secure_url')}), 200
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return erro_json(
+            e,
+            'Falha ao fazer upload da imagem do cheque.',
+            chave_mensagem='error',
+            contexto='upload_imagem_cheque',
+        )
 
 
 @caixa_bp.route('/caixa/gaveta/salvar', methods=['POST'])

@@ -16,17 +16,18 @@ Endpoints:
     * master.auditar_lote_cliente            GET      /admin/auditar_lote_cliente/<cliente_id>
 """
 import logging
+import os
 from decimal import Decimal
 
 from flask import (
-    Blueprint, render_template, request, redirect, url_for, flash,
+    Blueprint, render_template, request, redirect, url_for, flash, jsonify,
 )
 from flask_login import login_required
 from werkzeug.security import generate_password_hash
 from sqlalchemy import func
 
 from models import db, Empresa, Usuario, Venda, LancamentoCaixa, Cliente, PERFIL_DONO
-from services.auth_utils import master_required
+from services.auth_utils import master_required, admin_required, tenant_required
 from services.db_utils import _safe_db_commit, query_tenant, empresa_id_atual
 from services.vendas_services import (
     _resincronizar_pagamento_venda,
@@ -35,6 +36,15 @@ from services.vendas_services import (
 
 
 master_bp = Blueprint('master', __name__)
+
+
+def _debug_routes_habilitadas() -> bool:
+    """Endpoints de debug só ficam ativos quando ``ENABLE_DEBUG_ROUTES=1``."""
+    return os.environ.get('ENABLE_DEBUG_ROUTES') == '1'
+
+
+def _resposta_debug_desabilitado():
+    return jsonify({'erro': 'Endpoint de debug desabilitado neste ambiente.'}), 404
 
 
 def _master_validar_form_nova_empresa(form):
@@ -77,82 +87,75 @@ def _master_validar_form_nova_empresa(form):
 
 @master_bp.route('/master-admin', methods=['GET', 'POST'])
 @login_required
+@master_required
 def master_admin():
     """Painel Super Admin: cria novas Empresas + Dono inicial."""
-    @master_required
-    def _master_admin():
-        if request.method == 'POST':
-            dados, erro = _master_validar_form_nova_empresa(request.form)
-            if erro:
-                flash(erro, 'error')
-                return redirect(url_for('master.master_admin'))
-
-            try:
-                nova_empresa = Empresa(
-                    nome_fantasia=dados['nome_fantasia'],
-                    cnpj=dados['cnpj'],
-                    ativo=True,
-                )
-                db.session.add(nova_empresa)
-                db.session.flush()  # garante nova_empresa.id
-
-                dono = Usuario(
-                    username=dados['dono_username'],
-                    password_hash=generate_password_hash(dados['dono_senha']),
-                    role='admin',
-                    perfil=PERFIL_DONO,
-                    empresa_id=nova_empresa.id,
-                    nome=dados['dono_nome'],
-                    email=dados['dono_email'],
-                )
-                db.session.add(dono)
-                db.session.commit()
-            except Exception as e:
-                db.session.rollback()
-                logging.error('Erro ao criar empresa+dono: %s', e, exc_info=True)
-                flash('Erro ao criar empresa. Tente novamente.', 'error')
-                return redirect(url_for('master.master_admin'))
-
-            flash(
-                f'Empresa "{nova_empresa.nome_fantasia}" criada com sucesso. '
-                f'Usuario Dono: {dono.username}.',
-                'success',
-            )
+    if request.method == 'POST':
+        dados, erro = _master_validar_form_nova_empresa(request.form)
+        if erro:
+            flash(erro, 'error')
             return redirect(url_for('master.master_admin'))
 
-        empresas = (
-            db.session.query(
-                Empresa,
-                db.func.count(Usuario.id).label('total_usuarios'),
+        try:
+            nova_empresa = Empresa(
+                nome_fantasia=dados['nome_fantasia'],
+                cnpj=dados['cnpj'],
+                ativo=True,
             )
-            .outerjoin(Usuario, Usuario.empresa_id == Empresa.id)
-            .group_by(Empresa.id)
-            .order_by(Empresa.data_cadastro.desc())
-            .all()
-        )
-        return render_template('admin_master.html', empresas=empresas)
+            db.session.add(nova_empresa)
+            db.session.flush()  # garante nova_empresa.id
 
-    return _master_admin()
+            dono = Usuario(
+                username=dados['dono_username'],
+                password_hash=generate_password_hash(dados['dono_senha']),
+                role='admin',
+                perfil=PERFIL_DONO,
+                empresa_id=nova_empresa.id,
+                nome=dados['dono_nome'],
+                email=dados['dono_email'],
+            )
+            db.session.add(dono)
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            logging.error('Erro ao criar empresa+dono: %s', e, exc_info=True)
+            flash('Erro ao criar empresa. Tente novamente.', 'error')
+            return redirect(url_for('master.master_admin'))
+
+        flash(
+            f'Empresa "{nova_empresa.nome_fantasia}" criada com sucesso. '
+            f'Usuario Dono: {dono.username}.',
+            'success',
+        )
+        return redirect(url_for('master.master_admin'))
+
+    empresas = (
+        db.session.query(
+            Empresa,
+            db.func.count(Usuario.id).label('total_usuarios'),
+        )
+        .outerjoin(Usuario, Usuario.empresa_id == Empresa.id)
+        .group_by(Empresa.id)
+        .order_by(Empresa.data_cadastro.desc())
+        .all()
+    )
+    return render_template('admin_master.html', empresas=empresas)
 
 
 @master_bp.route('/master-admin/empresa/<int:empresa_id>/toggle_ativo', methods=['POST'])
 @login_required
+@master_required
 def master_toggle_empresa_ativo(empresa_id):
     """Ativa/desativa um tenant (suspensão por inadimplência etc)."""
-    @master_required
-    def _toggle():
-        empresa = Empresa.query.get_or_404(empresa_id)
-        empresa.ativo = not bool(empresa.ativo)
-        ok, err = _safe_db_commit()
-        if not ok:
-            flash(err or 'Erro ao atualizar empresa.', 'error')
-        else:
-            estado = 'ativada' if empresa.ativo else 'desativada'
-            flash(f'Empresa "{empresa.nome_fantasia}" {estado}.', 'success')
-        return redirect(url_for('master.master_admin'))
-
-    return _toggle()
-
+    empresa = Empresa.query.get_or_404(empresa_id)
+    empresa.ativo = not bool(empresa.ativo)
+    ok, err = _safe_db_commit()
+    if not ok:
+        flash(err or 'Erro ao atualizar empresa.', 'error')
+    else:
+        estado = 'ativada' if empresa.ativo else 'desativada'
+        flash(f'Empresa "{empresa.nome_fantasia}" {estado}.', 'success')
+    return redirect(url_for('master.master_admin'))
 
 def _classificar_resync_dry_run(venda):
     """Simula o que ``_resincronizar_pagamento_venda_seguro`` faria SEM
@@ -224,6 +227,8 @@ def _classificar_resync_dry_run(venda):
 
 @master_bp.route('/admin/diagnosticar_saldos', methods=['GET'])
 @login_required
+@tenant_required
+@admin_required
 def diagnosticar_saldos():
     """DRY-RUN MÃO ÚNICA: classifica vendas do tenant em buckets sem
     alterar o banco.
@@ -357,6 +362,8 @@ def diagnosticar_saldos():
 
 @master_bp.route('/admin/recuperar_saldos', methods=['GET'])
 @login_required
+@tenant_required
+@admin_required
 def recuperar_saldos():
     """APLICA (MÃO ÚNICA): só promove ``situacao`` (PENDENTE → PARCIAL →
     PAGO). Nunca rebaixa.
@@ -414,6 +421,8 @@ def recuperar_saldos():
 
 @master_bp.route('/admin/limpar_valor_pago_fantasma', methods=['GET'])
 @login_required
+@tenant_required
+@admin_required
 def limpar_valor_pago_fantasma():
     """FAXINA: zera o ``valor_pago`` de Vendas PENDENTE com ``valor_pago > 0``.
 
@@ -517,6 +526,8 @@ def limpar_valor_pago_fantasma():
 
 @master_bp.route('/admin/inspect_venda/<int:venda_id>', methods=['GET'])
 @login_required
+@tenant_required
+@admin_required
 def inspect_venda(venda_id):
     """Dump cru de uma Venda + LancamentoCaixa relacionados.
 
@@ -536,7 +547,12 @@ def inspect_venda(venda_id):
     (espaços não-quebráveis, traços diferentes do ASCII, etc).
 
     Multi-tenant: lê apenas dentro do ``empresa_id`` do usuário logado.
+
+    Só responde quando ``ENABLE_DEBUG_ROUTES=1`` no ambiente.
     """
+    if not _debug_routes_habilitadas():
+        return _resposta_debug_desabilitado()
+
     eid = empresa_id_atual()
 
     venda = query_tenant(Venda).filter_by(id=venda_id).first()
@@ -682,6 +698,8 @@ def _parse_valor_br(valor_raw):
 
 @master_bp.route('/admin/auditar_lote_cliente/<int:cliente_id>', methods=['GET'])
 @login_required
+@tenant_required
+@admin_required
 def auditar_lote_cliente(cliente_id):
     """Raio-X READ-ONLY do que aconteceria num receber_lote_cliente.
 

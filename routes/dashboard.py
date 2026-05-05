@@ -46,6 +46,7 @@ from services.db_utils import (
     query_tenant, query_documentos_tenant, empresa_id_atual,
 )
 from services.cache_utils import _dashboard_cache_key
+from services.error_utils import erro_json
 from services.documentos_services import _listar_documentos_recem_chegados
 from services.query_utils import filtro_ano_data_venda
 
@@ -707,8 +708,6 @@ def api_vendas_por_filtro():
 @dashboard_bp.route('/api/dashboard/detalhes/<filtro>')
 def api_dashboard_detalhes(filtro):
     """Lista vendas filtradas por pendente/pago/avulsa/<fornecedor>."""
-    import traceback
-
     try:
         ano_ativo = session.get('ano_ativo', datetime.now().year)
         # Range em vez de extract('year', ...) — usa ix_vendas_empresa_data.
@@ -795,8 +794,7 @@ def api_dashboard_detalhes(filtro):
         })
     except Exception as e:
         db.session.rollback()
-        traceback.print_exc()
-        return jsonify({'erro': str(e)}), 500
+        return erro_json(e, 'Falha ao carregar detalhes do dashboard.', contexto='api_dashboard_detalhes')
 
 
 @dashboard_bp.route('/api/dashboard/documentos_pendentes/resumo', methods=['GET'])
@@ -917,8 +915,6 @@ def api_cobrancas_pendentes():
 @dashboard_bp.route('/api/dashboard/detalhes_mes/<int:ano>/<int:mes>')
 def api_detalhes_mes(ano, mes):
     """Drill-down de um mês: totais, top clientes e lista de vendas."""
-    import traceback
-
     try:
         if mes < 1 or mes > 12:
             return jsonify({'erro': 'Mês inválido. Use valores de 1 a 12.'}), 400
@@ -1036,5 +1032,4 @@ def api_detalhes_mes(ano, mes):
 
     except Exception as e:
         db.session.rollback()
-        traceback.print_exc()
-        return jsonify({'erro': f'Erro ao processar dados do mês: {str(e)}'}), 500
+        return erro_json(e, 'Falha ao processar dados do mês.', contexto='api_detalhes_mes')
