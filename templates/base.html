@@ -1513,5 +1513,36 @@
         }
     })();
     </script>
+
+    <script>
+    // Handler global anti-bfcache (Safari/iOS). Funciona em conjunto com
+    // ``Cache-Control: no-store`` enviado pelo backend em rotas
+    // autenticadas. Quando o usuário usa back/forward o Safari pode
+    // restaurar a página de um snapshot em memória com o estado JS
+    // preservado — botões em "Salvando..." continuam disabled, modais
+    // ficam abertos, etc. Esta defesa adicional restaura QUALQUER botão
+    // que tenha guardado o HTML original em ``data-original-html`` (padrão
+    // adotado em ``templates/caixa.html`` e similares) e dispara um evento
+    // ``cursor:pageshow-restored`` para que páginas específicas possam
+    // adicionar lógica própria (ex.: fechar modais sem precisar duplicar
+    // este código).
+    window.addEventListener('pageshow', function(event) {
+        if (!event.persisted) return;
+        try {
+            document.querySelectorAll('button[disabled][data-original-html]').forEach(function(btn) {
+                btn.disabled = false;
+                btn.classList.remove('opacity-50', 'cursor-not-allowed');
+                btn.innerHTML = btn.getAttribute('data-original-html');
+            });
+            var loaderGlobal = document.getElementById('loader-global');
+            if (loaderGlobal) loaderGlobal.classList.add('hidden');
+            window.dispatchEvent(new CustomEvent('cursor:pageshow-restored'));
+        } catch (err) {
+            if (window.console && console.warn) {
+                console.warn('[BASE] pageshow reset falhou:', err);
+            }
+        }
+    });
+    </script>
 </body>
 </html>

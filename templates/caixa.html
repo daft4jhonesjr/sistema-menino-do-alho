@@ -661,6 +661,39 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 });
+
+// Defesa em profundidade contra bfcache (Safari/iOS). Mesmo com o backend
+// enviando ``Cache-Control: no-store`` em rotas autenticadas, o usuário
+// pode acionar back/forward em fluxos onde o cache HTTP já não é
+// decisivo (cliques rápidos, swipe gesture no iOS). ``pageshow`` com
+// ``event.persisted === true`` indica que a página voltou de um snapshot
+// preservado em memória, com o estado JS intacto — botão "Salvando..."
+// ainda travado, modal pendurado, etc. Resetamos manualmente para que a
+// próxima submissão dispare normalmente, evitando o bug "primeiro
+// lançamento funciona, segundo trava silenciosamente".
+window.addEventListener('pageshow', function(event) {
+    if (!event.persisted) return;
+    try {
+        if (typeof resetBotaoSalvarLancamento === 'function') {
+            resetBotaoSalvarLancamento();
+        }
+        var modal = document.getElementById('modalNovoLancamento');
+        if (modal) modal.classList.add('hidden');
+        if (typeof liberarFundo === 'function') liberarFundo();
+        // Outros botões de submit do Caixa que também podem ter ficado
+        // disabled (excluir massa, importar, toggles AJAX). Restauramos
+        // texto original a partir de data-original-html quando disponível.
+        document.querySelectorAll('button[disabled][data-original-html]').forEach(function(btn) {
+            btn.disabled = false;
+            btn.classList.remove('opacity-50', 'cursor-not-allowed');
+            btn.innerHTML = btn.getAttribute('data-original-html');
+        });
+    } catch (e) {
+        if (window.console && console.warn) {
+            console.warn('[CAIXA] pageshow reset falhou:', e);
+        }
+    }
+});
 function atualizarTipoPorCategoria(categoriaSelect, tipoInputId) {
     var tipoInput = document.getElementById(tipoInputId);
     if (!tipoInput) return;

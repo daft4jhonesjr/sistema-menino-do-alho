@@ -2525,7 +2525,31 @@ def shutdown_session(exception=None):
 
 @app.after_request
 def add_cache_control_static(response):
-    """Adiciona headers de cache longo para arquivos estáticos."""
+    """Define a política de cache HTTP do app.
+
+    Estratégia:
+
+    * ``/static/*`` — cache longo (1 ano) com ETag, pois o nome do arquivo
+      é versionado pelo bundler/git e o navegador pode reusar livremente.
+    * Páginas autenticadas (``current_user.is_authenticated``) — bloqueamos
+      explicitamente o ``bfcache`` (back-forward cache) do Safari e demais
+      caches de navegador com ``Cache-Control: no-store``. Isto é
+      OBRIGATÓRIO em apps com sessão e CSRF token inline:
+        - sem ``no-store``, o Safari restaura o snapshot da página com o
+          DOM preservado (incluindo botões em estado ``disabled=true`` da
+          última submissão e tokens CSRF possivelmente expirados);
+        - o usuário tenta postar de novo e o JS bloqueia silenciosamente
+          (``e.preventDefault()`` na trava anti-duplo-clique) ou o backend
+          recusa o token;
+        - sintoma reportado em produção: "primeiro lançamento funciona,
+          segundo trava". Modo Incognito do Safari desativa bfcache, daí
+          ele "resolver" o problema.
+      ``no-cache`` + ``must-revalidate`` + ``Pragma: no-cache`` são
+      redundâncias para navegadores legados/proxies que ignoram um ou
+      outro header.
+    * Demais respostas (públicas anônimas, redirects de autenticação) —
+      mantemos o default do Flask, sem cache explícito.
+    """
     if request.path.startswith('/static/'):
         # Cache de 1 ano para arquivos estáticos (CSS, JS, imagens, fontes)
         response.headers['Cache-Control'] = 'public, max-age=31536000'
@@ -2533,6 +2557,20 @@ def add_cache_control_static(response):
         if not response.headers.get('ETag'):
             etag = hashlib.md5(response.get_data()).hexdigest()
             response.headers['ETag'] = f'"{etag}"'
+        return response
+
+    try:
+        autenticado = bool(getattr(current_user, 'is_authenticated', False))
+    except Exception:
+        # Em caminhos onde o LoginManager ainda não rodou (ex.: handler de
+        # erro muito cedo no ciclo), preferimos não-cachear por segurança.
+        autenticado = True
+
+    if autenticado:
+        response.headers['Cache-Control'] = (
+            'no-store, no-cache, must-revalidate, max-age=0'
+        )
+        response.headers['Pragma'] = 'no-cache'
     return response
 
 
