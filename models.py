@@ -212,7 +212,7 @@ class Produto(db.Model):
         nullable=True,
         index=True,
     )
-    tipo = db.Column(db.String(20), nullable=False, index=True)
+    tipo = db.Column(db.String(50), nullable=False, index=True)
     nacionalidade = db.Column(db.String(20), nullable=False, index=True)
     marca = db.Column(db.String(100), nullable=False)
     tamanho = db.Column(db.String(10), nullable=False)  # Aceita números ('7', '8') ou letras ('P', 'M', 'G', 'S/N')
