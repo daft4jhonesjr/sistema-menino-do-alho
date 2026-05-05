@@ -23,7 +23,13 @@
 <!-- Linha de Resumo do Pedido (Expansível) -->
 <tr class="pedido-resumo cursor-pointer transition {{ row_bg_class }} {{ row_hover_class }} border-b border-gray-200 dark:border-gray-700" data-pedido-id="{{ pedido_unique_id }}" data-venda-ids="{{ pedido.vendas|map(attribute='id')|list|tojson }}" data-lucro-total="{{ pedido.total_lucro }}" data-empresa="{{ (pedido.empresa_faturadora or 'NENHUM') | upper }}">
     <td class="px-2 py-4 text-center text-xs text-gray-400 dark:text-gray-500 font-bold celula-numero"></td>
-    <td class="px-3 py-4 text-center" onclick="event.stopPropagation();">
+    {# Coluna de seleção em massa. NÃO usar onclick="event.stopPropagation();"
+       aqui: o ``stopPropagation`` interrompe o bubbling antes que listeners
+       delegados em ``document`` (ex.: ``.btn-desvincular-doc``) possam
+       interceptar o evento. A guarda do accordion em ``vendas/listar.html``
+       (``if (e.target.closest('a, button, form, input')) return;``) já
+       impede que clicar no checkbox expanda a linha do pedido. #}
+    <td class="px-3 py-4 text-center">
         <input type="checkbox" class="bulk-row-check rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" data-venda-ids="{{ pedido.vendas|map(attribute='id')|list|tojson }}" data-lucro-total="{{ pedido.total_lucro }}">
     </td>
     <td class="px-4 py-4 text-center">
@@ -82,7 +88,12 @@
         --
         {% endif %}
     </td>
-    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium min-w-[180px]" onclick="event.stopPropagation();">
+    {# Coluna AÇÕES. NÃO usar onclick="event.stopPropagation();" aqui:
+       botões como ``.btn-desvincular-doc`` dependem do bubbling até o
+       ``document`` (event delegation). A proteção contra expandir o
+       accordion já vive no listener do <tr.pedido-resumo>: ele filtra
+       cliques em ``a, button, form, input`` antes de toggle. #}
+    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium min-w-[180px]">
         <div class="flex items-center justify-end gap-1.5 flex-nowrap">
             {# WHATSAPP: Link direto (imune a bloqueador de pop-ups) #}
             <a href="{{ url_for('documentos.enviar_whatsapp_boleto', id=pedido.primeira_venda_id) }}" target="_blank" rel="noopener noreferrer" class="flex-shrink-0 p-2.5 md:p-1.5 rounded text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/30 inline-flex transition-colors" title="Enviar cobrança com link do boleto no WhatsApp">
