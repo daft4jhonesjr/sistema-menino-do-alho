@@ -75,6 +75,34 @@
 </div>
 {% endif %}
 
+<!-- Trocar Minha Senha (autosserviço — qualquer usuário logado nesta tela) -->
+<div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-6 mb-6">
+    <h3 class="text-lg font-bold text-emerald-700 dark:text-emerald-400 mb-1 flex items-center">
+        <i data-lucide="key-round" class="w-5 h-5 mr-2"></i>Trocar Minha Senha
+    </h3>
+    <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+        Atualize a senha do seu próprio usuário (<span class="font-semibold">{{ current_user.username }}</span>). Mínimo de 6 caracteres.
+    </p>
+    <form method="POST" action="{{ url_for('auth.trocar_minha_senha') }}" class="space-y-4 max-w-xl" autocomplete="off">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div>
+            <label for="trocar_nova_senha" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nova Senha</label>
+            <input type="password" id="trocar_nova_senha" name="nova_senha" required minlength="6" autocomplete="new-password"
+                   class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm dark:bg-gray-700 dark:text-gray-100"
+                   placeholder="Digite a nova senha (mínimo 6 caracteres)">
+        </div>
+        <div>
+            <label for="trocar_confirmar_senha" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Confirmar Nova Senha</label>
+            <input type="password" id="trocar_confirmar_senha" name="confirmar_senha" required minlength="6" autocomplete="new-password"
+                   class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm dark:bg-gray-700 dark:text-gray-100"
+                   placeholder="Repita a nova senha">
+        </div>
+        <button type="submit" class="bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-xl transition font-medium flex items-center">
+            <i data-lucide="save" class="w-4 h-4 mr-2"></i>Atualizar Minha Senha
+        </button>
+    </form>
+</div>
+
 <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-hidden">
     <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
