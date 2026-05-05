@@ -2194,5 +2194,25 @@ function resetarLarguraColunas() {
     alert('Memória visual completamente limpa! As colunas vão voltar ao tamanho natural de leitura.');
     window.location.reload();
 }
+
+// Máscara dinâmica de CNPJ (00.000.000/0000-00) para os modais de
+// Novo/Editar Fornecedor. Usamos delegação no document para cobrir tanto
+// o input renderizado no carregamento quanto qualquer input clonado/
+// reaberto via JS (ex.: linha de edição inline em ``modal-lista-fornecedores``).
+// Padrão idêntico ao usado em ``templates/clientes/listar.html`` para
+// manter coerência de UX e regex em todo o sistema.
+(function() {
+    document.addEventListener('input', function(e) {
+        var alvo = e.target;
+        if (!alvo || !alvo.matches) return;
+        if (!alvo.matches('input[name="cnpj"], .input-cnpj')) return;
+        var v = (alvo.value || '').replace(/\D/g, '').substring(0, 14);
+        v = v.replace(/^(\d{2})(\d)/, '$1.$2');
+        v = v.replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3');
+        v = v.replace(/\.(\d{3})(\d)/, '.$1/$2');
+        v = v.replace(/(\d{4})(\d)/, '$1-$2');
+        alvo.value = v;
+    });
+})();
 </script>
 {% endblock %}

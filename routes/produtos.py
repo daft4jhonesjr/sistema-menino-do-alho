@@ -690,11 +690,42 @@ def exportar_relatorio_produtos():
 # Fornecedores
 # ============================================================
 
+# Permitido em CNPJ: dígitos + separadores do formato brasileiro
+# (00.000.000/0000-00). Tudo o que não bater nesse charset vira lixo
+# e é descartado antes de gravar. Máscara client-side já garante esse
+# formato no input do modal, mas blindamos no backend para o caso de
+# payload manipulado, copy-paste com caracteres invisíveis ou usuário
+# sem JS.
+_CNPJ_CARACTERES_PERMITIDOS = re.compile(r'[^0-9./-]')
+
+
+def _normalizar_cnpj_fornecedor(valor):
+    """Normaliza um CNPJ vindo do formulário para o formato persistido.
+
+    Args:
+        valor: string crua vinda de ``request.form.get('cnpj')``.
+
+    Returns:
+        Uma string com no máximo 20 caracteres (limite da coluna
+        ``Fornecedor.cnpj``) — preservando os separadores
+        ``00.000.000/0000-00`` quando presentes — ou ``None`` quando o
+        usuário deixou o campo em branco.
+    """
+    if valor is None:
+        return None
+    bruto = str(valor).strip()
+    if not bruto:
+        return None
+    sanitizado = _CNPJ_CARACTERES_PERMITIDOS.sub('', bruto)
+    sanitizado = sanitizado[:20]
+    return sanitizado or None
+
+
 @produtos_bp.route('/fornecedores/novo', methods=['POST'])
 def novo_fornecedor():
     nome = str(request.form.get('nome') or '').strip().upper()
     razao_social = str(request.form.get('razao_social') or '').strip().upper() or None
-    cnpj = str(request.form.get('cnpj') or '').strip() or None
+    cnpj = _normalizar_cnpj_fornecedor(request.form.get('cnpj'))
     endereco = str(request.form.get('endereco') or '').strip() or None
     tipos_ids_raw = request.form.getlist('tipos_produtos')
     tipos_ids = []
@@ -730,7 +761,7 @@ def editar_fornecedor(id):
     fornecedor = query_tenant(Fornecedor).filter_by(id=id).first_or_404()
     nome = str(request.form.get('nome') or '').strip().upper()
     razao_social = str(request.form.get('razao_social') or '').strip().upper() or None
-    cnpj = str(request.form.get('cnpj') or '').strip() or None
+    cnpj = _normalizar_cnpj_fornecedor(request.form.get('cnpj'))
     endereco = str(request.form.get('endereco') or '').strip() or None
     tipos_ids_raw = request.form.getlist('tipos_produtos')
     tipos_ids = []
@@ -774,7 +805,7 @@ def editar_fornecedor_ajax(id):
     try:
         novo_nome = str(request.form.get('nome') or '').strip().upper()
         nova_razao = str(request.form.get('razao_social') or '').strip().upper() or None
-        novo_cnpj = str(request.form.get('cnpj') or '').strip() or None
+        novo_cnpj = _normalizar_cnpj_fornecedor(request.form.get('cnpj'))
         tipos_ids_raw = request.form.getlist('tipos_produtos')
         tipos_ids = []
         for tid in tipos_ids_raw:
