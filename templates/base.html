@@ -449,8 +449,11 @@
                 <a href="{{ url_for('caixa.caixa') }}" class="px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors text-sm {% if request.endpoint == 'caixa.caixa' %}bg-white/20 text-white font-medium{% else %}text-emerald-50 hover:bg-white/10 hover:text-white{% endif %}">
                     <i data-lucide="wallet" class="w-4 h-4"></i>Caixa Diário
                 </a>
-                <a href="{{ url_for('vendas.logistica') }}" class="px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors text-sm {% if request.endpoint == 'vendas.logistica' %}bg-white/20 text-white font-medium{% else %}text-emerald-50 hover:bg-white/10 hover:text-white{% endif %}">
+                <a href="{{ url_for('vendas.logistica') }}" class="relative px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors text-sm {% if request.endpoint == 'vendas.logistica' %}bg-white/20 text-white font-medium{% else %}text-emerald-50 hover:bg-white/10 hover:text-white{% endif %}">
                     <i data-lucide="truck" class="w-4 h-4"></i>Logística
+                    {% if entregas_pendentes and entregas_pendentes > 0 %}
+                    <span class="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 text-[10px] font-bold leading-none text-white bg-red-500 rounded-full ring-2 ring-emerald-700" title="{{ entregas_pendentes }} entrega(s) pendente(s)">{{ entregas_pendentes }}</span>
+                    {% endif %}
                 </a>
                 
                 <!-- Seletor de Ano -->

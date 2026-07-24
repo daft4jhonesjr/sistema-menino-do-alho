@@ -2765,6 +2765,28 @@ def inject_count_outros():
 
 
 @app.context_processor
+def inject_entregas_pendentes():
+    """Disponibiliza entregas_pendentes (vendas com status_entrega PENDENTE).
+
+    Multi-tenant: restringe ao tenant atual. Usuarios MASTER ou nao logados
+    recebem 0 (sem badge na navbar).
+    """
+    try:
+        if not current_user.is_authenticated:
+            return {'entregas_pendentes': 0}
+        eid = getattr(current_user, 'empresa_id', None)
+        if eid is None:
+            return {'entregas_pendentes': 0}
+        n = Venda.query.filter(
+            Venda.empresa_id == eid,
+            Venda.status_entrega == 'PENDENTE',
+        ).count()
+        return {'entregas_pendentes': n}
+    except Exception:
+        return {'entregas_pendentes': 0}
+
+
+@app.context_processor
 def inject_ano_ativo():
     """Disponibiliza ano_ativo e anos_disponiveis em todos os templates."""
     ano_atual = datetime.now().year
