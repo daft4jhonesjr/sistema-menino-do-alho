@@ -412,6 +412,27 @@ def listar_produtos():
         qtd = quantidade_vendida_por_produto.get(pid, 0)
         lucro_medio_por_produto[pid] = (lucro / qtd) if qtd else 0.0
 
+    # Margem real (%) sobre o faturamento das unidades já saídas do estoque.
+    # qtd_vendida = qtd_entrada - estoque_atual; CMV = qtd_vendida * preço;
+    # faturamento = CMV + lucro_realizado; margem = lucro / faturamento * 100.
+    margem_percentual_por_produto = {}
+    for item in produtos_com_entrada_todos:
+        produto = item['produto']
+        qtd_entrada = int(item['quantidade_entrada_exibicao'] or 0)
+        qtd_vendida = qtd_entrada - int(produto.estoque_atual or 0)
+        if qtd_vendida <= 0:
+            margem_percentual_por_produto[produto.id] = 0.0
+            continue
+        lucro_realizado = float(lucro_realizado_por_produto.get(produto.id, 0.0))
+        cmv = qtd_vendida * float(produto.preco_custo or 0)
+        faturamento = cmv + lucro_realizado
+        if faturamento > 0:
+            margem_percentual_por_produto[produto.id] = round(
+                (lucro_realizado / faturamento) * 100, 1
+            )
+        else:
+            margem_percentual_por_produto[produto.id] = 0.0
+
     # Calcular totais globais por tipo (usando TODOS os produtos)
     totais_por_tipo = {}
     for tipo, itens in produtos_por_tipo_todos.items():
@@ -536,6 +557,7 @@ def listar_produtos():
             quantidade_vendida_por_produto=quantidade_vendida_por_produto,
             lucro_realizado_por_produto=lucro_realizado_por_produto,
             lucro_medio_por_produto=lucro_medio_por_produto,
+            margem_percentual_por_produto=margem_percentual_por_produto,
         )
         return jsonify({'html': html_linhas, 'has_next': pagination.has_next, 'page': page})
 
@@ -562,6 +584,7 @@ def listar_produtos():
         quantidade_vendida_por_produto=quantidade_vendida_por_produto,
         lucro_realizado_por_produto=lucro_realizado_por_produto,
         lucro_medio_por_produto=lucro_medio_por_produto,
+        margem_percentual_por_produto=margem_percentual_por_produto,
     )
 
 

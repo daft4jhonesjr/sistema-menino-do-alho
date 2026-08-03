@@ -40,8 +40,12 @@
     {% set lucro_real = lucro_realizado_por_produto.get(produto.id, 0) if lucro_realizado_por_produto is defined else 0 %}
     {% set qtd_vendida = quantidade_vendida_por_produto.get(produto.id, 0) if quantidade_vendida_por_produto is defined else 0 %}
     {% set lucro_medio = lucro_medio_por_produto.get(produto.id, 0) if lucro_medio_por_produto is defined else 0 %}
+    {% set margem_pct = margem_percentual_por_produto.get(produto.id, 0) if margem_percentual_por_produto is defined else 0 %}
     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-right {% if lucro_real > 0 %}text-emerald-600 dark:text-emerald-400{% elif lucro_real < 0 %}text-red-600 dark:text-red-400{% else %}text-amber-600 dark:text-amber-400{% endif %}" title="{% if qtd_vendida > 0 %}Lucro de {{ lucro_medio | formato_moeda }} por unidade{% else %}Nenhuma venda{% endif %}">
         {{ lucro_real | formato_moeda }}
+    </td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-right {% if margem_pct > 0 %}text-emerald-500 dark:text-emerald-400{% elif margem_pct < 0 %}text-red-600 dark:text-red-400{% else %}text-gray-500 dark:text-gray-400{% endif %}">
+        {{ '%.1f'|format(margem_pct) }}%
     </td>
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{% if produto.data_chegada %}{{ produto.data_chegada.strftime('%d/%m/%Y') }}{% endif %}</td>
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ produto.tipo }}</td>
