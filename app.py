@@ -2850,74 +2850,139 @@ def injetar_datas():
 
 
 def _contar_cobrancas_pendentes_visiveis():
-    """Conta pedidos vencidos visíveis para o usuário atual.
+    """Conta pedidos vencidos com as mesmas regras de ``listar_vendas?filtro_vencidos=1``.
 
-    Optimizações aplicadas (C2):
-    - Para admin: uma única query SQL com COUNT + filtro de data (sem carregar objetos).
-    - Para usuário comum: carrega apenas os campos essenciais (id, situacao,
-      data_vencimento, caminho_boleto) sem joinedload desnecessário, e
-      limita a 500 registros defensivamente.
+    Diferenças históricas que geravam inconsistência (ex.: alerta 5 vs tabela 4):
+    - A notificação contava **vendas** individuais; a tabela lista **pedidos**
+      agrupados (cliente+NF+data / consumidor final).
+    - A listagem padrão (filtro=geral) exclui produtos de bacalhau; a contagem
+      antiga incluía todos.
+    - A listagem resolve ``data_vencimento`` via Documento (caminho_boleto)
+      quando a venda não tem a data; o caminho admin antigo ignorava isso.
+    - A situacao efetiva é a do **pedido agregado**, não a de cada linha.
 
-    Multi-tenant: restringe a contagem ao tenant do usuario atual. Usuarios
-    MASTER (sem empresa_id) nao veem badge de cobrancas, o que eh intencional.
+    Multi-tenant: restringe ao tenant atual. MASTER (sem empresa_id) recebe 0.
     """
     try:
+        from services.query_utils import filtro_ano_data_venda
+
         hoje = get_hoje_brasil()
         ano_ativo = session.get('ano_ativo', datetime.now().year)
         eid = empresa_id_atual()
         if eid is None:
             return 0
 
-        if _e_admin_tenant():
-            # Caminho rápido para admin: contar via SQL puro usando data_vencimento direta.
-            # Vendas sem data_vencimento própria precisariam de JOIN com Documento —
-            # aceitamos uma sub-estimativa leve aqui em troca de performance.
-            total_direto = db.session.query(func.count(Venda.id)).filter(
-                Venda.empresa_id == eid,
-                extract('year', Venda.data_venda) == ano_ativo,
-                Venda.situacao.in_(['PENDENTE', 'PARCIAL']),
-                Venda.data_vencimento.isnot(None),
-                Venda.data_vencimento < hoje,
-            ).scalar() or 0
-            return total_direto
+        _ano_ini, _ano_fim = filtro_ano_data_venda(ano_ativo, Venda.data_venda)
+        # Mesmo critério de listar_vendas com filtro=geral (default do link do alerta).
+        filtro_bacalhau_expr = or_(
+            Produto.nome_produto.ilike('%bacalhau%'),
+            Produto.tipo.ilike('%bacalhau%'),
+        )
 
-        # Para usuário comum: carrega colunas essenciais (sem usuario_id — coluna inexistente em Venda).
-        # Conta todas as cobranças vencidas do período; o badge é informativo para todos os usuários.
-        vendas = query_tenant(Venda).with_entities(
-            Venda.id, Venda.situacao, Venda.data_vencimento,
-            Venda.caminho_boleto
+        ids_ano = db.session.query(Venda.id).join(
+            Produto, Venda.produto_id == Produto.id
         ).filter(
-            extract('year', Venda.data_venda) == ano_ativo,
-            Venda.situacao.in_(['PENDENTE', 'PARCIAL']),
-        ).limit(500).all()
+            Venda.empresa_id == eid,
+            _ano_ini, _ano_fim,
+            ~filtro_bacalhau_expr,
+        )
 
-        # Pré-fetch de documentos via .in_() — UMA query, não N.
+        vendas = query_tenant(Venda).options(
+            joinedload(Venda.cliente),
+        ).filter(
+            Venda.id.in_(ids_ano),
+        ).all()
+
+        if not vendas:
+            return 0
+
+        # Pré-fetch de documentos por caminho_boleto (fallback de data_vencimento).
         caminhos_boleto = list({
-            str(r.caminho_boleto or '').strip()
-            for r in vendas
-            if str(r.caminho_boleto or '').strip()
+            str(getattr(v, 'caminho_boleto', None) or '').strip()
+            for v in vendas
+            if str(getattr(v, 'caminho_boleto', None) or '').strip()
         })
         docs_por_caminho: dict = {}
         if caminhos_boleto:
-            # Auditoria P0 (A2): escopa Documentos pelo tenant — caminho_arquivo
-            # pode coincidir entre empresas e dispararia leitura cross-tenant.
             docs_boleto = query_documentos_tenant().with_entities(
                 Documento.caminho_arquivo, Documento.data_vencimento
             ).filter(Documento.caminho_arquivo.in_(caminhos_boleto)).all()
-            docs_por_caminho = {str(d.caminho_arquivo or '').strip(): d for d in docs_boleto}
+            docs_por_caminho = {
+                str(d.caminho_arquivo or '').strip(): d for d in docs_boleto
+            }
+
+        # Agrupa como listar_vendas: consumidor final = (cliente, data, avulso);
+        # demais = (cliente, NF, data).
+        pedidos: dict = {}
+        for venda in vendas:
+            cliente = venda.cliente
+            cnpj_cliente = (cliente.cnpj if cliente else None) or ''
+            is_consumidor_final = cnpj_cliente in ('0', '00000000000000', '')
+            data_venda_normalizada = (
+                venda.data_venda.date()
+                if hasattr(venda.data_venda, 'date')
+                else venda.data_venda
+            )
+            if is_consumidor_final:
+                avulso_norm = str(getattr(venda, 'cliente_avulso', '') or '').strip().upper()
+                pedido_key = (venda.cliente_id, data_venda_normalizada, avulso_norm)
+            else:
+                nf_normalizada = str(venda.nf).strip() if venda.nf else ''
+                pedido_key = (venda.cliente_id, nf_normalizada, data_venda_normalizada)
+            pedidos.setdefault(pedido_key, []).append(venda)
 
         total = 0
-        for r in vendas:
-            dv = r.data_vencimento
-            if dv is None:
-                cb = str(r.caminho_boleto or '').strip()
-                doc = docs_por_caminho.get(cb)
-                if doc:
-                    dv = doc.data_vencimento
-            if dv is None:
+        for vendas_do_pedido in pedidos.values():
+            vendas_financeiras = [
+                v for v in vendas_do_pedido
+                if str(getattr(v, 'tipo_operacao', 'VENDA') or 'VENDA').upper() != 'PERDA'
+            ]
+            if not vendas_financeiras:
                 continue
-            if dv < hoje:
+
+            total_valor_financeiro = sum(
+                float(v.calcular_total() or 0) for v in vendas_financeiras
+            )
+            total_pago_financeiro = sum(
+                float(getattr(v, 'valor_pago', None) or 0) for v in vendas_financeiras
+            )
+            situacoes_financeiras = [
+                str(v.situacao or '').strip().upper() for v in vendas_financeiras
+            ]
+            todas_pagas = situacoes_financeiras and all(
+                s == 'PAGO' for s in situacoes_financeiras
+            )
+            if todas_pagas or (
+                total_valor_financeiro > 0
+                and total_pago_financeiro >= total_valor_financeiro - 0.01
+            ):
+                situacao_pedido = 'PAGO'
+            elif total_pago_financeiro > 0.01:
+                situacao_pedido = 'PARCIAL'
+            else:
+                situacao_pedido = 'PENDENTE'
+
+            if situacao_pedido not in ('PENDENTE', 'PARCIAL'):
+                continue
+
+            dv = None
+            for vv in vendas_do_pedido:
+                if getattr(vv, 'data_vencimento', None) is not None:
+                    dv = vv.data_vencimento
+                    break
+            if dv is None:
+                for vv in vendas_do_pedido:
+                    cb = str(getattr(vv, 'caminho_boleto', None) or '').strip()
+                    if not cb:
+                        continue
+                    doc = docs_por_caminho.get(cb)
+                    if doc and getattr(doc, 'data_vencimento', None) is not None:
+                        dv = doc.data_vencimento
+                        break
+
+            if dv is not None and dv < hoje:
                 total += 1
+
         return total
     except Exception:
         return 0
@@ -2945,8 +3010,9 @@ def injetar_alertas():
             return dict(alertas_sistema=alertas)
 
         if getattr(current_user, 'notifica_boletos', False):
-            _cache_key = f'_alertas_boletos_ts'
-            _cache_val = f'_alertas_boletos_val'
+            # Sufixo v2: invalida cache antigo (contagem por venda, não por pedido).
+            _cache_key = '_alertas_boletos_ts_v2'
+            _cache_val = '_alertas_boletos_val_v2'
             _agora = datetime.now().timestamp()
             _ts = session.get(_cache_key, 0)
 
