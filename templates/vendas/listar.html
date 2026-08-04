@@ -523,6 +523,10 @@
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
         </button>
     </div>
+    <button type="button" id="btn-copiar-nfs" class="px-3 py-1.5 rounded-md text-sm font-semibold bg-slate-700 text-white hover:bg-slate-600 dark:bg-slate-600 dark:hover:bg-slate-500 transition-colors inline-flex items-center gap-1.5" title="Copiar todas as NFs da tabela atual">
+        <i data-lucide="copy" class="w-4 h-4"></i>
+        <span class="btn-copiar-nfs-label">Copiar NFs</span>
+    </button>
 </div>
 
 <div class="relative">
@@ -3100,6 +3104,104 @@ function toggleAnaliseVendas(event) {
                 dropdown.open = false;
             }
         });
+    });
+})();
+
+// Copiar em lote todas as NFs exibidas na tabela atual de vendas.
+(function() {
+    var btn = document.getElementById('btn-copiar-nfs');
+    if (!btn) return;
+
+    var label = btn.querySelector('.btn-copiar-nfs-label');
+    var classesOriginais = btn.className;
+    var textoOriginal = label ? label.textContent : 'Copiar NFs';
+    var feedbackTimer = null;
+
+    function indiceColunaNf(tabela) {
+        var ths = tabela.querySelectorAll('thead th');
+        for (var i = 0; i < ths.length; i++) {
+            var txt = (ths[i].textContent || '').replace(/\s+/g, ' ').trim().toUpperCase();
+            if (txt === 'NF' || txt.indexOf('NF') === 0) return i;
+        }
+        return -1;
+    }
+
+    function coletarNfs() {
+        var tabela = document.getElementById('tabela-vendas');
+        if (!tabela) return [];
+
+        var idxNf = indiceColunaNf(tabela);
+        var nfs = [];
+        var vistos = {};
+        var linhas = tabela.querySelectorAll('tbody tr.pedido-resumo');
+
+        linhas.forEach(function(tr) {
+            var texto = '';
+            if (idxNf >= 0) {
+                var celula = tr.children[idxNf];
+                texto = celula ? (celula.textContent || '').trim() : '';
+            } else {
+                var span = tr.querySelector('span[title*="copiar a NF"]');
+                texto = span ? (span.textContent || '').trim() : '';
+            }
+            if (!texto || texto === '-' || texto === 'None' || texto.toUpperCase() === 'N/A') return;
+            // Mantém só dígitos/letras típicos de NF; ignora lixo visual.
+            var limpo = texto.replace(/\s+/g, '').trim();
+            if (!limpo || vistos[limpo]) return;
+            vistos[limpo] = true;
+            nfs.push(limpo);
+        });
+        return nfs;
+    }
+
+    function restaurarBotao() {
+        btn.className = classesOriginais;
+        btn.disabled = false;
+        if (label) label.textContent = textoOriginal;
+        if (window.lucide && typeof window.lucide.createIcons === 'function') {
+            window.lucide.createIcons();
+        }
+    }
+
+    btn.addEventListener('click', function() {
+        var nfs = coletarNfs();
+        if (!nfs.length) {
+            if (label) label.textContent = 'Nenhuma NF';
+            btn.className = 'px-3 py-1.5 rounded-md text-sm font-semibold bg-amber-600 text-white transition-colors inline-flex items-center gap-1.5';
+            clearTimeout(feedbackTimer);
+            feedbackTimer = setTimeout(restaurarBotao, 2000);
+            return;
+        }
+
+        var texto = nfs.join(', ');
+        var aplicarSucesso = function() {
+            if (label) label.textContent = 'NFs Copiadas!';
+            btn.className = 'px-3 py-1.5 rounded-md text-sm font-semibold bg-emerald-600 text-white transition-colors inline-flex items-center gap-1.5';
+            clearTimeout(feedbackTimer);
+            feedbackTimer = setTimeout(restaurarBotao, 2000);
+        };
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(texto).then(aplicarSucesso).catch(function(err) {
+                console.error('Erro ao copiar NFs:', err);
+            });
+        } else {
+            // Fallback para ambientes sem Clipboard API.
+            var ta = document.createElement('textarea');
+            ta.value = texto;
+            ta.setAttribute('readonly', '');
+            ta.style.position = 'fixed';
+            ta.style.left = '-9999px';
+            document.body.appendChild(ta);
+            ta.select();
+            try {
+                document.execCommand('copy');
+                aplicarSucesso();
+            } catch (err) {
+                console.error('Erro ao copiar NFs:', err);
+            }
+            document.body.removeChild(ta);
+        }
     });
 })();
 </script>
