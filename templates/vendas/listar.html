@@ -2256,6 +2256,40 @@ document.addEventListener('DOMContentLoaded', function() {
                             }
                         })
                         .catch(function(err) { console.error('Erro ao buscar pagamento padrão:', err); });
+
+                    // Auto-preenchimento da Empresa mais frequente para este cliente
+                    fetch('/api/empresa-frequente/' + encodeURIComponent(value), { credentials: 'same-origin' })
+                        .then(function(r) { return r.json(); })
+                        .then(function(data) {
+                            var empresa = (data && data.empresa) ? String(data.empresa).trim() : '';
+                            if (!empresa) return;
+                            var selectEmp = document.getElementById('inline-empresa_faturadora');
+                            if (!selectEmp) return;
+                            var norm = function(s) {
+                                return (s || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim();
+                            };
+                            var alvo = norm(empresa);
+                            var encontrada = false;
+                            for (var i = 0; i < selectEmp.options.length; i++) {
+                                var opt = selectEmp.options[i];
+                                if (opt.value && norm(opt.value) === alvo) {
+                                    selectEmp.value = opt.value;
+                                    encontrada = true;
+                                    break;
+                                }
+                            }
+                            // Se o filtro por produto ainda não listou essa empresa, inclui a opção.
+                            if (!encontrada) {
+                                var nova = document.createElement('option');
+                                nova.value = empresa.toUpperCase();
+                                nova.textContent = empresa.toUpperCase();
+                                selectEmp.appendChild(nova);
+                                selectEmp.value = nova.value;
+                            }
+                            selectEmp.classList.add('ring-2', 'ring-emerald-500', 'transition-all');
+                            setTimeout(function() { selectEmp.classList.remove('ring-2', 'ring-emerald-500'); }, 1000);
+                        })
+                        .catch(function(err) { console.error('Erro ao buscar empresa frequente:', err); });
                 }
             },
             onClear: function() {

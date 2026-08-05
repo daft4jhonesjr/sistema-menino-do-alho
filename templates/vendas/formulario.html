@@ -160,6 +160,41 @@ document.addEventListener('DOMContentLoaded', function() {
     if (clienteSelect) {
         clienteSelect.addEventListener('change', atualizarCampoClienteAvulso);
         atualizarCampoClienteAvulso();
+
+        // Auto-preenche Empresa com a mais frequente do cliente (apenas em nova venda).
+        {% if not venda %}
+        clienteSelect.addEventListener('change', function() {
+            var cid = clienteSelect.value;
+            if (!cid) return;
+            fetch('/api/empresa-frequente/' + encodeURIComponent(cid), { credentials: 'same-origin' })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var empresa = (data && data.empresa) ? String(data.empresa).trim() : '';
+                    if (!empresa || !empresaSelect) return;
+                    var norm = function(s) {
+                        return (s || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim();
+                    };
+                    var alvo = norm(empresa);
+                    var ok = false;
+                    for (var i = 0; i < empresaSelect.options.length; i++) {
+                        var opt = empresaSelect.options[i];
+                        if (opt.value && norm(opt.value) === alvo) {
+                            empresaSelect.value = opt.value;
+                            ok = true;
+                            break;
+                        }
+                    }
+                    if (!ok) {
+                        var nova = document.createElement('option');
+                        nova.value = empresa.toUpperCase();
+                        nova.textContent = empresa.toUpperCase();
+                        empresaSelect.appendChild(nova);
+                        empresaSelect.value = nova.value;
+                    }
+                })
+                .catch(function(err) { console.error('Erro ao buscar empresa frequente:', err); });
+        });
+        {% endif %}
     }
 
     function atualizarEmpresasPorProduto() {

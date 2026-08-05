@@ -8,6 +8,7 @@ Rotas extraídas do legado ``app.py``:
 * ``GET  /api/dashboard/detalhes/<filtro>``          — vendas pendentes/pagas/avulsa/fornecedor
 * ``GET  /api/dashboard/documentos_pendentes/resumo``— polling da fila de docs
 * ``GET  /api/cliente/ultimo_pagamento``             — autocomplete de forma de pagto
+* ``GET  /api/empresa-frequente/<cliente>``           — autocomplete de empresa faturadora
 * ``GET  /api/cobrancas_pendentes``                  — push notification preflight
 * ``GET  /api/dashboard/detalhes_mes/<ano>/<mes>``   — drill-down do gráfico mensal
 
@@ -840,6 +841,55 @@ def ultimo_pagamento_cliente():
     if ultima_venda and ultima_venda.forma_pagamento:
         return jsonify({'forma_pagamento': ultima_venda.forma_pagamento})
     return jsonify({'forma_pagamento': None})
+
+
+@dashboard_bp.route('/api/empresa-frequente/<path:cliente_ref>', methods=['GET'])
+def empresa_frequente_cliente(cliente_ref):
+    """Empresa faturadora mais usada historicamente para o cliente.
+
+    Aceita ``cliente_id`` (numérico) ou nome do cliente no path. Agrupa as
+    vendas por ``empresa_faturadora`` e devolve a de maior ocorrência.
+    Clientes sem histórico retornam ``{"empresa": null}``.
+    """
+    try:
+        ref = (cliente_ref or '').strip()
+        if not ref:
+            return jsonify({'empresa': None}), 400
+
+        query = query_tenant(Venda).with_entities(
+            Venda.empresa_faturadora,
+            func.count(Venda.id).label('total'),
+        )
+
+        if ref.isdigit():
+            query = query.filter(Venda.cliente_id == int(ref))
+        else:
+            # Match exato (case-insensitive) primeiro; fallback parcial.
+            cliente = query_tenant(Cliente).filter(
+                func.lower(Cliente.nome_cliente) == ref.lower()
+            ).first()
+            if not cliente:
+                cliente = query_tenant(Cliente).filter(
+                    Cliente.nome_cliente.ilike(f'%{ref}%')
+                ).order_by(Cliente.nome_cliente).first()
+            if not cliente:
+                return jsonify({'empresa': None})
+            query = query.filter(Venda.cliente_id == cliente.id)
+
+        row = (
+            query
+            .filter(Venda.empresa_faturadora.isnot(None))
+            .filter(Venda.empresa_faturadora != '')
+            .group_by(Venda.empresa_faturadora)
+            .order_by(desc(func.count(Venda.id)), Venda.empresa_faturadora.asc())
+            .first()
+        )
+        if not row or not row[0]:
+            return jsonify({'empresa': None})
+        return jsonify({'empresa': str(row[0]).strip()})
+    except Exception:
+        current_app.logger.exception('Falha ao buscar empresa frequente do cliente')
+        return jsonify({'empresa': None}), 500
 
 
 @dashboard_bp.route('/api/dashboard/radar_recompra')

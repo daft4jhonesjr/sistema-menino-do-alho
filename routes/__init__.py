@@ -37,6 +37,7 @@ Estado atual:
                            /api/dashboard/detalhes/<filtro>,
                            /api/dashboard/documentos_pendentes/resumo,
                            /api/cliente/ultimo_pagamento,
+                           /api/empresa-frequente/<cliente>,
                            /api/cobrancas_pendentes,
                            /api/dashboard/detalhes_mes/<ano>/<mes>
     * ``caixa_bp``       → /caixa, /caixa/adicionar, /caixa/editar/<id>,
