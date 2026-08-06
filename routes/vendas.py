@@ -45,7 +45,7 @@ from flask import (
     flash, jsonify, session, current_app, Response,
 )
 from flask_login import current_user
-from sqlalchemy import asc, case, desc, func, or_
+from sqlalchemy import and_, asc, case, desc, func, or_
 from sqlalchemy.orm import joinedload
 import pandas as pd
 from werkzeug.utils import secure_filename
@@ -239,6 +239,47 @@ def listar_vendas():
     if cliente_id:
         subq_ids = subq_ids.filter(Venda.cliente_id == cliente_id)
 
+    # ------------------------------------------------------------------
+    # TOTALIZADORES (rodapé): universo COMPLETO dos filtros, sem LIMIT.
+    # A listagem abaixo continua limitada para não explodir memória/HTML.
+    # Regra de "Total a Receber": saldo (face - valor_pago) em linhas
+    # PENDENTE/PARCIAL, excluindo PERDA — alinhado ao KPI do Dashboard.
+    # ------------------------------------------------------------------
+    _valor_face_expr = Venda.preco_venda * Venda.quantidade_venda
+    _saldo_devedor_expr = _valor_face_expr - func.coalesce(Venda.valor_pago, 0)
+    _filtro_sem_perda = func.upper(func.coalesce(Venda.tipo_operacao, 'VENDA')) != 'PERDA'
+    _q_totais = db.session.query(
+        func.coalesce(
+            func.sum(
+                case(
+                    (
+                        and_(
+                            _filtro_sem_perda,
+                            Venda.situacao.in_(['PENDENTE', 'PARCIAL']),
+                        ),
+                        case(
+                            (_saldo_devedor_expr > 0, _saldo_devedor_expr),
+                            else_=0,
+                        ),
+                    ),
+                    else_=0,
+                )
+            ),
+            0,
+        )
+    ).filter(Venda.id.in_(subq_ids))
+    if forma_pagto != 'TODAS':
+        _q_totais = _q_totais.filter(
+            func.upper(func.coalesce(Venda.forma_pagamento, '')) == forma_pagto
+        )
+    if filtro_vencidos:
+        _hoje_totais = get_hoje_brasil()
+        _q_totais = _q_totais.filter(
+            Venda.data_vencimento.isnot(None),
+            Venda.data_vencimento < _hoje_totais,
+        )
+    total_geral_a_receber = float(_q_totais.scalar() or 0)
+
     # Limite dinâmico baseado na página solicitada. A "paginação real
     # em SQL" é difícil de fazer aqui sem perder semântica das
     # ordenações derivadas (vencimento/situação/forma_pagamento que
@@ -252,6 +293,7 @@ def listar_vendas():
     # * filtros estreitos (cliente_id ou produto_id) também recebem
     #   teto menor: a probabilidade do conjunto resultante ser
     #   pequeno é alta.
+    # Este LIMIT vale APENAS para a listagem/render — NÃO para totais.
     _page_param = max(1, request.args.get('page', 1, type=int) or 1)
     _per_page_default = 20
     _limite_base = 400 if not (cliente_id or produto_id) else 600
@@ -546,15 +588,8 @@ def listar_vendas():
     # foram removidos acima — sem mutações pendentes não há nada para
     # commitar, e qualquer erro em SELECT é capturado pelo Flask.
 
-    # Total a Receber: soma dos saldos devedores de TODOS os pedidos
-    # PENDENTE/PARCIAL (não paginado) — bate com a lógica do extrato.
-    # Calculado aqui porque ``pedidos_agrupados`` já tem ``situacao`` e
-    # ``total_saldo_devedor`` consolidados.
-    total_geral_a_receber = sum(
-        float(p.get('total_saldo_devedor') or 0)
-        for p in pedidos_agrupados
-        if str(p.get('situacao') or '').strip().upper() in ('PENDENTE', 'PARCIAL')
-    )
+    # ``total_geral_a_receber`` já foi calculado acima via SQL sobre o
+    # universo filtrado completo (sem LIMIT da listagem).
 
     page = request.args.get('page', 1, type=int)
     per_page = 20
@@ -611,18 +646,14 @@ def listar_vendas():
     todos_clientes = query_tenant(Cliente).order_by(Cliente.nome_cliente).limit(500).all()
     todos_produtos = query_tenant(Produto).order_by(Produto.nome_produto).limit(500).all()
 
-    # Agregações dos gráficos via 3 GROUP BY no banco em vez de iterar
-    # `vendas_raw` em Python. Como `vendas_raw` é construído a partir de
-    # `Venda.id.in_(subq_ids_select)` + filtro de forma de pagamento,
-    # reaplicamos exatamente os mesmos filtros aqui para manter a
-    # equivalência. Substitui um loop O(N) com `calcular_total()` por
-    # 3 SUM/COUNT indexados (usa ix_vendas_empresa_situacao e cia).
+    # Agregações dos gráficos: universo filtrado COMPLETO (sem o LIMIT
+    # da listagem), para bater com o rodapé / Dashboard.
     graficos_data = {'situacao': {}, 'pagamento': {}, 'empresa': {}}
     _valor_total_expr = Venda.preco_venda * Venda.quantidade_venda
     _filtro_perda_grafico = func.upper(func.coalesce(Venda.tipo_operacao, 'VENDA')) != 'PERDA'
 
     def _query_grafico_base():
-        q = db.session.query(Venda).filter(Venda.id.in_(subq_ids_select))
+        q = db.session.query(Venda).filter(Venda.id.in_(subq_ids))
         if forma_pagto != 'TODAS':
             q = q.filter(func.upper(func.coalesce(Venda.forma_pagamento, '')) == forma_pagto)
         return q
