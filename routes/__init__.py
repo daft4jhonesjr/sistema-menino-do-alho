@@ -2,7 +2,8 @@
 
 Estado atual:
     * ``auth_bp``        → /login, /logout, /cadastro, /perfil, /configuracoes,
-                           /gerenciar_usuarios/*, /api/logs/*
+                           /gerenciar_usuarios/*, /api/usuarios/<id>/reset-senha,
+                           /api/logs/*
     * ``master_bp``      → /master-admin/*
     * ``clientes_bp``    → /clientes, /clientes/novo, /clientes/editar, /clientes/excluir,
                            /cliente/<id>/toggle_ativo, /clientes/<id>/extrato,

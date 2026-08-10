@@ -5,6 +5,7 @@ Rotas extraídas do legado ``app.py``:
     * /configuracoes (preferências do usuário + ler logs de erro)
     * /api/logs/erros, /api/logs/limpar
     * /gerenciar_usuarios/*  (CRUD de usuários do tenant)
+    * /api/usuarios/<id>/reset-senha  (admin redefine senha de outro usuário)
 
 Endpoints novos seguem o padrão ``auth.<nome>``. Os redirects internos
 e templates já foram atualizados para o novo formato.
@@ -517,6 +518,50 @@ def editar_usuario_completo(id):
         return redirect(url_for('auth.gerenciar_usuarios'))
 
     return _editar()
+
+
+@auth_bp.route('/api/usuarios/<int:usuario_id>/reset-senha', methods=['POST'])
+@login_required
+def api_reset_senha_usuario(usuario_id):
+    """Admin redefine a senha de outro usuário do mesmo tenant.
+
+    Recebe JSON ``{"nova_senha": "..."}``, aplica ``generate_password_hash``
+    e grava em ``password_hash``. Nunca lê nem devolve a senha anterior.
+    """
+    @tenant_required
+    @admin_required
+    def _reset():
+        u = Usuario.query.get_or_404(usuario_id)
+        ok_perm, _resp = _checar_gestao_usuario_permitida(u)
+        if not ok_perm:
+            return jsonify(ok=False, mensagem='Acesso negado: usuário pertence a outra empresa.'), 403
+
+        data = request.get_json(silent=True) or {}
+        nova_senha = (data.get('nova_senha') or data.get('senha') or '').strip()
+        confirmar = (data.get('confirmar_senha') or '').strip()
+
+        if not nova_senha:
+            return jsonify(ok=False, mensagem='Informe a nova senha.'), 400
+        if len(nova_senha) < 6:
+            return jsonify(ok=False, mensagem='A nova senha deve ter no mínimo 6 caracteres.'), 400
+        if confirmar and confirmar != nova_senha:
+            return jsonify(ok=False, mensagem='A nova senha e a confirmação não conferem.'), 400
+
+        try:
+            u.password_hash = generate_password_hash(nova_senha)
+            ok, err = _safe_db_commit()
+            if not ok:
+                return jsonify(ok=False, mensagem=err or 'Erro ao salvar a nova senha.'), 500
+        except Exception as exc:
+            db.session.rollback()
+            return erro_json(exc, 'Erro ao redefinir a senha.', contexto='api_reset_senha_usuario')
+
+        return jsonify(
+            ok=True,
+            mensagem=f'Senha do usuário "{u.username}" atualizada com sucesso!',
+        )
+
+    return _reset()
 
 
 @auth_bp.route('/gerenciar_usuarios/excluir/<int:id>', methods=['POST'])

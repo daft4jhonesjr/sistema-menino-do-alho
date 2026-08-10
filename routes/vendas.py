@@ -286,7 +286,7 @@ def listar_vendas():
     # dependem de campos consolidados em Python depois do agrupamento
     # virtual). Em vez disso reduzimos o teto agressivamente:
     #
-    # * default=400 cobre as ~20 primeiras páginas (per_page=20) com
+    # * default=400 cobre as ~10 primeiras páginas (per_page=40) com
     #   folga, em vez do 1000 anterior que era largura morta.
     # * usuários que paginam para o fundo ganham elasticidade via
     #   `?page=N` — somamos N*per_page*3 ao teto, com cap em 2000.
@@ -295,7 +295,7 @@ def listar_vendas():
     #   pequeno é alta.
     # Este LIMIT vale APENAS para a listagem/render — NÃO para totais.
     _page_param = max(1, request.args.get('page', 1, type=int) or 1)
-    _per_page_default = 20
+    _per_page_default = 40
     _limite_base = 400 if not (cliente_id or produto_id) else 600
     _limite_dinamico = min(2000, max(_limite_base, _page_param * _per_page_default * 3))
     subq_ids_select = (
@@ -592,7 +592,7 @@ def listar_vendas():
     # universo filtrado completo (sem LIMIT da listagem).
 
     page = request.args.get('page', 1, type=int)
-    per_page = 20
+    per_page = 40
 
     total_pedidos = len(pedidos_agrupados)
     total_pages = ceil(total_pedidos / per_page) if total_pedidos > 0 else 1

@@ -154,9 +154,18 @@
                         </span>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap">
-                        <div class="flex items-center gap-3">
+                        <div class="flex items-center gap-3 flex-wrap">
                             <button type="button" onclick="abrirModalUsuario(this.dataset.id, this.dataset.username, this.dataset.role)" class="btn-editar-usuario bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 px-3 py-1 rounded hover:bg-emerald-200 dark:hover:bg-emerald-800/50 transition text-sm font-medium" data-id="{{ u.id }}" data-username="{{ u.username|e }}" data-role="{{ u.role }}">
                                 Editar
+                            </button>
+                            <button type="button"
+                                    class="btn-reset-senha bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 px-3 py-1 rounded hover:bg-amber-200 dark:hover:bg-amber-800/50 transition text-sm font-medium inline-flex items-center gap-1"
+                                    data-id="{{ u.id }}"
+                                    data-username="{{ u.username|e }}"
+                                    onclick="abrirModalResetSenha(this.dataset.id, this.dataset.username)"
+                                    title="Redefinir senha deste usuário">
+                                <i data-lucide="key-round" class="w-4 h-4"></i>
+                                <span class="hidden sm:inline">Resetar Senha</span>
                             </button>
                             {% if u.id != current_user.id and u.username != 'Jhones' %}
                             <form action="{{ url_for('auth.excluir_usuario', id=u.id) }}" method="POST" class="inline" onsubmit="return confirm('Tem certeza que deseja EXCLUIR o usuário &quot;{{ u.username|e }}&quot;? Esta ação não pode ser desfeita.');">
@@ -226,6 +235,43 @@
         </form>
     </div>
 </div>
+
+<!-- Modal Resetar Senha (admin → outro usuário) -->
+<div id="modalResetSenha" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl dark:shadow-none border border-gray-200 dark:border-gray-700 w-full max-w-md p-6 mx-4">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-bold text-gray-800 dark:text-gray-100">Resetar Senha</h3>
+            <button type="button" onclick="fecharModalResetSenha()" class="text-gray-400 dark:text-gray-500 hover:text-red-500 transition text-2xl" aria-label="Fechar">&times;</button>
+        </div>
+        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            Digite a nova senha para o usuário
+            <span id="reset_senha_username" class="font-semibold text-gray-900 dark:text-gray-100"></span>.
+            A senha atual <strong>não</strong> é exibida nem recuperável.
+        </p>
+        <form id="formResetSenha" autocomplete="off" onsubmit="return confirmarResetSenha(event)">
+            <input type="hidden" id="reset_senha_user_id" value="">
+            <div class="space-y-4">
+                <div>
+                    <label for="reset_nova_senha" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nova Senha</label>
+                    <input type="password" id="reset_nova_senha" required minlength="6" autocomplete="new-password"
+                           class="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2.5 focus:ring-amber-500 focus:border-amber-500 dark:bg-gray-700 dark:text-gray-100"
+                           placeholder="Mínimo 6 caracteres">
+                </div>
+                <div>
+                    <label for="reset_confirmar_senha" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Confirmar Nova Senha</label>
+                    <input type="password" id="reset_confirmar_senha" required minlength="6" autocomplete="new-password"
+                           class="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2.5 focus:ring-amber-500 focus:border-amber-500 dark:bg-gray-700 dark:text-gray-100"
+                           placeholder="Repita a nova senha">
+                </div>
+                <p id="reset_senha_erro" class="hidden text-sm text-red-600 dark:text-red-400"></p>
+            </div>
+            <div class="mt-6 flex justify-end gap-3">
+                <button type="button" onclick="fecharModalResetSenha()" class="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600">Cancelar</button>
+                <button type="submit" id="btn-confirmar-reset-senha" class="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 font-medium">Confirmar Reset</button>
+            </div>
+        </form>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -248,6 +294,99 @@ function fecharModalUsuario() {
     modal.classList.add('hidden');
     modal.classList.remove('flex');
     liberarFundo();
+}
+
+function abrirModalResetSenha(id, username) {
+    document.getElementById('reset_senha_user_id').value = id || '';
+    document.getElementById('reset_senha_username').textContent = username || '';
+    document.getElementById('reset_nova_senha').value = '';
+    document.getElementById('reset_confirmar_senha').value = '';
+    var erro = document.getElementById('reset_senha_erro');
+    erro.classList.add('hidden');
+    erro.textContent = '';
+    var modal = document.getElementById('modalResetSenha');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    travarFundo();
+    setTimeout(function() {
+        var input = document.getElementById('reset_nova_senha');
+        if (input) input.focus();
+    }, 50);
+}
+
+function fecharModalResetSenha() {
+    var modal = document.getElementById('modalResetSenha');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    liberarFundo();
+}
+
+function confirmarResetSenha(event) {
+    event.preventDefault();
+    var userId = document.getElementById('reset_senha_user_id').value;
+    var nova = (document.getElementById('reset_nova_senha').value || '').trim();
+    var confirmar = (document.getElementById('reset_confirmar_senha').value || '').trim();
+    var erroEl = document.getElementById('reset_senha_erro');
+    var btn = document.getElementById('btn-confirmar-reset-senha');
+
+    function showErro(msg) {
+        erroEl.textContent = msg;
+        erroEl.classList.remove('hidden');
+    }
+
+    if (!userId) {
+        showErro('Usuário inválido.');
+        return false;
+    }
+    if (!nova || nova.length < 6) {
+        showErro('A nova senha deve ter no mínimo 6 caracteres.');
+        return false;
+    }
+    if (nova !== confirmar) {
+        showErro('A nova senha e a confirmação não conferem.');
+        return false;
+    }
+
+    erroEl.classList.add('hidden');
+    btn.disabled = true;
+    var textoOriginal = btn.textContent;
+    btn.textContent = 'Salvando...';
+
+    fetch('/api/usuarios/' + encodeURIComponent(userId) + '/reset-senha', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({ nova_senha: nova, confirmar_senha: confirmar })
+    })
+    .then(function(resp) {
+        return resp.json().then(function(data) {
+            return { okHttp: resp.ok, status: resp.status, data: data || {} };
+        }).catch(function() {
+            return { okHttp: resp.ok, status: resp.status, data: {} };
+        });
+    })
+    .then(function(result) {
+        btn.disabled = false;
+        btn.textContent = textoOriginal;
+        if (result.okHttp && result.data.ok) {
+            fecharModalResetSenha();
+            alert(result.data.mensagem || 'Senha atualizada com sucesso!');
+            return;
+        }
+        showErro(result.data.mensagem || ('Falha ao resetar senha (HTTP ' + result.status + ').'));
+    })
+    .catch(function(err) {
+        console.error('Erro ao resetar senha:', err);
+        btn.disabled = false;
+        btn.textContent = textoOriginal;
+        showErro('Erro de rede ao resetar a senha. Tente novamente.');
+    });
+
+    return false;
 }
 </script>
 {% endblock %}
