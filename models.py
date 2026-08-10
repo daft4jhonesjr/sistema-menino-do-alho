@@ -91,6 +91,7 @@ class Usuario(UserMixin, db.Model):
     notifica_radar = db.Column(db.Boolean, default=True)
     notifica_logistica = db.Column(db.Boolean, default=True)
     notifica_frase = db.Column(db.Boolean, default=True)
+    ultimo_acesso = db.Column(db.DateTime, nullable=True, index=True)
 
     empresa = db.relationship('Empresa', backref=db.backref('usuarios', lazy='dynamic'))
 

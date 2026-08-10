@@ -397,7 +397,18 @@ def gerenciar_usuarios():
             .all()
         )
         config = get_config()
-        return render_template('auth/gerenciar_usuarios.html', usuarios=usuarios, config=config)
+        # Relógio do Brasil para calcular status Online (<= 10 min) no template.
+        try:
+            import pytz
+            agora_brasil = datetime.now(pytz.timezone('America/Recife')).replace(tzinfo=None)
+        except Exception:
+            agora_brasil = datetime.now()
+        return render_template(
+            'auth/gerenciar_usuarios.html',
+            usuarios=usuarios,
+            config=config,
+            agora_brasil=agora_brasil,
+        )
 
     return _gerenciar_usuarios()
 

@@ -2508,6 +2508,48 @@ def limpar_sessao_anterior():
         db.session.remove()
 
 
+@app.before_request
+def rastrear_ultimo_acesso():
+    """Atualiza ``Usuario.ultimo_acesso`` com throttle de 5 minutos.
+
+    Evita UPDATE a cada clique/XHR: só grava se o último registro for
+    mais antigo que 5 minutos (ou nulo). Commit imediato para não
+    depender do restante da request.
+    """
+    try:
+        if not getattr(current_user, 'is_authenticated', False):
+            return
+        endpoint = request.endpoint or ''
+        if endpoint == 'static' or endpoint.startswith('static'):
+            return
+        # Polling/API muito frequentes não precisam disparar o throttle
+        # além do intervalo — a checagem de 5 min já cobre isso.
+
+        fuso = pytz.timezone('America/Recife')
+        agora = datetime.now(fuso).replace(tzinfo=None)
+        ultimo = getattr(current_user, 'ultimo_acesso', None)
+        if ultimo is not None:
+            if getattr(ultimo, 'tzinfo', None) is not None:
+                ultimo = ultimo.replace(tzinfo=None)
+            if (agora - ultimo).total_seconds() < 5 * 60:
+                return
+
+        db.session.query(Usuario).filter(Usuario.id == current_user.id).update(
+            {Usuario.ultimo_acesso: agora},
+            synchronize_session=False,
+        )
+        db.session.commit()
+        try:
+            current_user.ultimo_acesso = agora
+        except Exception:
+            pass
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+
+
 @app.teardown_appcontext
 def shutdown_session(exception=None):
     """
@@ -3596,6 +3638,11 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
         # Migração: email em usuarios
         try:
             _adicionar_coluna_se_ausente('usuarios', 'email', 'VARCHAR(150)')
+        except (OperationalError, Exception):
+            db.session.rollback()
+        # Migração: ultimo_acesso em usuarios (status online / última atividade)
+        try:
+            _adicionar_coluna_se_ausente('usuarios', 'ultimo_acesso', 'TIMESTAMP')
         except (OperationalError, Exception):
             db.session.rollback()
         # --- MIGRACAO AUTOMATICA: Colunas de notificacao em usuarios (cross-database) ---
