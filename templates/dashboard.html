@@ -280,13 +280,23 @@
                         {% if doc.numero_nf %} · NF {{ doc.numero_nf }}{% endif %}
                         {% if doc.razao_social %} · {{ doc.razao_social }}{% endif %}
                         {% if doc.data_vencimento %} · Venc. {{ doc.data_vencimento.strftime('%d/%m/%Y') }}{% endif %}
-                        {% if not (doc.cnpj or doc.numero_nf or doc.razao_social or doc.data_vencimento) %}—{% endif %}
+                        {% if doc.valor is not none and doc.valor != 0 %}
+                        · <span class="font-bold text-green-600 dark:text-green-400">Valor: {{ doc.valor|formato_moeda }}</span>
+                        {% elif doc.valor is none %}
+                        · <span class="text-gray-400 dark:text-gray-500">Valor não identificado</span>
+                        {% endif %}
+                        {% if not (doc.cnpj or doc.numero_nf or doc.razao_social or doc.data_vencimento or doc.valor is not none) %}—{% endif %}
                         {% else %}
                         {% if doc.cnpj %}<span class="font-medium text-emerald-700">Pagador: {{ doc.cnpj }}</span>{% endif %}
                         {% if doc.numero_nf %} · NF {{ doc.numero_nf }}{% endif %}
                         {% if doc.razao_social %} · {{ doc.razao_social }}{% endif %}
                         {% if doc.data_vencimento %} · Venc. {{ doc.data_vencimento.strftime('%d/%m/%Y') }}{% endif %}
-                        {% if not (doc.cnpj or doc.numero_nf or doc.razao_social or doc.data_vencimento) %}—{% endif %}
+                        {% if doc.valor is not none and doc.valor != 0 %}
+                        · <span class="font-bold text-green-600 dark:text-green-400">Valor: {{ doc.valor|formato_moeda }}</span>
+                        {% elif doc.valor is none %}
+                        · <span class="text-gray-400 dark:text-gray-500">Valor não identificado</span>
+                        {% endif %}
+                        {% if not (doc.cnpj or doc.numero_nf or doc.razao_social or doc.data_vencimento or doc.valor is not none) %}—{% endif %}
                         {% endif %}
                     </p>
                 </div>

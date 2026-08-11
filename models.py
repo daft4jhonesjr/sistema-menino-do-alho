@@ -668,6 +668,7 @@ class Documento(db.Model):
     nf_extraida = db.Column(db.String(50))  # Cache OCR: NF extraída; se preenchida, não roda OCR de novo
     razao_social = db.Column(db.String(200))  # Razão social extraída
     data_vencimento = db.Column(db.Date)  # Data de vencimento (para boletos)
+    valor = db.Column(db.Numeric(12, 2), nullable=True)  # Valor total extraído (boleto/NF)
     venda_id = db.Column(db.Integer, db.ForeignKey('vendas.id', ondelete='CASCADE'), nullable=True, index=True)
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True, index=True)
     data_processamento = db.Column(db.Date, default=date.today, nullable=False)  # Quando foi processado

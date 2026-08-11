@@ -1219,7 +1219,18 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                         'cnpj': doc_existente.cnpj,
                         'razao_social': doc_existente.razao_social,
                         'data_vencimento': doc_existente.data_vencimento,
+                        'valor_boleto': getattr(doc_existente, 'valor', None),
                     }
+                    # Se valor ainda não foi persistido, re-extrai só o valor do PDF
+                    if dados_extraidos.get('valor_boleto') is None and os.path.isfile(caminho_completo):
+                        try:
+                            dados_pdf = _processar_pdf(caminho_completo, tipo)
+                            if dados_pdf and dados_pdf.get('valor_boleto') is not None:
+                                documento.valor = dados_pdf.get('valor_boleto')
+                                dados_extraidos['valor_boleto'] = documento.valor
+                                db.session.flush()
+                        except Exception:
+                            pass
                 else:
                     dados_extraidos = _processar_pdf(caminho_completo, tipo)
                     if dados_extraidos is None:
@@ -1230,6 +1241,8 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                     documento.numero_nf = dados_extraidos.get('numero_nf')
                     documento.razao_social = dados_extraidos.get('razao_social')
                     documento.data_vencimento = dados_extraidos.get('data_vencimento')
+                    if dados_extraidos.get('valor_boleto') is not None:
+                        documento.valor = dados_extraidos.get('valor_boleto')
                     nf_val = dados_extraidos.get('numero_nf')
                     documento.nf_extraida = nf_val
                     documento.data_processamento = date.today()
@@ -1444,6 +1457,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                         nf_extraida=nf_val,
                         razao_social=dados_extraidos.get('razao_social'),
                         data_vencimento=dados_extraidos.get('data_vencimento'),
+                        valor=dados_extraidos.get('valor_boleto'),
                         venda_id=venda_id,
                         usuario_id=usuario_id,
                         empresa_id=_empresa_id_para_documento(
@@ -1687,6 +1701,8 @@ def _reprocessar_boletos_atualizar_extracao():
             doc.cnpj = dados.get('cnpj')
             doc.razao_social = dados.get('razao_social')
             doc.data_vencimento = dados.get('data_vencimento')
+            if dados.get('valor_boleto') is not None:
+                doc.valor = dados.get('valor_boleto')
             db.session.commit()
             ok += 1
         except Exception:
@@ -3595,6 +3611,11 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
         # Cache OCR: nf_extraida em documentos (evita re-rodar OCR)
         try:
             _adicionar_coluna_se_ausente('documentos', 'nf_extraida', 'VARCHAR(50)')
+        except (OperationalError, Exception):
+            db.session.rollback()
+        # Valor total extraído do boleto/NF (bot-boleto / OCR)
+        try:
+            _adicionar_coluna_se_ausente('documentos', 'valor', 'NUMERIC(12,2)')
         except (OperationalError, Exception):
             db.session.rollback()
         try:

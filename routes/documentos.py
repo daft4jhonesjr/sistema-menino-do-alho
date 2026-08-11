@@ -547,6 +547,23 @@ def api_receber_automatico():
                 arquivo.save(caminho)
                 caminho_relativo = os.path.relpath(caminho, current_app.root_path)
 
+            valor_raw = (
+                request.form.get('valor')
+                or request.form.get('valor_boleto')
+                or request.form.get('valor_total')
+                or None
+            )
+            valor_doc = None
+            if valor_raw is not None and str(valor_raw).strip() != '':
+                try:
+                    from routes.caixa import _limpar_valor_moeda
+                    valor_doc = _limpar_valor_moeda(valor_raw)
+                except Exception:
+                    try:
+                        valor_doc = float(str(valor_raw).replace('.', '').replace(',', '.'))
+                    except Exception:
+                        valor_doc = None
+
             novo_documento = Documento(
                 url_arquivo=url_arquivo,
                 public_id=public_id,
@@ -554,6 +571,7 @@ def api_receber_automatico():
                 tipo=tipo_documento,
                 numero_nf=(request.form.get('numero_nf') or request.form.get('nf') or None),
                 razao_social=(request.form.get('razao_social') or request.form.get('pagador') or None),
+                valor=valor_doc,
                 usuario_id=user_id,
                 empresa_id=_empresa_id_para_documento(fallback_user_id=user_id),
                 venda_id=None,
