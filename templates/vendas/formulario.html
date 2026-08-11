@@ -119,6 +119,16 @@
                     <option value="PAGO" {% if venda and venda.situacao == 'PAGO' %}selected{% endif %}>✅ Pago</option>
                 </select>
             </div>
+
+            {% if not venda %}
+            <div class="mb-4 flex items-end">
+                <label for="ja_entregue" class="inline-flex items-center gap-2 cursor-pointer select-none text-sm text-gray-700">
+                    <input type="checkbox" id="ja_entregue" name="ja_entregue" value="1"
+                           class="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500">
+                    <span>Já entregue?</span>
+                </label>
+            </div>
+            {% endif %}
         </div>
 
         <div class="flex gap-4 mt-6">

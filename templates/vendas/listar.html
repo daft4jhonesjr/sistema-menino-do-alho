@@ -397,6 +397,12 @@
                         <option value="TRANSFERENCIA">🏦 Transferência</option>
                     </select>
                 </div>
+                <div class="flex flex-col justify-end">
+                    <label for="inline-ja-entregue" class="inline-flex items-center gap-2 h-[42px] px-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-sm text-gray-700 dark:text-gray-200 cursor-pointer select-none">
+                        <input type="checkbox" id="inline-ja-entregue" name="ja_entregue" value="1" class="rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500">
+                        <span>Já entregue?</span>
+                    </label>
+                </div>
                 <div>
                     <button type="submit" id="btn-adicionar-carrinho" class="w-full h-[42px] flex items-center justify-center gap-2 bg-emerald-700 hover:bg-emerald-600 text-white font-medium text-sm rounded-xl shadow transition-colors whitespace-nowrap">
                         <i data-lucide="shopping-cart" class="w-4 h-4"></i>Adicionar
@@ -1792,6 +1798,8 @@ document.addEventListener('DOMContentLoaded', function() {
         var formaPagEl = document.getElementById('inline-forma_pagamento');
         var formaPagamento = (formaPagEl && formaPagEl.value) ? String(formaPagEl.value).trim() : '';
         if (tipoOperacao === 'PERDA') formaPagamento = '';
+        var jaEntregueEl = document.getElementById('inline-ja-entregue');
+        var jaEntregue = !!(jaEntregueEl && jaEntregueEl.checked);
         var lucroPercentual = 0;
         if (lucroPercentualInput && String(lucroPercentualInput.value || '').trim() !== '') {
             lucroPercentual = parseFloat(String(lucroPercentualInput.value).replace(',', '.'));
@@ -1827,7 +1835,8 @@ document.addEventListener('DOMContentLoaded', function() {
             tipo_operacao: tipoOperacao,
             lucro_percentual: lucroPercentual > 0 ? lucroPercentual : null,
             situacao: situacao,
-            forma_pagamento: formaPagamento || null
+            forma_pagamento: formaPagamento || null,
+            ja_entregue: jaEntregue
         };
     }
 
@@ -2012,6 +2021,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function itensParaBackend() {
+        // Estado atual do checkbox no momento da finalização (vale para o lote inteiro).
+        var jaEntregueEl = document.getElementById('inline-ja-entregue');
+        var jaEntregueAgora = !!(jaEntregueEl && jaEntregueEl.checked);
         return carrinho.map(function(it) {
             return {
                 cliente_id: it.cliente_id,
@@ -2025,7 +2037,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 tipo_operacao: it.tipo_operacao || 'VENDA',
                 lucro_percentual: (typeof it.lucro_percentual === 'number' && it.lucro_percentual > 0) ? it.lucro_percentual : null,
                 situacao: it.situacao,
-                forma_pagamento: it.forma_pagamento || null
+                forma_pagamento: it.forma_pagamento || null,
+                ja_entregue: (typeof it.ja_entregue === 'boolean') ? (it.ja_entregue || jaEntregueAgora) : jaEntregueAgora
             };
         });
     }

@@ -1166,6 +1166,11 @@ def nova_venda():
             situacao = 'PERDA'
             forma_pagamento = None
             lucro_percentual = None
+        # "Já entregue?" → status_entrega=ENTREGUE (fora da fila PENDENTE da Logística).
+        ja_entregue = str(request.form.get('ja_entregue') or '').strip().lower() in (
+            '1', 'true', 'sim', 'yes', 'on',
+        )
+        status_entrega = 'ENTREGUE' if ja_entregue else 'PENDENTE'
         venda = Venda(
             cliente_id=cliente_id,
             cliente_avulso=cliente_avulso,
@@ -1179,6 +1184,7 @@ def nova_venda():
             forma_pagamento=forma_pagamento,
             tipo_operacao=tipo_operacao,
             lucro_percentual=lucro_percentual,
+            status_entrega=status_entrega,
             empresa_id=empresa_id_atual(),
         )
         db.session.add(venda)
@@ -1332,11 +1338,21 @@ def processar_carrinho():
                 return jsonify(ok=False, mensagem=f'Cliente ID {cliente_id} não encontrado.'), 400
             cliente_avulso_raw = (obj.get('cliente_avulso') or '').strip()
             cliente_avulso = cliente_avulso_raw if 'DESCONHECIDO' in str(cliente.nome_cliente or '').upper() else None
-            if tipo_operacao == 'PERDA':
+            if (tipo_operacao == 'PERDA'):
                 preco_venda = Decimal('0')
                 situacao = 'PERDA'
                 forma_pagamento = None
                 lucro_percentual = None
+
+            # Logística lista apenas status_entrega=PENDENTE. Se o usuário
+            # marcou "Já entregue?", grava ENTREGUE e a venda não entra na
+            # fila de pendentes (sem criar coluna nova).
+            ja_entregue_raw = obj.get('ja_entregue')
+            ja_entregue = (
+                ja_entregue_raw is True
+                or str(ja_entregue_raw or '').strip().lower() in ('1', 'true', 'sim', 'yes', 'on')
+            )
+            status_entrega = 'ENTREGUE' if ja_entregue else 'PENDENTE'
 
             venda = Venda(
                 cliente_id=cliente_id,
@@ -1351,6 +1367,7 @@ def processar_carrinho():
                 forma_pagamento=forma_pagamento,
                 tipo_operacao=tipo_operacao,
                 lucro_percentual=lucro_percentual,
+                status_entrega=status_entrega,
                 empresa_id=empresa_id_atual(),
             )
             db.session.add(venda)
