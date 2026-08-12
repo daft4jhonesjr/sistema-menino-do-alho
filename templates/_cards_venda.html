@@ -90,7 +90,7 @@
         {% endif %}
         <form action="{{ url_for('vendas.excluir_venda', id=pedido.primeira_venda_id) }}" method="POST" class="inline form-excluir-pedido" data-cliente="{{ pedido.cliente_nome }}" data-nf="{{ pedido.nf }}" data-data="{{ pedido.data_venda.strftime('%d/%m/%Y') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-            <button type="submit" class="p-1.5 rounded text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 transition-transform hover:scale-110" title="Excluir Pedido" onclick="return confirm('Excluir este pedido?');"><i data-lucide="trash-2" class="w-5 h-5"></i></button>
+            <button type="submit" class="p-1.5 rounded text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 transition-transform hover:scale-110" title="Excluir Pedido"><i data-lucide="trash-2" class="w-5 h-5"></i></button>
         </form>
         </div>
     </div>
