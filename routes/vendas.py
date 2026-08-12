@@ -1519,6 +1519,7 @@ def editar_venda(id):
 
             produto = query_tenant(Produto).filter(Produto.id == produto_id).with_for_update().first()
             if not produto:
+                db.session.rollback()
                 flash('Produto não encontrado.', 'error')
                 return redirect(url_for('vendas.listar_vendas'))
 
@@ -1528,6 +1529,7 @@ def editar_venda(id):
                 estoque_disponivel = produto.estoque_atual
 
             if estoque_disponivel < quantidade_venda:
+                db.session.rollback()
                 flash(f'Estoque insuficiente! Disponível: {estoque_disponivel}', 'error')
                 return redirect(url_for('vendas.listar_vendas'))
 
@@ -1553,6 +1555,7 @@ def editar_venda(id):
                 try:
                     data_venda_nova = date.fromisoformat(data_venda_raw)
                 except Exception:
+                    db.session.rollback()
                     flash('Data da venda inválida.', 'error')
                     return redirect(url_for('vendas.listar_vendas'))
 
@@ -1584,6 +1587,7 @@ def editar_venda(id):
             if tipo_operacao not in ('VENDA', 'PERDA'):
                 tipo_operacao = 'VENDA'
             if tipo_operacao != 'PERDA' and not forma_pagamento_nova:
+                db.session.rollback()
                 flash('Selecione a forma de pagamento.', 'error')
                 return redirect(request.referrer or url_for('vendas.listar_vendas'))
             venda.tipo_operacao = tipo_operacao
@@ -1691,12 +1695,14 @@ def excluir_item_venda(id):
     if not _usuario_pode_gerenciar_venda(venda):
         return _resposta_sem_permissao()
     try:
+        # Coleta metadados Cloudinary ANTES dos locks; delete na nuvem só após commit.
+        cloudinary_alvos = []
         for doc in list(getattr(venda, 'documentos', []) or []):
-            _deletar_cloudinary_seguro(
-                public_id=getattr(doc, 'public_id', None),
-                url=getattr(doc, 'url_arquivo', None),
-                resource_type='raw',
-            )
+            cloudinary_alvos.append({
+                'public_id': getattr(doc, 'public_id', None),
+                'url': getattr(doc, 'url_arquivo', None),
+            })
+
         _apagar_lancamentos_caixa_por_vendas([venda])
         if venda.produto_id:
             produto = _produto_com_lock(venda.produto_id)
@@ -1705,6 +1711,14 @@ def excluir_item_venda(id):
         db.session.delete(venda)
         db.session.commit()
         limpar_cache_dashboard()
+
+        for alvo in cloudinary_alvos:
+            _deletar_cloudinary_seguro(
+                public_id=alvo.get('public_id'),
+                url=alvo.get('url'),
+                resource_type='raw',
+            )
+
         if _is_ajax():
             return jsonify(ok=True, mensagem='Item removido com sucesso.')
         flash('Item removido com sucesso.', 'success')
@@ -1760,16 +1774,20 @@ def excluir_venda(id):
     vendas_do_pedido = query.all()
 
     try:
+        # 1) Coletar alvos Cloudinary sem I/O de rede (libera locks depois do commit).
+        cloudinary_alvos = []
+        for v in vendas_do_pedido:
+            for doc in list(getattr(v, 'documentos', []) or []):
+                cloudinary_alvos.append({
+                    'public_id': getattr(doc, 'public_id', None),
+                    'url': getattr(doc, 'url_arquivo', None),
+                })
+
+        # 2) Locks + exclusão no banco + commit.
         lancamentos_removidos = _apagar_lancamentos_caixa_por_vendas(vendas_do_pedido)
 
         logs = []
         for v in vendas_do_pedido:
-            for doc in list(getattr(v, 'documentos', []) or []):
-                _deletar_cloudinary_seguro(
-                    public_id=getattr(doc, 'public_id', None),
-                    url=getattr(doc, 'url_arquivo', None),
-                    resource_type='raw',
-                )
             produto = _produto_com_lock(v.produto_id) if v.produto_id else None
             quantidade = v.quantidade_venda
             nome_produto = produto.nome_produto if produto else 'Desconhecido'
@@ -1780,6 +1798,14 @@ def excluir_venda(id):
 
         db.session.commit()
         limpar_cache_dashboard()
+
+        # 3) Só após commit bem-sucedido: delete na nuvem (fora da transação).
+        for alvo in cloudinary_alvos:
+            _deletar_cloudinary_seguro(
+                public_id=alvo.get('public_id'),
+                url=alvo.get('url'),
+                resource_type='raw',
+            )
 
         current_app.logger.info(
             f"Pedido excluído (Cliente: {nome_cliente}, NF: {nf_pedido or 'N/A'}, "

@@ -2529,8 +2529,9 @@ def rastrear_ultimo_acesso():
     """Atualiza ``Usuario.ultimo_acesso`` com throttle de 5 minutos.
 
     Evita UPDATE a cada clique/XHR: só grava se o último registro for
-    mais antigo que 5 minutos (ou nulo). Commit imediato para não
-    depender do restante da request.
+    mais antigo que 5 minutos (ou nulo). Usa conexão direta do engine
+    (fora de ``db.session``) para não dar commit/expire na sessão da
+    request e não concorrer com locks de editar/excluir vendas.
     """
     try:
         if not getattr(current_user, 'is_authenticated', False):
@@ -2550,20 +2551,20 @@ def rastrear_ultimo_acesso():
             if (agora - ultimo).total_seconds() < 5 * 60:
                 return
 
-        db.session.query(Usuario).filter(Usuario.id == current_user.id).update(
-            {Usuario.ultimo_acesso: agora},
-            synchronize_session=False,
-        )
-        db.session.commit()
+        # Commit isolado: não tocar em db.session (evita expire_on_commit).
+        with db.engine.begin() as conn:
+            conn.execute(
+                Usuario.__table__.update()
+                .where(Usuario.__table__.c.id == current_user.id)
+                .values(ultimo_acesso=agora)
+            )
         try:
             current_user.ultimo_acesso = agora
         except Exception:
             pass
     except Exception:
-        try:
-            db.session.rollback()
-        except Exception:
-            pass
+        # Telemetria de presença nunca deve derrubar a request.
+        pass
 
 
 @app.teardown_appcontext
