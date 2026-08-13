@@ -188,9 +188,13 @@ def listar_clientes():
     if ordem_param in ('desc', 'id_decrescente'):
         ordem = 'id_decrescente'
         base = base.order_by(Cliente.id.desc())
-    else:
+    elif ordem_param in ('asc', 'id_crescente'):
         ordem = 'id_crescente'
         base = base.order_by(Cliente.id.asc())
+    else:
+        # Padrão: alfabética por nome (agrupa filiais com mesmo prefixo, ex. COMAL_*)
+        ordem = 'nome_asc'
+        base = base.order_by(Cliente.nome_cliente.asc())
 
     clientes = base.limit(per_page).offset((page - 1) * per_page).all()
     return render_template(
