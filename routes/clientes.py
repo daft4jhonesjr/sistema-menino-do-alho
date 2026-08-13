@@ -274,19 +274,34 @@ def editar_cliente(id):
                     flash(f'CNPJ já está cadastrado para o cliente {cliente_existente.nome_cliente}', 'error')
                     return render_template('clientes/formulario.html', cliente=cliente)
 
-            cliente.nome_cliente = request.form.get('nome_cliente') or cliente.nome_cliente
-            cliente.telefone = (request.form.get('telefone', '') or '').strip() or None
-            cliente.razao_social = request.form.get('razao_social', '')
+            nome_raw = (request.form.get('nome_cliente') or '').strip() or (cliente.nome_cliente or '')
+            razao_raw = (request.form.get('razao_social') or '').strip()
+            cidade_raw = (request.form.get('cidade') or '').strip()
+            endereco_raw = (request.form.get('endereco') or '').strip() or None
+            telefone_raw = (request.form.get('telefone', '') or '').strip() or None
+
+            cliente.nome_cliente = nome_raw[:200]
+            cliente.telefone = telefone_raw[:20] if telefone_raw else None
+            cliente.razao_social = razao_raw[:200] if razao_raw else ''
             cliente.cnpj = cnpj
-            cliente.cidade = request.form.get('cidade', '')
-            cliente.endereco = request.form.get('endereco', '') or None
-            db.session.commit()
+            cliente.cidade = cidade_raw[:100] if cidade_raw else ''
+            cliente.endereco = endereco_raw[:255] if endereco_raw else None
+            try:
+                db.session.commit()
+            except IntegrityError:
+                db.session.rollback()
+                flash('Erro: Este CNPJ já está cadastrado no sistema.', 'error')
+                return redirect(url_for('clientes.listar_clientes'))
             registrar_log('EDITAR', 'CLIENTES', f"Cliente #{cliente.id} — {cliente.nome_cliente} editado.")
             flash('Cliente atualizado com sucesso!', 'success')
             return redirect(url_for('clientes.listar_clientes'))
 
         return render_template('clientes/formulario.html', cliente=cliente)
 
+    except IntegrityError:
+        db.session.rollback()
+        flash('Erro: Este CNPJ já está cadastrado no sistema.', 'error')
+        return redirect(url_for('clientes.listar_clientes'))
     except Exception as e:
         db.session.rollback()
         erro_flash(e, 'Erro interno ao processar cliente. Tente novamente.', contexto=f'editar_cliente:{id}')
