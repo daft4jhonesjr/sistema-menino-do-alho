@@ -609,18 +609,19 @@ def receber_lote_cliente(id):
     valor_restante = Decimal(str(valor_recebido or Decimal('0.00')))
     vendas_afetadas = []
 
-    # Pré-formata o valor TOTAL pago pelo cliente em formato BR ("20.000,00").
-    # Esse marcador "(Lote: R$ X,XX)" entra na descrição de TODOS os
-    # LancamentoCaixa gerados nesta requisição — independentemente do
-    # fatiamento do dinheiro entre N vendas. Permite ao operador, ao
-    # olhar o Caixa Diário, lembrar que esses lançamentos vieram de UM
-    # único pagamento real do cliente. Não interfere no regex
-    # ``_RE_MARCADOR_VENDA = r'Venda #(\d+)'`` (que casa apenas o prefixo).
-    _valor_lote_int, _valor_lote_dec = divmod(int((valor_recebido * 100)), 100)
-    _valor_lote_fmt = f"{_valor_lote_int:,}".replace(',', '.') + f",{_valor_lote_dec:02d}"
-    _marcador_lote = f"(Lote: R$ {_valor_lote_fmt})"
-
     try:
+        # Pré-formata o valor TOTAL pago pelo cliente em formato BR ("20.000,00").
+        # Esse marcador "(Lote: R$ X,XX)" entra na descrição de TODOS os
+        # LancamentoCaixa gerados nesta requisição — independentemente do
+        # fatiamento do dinheiro entre N vendas. Permite ao operador, ao
+        # olhar o Caixa Diário, lembrar que esses lançamentos vieram de UM
+        # único pagamento real do cliente. Não interfere no regex
+        # ``_RE_MARCADOR_VENDA = r'Venda #(\d+)'`` (que casa apenas o prefixo).
+        # Dentro do try para qualquer falha cair no except tratado (evita 500 puro).
+        _valor_lote_int, _valor_lote_dec = divmod(int((valor_recebido * 100)), 100)
+        _valor_lote_fmt = f"{_valor_lote_int:,}".replace(',', '.') + f",{_valor_lote_dec:02d}"
+        _marcador_lote = f"(Lote: R$ {_valor_lote_fmt})"
+
         for venda in vendas_abertas:
             if valor_restante <= Decimal('0.00'):
                 break
@@ -639,13 +640,14 @@ def receber_lote_cliente(id):
 
             novo_lanc = LancamentoCaixa(
                 data=data_pagamento,
-                descricao=f"Venda #{venda.id} - {cliente.nome_cliente} {_marcador_lote}",
+                descricao=f"Venda #{venda.id} - {cliente.nome_cliente} {_marcador_lote}"[:200],
                 tipo='ENTRADA',
                 categoria='Entrada Cliente',
                 forma_pagamento=forma_pgto,
                 valor=valor_abatido,
                 usuario_id=current_user.id,
                 empresa_id=empresa_id_atual(),
+                venda_id=venda.id,
             )
             db.session.add(novo_lanc)
 
@@ -657,13 +659,14 @@ def receber_lote_cliente(id):
             if 'boleto' in forma_pgto.lower() and not repassar_fornecedor:
                 repasse_lanc = LancamentoCaixa(
                     data=data_pagamento,
-                    descricao=f"Venda #{venda.id} - {cliente.nome_cliente} (Repasse {_marcador_lote[1:-1]})",
+                    descricao=f"Venda #{venda.id} - {cliente.nome_cliente} (Repasse {_marcador_lote[1:-1]})"[:200],
                     tipo='SAIDA',
                     categoria='Saída Fornecedor',
                     forma_pagamento=forma_pgto,
                     valor=valor_abatido,
                     usuario_id=current_user.id,
                     empresa_id=empresa_id_atual(),
+                    venda_id=venda.id,
                 )
                 db.session.add(repasse_lanc)
 
@@ -686,7 +689,7 @@ def receber_lote_cliente(id):
                     descricao=(
                         f"Repasse Direto (Origem: Lote {cliente.nome_cliente}) "
                         f"- Fornecedor: {fornecedor_repasse}"
-                    ),
+                    )[:200],
                     tipo='SAIDA',
                     categoria='Saída Fornecedor',
                     forma_pagamento=forma_pgto,
