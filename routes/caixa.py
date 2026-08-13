@@ -13,6 +13,7 @@ Rotas extraídas do legado ``app.py``:
 * ``POST /caixa/deletar/<id>``                     — deletar com estorno reverso
 * ``POST /caixa/deletar_massa``                    — deletar múltiplos (admin)
 * ``POST /caixa/importar``                         — importação CSV/TSV/TXT
+* ``POST /api/caixa/fechar_mes``                   — zera/transporta fundo mensal
 
 Helpers exclusivos do módulo (usados também por scripts utilitários e
 por outros blueprints via ``from routes.caixa import _limpar_valor_moeda``):
@@ -20,6 +21,7 @@ por outros blueprints via ``from routes.caixa import _limpar_valor_moeda``):
 * ``_limpar_valor_moeda(v)``                       — parser BRL → Decimal
 * ``_normalizar_itens_contagem(itens, incluir_nome)`` — sanitização da gaveta
 * ``_status_envio_por_forma_pagamento(forma)``     — derivação Cheque → status
+* ``realizar_fechamento_mensal(mes, ano, setor)``  — transporte Fundo de Caixa
 
 Eventos SQLAlchemy:
     Os ``before_insert``/``before_update`` em ``LancamentoCaixa`` (que
@@ -305,6 +307,218 @@ def _normalizar_itens_contagem(itens, incluir_nome=False):
     return itens_norm
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Categorias do Caixa + Fechamento Mensal (Fundo de Caixa)
+# ─────────────────────────────────────────────────────────────────────────────
+
+CATEGORIA_FUNDO_SAIDA = 'Fundo de Caixa (Saída)'
+CATEGORIA_FUNDO_ENTRADA = 'Fundo de Caixa (Entrada)'
+
+CATEGORIAS_CAIXA = (
+    'Entrada Cliente',
+    'Saída Pessoal',
+    'Saída Fornecedor',
+    CATEGORIA_FUNDO_ENTRADA,
+    CATEGORIA_FUNDO_SAIDA,
+)
+
+# Formas canônicas usadas no transporte (espelham o select do modal).
+FORMAS_FUNDO_CAIXA = ('Dinheiro', 'Pix', 'Cheque', 'Boleto')
+
+
+def _normalizar_bucket_forma(forma_pagamento):
+    """Mapeia forma livre → bucket canônico (Dinheiro/Pix/Cheque/Boleto) ou None."""
+    forma = str(forma_pagamento or '').strip().lower()
+    if not forma:
+        return None
+    if 'dinheiro' in forma:
+        return 'Dinheiro'
+    if 'cheque' in forma:
+        return 'Cheque'
+    if 'pix' in forma or 'transfer' in forma:
+        return 'Pix'
+    if 'boleto' in forma:
+        return 'Boleto'
+    return None
+
+
+def _ultimo_dia_mes(ano, mes):
+    import calendar
+    return date(ano, mes, calendar.monthrange(ano, mes)[1])
+
+
+def _primeiro_dia_mes_seguinte(ano, mes):
+    if mes == 12:
+        return date(ano + 1, 1, 1)
+    return date(ano, mes + 1, 1)
+
+
+def _calcular_saldos_por_forma(mes, ano, setor='GERAL'):
+    """Saldo líquido (entradas − saídas) do mês/ano por forma canônica."""
+    eid = empresa_id_atual()
+    inicio = date(int(ano), int(mes), 1)
+    fim = _primeiro_dia_mes_seguinte(int(ano), int(mes))
+    saldos = {f: Decimal('0.00') for f in FORMAS_FUNDO_CAIXA}
+
+    q = LancamentoCaixa.query.filter(
+        LancamentoCaixa.data >= inicio,
+        LancamentoCaixa.data < fim,
+        LancamentoCaixa.setor == setor,
+    )
+    if eid is not None:
+        q = q.filter(LancamentoCaixa.empresa_id == eid)
+
+    for lanc in q.all():
+        bucket = _normalizar_bucket_forma(lanc.forma_pagamento)
+        if not bucket:
+            continue
+        valor = Decimal(str(lanc.valor or 0))
+        if str(lanc.tipo or '').upper() == 'ENTRADA':
+            saldos[bucket] += valor
+        else:
+            saldos[bucket] -= valor
+    return saldos
+
+
+def _mes_ja_fechado(mes, ano, setor='GERAL'):
+    """True se já existe SAÍDA 'Fundo de Caixa (Saída)' naquele mês/setor/tenant."""
+    eid = empresa_id_atual()
+    inicio = date(int(ano), int(mes), 1)
+    fim = _primeiro_dia_mes_seguinte(int(ano), int(mes))
+    q = LancamentoCaixa.query.filter(
+        LancamentoCaixa.data >= inicio,
+        LancamentoCaixa.data < fim,
+        LancamentoCaixa.setor == setor,
+        LancamentoCaixa.tipo == 'SAIDA',
+        LancamentoCaixa.categoria == CATEGORIA_FUNDO_SAIDA,
+    )
+    if eid is not None:
+        q = q.filter(LancamentoCaixa.empresa_id == eid)
+    return q.first() is not None
+
+
+def realizar_fechamento_mensal(mes, ano, setor='GERAL'):
+    """Transporta saldo positivo do mês para o 1º dia do mês seguinte, por forma.
+
+    Para cada forma (Dinheiro, Pix, Cheque, Boleto) com saldo > 0:
+      * SAÍDA no último dia do mês — categoria ``Fundo de Caixa (Saída)``
+      * ENTRADA no 1º dia do mês seguinte — ``Fundo de Caixa (Entrada)``
+
+    Idempotente: se o mês já tiver Fundo de Caixa (Saída), não altera nada.
+    Retorna dict com ``ok``, ``mensagem``, ``transportado`` (lista de formas/valores).
+    """
+    mes = int(mes)
+    ano = int(ano)
+    setor = (setor or 'GERAL').strip().upper()
+    if setor not in ('GERAL', 'BACALHAU'):
+        setor = 'GERAL'
+    if mes < 1 or mes > 12:
+        return {'ok': False, 'mensagem': 'Mês inválido.', 'transportado': []}
+
+    if _mes_ja_fechado(mes, ano, setor=setor):
+        return {
+            'ok': True,
+            'mensagem': 'Este mês já possui fechamento (Fundo de Caixa).',
+            'transportado': [],
+            'ja_fechado': True,
+        }
+
+    saldos = _calcular_saldos_por_forma(mes, ano, setor=setor)
+    a_transportar = {
+        forma: valor
+        for forma, valor in saldos.items()
+        if valor is not None and Decimal(str(valor)) > Decimal('0.00')
+    }
+    if not a_transportar:
+        return {
+            'ok': True,
+            'mensagem': 'Nenhum saldo positivo por forma de pagamento para transportar.',
+            'transportado': [],
+        }
+
+    eid = empresa_id_atual()
+    uid = current_user.id if getattr(current_user, 'is_authenticated', False) else None
+    data_saida = _ultimo_dia_mes(ano, mes)
+    data_entrada = _primeiro_dia_mes_seguinte(ano, mes)
+    meses_pt = {
+        1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril', 5: 'Maio', 6: 'Junho',
+        7: 'Julho', 8: 'Agosto', 9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro',
+    }
+    rotulo_mes = f"{meses_pt[mes]}/{ano}"
+
+    transportado = []
+    try:
+        for forma, valor in a_transportar.items():
+            valor_dec = Decimal(str(valor)).quantize(Decimal('0.01'))
+            if valor_dec <= 0:
+                continue
+            db.session.add(LancamentoCaixa(
+                data=data_saida,
+                descricao=f'Fechamento mensal — transporte {forma} ({rotulo_mes})',
+                tipo='SAIDA',
+                categoria=CATEGORIA_FUNDO_SAIDA,
+                forma_pagamento=forma,
+                setor=setor,
+                valor=valor_dec,
+                usuario_id=uid,
+                empresa_id=eid,
+                status_envio=_status_envio_por_forma_pagamento(forma),
+            ))
+            db.session.add(LancamentoCaixa(
+                data=data_entrada,
+                descricao=f'Abertura de mês — fundo transportado de {rotulo_mes} ({forma})',
+                tipo='ENTRADA',
+                categoria=CATEGORIA_FUNDO_ENTRADA,
+                forma_pagamento=forma,
+                setor=setor,
+                valor=valor_dec,
+                usuario_id=uid,
+                empresa_id=eid,
+                status_envio=_status_envio_por_forma_pagamento(forma),
+            ))
+            transportado.append({'forma': forma, 'valor': float(valor_dec)})
+
+        db.session.commit()
+        limpar_cache_dashboard()
+        return {
+            'ok': True,
+            'mensagem': (
+                f'Fechamento de {rotulo_mes} concluído. '
+                f'{len(transportado)} forma(s) transportada(s) para {data_entrada.strftime("%d/%m/%Y")}.'
+            ),
+            'transportado': transportado,
+            'data_saida': data_saida.isoformat(),
+            'data_entrada': data_entrada.isoformat(),
+        }
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error('Falha no fechamento mensal do caixa', exc_info=True)
+        return {
+            'ok': False,
+            'mensagem': f'Erro ao realizar fechamento mensal: {e}',
+            'transportado': [],
+        }
+
+
+def _tentar_fechamento_automatico_mes_anterior(setor='GERAL'):
+    """Se o mês civil anterior ainda tem saldo positivo e não foi fechado, fecha.
+
+    Retorna o dict de ``realizar_fechamento_mensal`` ou None se não havia nada a fazer.
+    """
+    hoje = date.today()
+    if hoje.month == 1:
+        mes_ant, ano_ant = 12, hoje.year - 1
+    else:
+        mes_ant, ano_ant = hoje.month - 1, hoje.year
+
+    if _mes_ja_fechado(mes_ant, ano_ant, setor=setor):
+        return None
+    saldos = _calcular_saldos_por_forma(mes_ant, ano_ant, setor=setor)
+    if not any(Decimal(str(v)) > 0 for v in saldos.values()):
+        return None
+    return realizar_fechamento_mensal(mes_ant, ano_ant, setor=setor)
+
+
 def _status_envio_por_forma_pagamento(forma_pagamento):
     """Retorna 'Não Enviado' para cheques, None para qualquer outra forma."""
     forma = str(forma_pagamento or '').strip().lower()
@@ -343,6 +557,18 @@ def caixa():
     setor_atual = (request.args.get('setor', 'GERAL') or 'GERAL').strip().upper()
     if setor_atual not in ('GERAL', 'BACALHAU'):
         setor_atual = 'GERAL'
+
+    # Gatilho automático: fecha o mês civil anterior se ainda houver saldo
+    # positivo por forma e não existir Fundo de Caixa (Saída). Idempotente.
+    try:
+        resultado_auto = _tentar_fechamento_automatico_mes_anterior(setor_atual)
+        if resultado_auto and resultado_auto.get('ok') and resultado_auto.get('transportado'):
+            flash(resultado_auto.get('mensagem') or 'Fechamento mensal automático concluído.', 'success')
+            return redirect(url_for('caixa.caixa', setor=setor_atual))
+        if resultado_auto and not resultado_auto.get('ok'):
+            flash(resultado_auto.get('mensagem') or 'Falha no fechamento automático do mês anterior.', 'error')
+    except Exception:
+        current_app.logger.exception('Erro no gatilho de fechamento mensal automático')
 
     # Filtro por ano ativo (mesmo padrão de Vendas/Produtos): em vez de
     # ``.limit(500)``, recortamos a janela ao ano selecionado pelo usuário
@@ -453,6 +679,26 @@ def caixa():
 
     for chave, grupo in lancamentos_agrupados.items():
         grupo['saldo_mes'] = grupo['entradas_mes'] - grupo['saidas_mes']
+        try:
+            ano_g, mes_g = int(chave[:4]), int(chave[5:7])
+        except Exception:
+            ano_g, mes_g = None, None
+        grupo['ano'] = ano_g
+        grupo['mes'] = mes_g
+        grupo['fechado'] = any(
+            str(getattr(l, 'tipo', '') or '').upper() == 'SAIDA'
+            and str(getattr(l, 'categoria', '') or '') == CATEGORIA_FUNDO_SAIDA
+            for l in grupo.get('itens') or []
+        )
+        # Botão só em meses anteriores ao mês civil atual (não fecha o mês corrente).
+        mes_civil = date.today().strftime('%Y-%m')
+        tem_saldo_positivo = any(
+            Decimal(str(grupo.get(k) or 0)) > 0
+            for k in ('saldo_dinheiro', 'saldo_cheque', 'saldo_pix', 'saldo_boleto')
+        )
+        grupo['pode_fechar'] = bool(
+            chave < mes_civil and not grupo['fechado'] and tem_saldo_positivo
+        )
 
     chaves_ordenadas = sorted(lancamentos_agrupados.keys())
     saldo_acumulado = Decimal('0.00')
@@ -504,7 +750,38 @@ def caixa():
         abrir_mes=abrir_mes,
         destaque_id=destaque_id,
         ano_ativo=ano_ativo,
+        categorias_caixa=CATEGORIAS_CAIXA,
     )
+
+
+@caixa_bp.route('/api/caixa/fechar_mes', methods=['POST'])
+def api_fechar_mes_caixa():
+    """Fecha um mês explicitamente: zera saldos positivos e transporta ao mês seguinte."""
+    data = request.get_json(silent=True) or {}
+    mes = data.get('mes') or request.form.get('mes')
+    ano = data.get('ano') or request.form.get('ano')
+    setor = (data.get('setor') or request.form.get('setor') or 'GERAL')
+    try:
+        mes_i = int(mes)
+        ano_i = int(ano)
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'mensagem': 'Informe mês e ano válidos.'}), 400
+
+    # Não permitir fechar o mês civil corrente (ainda aberto operacionalmente).
+    hoje = date.today()
+    if ano_i == hoje.year and mes_i == hoje.month:
+        return jsonify({
+            'ok': False,
+            'mensagem': 'O mês atual ainda está aberto. Feche apenas meses anteriores.',
+        }), 400
+    if (ano_i, mes_i) > (hoje.year, hoje.month):
+        return jsonify({'ok': False, 'mensagem': 'Não é possível fechar um mês futuro.'}), 400
+
+    resultado = realizar_fechamento_mensal(mes_i, ano_i, setor=setor)
+    status = 200 if resultado.get('ok') else 500
+    if resultado.get('ja_fechado'):
+        status = 200
+    return jsonify(resultado), status
 
 
 @caixa_bp.route('/upload_imagem_cheque', methods=['POST'])
