@@ -3,6 +3,7 @@
 {% block title %}Clientes - Menino do Alho{% endblock %}
 
 {% block content %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <div class="mb-6 flex justify-between items-center flex-wrap gap-4">
     <div>
         <h2 class="text-3xl font-bold text-emerald-700 dark:text-emerald-400 mb-2">Clientes</h2>
@@ -632,9 +633,45 @@ function toggleDropdownNovoCliente(event) {
 
     if (form) {
         form.addEventListener('submit', function(e) {
+            if (form.getAttribute('data-submitting') === '1') {
+                e.preventDefault();
+                return;
+            }
             e.preventDefault();
-            if (!confirm('Tem certeza que deseja alterar os dados deste cliente?')) return;
-            form.submit();
+
+            function enviarEdicaoCliente() {
+                form.setAttribute('data-submitting', '1');
+                var btnSalvar = document.getElementById('btn-salvar-editar-cliente');
+                if (btnSalvar) {
+                    btnSalvar.disabled = true;
+                    btnSalvar.classList.add('opacity-60', 'cursor-not-allowed');
+                }
+                HTMLFormElement.prototype.submit.call(form);
+            }
+
+            // Fallback se SweetAlert2 não carregar.
+            if (typeof Swal === 'undefined') {
+                if (!confirm('Tem certeza que deseja alterar os dados deste cliente?')) return;
+                enviarEdicaoCliente();
+                return;
+            }
+
+            var dark = document.documentElement.classList.contains('dark');
+            Swal.fire({
+                title: 'Confirmar Alteração?',
+                text: 'Tem certeza que deseja alterar os dados deste cliente?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#059669',
+                cancelButtonColor: '#6B7280',
+                confirmButtonText: 'Sim, salvar!',
+                cancelButtonText: 'Cancelar',
+                background: dark ? '#1F2937' : '#FFFFFF',
+                color: dark ? '#F9FAFB' : '#111827'
+            }).then(function(result) {
+                if (!result.isConfirmed) return;
+                enviarEdicaoCliente();
+            });
         });
     }
 })();
