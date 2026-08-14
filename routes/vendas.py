@@ -772,6 +772,11 @@ def exportar_relatorio_vendas():
     if not colunas:
         colunas = ordem_padrao_colunas
 
+    # "A_RECEBER" (e alias legado "PENDENTE") = mesma regra do KPI
+    # "Financeiro - Pendente" do Dashboard: PENDENTE + PARCIAL, saldo
+    # nas parciais, sem PERDA e sem Bacalhau.
+    filtro_a_receber = filtro_situacao in ('A_RECEBER', 'PENDENTE')
+
     _ini_export, _fim_export = filtro_ano_data_venda(ano_ativo, Venda.data_venda)
     query = query_tenant(Venda).options(
         joinedload(Venda.cliente),
@@ -780,7 +785,14 @@ def exportar_relatorio_vendas():
 
     if filtro_empresa != 'TODAS':
         query = query.filter(func.upper(func.coalesce(Venda.empresa_faturadora, 'NENHUM')) == filtro_empresa)
-    if filtro_situacao != 'TODAS':
+    if filtro_a_receber:
+        query = query.filter(func.upper(func.coalesce(Venda.situacao, '')).in_(['PENDENTE', 'PARCIAL']))
+        query = query.filter(func.upper(func.coalesce(Venda.tipo_operacao, 'VENDA')) != 'PERDA')
+        query = query.join(Produto, Venda.produto_id == Produto.id).filter(
+            ~Produto.tipo.ilike('%BACALHAU%'),
+            ~Produto.nome_produto.ilike('%BACALHAU%'),
+        )
+    elif filtro_situacao != 'TODAS':
         query = query.filter(func.upper(func.coalesce(Venda.situacao, '')) == filtro_situacao)
     if filtro_forma_pagamento != 'TODAS':
         query = query.filter(func.upper(func.coalesce(Venda.forma_pagamento, '')) == filtro_forma_pagamento)
@@ -796,6 +808,9 @@ def exportar_relatorio_vendas():
     vendas = query.order_by(Venda.data_venda.desc(), Venda.id.desc()).all()
     if not _e_admin_tenant():
         vendas = [v for v in vendas if _usuario_pode_gerenciar_venda(v)]
+
+    if filtro_a_receber:
+        colunas_disponiveis['valor_total'] = 'Valor a Receber'
 
     def _fmt_num(valor):
         try:
@@ -825,9 +840,21 @@ def exportar_relatorio_vendas():
     for venda in vendas:
         qtd_venda = int(getattr(venda, 'quantidade_venda', 0) or 0)
         try:
-            valor_total_venda = Decimal(str(venda.calcular_total() or Decimal('0.00')))
+            valor_face = Decimal(str(venda.calcular_total() or Decimal('0.00')))
         except Exception:
-            valor_total_venda = Decimal('0.00')
+            valor_face = Decimal('0.00')
+        sit_venda = (venda.situacao or '').strip().upper()
+        # Alinhado ao Dashboard: PARCIAL exporta/soma só o saldo devedor.
+        if filtro_a_receber and sit_venda == 'PARCIAL':
+            try:
+                valor_pago = Decimal(str(getattr(venda, 'valor_pago', None) or Decimal('0.00')))
+            except Exception:
+                valor_pago = Decimal('0.00')
+            valor_total_venda = valor_face - valor_pago
+            if valor_total_venda < 0:
+                valor_total_venda = Decimal('0.00')
+        else:
+            valor_total_venda = valor_face
         try:
             lucro_venda = Decimal(str(venda.calcular_lucro() or Decimal('0.00')))
         except Exception:
