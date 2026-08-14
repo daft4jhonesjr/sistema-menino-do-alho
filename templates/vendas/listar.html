@@ -5,6 +5,14 @@
 {% block head_extras %}
 <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css" rel="stylesheet">
 <style>
+    /* Animação da seção retrátil de documentos (migrada do Dashboard) */
+    #lista-documentos {
+        transition: max-height 0.3s ease, opacity 0.3s ease;
+        overflow: hidden;
+    }
+    #chevron-documentos {
+        transition: transform 0.3s ease;
+    }
     /* Simetria: altura, borda e arredondamento iguais em todos os campos */
     .venda-input-group input,
     .venda-input-group select,
@@ -452,6 +460,182 @@
         </div>
     </div>
 </div>
+</div>
+
+<!-- Documentos Recém-Chegados (migrado do Dashboard — centraliza o fluxo de vendas) -->
+<section class="mt-8 mb-8">
+    <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+        <button type="button" id="btn-toggle-documentos" class="flex items-center gap-2 cursor-pointer bg-transparent border-none p-0 text-left" aria-expanded="false" aria-controls="lista-documentos">
+            <h3 class="text-xl font-bold text-emerald-700 flex items-center mb-0">
+                <i data-lucide="inbox" class="w-5 h-5 mr-2"></i>Documentos Recém-Chegados
+            </h3>
+            <i data-lucide="chevron-down" class="w-5 h-5 text-emerald-600 transition-transform duration-300" id="chevron-documentos" style="transform: rotate(-90deg);"></i>
+        </button>
+        <div class="flex flex-wrap items-center gap-4">
+            <div class="text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700">
+                <span class="font-medium">Status:</span>
+                <span class="text-blue-600">{{ total_boletos }} boleto{{ 's' if total_boletos != 1 else '' }}</span> +
+                <span class="text-indigo-600 dark:text-indigo-400">{{ total_notas }} NF{{ 's' if total_notas != 1 else '' }}</span>
+                <span class="text-gray-400 mx-0.5">|</span>
+                <span class="text-emerald-600">{{ boletos_vinculados + notas_vinculadas }} vinculados</span>
+                {% if documentos_sem_vinculo > 0 %}
+                <span class="text-gray-400 mx-0.5">|</span>
+                <span class="text-amber-600 dark:text-amber-400">{{ documentos_sem_vinculo }} pendente{{ 's' if documentos_sem_vinculo != 1 else '' }}</span>
+                {% endif %}
+                {% if erros > 0 %}
+                <span class="text-gray-400 mx-0.5">|</span>
+                <span class="text-red-600">{{ erros }} com erro</span>
+                {% endif %}
+            </div>
+            <button type="button" id="btn-atualizar-fila" class="inline-flex items-center gap-2 rounded-lg border border-emerald-300 dark:border-emerald-800 bg-white dark:bg-gray-800 px-4 py-2 text-sm font-semibold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition">
+                <i data-lucide="rotate-cw" class="w-4 h-4"></i>Atualizar Fila
+            </button>
+            <span id="badge-fila-novos" class="hidden text-xs font-semibold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 px-3 py-1 rounded-full">
+                Novos documentos disponíveis
+            </span>
+            <button type="button" id="btnDeletarMassa" onclick="deletarDocumentosSelecionados()" class="hidden bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded shadow transition-all duration-200">
+                Deletar Selecionados (<span id="countMassa">0</span>)
+            </button>
+            <div id="loading-container" class="hidden mt-4 w-full basis-full" style="min-width: 280px;">
+                <p class="text-emerald-600 mb-1 font-bold flex items-center gap-2">
+                    <i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>
+                    Lendo e organizando documentos... Por favor, aguarde.
+                </p>
+                <div class="h-4 w-full rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+                    <div class="h-full bg-emerald-500 rounded-full animate-pulse" style="width: 100%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="lista-documentos" class="overflow-visible" data-doc-total="{{ (documentos_pendentes|length) if documentos_pendentes else 0 }}">
+    {% if documentos_pendentes and documentos_pendentes|length > 0 %}
+    <div class="space-y-4" id="lista-documentos-cards">
+        {% for item in documentos_pendentes %}
+        {% set doc = item.doc %}
+        {% set nome = item.nome_arquivo %}
+        {% set ok = item.leitura_ok %}
+        {% set nf_nao = item.nf_nao_encontrada %}
+        <div id="doc-{{ doc.id }}" class="rounded-xl border shadow-sm dark:shadow-none overflow-hidden flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 {% if ok and not nf_nao %}bg-emerald-50/50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800{% elif nf_nao %}bg-amber-50/50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800{% else %}bg-amber-50/50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800{% endif %}">
+            <div class="flex items-center gap-4 p-4 flex-1 min-w-0">
+                <input type="checkbox" class="checkbox-documento w-5 h-5 text-emerald-600 rounded focus:ring-emerald-500 cursor-pointer" value="{{ doc.id }}" onchange="verificarSelecaoMassa()">
+                <div class="flex-shrink-0 w-12 h-12 rounded-lg flex items-center justify-center {% if doc.tipo == 'BOLETO' %}bg-blue-100 text-blue-700{% else %}bg-emerald-100 text-emerald-700{% endif %}">
+                    {% if doc.tipo == 'BOLETO' %}
+                    <i data-lucide="file-text" class="w-6 h-6" aria-hidden="true"></i>
+                    {% else %}
+                    <i data-lucide="receipt" class="w-6 h-6" aria-hidden="true"></i>
+                    {% endif %}
+                </div>
+                <div class="min-w-0 flex-1">
+                    <p class="font-semibold text-gray-900 dark:text-gray-100 truncate">{% if item.etiqueta_pasta %}<span class="text-gray-500 dark:text-gray-400 font-medium">[{{ item.etiqueta_pasta }}]</span> {% endif %}{{ nome }}</p>
+                    {% if not ok %}
+                    <p class="text-sm text-amber-700 font-medium mt-0.5">Leitura incompleta — Verifique o arquivo manualmente.</p>
+                    {% elif item.diagnostico is defined and item.diagnostico %}
+                    {% set diag = item.diagnostico %}
+                    {% if diag.cenario == 'B' %}
+                    <p class="text-sm text-orange-700 font-medium mt-0.5" title="NF: {{ diag.nf_lida or doc.numero_nf or 'N/A' }}">{{ diag.mensagem }}</p>
+                    {% elif diag.cenario == 'A' %}
+                    <p class="text-sm text-blue-700 font-medium mt-0.5" title="NF: {{ diag.nf_lida or doc.numero_nf or 'N/A' }}">{{ diag.mensagem }}</p>
+                    {% else %}
+                    <p class="text-sm text-amber-700 font-medium mt-0.5" title="NF: {{ diag.nf_lida or doc.numero_nf or 'N/A' }}">{{ diag.mensagem }}</p>
+                    {% endif %}
+                    {% elif nf_nao %}
+                    <p class="text-sm text-amber-700 font-medium mt-0.5">NF {{ doc.numero_nf or '?' }} lida, mas não encontrada nas Vendas.</p>
+                    {% endif %}
+                    <p class="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
+                        {% if ok %}
+                        {% if doc.cnpj %}<span class="font-medium text-emerald-700">Pagador: {{ doc.cnpj }}</span>{% endif %}
+                        {% if doc.numero_nf %} · NF {{ doc.numero_nf }}{% endif %}
+                        {% if doc.razao_social %} · {{ doc.razao_social }}{% endif %}
+                        {% if doc.data_vencimento %} · Venc. {{ doc.data_vencimento.strftime('%d/%m/%Y') }}{% endif %}
+                        {% if doc.valor is not none and doc.valor != 0 %}
+                        · <span class="font-bold text-green-600 dark:text-green-400">Valor: {{ doc.valor|formato_moeda }}</span>
+                        {% elif doc.valor is none %}
+                        · <span class="text-gray-400 dark:text-gray-500">Valor não identificado</span>
+                        {% endif %}
+                        {% if not (doc.cnpj or doc.numero_nf or doc.razao_social or doc.data_vencimento or doc.valor is not none) %}—{% endif %}
+                        {% else %}
+                        {% if doc.cnpj %}<span class="font-medium text-emerald-700">Pagador: {{ doc.cnpj }}</span>{% endif %}
+                        {% if doc.numero_nf %} · NF {{ doc.numero_nf }}{% endif %}
+                        {% if doc.razao_social %} · {{ doc.razao_social }}{% endif %}
+                        {% if doc.data_vencimento %} · Venc. {{ doc.data_vencimento.strftime('%d/%m/%Y') }}{% endif %}
+                        {% if doc.valor is not none and doc.valor != 0 %}
+                        · <span class="font-bold text-green-600 dark:text-green-400">Valor: {{ doc.valor|formato_moeda }}</span>
+                        {% elif doc.valor is none %}
+                        · <span class="text-gray-400 dark:text-gray-500">Valor não identificado</span>
+                        {% endif %}
+                        {% if not (doc.cnpj or doc.numero_nf or doc.razao_social or doc.data_vencimento or doc.valor is not none) %}—{% endif %}
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+            <div class="flex flex-col sm:flex-row items-center gap-2 flex-shrink-0 p-4 sm:pl-0 sm:pr-4 sm:py-4 border-t sm:border-t-0 sm:border-l border-gray-200 dark:border-gray-700">
+                <a href="{{ url_for('documentos.visualizar_documento', id=doc.id) }}" target="_blank" class="inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition">
+                    <i data-lucide="external-link" class="w-4 h-4 mr-2"></i>Visualizar
+                </a>
+                {% if current_user.is_admin() %}
+                <a href="{{ url_for('documentos.debug_texto_arquivo', id=doc.id) }}" target="_blank" title="Ver texto bruto lido pelo robô" class="inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-slate-200 hover:bg-slate-300 text-slate-700 transition-colors">
+                    <i data-lucide="search" class="w-4 h-4 mr-2"></i>Debug
+                </a>
+                {% endif %}
+                {% if item.diagnostico is defined and item.diagnostico and item.diagnostico.cliente_id %}
+                <a href="{{ url_for('clientes.editar_cliente', id=item.diagnostico.cliente_id) }}" class="inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition" title="Verificar dados do cliente no cadastro">
+                    <i data-lucide="user-check" class="w-4 h-4 mr-2"></i>Ver Cliente
+                </a>
+                {% endif %}
+                {% if nf_nao %}
+                {% set criar_venda_params = {} %}
+                {% if doc.razao_social %}{% set _ = criar_venda_params.update({'cliente': doc.razao_social}) %}{% endif %}
+                {% if doc.numero_nf %}{% set _ = criar_venda_params.update({'nf': doc.numero_nf}) %}{% endif %}
+                {% if doc.data_vencimento %}{% set _ = criar_venda_params.update({'data': doc.data_vencimento.strftime('%Y-%m-%d')}) %}{% endif %}
+                <a href="{{ url_for('vendas.listar_vendas', **criar_venda_params) }}" class="inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-gray-600 text-white hover:bg-gray-700 transition">
+                    <i data-lucide="plus-circle" class="w-4 h-4 mr-2"></i>Criar venda
+                </a>
+                {% endif %}
+                <button type="button" class="btn-vincular-doc inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 transition" data-doc-id="{{ doc.id }}" data-doc-nome="{{ nome }}" data-pagador="{{ (doc.razao_social or doc.cnpj) | default('', true) }}" {% if item.diagnostico is defined and item.diagnostico %}title="NF: {{ item.diagnostico.nf_lida or doc.numero_nf or 'N/A' }}"{% elif doc.numero_nf %}title="NF: {{ doc.numero_nf }}"{% endif %}>
+                    <i data-lucide="link" class="w-4 h-4 mr-2"></i>Vincular à Venda
+                </button>
+                <button type="button" class="inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-700 transition" onclick="confirmarExclusaoArquivo({{ doc.id }}, this)" title="Excluir arquivo definitivamente">
+                    <i data-lucide="trash-2" class="w-4 h-4 mr-2"></i>Deletar
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p id="documentos-empty-state" class="text-gray-500 dark:text-gray-400 py-6 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-center">Nenhum documento pendente. Nada precisa da sua atenção no momento.</p>
+    {% endif %}
+    </div>
+</section>
+
+<!-- Modal Vincular à Venda -->
+<div id="modal-vincular-doc" class="fixed inset-0 z-50 hidden" aria-hidden="true">
+    <div class="absolute inset-0 bg-black/50" data-dismiss="modal-vincular-doc"></div>
+    <div class="absolute inset-0 flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl dark:shadow-none dark:border dark:border-gray-700 max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                <h4 class="text-lg font-bold text-emerald-700">Vincular à Venda</h4>
+                <p id="modal-vincular-doc-nome" class="text-sm text-gray-600 dark:text-gray-400 mt-1 truncate"></p>
+            </div>
+            <form id="form-vincular-doc" method="post" action="#" class="flex flex-col flex-1 min-h-0">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <input type="hidden" name="doc_id" id="input-vincular-doc-id" />
+                <div class="p-6 flex-1 overflow-y-auto">
+                    <div class="mb-3">
+                        <label for="filtro_vendas_modal" class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Filtrar Pedido</label>
+                        <input type="text" id="filtro_vendas_modal" placeholder="Digite para buscar..." class="w-full rounded-md border border-slate-300 dark:border-gray-700 dark:bg-gray-700 dark:text-gray-100 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+                    </div>
+                    <label for="select-vincular-pedido" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Pedido</label>
+                    <select id="select-vincular-pedido" name="venda_id" required class="w-full rounded-lg border border-gray-300 dark:border-gray-700 dark:bg-gray-700 dark:text-gray-100 px-4 py-2 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                        <option value="">Selecione um pedido…</option>
+                    </select>
+                </div>
+                <div class="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
+                    <button type="button" class="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700" data-dismiss="modal-vincular-doc">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">Vincular</button>
+                </div>
+            </form>
+        </div>
+    </div>
 </div>
 
 <!-- Análise Geral de Vendas (Gráficos Doughnut) -->
@@ -3607,4 +3791,559 @@ function toggleAnaliseVendas(event) {
     }
 })();
 </script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     Documentos Recém-Chegados — migrado do Dashboard (ver histórico em
+     templates/dashboard.html e routes/dashboard.py). O modal "Vincular à
+     Venda" já foi inserido acima, junto da seção principal (no bloco de
+     conteúdo). O JS abaixo dá suporte a ambos.
+     ═══════════════════════════════════════════════════════════════════════ -->
+
+<script>
+// Modal de vínculo de documentos
+(function() {
+    var modal = document.getElementById('modal-vincular-doc');
+    var form = document.getElementById('form-vincular-doc');
+    var inputDocId = document.getElementById('input-vincular-doc-id');
+    var selectPedido = document.getElementById('select-vincular-pedido');
+    var inputFiltro = document.getElementById('filtro_vendas_modal');
+    var docNomeEl = document.getElementById('modal-vincular-doc-nome');
+    var tokenMeta = document.querySelector('meta[name="csrf-token"]');
+    var pendingFilterTerm = '';
+
+    function garantirCsrfNoForm(formEl) {
+        if (!formEl) return;
+        var token = tokenMeta ? tokenMeta.getAttribute('content') : '';
+        if (!token) return;
+        var csrfInput = formEl.querySelector('input[name="csrf_token"]');
+        if (!csrfInput) {
+            csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrf_token';
+            formEl.appendChild(csrfInput);
+        }
+        csrfInput.value = token;
+    }
+
+    function showModal() { modal.classList.remove('hidden'); travarFundo(); }
+    function hideModal() { modal.classList.add('hidden'); liberarFundo(); }
+
+    function filtrarSelect(termo, selectElement) {
+        if (!selectElement) return;
+        var query = (termo || '').toLowerCase().trim();
+        var options = selectElement.querySelectorAll('option');
+        var encontrouMatch = false;
+
+        options.forEach(function(option) {
+            if (option.value === '') {
+                option.style.display = '';
+                return;
+            }
+            var texto = (option.textContent || '').toLowerCase();
+            var visivel = !query || texto.indexOf(query) !== -1;
+            option.style.display = visivel ? '' : 'none';
+            if (visivel && !encontrouMatch) {
+                option.selected = true;
+                encontrouMatch = true;
+            }
+        });
+
+        if (!encontrouMatch) {
+            selectElement.value = '';
+        }
+    }
+
+    function extrairTermoPagador(pagadorCompleto) {
+        var palavras = (pagadorCompleto || '')
+            .split(/\s+/)
+            .filter(function(p) { return p.length > 2; });
+        return palavras.length > 0 ? palavras[0] : '';
+    }
+
+    function aplicarFiltroInicial(btn) {
+        if (!inputFiltro || !selectPedido) return;
+        var pagadorCompleto = btn.getAttribute('data-pagador') || '';
+        var termoBusca = extrairTermoPagador(pagadorCompleto);
+        pendingFilterTerm = termoBusca;
+        inputFiltro.value = termoBusca;
+        filtrarSelect(termoBusca, selectPedido);
+    }
+
+    function loadPedidos() {
+        selectPedido.innerHTML = '<option value="">Carregando…</option>';
+        fetch('/api/pedidos', { headers: { 'Accept': 'application/json' } })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                selectPedido.innerHTML = '<option value="">Selecione um pedido…</option>';
+                (data.pedidos || []).forEach(function(p) {
+                    var opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.textContent = p.label;
+                    selectPedido.appendChild(opt);
+                });
+                filtrarSelect(pendingFilterTerm, selectPedido);
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+            })
+            .catch(function() {
+                selectPedido.innerHTML = '<option value="">Erro ao carregar pedidos.</option>';
+            });
+    }
+
+    function abrirModalVincular(btn, arquivoId) {
+        var id = arquivoId || btn.getAttribute('data-doc-id');
+        var nome = btn.getAttribute('data-doc-nome') || '';
+        inputDocId.value = id;
+        docNomeEl.textContent = nome;
+        aplicarFiltroInicial(btn);
+        loadPedidos();
+        showModal();
+    }
+
+    window.abrirModalVincular = abrirModalVincular;
+
+    document.querySelectorAll('.btn-vincular-doc').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            abrirModalVincular(btn, btn.getAttribute('data-doc-id'));
+        });
+    });
+
+    if (inputFiltro) {
+        inputFiltro.addEventListener('input', function(e) {
+            filtrarSelect(e.target.value, selectPedido);
+        });
+    }
+
+    document.querySelectorAll('[data-dismiss="modal-vincular-doc"]').forEach(function(el) {
+        el.addEventListener('click', hideModal);
+    });
+
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        var vendaId = selectPedido.value;
+        if (!vendaId) return;
+        garantirCsrfNoForm(form);
+        var docId = inputDocId.value || '';
+        var csrfInput = form.querySelector('input[name="csrf_token"]');
+        var csrf = csrfInput ? csrfInput.value : '';
+
+        var headers = {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        };
+        if (csrf) {
+            headers['X-CSRFToken'] = csrf;
+            headers['X-CSRF-Token'] = csrf;
+        }
+
+        fetch('/documento/' + docId + '/vincular', {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({ venda_id: vendaId })
+        })
+            .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+            .then(function(resp) {
+                var data = resp.data || {};
+                if (resp.ok && (data.ok || data.sucesso)) {
+                    hideModal();
+                    var card = document.getElementById('doc-' + docId);
+                    if (card) {
+                        card.remove();
+                    }
+                    if (typeof showToast === 'function') {
+                        showToast(data.mensagem || 'Documento vinculado com sucesso.', 'success');
+                    } else {
+                        alert(data.mensagem || 'Documento vinculado com sucesso.');
+                    }
+                    verificarSelecaoMassa();
+                    garantirEmptyStateDocumentos();
+                } else {
+                    var msg = data.mensagem || 'Erro ao vincular documento.';
+                    if (typeof showToast === 'function') {
+                        showToast(msg, 'error');
+                    } else {
+                        alert(msg);
+                    }
+                }
+            })
+            .catch(function() {
+                if (typeof showToast === 'function') {
+                    showToast('Erro de comunicação ao vincular documento.', 'error');
+                } else {
+                    alert('Erro de comunicação ao vincular documento.');
+                }
+            });
+    });
+})();
+
+// Toggle da seção "Documentos Recém-Chegados"
+(function() {
+    var btn = document.getElementById('btn-toggle-documentos');
+    var lista = document.getElementById('lista-documentos');
+    var chevron = document.getElementById('chevron-documentos');
+    if (!btn || !lista || !chevron) return;
+
+    btn.addEventListener('click', function() {
+        var isExpanded = btn.getAttribute('aria-expanded') === 'true';
+        if (isExpanded) {
+            // Fechar
+            lista.style.maxHeight = lista.scrollHeight + 'px';
+            lista.offsetHeight; // Force reflow
+            lista.style.maxHeight = '0px';
+            lista.style.opacity = '0';
+            chevron.style.transform = 'rotate(-90deg)';
+            btn.setAttribute('aria-expanded', 'false');
+        } else {
+            // Abrir
+            lista.style.maxHeight = lista.scrollHeight + 'px';
+            lista.style.opacity = '1';
+            chevron.style.transform = 'rotate(0deg)';
+            btn.setAttribute('aria-expanded', 'true');
+            // Remover max-height após a animação para permitir conteúdo dinâmico
+            setTimeout(function() {
+                lista.style.maxHeight = 'none';
+            }, 300);
+        }
+    });
+})();
+
+var exclusaoDocumentoEmAndamento = false;
+var exclusaoMassaEmAndamento = false;
+
+function toggleLoadingDocumentos(mostrar) {
+    var loading = document.getElementById('loading-container');
+    if (!loading) return;
+    if (mostrar) {
+        loading.classList.remove('hidden');
+    } else {
+        loading.classList.add('hidden');
+    }
+}
+
+function totalCardsDocumentos() {
+    return document.querySelectorAll('#lista-documentos [id^="doc-"]').length;
+}
+
+function atualizarContadorLocalDocumentos() {
+    var lista = document.getElementById('lista-documentos');
+    if (!lista) return;
+    lista.dataset.docTotal = String(totalCardsDocumentos());
+}
+
+function garantirEmptyStateDocumentos() {
+    var lista = document.getElementById('lista-documentos');
+    if (!lista) return;
+    var total = totalCardsDocumentos();
+    var empty = document.getElementById('documentos-empty-state');
+    if (total === 0 && !empty) {
+        lista.innerHTML = '<p id="documentos-empty-state" class="text-gray-500 dark:text-gray-400 py-6 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-center">Nenhum documento pendente. Nada precisa da sua atenção no momento.</p>';
+    } else if (total > 0 && empty) {
+        empty.remove();
+    }
+    atualizarContadorLocalDocumentos();
+}
+
+function fecharModalConfirmacaoExclusao() {
+    var wrap = document.getElementById('modal-confirmacao-exclusao-wrap');
+    if (wrap) {
+        wrap.classList.add('hidden');
+        wrap.setAttribute('aria-hidden', 'true');
+    }
+    window._confirmacaoExclusaoCallback = null;
+}
+
+function abrirModalConfirmacaoExclusao(mensagem, onConfirm) {
+    var wrap = document.getElementById('modal-confirmacao-exclusao-wrap');
+    var msgEl = document.getElementById('modal-confirmacao-exclusao-mensagem');
+    if (!wrap || !msgEl) {
+        if (typeof onConfirm === 'function' && window.confirm(mensagem)) onConfirm();
+        return;
+    }
+    msgEl.textContent = mensagem || '';
+    window._confirmacaoExclusaoCallback = (typeof onConfirm === 'function') ? onConfirm : null;
+    wrap.classList.remove('hidden');
+    wrap.setAttribute('aria-hidden', 'false');
+    if (typeof lucide !== 'undefined' && lucide.createIcons) {
+        try { lucide.createIcons(); } catch (_) {}
+    }
+}
+
+(function() {
+    function initModalConfirmacaoExclusao() {
+        var wrap = document.getElementById('modal-confirmacao-exclusao-wrap');
+        if (!wrap || wrap.dataset.bound === '1') return;
+        wrap.dataset.bound = '1';
+        var overlay = document.getElementById('modal-confirmacao-exclusao-overlay');
+        var btnExcluir = document.getElementById('modal-confirmacao-exclusao-btn-excluir');
+        var btnsFechar = document.querySelectorAll('.modal-confirmacao-exclusao-fechar');
+
+        function onFechar() { fecharModalConfirmacaoExclusao(); }
+        if (overlay) overlay.addEventListener('click', onFechar);
+        btnsFechar.forEach(function(btn) { btn.addEventListener('click', onFechar); });
+        if (btnExcluir) {
+            btnExcluir.addEventListener('click', function() {
+                var cb = window._confirmacaoExclusaoCallback;
+                fecharModalConfirmacaoExclusao();
+                if (typeof cb === 'function') cb();
+            });
+        }
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && wrap && !wrap.classList.contains('hidden')) {
+                fecharModalConfirmacaoExclusao();
+            }
+        });
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initModalConfirmacaoExclusao);
+    } else {
+        initModalConfirmacaoExclusao();
+    }
+})();
+
+function confirmarExclusaoArquivo(id, botaoEl) {
+    if (!id) return;
+    abrirModalConfirmacaoExclusao(
+        'Tem certeza que deseja excluir este arquivo? Esta ação remove o registro e o PDF no Cloudinary.',
+        function() { executarExclusaoArquivo(id, botaoEl); }
+    );
+}
+
+function executarExclusaoArquivo(id, botaoEl) {
+    if (exclusaoDocumentoEmAndamento) return;
+    exclusaoDocumentoEmAndamento = true;
+
+    var botao = botaoEl || null;
+    var htmlOriginal = botao ? botao.innerHTML : '';
+    if (botao) {
+        botao.disabled = true;
+        botao.classList.add('opacity-60', 'cursor-not-allowed');
+        botao.innerHTML = 'Deletando...';
+    }
+    toggleLoadingDocumentos(true);
+
+    var headers = { 'X-Requested-With': 'XMLHttpRequest' };
+    if (typeof getCsrfHeaders === 'function') {
+        var csrfHeaders = getCsrfHeaders();
+        for (var k in csrfHeaders) headers[k] = csrfHeaders[k];
+    }
+
+    fetch('/arquivo/' + id + '/deletar', {
+        method: 'POST',
+        headers: headers
+    })
+    .then(function(resp) {
+        return resp.json().catch(function() {
+            return {};
+        }).then(function(data) {
+            if (!resp.ok || !data || !data.ok) {
+                throw new Error((data && data.mensagem) || 'Falha ao excluir arquivo');
+            }
+            return data;
+        });
+    })
+    .then(function(data) {
+        if (typeof showToast === 'function') showToast('Arquivo excluído com sucesso.', 'success');
+        var card = document.getElementById('doc-' + id);
+        if (card) {
+            card.remove();
+        }
+        garantirEmptyStateDocumentos();
+        verificarSelecaoMassa();
+        toggleLoadingDocumentos(false);
+        exclusaoDocumentoEmAndamento = false;
+        if (botao) {
+            botao.disabled = false;
+            botao.classList.remove('opacity-60', 'cursor-not-allowed');
+            botao.innerHTML = htmlOriginal;
+        }
+    })
+    .catch(function(error) {
+        toggleLoadingDocumentos(false);
+        exclusaoDocumentoEmAndamento = false;
+        if (botao) {
+            botao.disabled = false;
+            botao.classList.remove('opacity-60', 'cursor-not-allowed');
+            botao.innerHTML = htmlOriginal;
+        }
+        var msg = (error && error.message) ? error.message : 'Não foi possível excluir o arquivo agora.';
+        if (typeof showToast === 'function') {
+            showToast(msg, 'error');
+        } else {
+            alert(msg);
+        }
+    });
+}
+
+function verificarSelecaoMassa() {
+    var checkboxes = document.querySelectorAll('.checkbox-documento:checked');
+    var btn = document.getElementById('btnDeletarMassa');
+    var countSpan = document.getElementById('countMassa');
+    if (!btn || !countSpan) return;
+
+    if (checkboxes.length > 0) {
+        btn.classList.remove('hidden');
+        countSpan.textContent = String(checkboxes.length);
+    } else {
+        btn.classList.add('hidden');
+        countSpan.textContent = '0';
+    }
+}
+
+async function deletarDocumentosSelecionados() {
+    var checkboxes = document.querySelectorAll('.checkbox-documento:checked');
+    var ids = Array.from(checkboxes).map(function(cb) { return parseInt(cb.value, 10); }).filter(function(id) { return !isNaN(id); });
+    if (ids.length === 0) return;
+
+    abrirModalConfirmacaoExclusao(
+        'Tem certeza que deseja excluir DE VEZ ' + ids.length + ' documento(s)?',
+        function() { executarExclusaoDocumentosMassa(ids); }
+    );
+}
+
+async function executarExclusaoDocumentosMassa(ids) {
+    if (!ids || ids.length === 0) return;
+    if (exclusaoMassaEmAndamento) return;
+    exclusaoMassaEmAndamento = true;
+
+    var btnMassa = document.getElementById('btnDeletarMassa');
+    var textoOriginalBtn = btnMassa ? btnMassa.innerHTML : '';
+    if (btnMassa) {
+        btnMassa.disabled = true;
+        btnMassa.classList.add('opacity-60', 'cursor-not-allowed');
+        btnMassa.innerHTML = 'Deletando...';
+    }
+    toggleLoadingDocumentos(true);
+
+    try {
+        var headers = {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        };
+        if (typeof getCsrfHeaders === 'function') {
+            var csrfHeaders = getCsrfHeaders();
+            for (var k in csrfHeaders) headers[k] = csrfHeaders[k];
+        }
+
+        var response = await fetch('/arquivos/deletar_em_massa', {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({ ids: ids })
+        });
+
+        var data = {};
+        try {
+            data = await response.json();
+        } catch (_) {
+            data = {};
+        }
+
+        if (!response.ok || data.ok === false || data.status === 'erro') {
+            throw new Error(data.mensagem || 'Erro ao excluir documentos em massa.');
+        }
+
+        ids.forEach(function(id) {
+            var card = document.getElementById('doc-' + id);
+            if (card) {
+                card.remove();
+            }
+        });
+        garantirEmptyStateDocumentos();
+        verificarSelecaoMassa();
+        toggleLoadingDocumentos(false);
+        exclusaoMassaEmAndamento = false;
+        if (btnMassa) {
+            btnMassa.disabled = false;
+            btnMassa.classList.add('hidden');
+            btnMassa.classList.remove('opacity-60', 'cursor-not-allowed');
+            btnMassa.innerHTML = textoOriginalBtn || 'Deletar Selecionados (<span id="countMassa">0</span>)';
+        }
+        if (typeof showToast === 'function') {
+            showToast(data.mensagem || 'Documento(s) excluído(s) com sucesso.', 'success');
+        }
+    } catch (error) {
+        toggleLoadingDocumentos(false);
+        exclusaoMassaEmAndamento = false;
+        if (btnMassa) {
+            btnMassa.disabled = false;
+            btnMassa.classList.remove('opacity-60', 'cursor-not-allowed');
+            btnMassa.innerHTML = textoOriginalBtn || 'Deletar Selecionados (<span id="countMassa">0</span>)';
+            verificarSelecaoMassa();
+        }
+        var msg = (error && error.message) ? error.message : 'Erro de conexão.';
+        if (typeof showToast === 'function') {
+            showToast(msg, 'error');
+        } else {
+            alert(msg);
+        }
+    }
+}
+
+// Polling leve da fila de documentos (evita stale data na página de Vendas)
+(function() {
+    var btnAtualizarFila = document.getElementById('btn-atualizar-fila');
+    var badgeNovos = document.getElementById('badge-fila-novos');
+    var lista = document.getElementById('lista-documentos');
+    if (!lista) return;
+
+    function localTotal() {
+        return totalCardsDocumentos();
+    }
+
+    async function checarFilaSilencioso() {
+        try {
+            var resp = await fetch('/api/dashboard/documentos_pendentes/resumo?t=' + Date.now(), {
+                headers: { 'Accept': 'application/json', 'Cache-Control': 'no-cache' }
+            });
+            if (!resp.ok) return;
+            var data = await resp.json();
+            if (!data || !data.ok) return;
+            var totalServidor = Number(data.total || 0);
+            var totalLocal = localTotal();
+            if (totalServidor > totalLocal) {
+                if (badgeNovos) badgeNovos.classList.remove('hidden');
+            } else if (badgeNovos) {
+                badgeNovos.classList.add('hidden');
+            }
+        } catch (_) {
+            // Silencioso para não poluir UX com erro intermitente de rede.
+        }
+    }
+
+    if (btnAtualizarFila) {
+        btnAtualizarFila.addEventListener('click', function() {
+            btnAtualizarFila.disabled = true;
+            btnAtualizarFila.classList.add('opacity-70', 'cursor-not-allowed');
+            window.location.href = window.location.pathname + '?refresh_docs=' + Date.now();
+        });
+    }
+
+    setInterval(checarFilaSilencioso, 30000);
+    checarFilaSilencioso();
+})();
+</script>
+
+<!-- Modal Confirmar Exclusão de Documento (mesmo padrão visual do Editar Venda) -->
+<div id="modal-confirmacao-exclusao-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
+    <div class="fixed inset-0 bg-black/50" id="modal-confirmacao-exclusao-overlay"></div>
+    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-xl shadow-sm dark:shadow-none border border-gray-200 dark:border-gray-700 z-50" onclick="event.stopPropagation()" role="dialog" aria-modal="true" aria-labelledby="modal-confirmacao-exclusao-titulo">
+        <div class="sticky top-0 flex justify-between items-center px-8 py-5 bg-emerald-700 text-white rounded-t-xl z-10">
+            <h3 id="modal-confirmacao-exclusao-titulo" class="text-xl font-bold flex items-center">
+                <i data-lucide="trash-2" class="w-5 h-5 mr-2"></i>Confirmar Exclusão
+            </h3>
+            <button type="button" class="modal-confirmacao-exclusao-fechar w-10 h-10 flex items-center justify-center rounded-full hover:bg-emerald-600 text-white font-bold transition" title="Fechar">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+        <div class="p-8">
+            <p id="modal-confirmacao-exclusao-mensagem" class="text-gray-700 dark:text-gray-200 text-base leading-relaxed"></p>
+            <div class="flex flex-wrap gap-4 mt-8 justify-end">
+                <button type="button" class="modal-confirmacao-exclusao-fechar bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-6 py-2.5 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 transition flex items-center font-medium">
+                    <i data-lucide="x" class="w-4 h-4 mr-2"></i>Cancelar
+                </button>
+                <button type="button" id="modal-confirmacao-exclusao-btn-excluir" class="bg-red-600 hover:bg-red-700 text-white px-6 py-2.5 rounded-xl transition flex items-center font-medium">
+                    <i data-lucide="trash-2" class="w-4 h-4 mr-2"></i>Excluir
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}

@@ -61,6 +61,7 @@ from services.db_utils import (
 )
 from services.cache_utils import limpar_cache_dashboard
 from services.error_utils import erro_json
+from services.documentos_services import _listar_documentos_recem_chegados
 from services.config_helpers import (
     registrar_log, get_hoje_brasil,
 )
@@ -712,6 +713,42 @@ def listar_vendas():
             'total': float(total_v or 0),
         }
 
+    # Fila de "Documentos Recém-Chegados" — migrada do Dashboard para
+    # centralizar o fluxo de trabalho de vendas (boletos/NFs chegam e o
+    # vendedor já os vincula/cria a venda sem trocar de página). Roda só
+    # no carregamento completo da página (o `is_ajax` acima já retornou
+    # antes daqui para as chamadas de paginação/scroll), evitando
+    # reprocessar e reflashar mensagens a cada "carregar mais".
+    documentos_pendentes, resultado_processamento = _listar_documentos_recem_chegados()
+    documentos_recem_chegados = documentos_pendentes
+    vinculos_novos = resultado_processamento.get('vinculos_novos', 0)
+    qtd_pendentes_doc = len(documentos_pendentes)
+    processados_doc = resultado_processamento.get('processados', 0)
+    erros_doc_raw = resultado_processamento.get('erros', [])
+    if isinstance(erros_doc_raw, list):
+        erros_doc = erros_doc_raw
+    elif isinstance(erros_doc_raw, int):
+        erros_doc = list(range(erros_doc_raw))
+    else:
+        erros_doc = []
+
+    # Estatísticas de saúde do sistema de documentos — tenant-aware.
+    docs_tenant = query_documentos_tenant()
+    total_documentos = docs_tenant.count()
+    documentos_vinculados = docs_tenant.filter(Documento.venda_id.isnot(None)).count()
+    documentos_sem_vinculo = total_documentos - documentos_vinculados
+    total_boletos = docs_tenant.filter(Documento.tipo == 'BOLETO').count()
+    total_notas = docs_tenant.filter(Documento.tipo == 'NOTA_FISCAL').count()
+    boletos_vinculados = docs_tenant.filter(Documento.tipo == 'BOLETO', Documento.venda_id.isnot(None)).count()
+    notas_vinculadas = docs_tenant.filter(Documento.tipo == 'NOTA_FISCAL', Documento.venda_id.isnot(None)).count()
+
+    if vinculos_novos > 0:
+        flash(f"✅ Sucesso: {vinculos_novos} documento(s) vinculado(s) automaticamente pela NF.", 'success')
+    elif qtd_pendentes_doc > 0:
+        flash(f"Processamento concluído: {processados_doc} documento(s) processado(s), {qtd_pendentes_doc} boleto(s) ainda pendente(s) de correção.", 'warning')
+    if len(erros_doc) > 0:
+        flash(f"Erro ao processar {len(erros_doc)} documento(s).", 'error')
+
     return render_template(
         'vendas/listar.html',
         pedidos=pedidos_paginados,
@@ -730,6 +767,18 @@ def listar_vendas():
         filtro_vencidos=filtro_vencidos,
         graficos_data=graficos_data,
         total_geral_a_receber=total_geral_a_receber,
+        documentos_recem_chegados=documentos_recem_chegados,
+        documentos_pendentes=documentos_pendentes,
+        total_documentos=total_documentos,
+        documentos_vinculados=documentos_vinculados,
+        documentos_sem_vinculo=documentos_sem_vinculo,
+        total_boletos=total_boletos,
+        total_notas=total_notas,
+        boletos_vinculados=boletos_vinculados,
+        notas_vinculadas=notas_vinculadas,
+        processados=processados_doc,
+        vinculos_novos=vinculos_novos,
+        erros=len(erros_doc),
     )
 
 

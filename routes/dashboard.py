@@ -48,11 +48,10 @@ from services.auth_utils import (
     tenant_required, _e_admin_tenant, _usuario_pode_gerenciar_venda,
 )
 from services.db_utils import (
-    query_tenant, query_documentos_tenant, empresa_id_atual,
+    query_tenant, empresa_id_atual,
 )
 from services.cache_utils import _dashboard_cache_key
 from services.error_utils import erro_json
-from services.documentos_services import _listar_documentos_recem_chegados
 from services.query_utils import filtro_ano_data_venda
 
 
@@ -289,35 +288,10 @@ def dashboard():
     filtro_sem_bacalhau_tipo = ~Produto.tipo.ilike('%BACALHAU%')
     filtro_sem_bacalhau_nome = ~Produto.nome_produto.ilike('%BACALHAU%')
 
-    documentos_pendentes, resultado_processamento = _listar_documentos_recem_chegados()
-    documentos_recem_chegados = documentos_pendentes
-    vinculos_novos = resultado_processamento.get('vinculos_novos', 0)
-    pendentes = len(documentos_pendentes)
-    processados = resultado_processamento.get('processados', 0)
-    erros_raw = resultado_processamento.get('erros', [])
-    if isinstance(erros_raw, list):
-        erros = erros_raw
-    elif isinstance(erros_raw, int):
-        erros = list(range(erros_raw))
-    else:
-        erros = []
-
-    # Estatísticas de saúde do sistema de documentos — tenant-aware (P0 A2).
-    docs_tenant = query_documentos_tenant()
-    total_documentos = docs_tenant.count()
-    documentos_vinculados = docs_tenant.filter(Documento.venda_id.isnot(None)).count()
-    documentos_sem_vinculo = total_documentos - documentos_vinculados
-    total_boletos = docs_tenant.filter(Documento.tipo == 'BOLETO').count()
-    total_notas = docs_tenant.filter(Documento.tipo == 'NOTA_FISCAL').count()
-    boletos_vinculados = docs_tenant.filter(Documento.tipo == 'BOLETO', Documento.venda_id.isnot(None)).count()
-    notas_vinculadas = docs_tenant.filter(Documento.tipo == 'NOTA_FISCAL', Documento.venda_id.isnot(None)).count()
-
-    if vinculos_novos > 0:
-        flash(f"✅ Sucesso: {vinculos_novos} documento(s) vinculado(s) automaticamente pela NF.", 'success')
-    elif pendentes > 0:
-        flash(f"Processamento concluído: {processados} documento(s) processado(s), {pendentes} boleto(s) ainda pendente(s) de correção.", 'warning')
-    if len(erros) > 0:
-        flash(f"Erro ao processar {len(erros)} documento(s).", 'error')
+    # Nota: a fila "Documentos Recém-Chegados" (com seu processamento
+    # incremental via `_listar_documentos_recem_chegados()`) foi movida
+    # para a página de Vendas (`routes/vendas.py:listar_vendas`), que
+    # centraliza esse fluxo de trabalho. Ver `templates/vendas/listar.html`.
 
     # KPI 1: Top 10 Clientes por Lucro
     vendas_por_cliente = db.session.query(
@@ -603,18 +577,6 @@ def dashboard():
         avulsas_info=avulsas_info,
         margem_porcentagem=float(margem_porcentagem),
         ticket_medio=float(ticket_medio),
-        documentos_recem_chegados=documentos_recem_chegados,
-        documentos_pendentes=documentos_pendentes,
-        total_documentos=total_documentos,
-        documentos_vinculados=documentos_vinculados,
-        documentos_sem_vinculo=documentos_sem_vinculo,
-        total_boletos=total_boletos,
-        total_notas=total_notas,
-        boletos_vinculados=boletos_vinculados,
-        notas_vinculadas=notas_vinculadas,
-        processados=processados,
-        vinculos_novos=vinculos_novos,
-        erros=len(erros),
         labels_meses=labels_meses,
         data_lucro=data_lucro,
         data_caixas=data_caixas,
