@@ -3886,6 +3886,17 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             _adicionar_coluna_se_ausente('clientes', 'ativo', 'BOOLEAN NOT NULL DEFAULT TRUE')
         except (OperationalError, Exception):
             db.session.rollback()
+        # Migração: contatos nomeados + segundo telefone em clientes (ex.: "João
+        # (Financeiro)" no principal, mais um número/contato alternativo).
+        for _col_contato, _ddl_contato in [
+            ('nome_contato', 'VARCHAR(100)'),
+            ('telefone_secundario', 'VARCHAR(20)'),
+            ('nome_contato_secundario', 'VARCHAR(100)'),
+        ]:
+            try:
+                _adicionar_coluna_se_ausente('clientes', _col_contato, _ddl_contato)
+            except (OperationalError, Exception):
+                db.session.rollback()
         # Migração: tabela de auditoria de ações (log de atividades)
         try:
             LogAtividade.__table__.create(bind=db.engine, checkfirst=True)

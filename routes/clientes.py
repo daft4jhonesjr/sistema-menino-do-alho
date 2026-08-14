@@ -238,6 +238,9 @@ def novo_cliente():
             cliente = Cliente(
                 nome_cliente=nome_cliente,
                 telefone=(request.form.get('telefone', '') or '').strip() or None,
+                nome_contato=(request.form.get('nome_contato', '') or '').strip()[:100] or None,
+                telefone_secundario=(request.form.get('telefone_secundario', '') or '').strip()[:20] or None,
+                nome_contato_secundario=(request.form.get('nome_contato_secundario', '') or '').strip()[:100] or None,
                 razao_social=request.form.get('razao_social', ''),
                 cnpj=cnpj,
                 cidade=request.form.get('cidade', ''),
@@ -283,9 +286,15 @@ def editar_cliente(id):
             cidade_raw = (request.form.get('cidade') or '').strip()
             endereco_raw = (request.form.get('endereco') or '').strip() or None
             telefone_raw = (request.form.get('telefone', '') or '').strip() or None
+            nome_contato_raw = (request.form.get('nome_contato', '') or '').strip() or None
+            telefone_secundario_raw = (request.form.get('telefone_secundario', '') or '').strip() or None
+            nome_contato_secundario_raw = (request.form.get('nome_contato_secundario', '') or '').strip() or None
 
             cliente.nome_cliente = nome_raw[:200]
             cliente.telefone = telefone_raw[:20] if telefone_raw else None
+            cliente.nome_contato = nome_contato_raw[:100] if nome_contato_raw else None
+            cliente.telefone_secundario = telefone_secundario_raw[:20] if telefone_secundario_raw else None
+            cliente.nome_contato_secundario = nome_contato_secundario_raw[:100] if nome_contato_secundario_raw else None
             cliente.razao_social = razao_raw[:200] if razao_raw else ''
             cliente.cnpj = cnpj
             cliente.cidade = cidade_raw[:100] if cidade_raw else ''

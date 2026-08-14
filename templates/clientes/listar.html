@@ -98,13 +98,27 @@
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ cliente.razao_social or '-' }}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ (cliente.cnpj | format_cnpj) or '-' }}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                        {% if cliente.telefone %}
-                        <a href="https://wa.me/55{{ cliente.telefone | replace('(', '') | replace(')', '') | replace('-', '') | replace(' ', '') }}" target="_blank" rel="noopener noreferrer" class="text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 font-medium transition-colors" title="Abrir WhatsApp">
-                            📱 {{ cliente.telefone }}
-                        </a>
-                        {% else %}
-                        <span class="text-gray-400 dark:text-gray-500">-</span>
-                        {% endif %}
+                        <div class="flex flex-col gap-1">
+                            {% if cliente.telefone %}
+                            <div class="flex items-center gap-1.5">
+                                <a href="https://wa.me/55{{ cliente.telefone | replace('(', '') | replace(')', '') | replace('-', '') | replace(' ', '') }}" target="_blank" rel="noopener noreferrer" class="text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 flex-shrink-0 transition-colors" title="Abrir WhatsApp">
+                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+                                </a>
+                                <span class="font-medium">{{ cliente.telefone }}{% if cliente.nome_contato %} <span class="text-gray-500 dark:text-gray-400 font-normal">({{ cliente.nome_contato }})</span>{% endif %}</span>
+                            </div>
+                            {% endif %}
+                            {% if cliente.telefone_secundario %}
+                            <div class="flex items-center gap-1.5">
+                                <a href="https://wa.me/55{{ cliente.telefone_secundario | replace('(', '') | replace(')', '') | replace('-', '') | replace(' ', '') }}" target="_blank" rel="noopener noreferrer" class="text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 flex-shrink-0 transition-colors" title="Abrir WhatsApp">
+                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+                                </a>
+                                <span class="font-medium">{{ cliente.telefone_secundario }}{% if cliente.nome_contato_secundario %} <span class="text-gray-500 dark:text-gray-400 font-normal">({{ cliente.nome_contato_secundario }})</span>{% endif %}</span>
+                            </div>
+                            {% endif %}
+                            {% if not cliente.telefone and not cliente.telefone_secundario %}
+                            <span class="text-gray-400 dark:text-gray-500">-</span>
+                            {% endif %}
+                        </div>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ cliente.cidade or '-' }}</td>
                     <td class="px-6 py-4">
@@ -128,6 +142,9 @@
                                 data-id="{{ cliente.id }}"
                                 data-nome="{{ cliente.nome_cliente }}"
                                 data-telefone="{{ cliente.telefone or '' }}"
+                                data-nome-contato="{{ cliente.nome_contato or '' }}"
+                                data-telefone-secundario="{{ cliente.telefone_secundario or '' }}"
+                                data-nome-contato-secundario="{{ cliente.nome_contato_secundario or '' }}"
                                 data-razao="{{ cliente.razao_social or '' }}"
                                 data-cnpj="{{ cliente.cnpj or '' }}"
                                 data-cidade="{{ cliente.cidade or '' }}"
@@ -183,6 +200,18 @@
                 <div class="mb-5">
                     <label for="modal-telefone" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">📱 Telefone / WhatsApp</label>
                     <input type="tel" id="modal-telefone" name="telefone" maxlength="15" placeholder="87 9 9999-9999" inputmode="tel" autocomplete="tel" class="input-telefone w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
+                </div>
+                <div class="mb-5">
+                    <label for="modal-nome_contato" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Nome do Contato</label>
+                    <input type="text" id="modal-nome_contato" name="nome_contato" maxlength="100" placeholder="Ex: João (Financeiro)" autocapitalize="words" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
+                </div>
+                <div class="mb-5">
+                    <label for="modal-telefone_secundario" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">📱 Telefone 2 (opcional)</label>
+                    <input type="tel" id="modal-telefone_secundario" name="telefone_secundario" maxlength="15" placeholder="87 9 9999-9999" inputmode="tel" autocomplete="tel" class="input-telefone w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
+                </div>
+                <div class="mb-5">
+                    <label for="modal-nome_contato_secundario" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Nome do Contato 2</label>
+                    <input type="text" id="modal-nome_contato_secundario" name="nome_contato_secundario" maxlength="100" placeholder="Ex: Maria (Compras)" autocapitalize="words" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                 </div>
                 <div class="mb-5">
                     <label for="modal-razao_social" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Razão Social</label>
@@ -297,6 +326,18 @@
                 <div class="mb-5">
                     <label for="edit_telefone" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">📱 Telefone / WhatsApp</label>
                     <input type="tel" id="edit_telefone" name="telefone" maxlength="15" placeholder="87 9 9999-9999" inputmode="tel" autocomplete="tel" class="input-telefone w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
+                </div>
+                <div class="mb-5">
+                    <label for="edit_nome_contato" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Nome do Contato</label>
+                    <input type="text" id="edit_nome_contato" name="nome_contato" maxlength="100" placeholder="Ex: João (Financeiro)" autocapitalize="words" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
+                </div>
+                <div class="mb-5">
+                    <label for="edit_telefone_secundario" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">📱 Telefone 2 (opcional)</label>
+                    <input type="tel" id="edit_telefone_secundario" name="telefone_secundario" maxlength="15" placeholder="87 9 9999-9999" inputmode="tel" autocomplete="tel" class="input-telefone w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
+                </div>
+                <div class="mb-5">
+                    <label for="edit_nome_contato_secundario" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Nome do Contato 2</label>
+                    <input type="text" id="edit_nome_contato_secundario" name="nome_contato_secundario" maxlength="100" placeholder="Ex: Maria (Compras)" autocapitalize="words" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                 </div>
                 <div class="mb-5">
                     <label for="edit_razao" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Razão Social</label>
@@ -511,6 +552,9 @@ function toggleDropdownNovoCliente(event) {
         var id = btn.getAttribute('data-id');
         var nome = btn.getAttribute('data-nome') || '';
         var telefone = btn.getAttribute('data-telefone') || '';
+        var nomeContato = btn.getAttribute('data-nome-contato') || '';
+        var telefoneSecundario = btn.getAttribute('data-telefone-secundario') || '';
+        var nomeContatoSecundario = btn.getAttribute('data-nome-contato-secundario') || '';
         var razao = btn.getAttribute('data-razao') || '';
         var cnpj = btn.getAttribute('data-cnpj') || '';
         var cidade = btn.getAttribute('data-cidade') || '';
@@ -518,6 +562,9 @@ function toggleDropdownNovoCliente(event) {
         form.action = actionBase.replace(/\/0$/, '/') + id;
         document.getElementById('edit_nome').value = nome;
         document.getElementById('edit_telefone').value = telefone;
+        document.getElementById('edit_nome_contato').value = nomeContato;
+        document.getElementById('edit_telefone_secundario').value = telefoneSecundario;
+        document.getElementById('edit_nome_contato_secundario').value = nomeContatoSecundario;
         document.getElementById('edit_razao').value = razao;
         document.getElementById('edit_cnpj').value = mascaraCNPJ(cnpj);
         document.getElementById('edit_cidade').value = cidade;

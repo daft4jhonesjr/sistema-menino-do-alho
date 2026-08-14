@@ -166,6 +166,9 @@ class Cliente(db.Model):
     cnpj = db.Column(db.String(18), unique=True, index=True)
     cidade = db.Column(db.String(100))
     telefone = db.Column(db.String(20), nullable=True)
+    nome_contato = db.Column(db.String(100), nullable=True)  # Ex.: "João (Financeiro)" — pessoa do telefone principal
+    telefone_secundario = db.Column(db.String(20), nullable=True)
+    nome_contato_secundario = db.Column(db.String(100), nullable=True)
     endereco = db.Column(db.String(255))
     ativo = db.Column(db.Boolean, default=True, nullable=False, server_default='1', index=True)
 

@@ -35,6 +35,39 @@
         </div>
 
         <div class="mb-4">
+            <label for="nome_contato" class="block text-sm font-medium text-gray-700 mb-2">
+                Nome do Contato
+            </label>
+            <input type="text" id="nome_contato" name="nome_contato" 
+                   value="{{ cliente.nome_contato if cliente else '' }}"
+                   placeholder="Ex: João (Financeiro)" maxlength="100"
+                   autocapitalize="words" autocomplete="off" spellcheck="false"
+                   class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
+        </div>
+
+        <div class="mb-4">
+            <label for="telefone_secundario" class="block text-sm font-medium text-gray-700 mb-2">
+                Telefone 2 <span class="text-gray-400 font-normal">(opcional)</span>
+            </label>
+            <input type="tel" id="telefone_secundario" name="telefone_secundario" 
+                   value="{{ cliente.telefone_secundario if cliente else '' }}"
+                   placeholder="87 9 9999-9999" maxlength="15"
+                   autocomplete="tel" inputmode="tel"
+                   class="input-telefone w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
+        </div>
+
+        <div class="mb-4">
+            <label for="nome_contato_secundario" class="block text-sm font-medium text-gray-700 mb-2">
+                Nome do Contato 2
+            </label>
+            <input type="text" id="nome_contato_secundario" name="nome_contato_secundario" 
+                   value="{{ cliente.nome_contato_secundario if cliente else '' }}"
+                   placeholder="Ex: Maria (Compras)" maxlength="100"
+                   autocapitalize="words" autocomplete="off" spellcheck="false"
+                   class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
+        </div>
+
+        <div class="mb-4">
             <label for="razao_social" class="block text-sm font-medium text-gray-700 mb-2">
                 Razão Social
             </label>
@@ -91,12 +124,9 @@
 <script>
 // Máscara progressiva de Telefone/WhatsApp: "XX X XXXX-XXXX" + tratamento
 // de paste com DDI (+55). Este formulário não compartilha script com
-// clientes/listar.html, então a lógica é replicada aqui para o campo
-// #telefone funcionar igual em toda a área de Clientes.
+// clientes/listar.html, então a lógica é replicada aqui — aplicada tanto
+// ao telefone principal quanto ao secundário (mesmo comportamento nos dois).
 (function() {
-    var campoTelefone = document.getElementById('telefone');
-    if (!campoTelefone) return;
-
     function formatarTelefoneWhatsapp(valor) {
         var v = (valor || '').replace(/\D/g, '').substring(0, 11);
         var formatado = '';
@@ -120,22 +150,29 @@
         return digitos;
     }
 
-    campoTelefone.addEventListener('paste', function(e) {
-        e.preventDefault();
-        var textoColado = (e.clipboardData || window.clipboardData).getData('text');
-        campoTelefone.value = limparDdiTelefoneColado(textoColado);
-        // Redispara 'input' para o listener abaixo formatar o valor colado.
-        campoTelefone.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    function ativarMascaraTelefone(campo) {
+        if (!campo) return;
 
-    campoTelefone.addEventListener('input', function() {
-        campoTelefone.value = formatarTelefoneWhatsapp(campoTelefone.value);
-    });
+        campo.addEventListener('paste', function(e) {
+            e.preventDefault();
+            var textoColado = (e.clipboardData || window.clipboardData).getData('text');
+            campo.value = limparDdiTelefoneColado(textoColado);
+            // Redispara 'input' para o listener abaixo formatar o valor colado.
+            campo.dispatchEvent(new Event('input', { bubbles: true }));
+        });
 
-    // Valor inicial (edição) pode vir sem formatação (dado antigo) — normaliza ao carregar.
-    if (campoTelefone.value) {
-        campoTelefone.value = formatarTelefoneWhatsapp(campoTelefone.value);
+        campo.addEventListener('input', function() {
+            campo.value = formatarTelefoneWhatsapp(campo.value);
+        });
+
+        // Valor inicial (edição) pode vir sem formatação (dado antigo) — normaliza ao carregar.
+        if (campo.value) {
+            campo.value = formatarTelefoneWhatsapp(campo.value);
+        }
     }
+
+    ativarMascaraTelefone(document.getElementById('telefone'));
+    ativarMascaraTelefone(document.getElementById('telefone_secundario'));
 })();
 </script>
 {% endblock %}
