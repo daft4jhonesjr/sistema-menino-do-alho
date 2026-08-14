@@ -3741,6 +3741,66 @@ function toggleAnaliseVendas(event) {
 })();
 </script>
 
+<script>
+/* Enviar resumo do pedido no WhatsApp para o telefone cadastrado do cliente.
+   Substitui o antigo link de cobrança (enviar_whatsapp_boleto), que falhava
+   quando não havia boleto vinculado. Dados vêm dos data-* no botão. */
+function enviarPedidoWhatsApp(elemento) {
+    if (!elemento) return;
+
+    var telefoneRaw = (elemento.getAttribute('data-telefone') || '').trim();
+    if (!telefoneRaw) {
+        var msgSemTel = 'Este cliente não possui telefone cadastrado.';
+        if (typeof showToast === 'function') showToast(msgSemTel, 'error');
+        else if (typeof Swal !== 'undefined') {
+            Swal.fire({ icon: 'warning', title: msgSemTel, confirmButtonColor: '#059669' });
+        } else {
+            alert(msgSemTel);
+        }
+        return;
+    }
+
+    var telefoneLimpo = telefoneRaw.replace(/\D/g, '');
+    if (!telefoneLimpo) {
+        var msgInvalido = 'Este cliente não possui telefone cadastrado.';
+        if (typeof showToast === 'function') showToast(msgInvalido, 'error');
+        else alert(msgInvalido);
+        return;
+    }
+    if (telefoneLimpo.indexOf('55') !== 0) {
+        telefoneLimpo = '55' + telefoneLimpo;
+    }
+
+    var cliente = (elemento.getAttribute('data-cliente') || '').trim() || 'cliente';
+    var total = (elemento.getAttribute('data-total') || '').trim() || '—';
+    var itens = [];
+    try {
+        var parsed = JSON.parse(elemento.getAttribute('data-itens') || '[]');
+        if (Array.isArray(parsed)) itens = parsed;
+    } catch (_) {}
+
+    var linhasItens = itens.map(function(item) {
+        var qtd = item.q != null ? item.q : (item.qtd != null ? item.qtd : '');
+        var nome = String(item.n || item.nome || '').trim();
+        if (!nome && qtd === '') return '';
+        return '• ' + qtd + 'x ' + nome;
+    }).filter(Boolean);
+
+    var blocoItens = linhasItens.length ? linhasItens.join('\n') : '• (sem itens)';
+    var mensagem = (
+        'Olá *' + cliente + '*, aqui é do *Menino do Alho*! 🧄\n\n' +
+        'Segue o resumo do seu pedido:\n' +
+        blocoItens + '\n\n' +
+        '*Valor Total:* ' + total
+    );
+
+    window.open(
+        'https://wa.me/' + telefoneLimpo + '?text=' + encodeURIComponent(mensagem),
+        '_blank'
+    );
+}
+</script>
+
 <!-- Modal Confirmar Ação (reversão de pagamento — mesmo padrão visual da exclusão) -->
 <div id="modal-confirmacao-acao-venda-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
     <div class="fixed inset-0 bg-black/50" id="modal-confirmacao-acao-venda-overlay"></div>
