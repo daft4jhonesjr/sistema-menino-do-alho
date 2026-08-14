@@ -976,6 +976,22 @@ def exportar_relatorio_vendas():
     )
 
 
+# Mapeamento manual de ``date.weekday()`` (0=Segunda ... 6=Domingo) para
+# nome do dia em português. Não usamos ``strftime('%A')`` porque o locale
+# do servidor (Render) é en_US por padrão — sem ``locale.setlocale``
+# explícito (que exigiria o pacote de locale instalado no container),
+# ``%A`` renderizaria "Saturday" em vez de "Sábado".
+_DIAS_SEMANA_PT = (
+    'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo',
+)
+
+
+def _formatar_data_com_dia_semana(data_venda):
+    """Retorna ``DD/MM/YYYY (Dia da Semana)`` a partir de um date/datetime."""
+    dia_semana = _DIAS_SEMANA_PT[data_venda.weekday()]
+    return f"{data_venda.strftime('%d/%m/%Y')} ({dia_semana})"
+
+
 @vendas_bp.route('/logistica')
 def logistica():
     """Roteirizador de Entregas: lista cada venda individualmente por status de entrega."""
@@ -1017,7 +1033,7 @@ def logistica():
                 'pedido_key': str(pedido_key),
                 'ids': [],
                 'venda_id': v.id,
-                'data': v.data_venda.strftime('%d/%m/%Y'),
+                'data': _formatar_data_com_dia_semana(v.data_venda),
                 'cliente_nome': cliente.nome_cliente or 'Sem Nome',
                 'endereco': cliente.endereco or '',
                 'produtos': [],

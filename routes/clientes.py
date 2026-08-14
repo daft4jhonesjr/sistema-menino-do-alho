@@ -34,8 +34,9 @@ from flask import (
 from flask_login import current_user
 from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError, TimeoutError as SATimeoutError
 import pandas as pd
+from werkzeug.exceptions import HTTPException
 from werkzeug.utils import secure_filename
 
 from models import db, Cliente, Venda, LancamentoCaixa
@@ -265,10 +266,16 @@ def novo_cliente():
 
 @clientes_bp.route('/clientes/editar/<int:id>', methods=['GET', 'POST'])
 def editar_cliente(id):
-    # first_or_404 precisa propagar para o handler do Flask: fica FORA do try
-    # genérico, senão 404 vira 500 e isolamento cross-tenant fica ruidoso.
-    cliente = query_tenant(Cliente).filter_by(id=id).first_or_404()
     try:
+        # P0 (laudo de contenção no pool de conexões): o checkout da conexão
+        # para este SELECT pode estourar `pool_timeout`/`lock_timeout` sob
+        # concorrência. Antes esta linha ficava FORA do try, então um
+        # OperationalError/TimeoutError aqui escapava "cru" para o handler
+        # global do Flask (que por sua vez reencadeia novas queries via
+        # context_processors ao renderizar a página de erro). Agora entra
+        # no try — o 404 genuíno (Cliente inexistente/outro tenant) continua
+        # propagando normalmente via o `except HTTPException: raise` abaixo.
+        cliente = query_tenant(Cliente).filter_by(id=id).first_or_404()
         if request.method == 'POST':
             cnpj_raw = request.form.get('cnpj', '').strip() or None
             cnpj = None
@@ -315,6 +322,19 @@ def editar_cliente(id):
         db.session.rollback()
         flash('Erro: Este CNPJ já está cadastrado no sistema.', 'error')
         return redirect(url_for('clientes.listar_clientes'))
+    except (OperationalError, SATimeoutError) as e:
+        # P0 (laudo de contenção no pool de conexões): timeout/queda de
+        # conexão ao resgatar ou salvar o cliente (pool esgotado, lock_timeout
+        # do Postgres, etc.). Captura amigável em vez de deixar a exceção
+        # crua estourar e reencadear novas queries no handler global de erro.
+        db.session.rollback()
+        current_app.logger.warning(f'editar_cliente:{id} — banco ocupado: {e}')
+        flash('O banco de dados está ocupado, tente novamente em alguns instantes.', 'warning')
+        return redirect(url_for('clientes.listar_clientes'))
+    except HTTPException:
+        # Preserva o 404 genuíno do first_or_404() (cliente inexistente ou
+        # de outro tenant) — não deve virar um flash genérico de erro 500.
+        raise
     except Exception as e:
         db.session.rollback()
         erro_flash(e, 'Erro interno ao processar cliente. Tente novamente.', contexto=f'editar_cliente:{id}')

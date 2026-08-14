@@ -2534,9 +2534,19 @@ def rastrear_ultimo_acesso():
     """Atualiza ``Usuario.ultimo_acesso`` com throttle de 5 minutos.
 
     Evita UPDATE a cada clique/XHR: só grava se o último registro for
-    mais antigo que 5 minutos (ou nulo). Usa conexão direta do engine
-    (fora de ``db.session``) para não dar commit/expire na sessão da
-    request e não concorrer com locks de editar/excluir vendas.
+    mais antigo que 5 minutos (ou nulo).
+
+    P0 (laudo de contenção no pool de conexões — /clientes/editar):
+    antes esta função abria uma SEGUNDA conexão via ``db.engine.begin()``,
+    paralela à conexão que a própria ``db.session`` já reserva para a
+    requisição. Sob concorrência, isso dobrava a pressão sobre
+    ``pool_size``/``max_overflow`` a cada request autenticada, contribuindo
+    para o esgotamento do pool que causava os timeouts intermitentes.
+    Agora reusa a MESMA ``db.session`` da requisição, com um commit
+    isolado (aceitável: o único efeito colateral é expirar os objetos já
+    carregados nesta sessão, que serão relidos com uma query extra e
+    barata na próxima vez que forem acessados — bem mais leve que manter
+    uma segunda conexão aberta).
     """
     try:
         if not getattr(current_user, 'is_authenticated', False):
@@ -2556,20 +2566,19 @@ def rastrear_ultimo_acesso():
             if (agora - ultimo).total_seconds() < 5 * 60:
                 return
 
-        # Commit isolado: não tocar em db.session (evita expire_on_commit).
-        with db.engine.begin() as conn:
-            conn.execute(
-                Usuario.__table__.update()
-                .where(Usuario.__table__.c.id == current_user.id)
-                .values(ultimo_acesso=agora)
-            )
+        db.session.execute(
+            Usuario.__table__.update()
+            .where(Usuario.__table__.c.id == current_user.id)
+            .values(ultimo_acesso=agora)
+        )
+        db.session.commit()
         try:
             current_user.ultimo_acesso = agora
         except Exception:
             pass
     except Exception:
         # Telemetria de presença nunca deve derrubar a request.
-        pass
+        db.session.rollback()
 
 
 @app.teardown_appcontext
