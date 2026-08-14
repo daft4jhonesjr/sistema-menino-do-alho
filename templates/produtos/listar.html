@@ -305,9 +305,9 @@
                                         title="Devolver ao fornecedor">
                                     <i data-lucide="undo-2" class="w-4 h-4"></i>
                                 </button>
-                                <form action="{{ url_for('produtos.excluir_produto', id=produto.id) }}" method="POST" class="inline" onsubmit="return confirm('Tem certeza que deseja excluir este produto?');">
+                                <form action="{{ url_for('produtos.excluir_produto', id=produto.id) }}" method="POST" class="inline form-excluir-produto" data-nome="{{ (produto.nome_produto or '')|replace('\n', ' ')|e }}">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                    <button type="submit" class="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 inline-flex items-center">
+                                    <button type="submit" class="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 inline-flex items-center" title="Excluir produto">
                                         <i data-lucide="trash-2" class="w-4 h-4"></i>
                                     </button>
                                 </form>
@@ -2218,6 +2218,110 @@ function resetarLarguraColunas() {
         v = v.replace(/(\d{4})(\d)/, '$1-$2');
         alvo.value = v;
     });
+})();
+</script>
+
+<!-- Modal Confirmar Exclusão de Produto (mesmo padrão visual do Dashboard/Vendas/Clientes) -->
+<div id="modal-confirmacao-exclusao-produto-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
+    <div class="fixed inset-0 bg-black/50" id="modal-confirmacao-exclusao-produto-overlay"></div>
+    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-xl shadow-sm dark:shadow-none border border-gray-200 dark:border-gray-700 z-50" onclick="event.stopPropagation()" role="dialog" aria-modal="true" aria-labelledby="modal-confirmacao-exclusao-produto-titulo">
+        <div class="sticky top-0 flex justify-between items-center px-8 py-5 bg-emerald-700 text-white rounded-t-xl z-10">
+            <h3 id="modal-confirmacao-exclusao-produto-titulo" class="text-xl font-bold flex items-center">
+                <i data-lucide="trash-2" class="w-5 h-5 mr-2"></i>Confirmar Exclusão
+            </h3>
+            <button type="button" class="modal-confirmacao-exclusao-produto-fechar w-10 h-10 flex items-center justify-center rounded-full hover:bg-emerald-600 text-white font-bold transition" title="Fechar">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+        <div class="p-8">
+            <p id="modal-confirmacao-exclusao-produto-mensagem" class="text-gray-700 dark:text-gray-200 text-base leading-relaxed"></p>
+            <div class="flex flex-wrap gap-4 mt-8 justify-end">
+                <button type="button" class="modal-confirmacao-exclusao-produto-fechar bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-6 py-2.5 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 transition flex items-center font-medium">
+                    <i data-lucide="x" class="w-4 h-4 mr-2"></i>Cancelar
+                </button>
+                <button type="button" id="modal-confirmacao-exclusao-produto-btn-excluir" class="bg-red-600 hover:bg-red-700 text-white px-6 py-2.5 rounded-xl transition flex items-center font-medium">
+                    <i data-lucide="trash-2" class="w-4 h-4 mr-2"></i>Excluir
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+(function() {
+    function fecharModalConfirmacaoExclusaoProduto() {
+        var wrap = document.getElementById('modal-confirmacao-exclusao-produto-wrap');
+        if (wrap) {
+            wrap.classList.add('hidden');
+            wrap.setAttribute('aria-hidden', 'true');
+        }
+        window._confirmacaoExclusaoProdutoCallback = null;
+    }
+
+    function abrirModalConfirmacaoExclusaoProduto(mensagem, onConfirm) {
+        var wrap = document.getElementById('modal-confirmacao-exclusao-produto-wrap');
+        var msgEl = document.getElementById('modal-confirmacao-exclusao-produto-mensagem');
+        if (!wrap || !msgEl) {
+            if (typeof onConfirm === 'function' && window.confirm(mensagem)) onConfirm();
+            return;
+        }
+        msgEl.textContent = mensagem || '';
+        window._confirmacaoExclusaoProdutoCallback = (typeof onConfirm === 'function') ? onConfirm : null;
+        wrap.classList.remove('hidden');
+        wrap.setAttribute('aria-hidden', 'false');
+        if (typeof lucide !== 'undefined' && lucide.createIcons) {
+            try { lucide.createIcons(); } catch (_) {}
+        }
+    }
+
+    window.abrirModalConfirmacaoExclusaoProduto = abrirModalConfirmacaoExclusaoProduto;
+    window.fecharModalConfirmacaoExclusaoProduto = fecharModalConfirmacaoExclusaoProduto;
+
+    function initModalConfirmacaoExclusaoProduto() {
+        var wrap = document.getElementById('modal-confirmacao-exclusao-produto-wrap');
+        if (!wrap || wrap.dataset.bound === '1') return;
+        wrap.dataset.bound = '1';
+        var overlay = document.getElementById('modal-confirmacao-exclusao-produto-overlay');
+        var btnExcluir = document.getElementById('modal-confirmacao-exclusao-produto-btn-excluir');
+        var btnsFechar = document.querySelectorAll('.modal-confirmacao-exclusao-produto-fechar');
+
+        function onFechar() { fecharModalConfirmacaoExclusaoProduto(); }
+        if (overlay) overlay.addEventListener('click', onFechar);
+        btnsFechar.forEach(function(btn) { btn.addEventListener('click', onFechar); });
+        if (btnExcluir) {
+            btnExcluir.addEventListener('click', function() {
+                var cb = window._confirmacaoExclusaoProdutoCallback;
+                fecharModalConfirmacaoExclusaoProduto();
+                if (typeof cb === 'function') cb();
+            });
+        }
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && wrap && !wrap.classList.contains('hidden')) {
+                fecharModalConfirmacaoExclusaoProduto();
+            }
+        });
+    }
+
+    document.addEventListener('submit', function(e) {
+        var form = e.target && e.target.closest ? e.target.closest('.form-excluir-produto') : null;
+        if (!form) return;
+        e.preventDefault();
+        e.stopPropagation();
+        var nome = form.getAttribute('data-nome') || 'este produto';
+        var mensagem = 'Tem certeza que deseja excluir o produto "' + nome + '"? Esta ação não pode ser desfeita.';
+        if (typeof window.abrirModalConfirmacaoExclusaoProduto === 'function') {
+            window.abrirModalConfirmacaoExclusaoProduto(mensagem, function() {
+                HTMLFormElement.prototype.submit.call(form);
+            });
+        } else if (window.confirm(mensagem)) {
+            HTMLFormElement.prototype.submit.call(form);
+        }
+    });
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initModalConfirmacaoExclusaoProduto);
+    } else {
+        initModalConfirmacaoExclusaoProduto();
+    }
 })();
 </script>
 {% endblock %}
