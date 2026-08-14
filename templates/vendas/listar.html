@@ -183,6 +183,27 @@
     </div>
 </div>
 
+{# Calendário horizontal de pendências logísticas (últimos 2 + hoje + próximos 4).
+   data-pendentes: datas YYYY-MM-DD com vendas ainda não ENTREGUE (ano ativo). #}
+<section id="calendario-pendencias-vendas"
+         class="mb-6 bg-white dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 rounded-lg p-4"
+         data-pendentes='{{ (datas_entrega_pendente or [])|tojson }}'
+         aria-label="Calendário de entregas pendentes">
+    <div class="flex items-center justify-between gap-3 mb-3">
+        <div class="flex items-center gap-2 min-w-0">
+            <i data-lucide="calendar-days" class="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0"></i>
+            <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">Agenda de Entregas</h3>
+        </div>
+        <span class="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400 flex-shrink-0">
+            <span class="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse"></span>
+            Pendente
+        </span>
+    </div>
+    <div id="calendario-pendencias-track"
+         class="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scroll-smooth"
+         role="list"></div>
+</section>
+
 <div id="modal-relatorio-vendas-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
     <div class="fixed inset-0 bg-black/50" id="modal-relatorio-vendas-overlay"></div>
     <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-xl shadow-sm dark:shadow-none border border-gray-200 dark:border-gray-700 z-50" onclick="event.stopPropagation()">
@@ -3149,6 +3170,75 @@ function ordenarVendasTabela(colIndex, tipo) {
 
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+<!-- Calendário horizontal de pendências (Agenda de Entregas) -->
+<script>
+(function() {
+    var secao = document.getElementById('calendario-pendencias-vendas');
+    var track = document.getElementById('calendario-pendencias-track');
+    if (!secao || !track) return;
+
+    var DIAS_ABREV = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+    var datasPendentes = [];
+    try {
+        datasPendentes = JSON.parse(secao.getAttribute('data-pendentes') || '[]');
+    } catch (_) {
+        datasPendentes = [];
+    }
+    var setPendentes = {};
+    datasPendentes.forEach(function(d) { setPendentes[d] = true; });
+
+    function toISO(d) {
+        var ano = d.getFullYear();
+        var mes = String(d.getMonth() + 1).padStart(2, '0');
+        var dia = String(d.getDate()).padStart(2, '0');
+        return ano + '-' + mes + '-' + dia;
+    }
+
+    var hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    // Janela: últimos 2 dias + hoje + próximos 4 dias = 7 blocos.
+    var blocos = [];
+    for (var offset = -2; offset <= 4; offset++) {
+        var d = new Date(hoje);
+        d.setDate(hoje.getDate() + offset);
+        blocos.push(d);
+    }
+
+    track.innerHTML = '';
+    blocos.forEach(function(d) {
+        var iso = toISO(d);
+        var isHoje = d.getTime() === hoje.getTime();
+        var temPendencia = !!setPendentes[iso];
+
+        var card = document.createElement('div');
+        card.setAttribute('role', 'listitem');
+        card.setAttribute('title', temPendencia ? 'Há entrega(s) pendente(s) nesse dia' : 'Sem pendências');
+        card.className = 'relative flex-shrink-0 w-16 sm:w-[72px] flex flex-col items-center justify-center gap-0.5 py-2.5 rounded-lg border transition-colors select-none ' +
+            (isHoje
+                ? 'bg-emerald-600/20 border-emerald-500 text-emerald-700 dark:text-emerald-400'
+                : 'bg-gray-50 dark:bg-gray-900/40 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300');
+
+        card.innerHTML =
+            '<span class="text-[10px] font-semibold uppercase tracking-wide">' + DIAS_ABREV[d.getDay()] + '</span>' +
+            '<span class="text-lg font-bold leading-none">' + d.getDate() + '</span>' +
+            (isHoje ? '<span class="text-[9px] font-medium uppercase tracking-wide">Hoje</span>' : '');
+
+        if (temPendencia) {
+            var dot = document.createElement('span');
+            dot.className = 'absolute top-1.5 right-1.5 w-2 h-2 rounded-full animate-pulse ' +
+                (isHoje ? 'bg-orange-400' : 'bg-orange-500');
+            dot.setAttribute('aria-hidden', 'true');
+            card.appendChild(dot);
+        }
+
+        track.appendChild(card);
+    });
+})();
+</script>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const btnToggleForm = document.getElementById('btn-toggle-nova-venda');

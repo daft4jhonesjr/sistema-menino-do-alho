@@ -749,6 +749,36 @@ def listar_vendas():
     if len(erros_doc) > 0:
         flash(f"Erro ao processar {len(erros_doc)} documento(s).", 'error')
 
+    # Datas (YYYY-MM-DD) com ao menos uma venda ainda não ENTREGUE — alimenta
+    # o calendário horizontal de pendências logísticas no topo de Vendas.
+    # Query leve (DISTINCT data), escopo do ano ativo + tenant atual.
+    datas_entrega_pendente = []
+    try:
+        _ano_cal = session.get('ano_ativo', datetime.now().year)
+        _ini_cal, _fim_cal = filtro_ano_data_venda(_ano_cal, Venda.data_venda)
+        _rows_cal = (
+            query_tenant(Venda)
+            .filter(
+                Venda.data_venda >= _ini_cal,
+                Venda.data_venda < _fim_cal,
+                func.upper(func.coalesce(Venda.status_entrega, 'PENDENTE')) != 'ENTREGUE',
+            )
+            .with_entities(Venda.data_venda)
+            .distinct()
+            .limit(400)
+            .all()
+        )
+        _set_cal = set()
+        for (_dv,) in _rows_cal:
+            if not _dv:
+                continue
+            _d = _dv.date() if hasattr(_dv, 'date') else _dv
+            _set_cal.add(_d.isoformat())
+        datas_entrega_pendente = sorted(_set_cal)
+    except Exception:
+        db.session.rollback()
+        datas_entrega_pendente = []
+
     return render_template(
         'vendas/listar.html',
         pedidos=pedidos_paginados,
@@ -779,6 +809,7 @@ def listar_vendas():
         processados=processados_doc,
         vinculos_novos=vinculos_novos,
         erros=len(erros_doc),
+        datas_entrega_pendente=datas_entrega_pendente,
     )
 
 
