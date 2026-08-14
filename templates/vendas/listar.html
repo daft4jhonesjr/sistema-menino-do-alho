@@ -562,49 +562,32 @@
                             <input type="checkbox" id="bulk-master" class="rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" title="Selecionar todos" aria-label="Selecionar todos">
                         </th>
                         <th class="px-4 py-3 text-left w-12"></th>
-                        {% set data_ordenacao_ativa = (not ordenar_por) and (not sort) and (ordem_data in ['crescente', 'decrescente']) %}
-                        {% set url_th_data = request.args.to_dict(flat=True) %}
-                        {% if url_th_data.get('ordenar_por') %}
-                            {% set _ = url_th_data.pop('ordenar_por') %}
-                        {% endif %}
-                        {% set proxima_ordem_data = 'decrescente' if ordem_data == 'crescente' else 'crescente' %}
-                        {% set _ = url_th_data.update({'ordem_data': proxima_ordem_data}) %}
-                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors {{ 'text-blue-600 dark:text-blue-400 font-bold' if data_ordenacao_ativa else 'text-gray-500 dark:text-gray-400' }}">
-                            <a href="{{ url_for('vendas.listar_vendas', **url_th_data) }}" class="inline-flex items-center gap-1 no-underline text-inherit">
+                        <th onclick="ordenarVendasTabela(3, 'numero')" data-sort-col="3" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors select-none" title="Ordenar por Data">
+                            <span class="inline-flex items-center gap-1">
                                 Data
-                                {% if ordem_data == 'crescente' %}
-                                    <svg class="w-3.5 h-3.5 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
-                                    </svg>
-                                {% else %}
-                                    <svg class="w-3.5 h-3.5 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                                    </svg>
-                                {% endif %}
-                            </a>
+                                <span class="sort-indicator opacity-50" aria-hidden="true">↕</span>
+                            </span>
                         </th>
-                        {% set cliente_ordenacao_ativa = sort in ['cliente_asc', 'cliente_desc'] %}
-                        {% set url_th_cliente = request.args.to_dict(flat=True) %}
-                        {% set proximo_sort_cliente = 'cliente_desc' if sort == 'cliente_asc' else 'cliente_asc' %}
-                        {% set _ = url_th_cliente.update({'sort': proximo_sort_cliente}) %}
-                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors {{ 'text-emerald-600 dark:text-emerald-400 font-bold' if cliente_ordenacao_ativa else 'text-gray-500 dark:text-gray-400' }}">
-                            <a href="{{ url_for('vendas.listar_vendas', **url_th_cliente) }}" class="inline-flex items-center gap-1 no-underline text-inherit">
+                        <th onclick="ordenarVendasTabela(4, 'texto')" data-sort-col="4" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors select-none" title="Ordenar por Cliente">
+                            <span class="inline-flex items-center gap-1">
                                 Cliente
-                                {% if sort == 'cliente_asc' %}
-                                    <svg class="w-3.5 h-3.5 {{ 'text-emerald-600 dark:text-emerald-400' if cliente_ordenacao_ativa else 'text-gray-400 dark:text-gray-500' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
-                                    </svg>
-                                {% else %}
-                                    <svg class="w-3.5 h-3.5 {{ 'text-emerald-600 dark:text-emerald-400' if cliente_ordenacao_ativa else 'text-gray-400 dark:text-gray-500' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                                    </svg>
-                                {% endif %}
-                            </a>
+                                <span class="sort-indicator opacity-50" aria-hidden="true">↕</span>
+                            </span>
                         </th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">NF</th>
+                        <th onclick="ordenarVendasTabela(5, 'texto')" data-sort-col="5" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors select-none" title="Ordenar por NF">
+                            <span class="inline-flex items-center gap-1">
+                                NF
+                                <span class="sort-indicator opacity-50" aria-hidden="true">↕</span>
+                            </span>
+                        </th>
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Preço Unit.</th>
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Qtd Total</th>
-                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Valor Total</th>
+                        <th onclick="ordenarVendasTabela(8, 'numero')" data-sort-col="8" class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors select-none" title="Ordenar por Valor Total">
+                            <span class="inline-flex items-center justify-end gap-1">
+                                Valor Total
+                                <span class="sort-indicator opacity-50" aria-hidden="true">↕</span>
+                            </span>
+                        </th>
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Lucro Total</th>
                         {% set url_venc_proximo = request.args.to_dict(flat=True) %}
                         {% if url_venc_proximo.get('ordenar_por') %}{% set _ = url_venc_proximo.pop('ordenar_por') %}{% endif %}
@@ -670,19 +653,11 @@
                                 </div>
                             </details>
                         </th>
-                        {% set url_th_situacao = {} %}
-                        {% if request.args.get('filtro') %}{% set _ = url_th_situacao.update({'filtro': request.args.get('filtro')}) %}{% endif %}
-                        {% if request.args.get('produto_id') %}{% set _ = url_th_situacao.update({'produto_id': request.args.get('produto_id')}) %}{% endif %}
-                        {% if request.args.get('cliente_id') %}{% set _ = url_th_situacao.update({'cliente_id': request.args.get('cliente_id')}) %}{% endif %}
-                        {% if request.args.get('forma_pagto') %}{% set _ = url_th_situacao.update({'forma_pagto': request.args.get('forma_pagto')}) %}{% endif %}
-                        {% if filtro_vencidos %}{% set _ = url_th_situacao.update({'filtro_vencidos': 1}) %}{% endif %}
-                        {% set _ = url_th_situacao.update({'ordem_data': ordem_data}) %}
-                        {% set _ = url_th_situacao.update({'ordenar_por': 'situacao'}) %}
-                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors {{ 'text-blue-600 dark:text-blue-400 font-bold' if ordenar_por == 'situacao' else 'text-gray-500 dark:text-gray-400' }}">
-                            <a href="{{ url_for('vendas.listar_vendas', **url_th_situacao) }}" class="flex items-center gap-1 no-underline text-inherit">
+                        <th onclick="ordenarVendasTabela(12, 'texto')" data-sort-col="12" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors select-none" title="Ordenar por Situação">
+                            <span class="inline-flex items-center gap-1">
                                 Situação
-                                <svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path></svg>
-                            </a>
+                                <span class="sort-indicator opacity-50" aria-hidden="true">↕</span>
+                            </span>
                         </th>
                         {% set forma_pagto_ativo = (forma_pagto or 'TODAS') != 'TODAS' %}
                         {% set url_forma_todas = request.args.to_dict(flat=True) %}
@@ -695,10 +670,14 @@
                         {% set _ = url_forma_pix.update({'forma_pagto': 'PIX'}) %}
                         {% set url_forma_dinheiro = request.args.to_dict(flat=True) %}
                         {% set _ = url_forma_dinheiro.update({'forma_pagto': 'DINHEIRO'}) %}
-                        <th class="relative px-6 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap {{ 'text-emerald-600 dark:text-emerald-400 font-bold' if forma_pagto_ativo else 'text-gray-500 dark:text-gray-400' }}">
-                            <details class="relative inline-block js-filtro-dropdown">
-                                <summary class="list-none inline-flex items-center gap-1 cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200 transition-colors">
+                        <th data-sort-col="13" class="relative px-6 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap {{ 'text-emerald-600 dark:text-emerald-400 font-bold' if forma_pagto_ativo else 'text-gray-500 dark:text-gray-400' }}">
+                            <div class="inline-flex items-center gap-1.5">
+                                <span onclick="ordenarVendasTabela(13, 'texto')" class="inline-flex items-center gap-1 cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200 transition-colors" title="Ordenar por Forma Pagto">
                                     Forma Pagto
+                                    <span class="sort-indicator opacity-50" aria-hidden="true">↕</span>
+                                </span>
+                            <details class="relative inline-block js-filtro-dropdown">
+                                <summary class="list-none inline-flex items-center gap-1 cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200 transition-colors" title="Filtrar por forma de pagamento">
                                     <svg class="w-3.5 h-3.5 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                                     </svg>
@@ -721,6 +700,7 @@
                                     </a>
                                 </div>
                             </details>
+                            </div>
                         </th>
                         <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider min-w-[180px] whitespace-nowrap">AÇÕES</th>
                     </tr>
@@ -2864,6 +2844,122 @@ document.addEventListener('DOMContentLoaded', function() {
         if (typeof lucide !== 'undefined') lucide.createIcons();
     }
 })();
+</script>
+
+<!-- Ordenação Client-Side da tabela de Vendas (substitui ?ordenar_por=/?sort=) -->
+<script>
+/* Reordena as linhas do <tbody> inteiramente no navegador, sem recarregar
+   a página. Opera sobre o estado ATUAL do DOM — funciona igual com a
+   página inicial (paginação) ou depois de "Carregar todos os dados",
+   já que sempre lê `#vendas-tbody` no momento do clique. */
+var _vendasSortState = { col: null, dir: 'asc' };
+
+function _parseMoedaOrdenacaoVendas(texto) {
+    var m = String(texto || '').match(/-?[\d.]*\d,\d{2}/);
+    if (!m) return 0;
+    var limpo = m[0].replace(/\./g, '').replace(',', '.');
+    var num = parseFloat(limpo);
+    return isNaN(num) ? 0 : num;
+}
+
+// Remove sub-linhas de apoio (ex.: "(Pago: R$ x)" em Situação/Valor Total,
+// marcadas com a classe utilitária `.block` no template) antes de extrair
+// o texto principal exibido na célula — evita que esse texto extra
+// contamine a comparação.
+function _extrairTextoPrincipalVendas(celula) {
+    var clone = celula.cloneNode(true);
+    clone.querySelectorAll('.block').forEach(function(el) { el.remove(); });
+    return (clone.textContent || '').replace(/\s+/g, ' ').trim();
+}
+
+function _extrairValorOrdenacaoVendas(tr, colIndex, tipo) {
+    var celula = tr.children[colIndex];
+    if (!celula) return tipo === 'numero' ? 0 : '';
+
+    // Colunas com parsing ambíguo via texto (Data em DD/MM, Valor Total com
+    // sub-linha de saldo) trazem o valor já pronto em data-sort-valor,
+    // gravado pelo backend em templates/_linhas_venda.html.
+    if (celula.hasAttribute('data-sort-valor')) {
+        var bruto = celula.getAttribute('data-sort-valor');
+        if (tipo === 'numero') {
+            var num = parseFloat(bruto);
+            return isNaN(num) ? 0 : num;
+        }
+        return bruto;
+    }
+
+    var texto = _extrairTextoPrincipalVendas(celula);
+    if (tipo === 'numero') return _parseMoedaOrdenacaoVendas(texto);
+    return texto;
+}
+
+function _atualizarIndicadoresSortVendas(colAtiva, dir) {
+    var ths = document.querySelectorAll('#tabela-vendas thead th[data-sort-col]');
+    ths.forEach(function(th) {
+        var ind = th.querySelector('.sort-indicator');
+        if (!ind) return;
+        var col = parseInt(th.getAttribute('data-sort-col'), 10);
+        if (col === colAtiva) {
+            ind.textContent = dir === 'asc' ? '↑' : '↓';
+            ind.classList.remove('opacity-50');
+            ind.classList.add('opacity-100', 'text-emerald-600', 'dark:text-emerald-400');
+        } else {
+            ind.textContent = '↕';
+            ind.classList.add('opacity-50');
+            ind.classList.remove('opacity-100', 'text-emerald-600', 'dark:text-emerald-400');
+        }
+    });
+}
+
+function ordenarVendasTabela(colIndex, tipo) {
+    var tbody = document.getElementById('vendas-tbody');
+    if (!tbody) return;
+
+    var linhasResumo = Array.prototype.slice.call(tbody.querySelectorAll('tr.pedido-resumo'));
+    if (linhasResumo.length < 2) return;
+
+    if (_vendasSortState.col === colIndex) {
+        _vendasSortState.dir = _vendasSortState.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+        _vendasSortState.col = colIndex;
+        _vendasSortState.dir = 'asc';
+    }
+    var dir = _vendasSortState.dir;
+    var fator = dir === 'asc' ? 1 : -1;
+    var tipoNumerico = (tipo === 'numero');
+
+    // Emparelha cada linha de resumo com sua linha de detalhes (localizada
+    // por data-pedido-id, não por posição no DOM) para que ambas viajem
+    // juntas na reordenação — o accordion depende de estarem próximas
+    // visualmente para o usuário entender qual pedido foi expandido.
+    var pares = linhasResumo.map(function(tr) {
+        var pedidoId = tr.getAttribute('data-pedido-id');
+        var detalhes = pedidoId ? tbody.querySelector('tr.pedido-detalhes[data-pedido-id="' + pedidoId + '"]') : null;
+        return { resumo: tr, detalhes: detalhes };
+    });
+
+    pares.sort(function(a, b) {
+        var valorA = _extrairValorOrdenacaoVendas(a.resumo, colIndex, tipo);
+        var valorB = _extrairValorOrdenacaoVendas(b.resumo, colIndex, tipo);
+
+        if (tipoNumerico) {
+            return (valorA - valorB) * fator;
+        }
+        return String(valorA).localeCompare(String(valorB), 'pt-BR', { sensitivity: 'base', numeric: true }) * fator;
+    });
+
+    // appendChild em nós já existentes MOVE os elementos (não clona) —
+    // todos os listeners já anexados (accordion, botões editar/excluir,
+    // checkboxes de seleção em massa) continuam funcionando normalmente.
+    var fragment = document.createDocumentFragment();
+    pares.forEach(function(par) {
+        fragment.appendChild(par.resumo);
+        if (par.detalhes) fragment.appendChild(par.detalhes);
+    });
+    tbody.appendChild(fragment);
+
+    _atualizarIndicadoresSortVendas(colIndex, dir);
+}
 </script>
 {% endblock %}
 
