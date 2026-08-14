@@ -3652,7 +3652,6 @@ function toggleAnaliseVendas(event) {
         var razao = (btn.getAttribute('data-razao') || '').trim();
         var cnpj = formatarCnpjNF(btn.getAttribute('data-cnpj') || '');
         var loc = separarCidadeUf(btn.getAttribute('data-cidade'), btn.getAttribute('data-uf'));
-        var pagamento = (btn.getAttribute('data-pagamento') || '').trim();
         var itens = parseItensNF(btn.getAttribute('data-itens'));
 
         var linhasItens = itens.map(function(item) {
@@ -3676,7 +3675,6 @@ function toggleAnaliseVendas(event) {
         }
         partes.push('');
         if (cidadeLinha) partes.push(cidadeLinha);
-        if (pagamento) partes.push(pagamento);
 
         return partes.join('\n').replace(/\n{3,}/g, '\n\n').trim();
     }
