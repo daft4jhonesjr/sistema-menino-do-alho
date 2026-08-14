@@ -1153,9 +1153,16 @@
             openModalConfirmar(btn);
             return;
         }
-        var msg = 'O pagamento foi um erro? Alterar pedido [NF ' + nf + '] de volta para PENDENTE?';
-        if (!confirm(msg)) return;
-        execAtualizarStatus(btn, situacao, null);
+        var cliente = btn.getAttribute('data-cliente') || '';
+        var msg = 'O pagamento foi um erro? Alterar pedido [NF ' + nf + ']' +
+            (cliente ? ' — ' + cliente : '') + ' de volta para PENDENTE?';
+        if (typeof window.abrirModalConfirmacaoAcaoVenda === 'function') {
+            window.abrirModalConfirmacaoAcaoVenda(msg, function() {
+                execAtualizarStatus(btn, situacao, null);
+            });
+        } else if (confirm(msg)) {
+            execAtualizarStatus(btn, situacao, null);
+        }
     }
 
     if (tbody) {
@@ -3254,6 +3261,94 @@ function toggleAnaliseVendas(event) {
             document.body.removeChild(ta);
         }
     });
+})();
+</script>
+
+<!-- Modal Confirmar Ação (reversão de pagamento — mesmo padrão visual da exclusão) -->
+<div id="modal-confirmacao-acao-venda-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
+    <div class="fixed inset-0 bg-black/50" id="modal-confirmacao-acao-venda-overlay"></div>
+    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-xl shadow-sm dark:shadow-none border border-gray-200 dark:border-gray-700 z-50" onclick="event.stopPropagation()" role="dialog" aria-modal="true" aria-labelledby="modal-confirmacao-acao-venda-titulo">
+        <div class="sticky top-0 flex justify-between items-center px-8 py-5 bg-emerald-700 text-white rounded-t-xl z-10">
+            <h3 id="modal-confirmacao-acao-venda-titulo" class="text-xl font-bold flex items-center">
+                <i data-lucide="rotate-ccw" class="w-5 h-5 mr-2"></i>Confirmar Reversão
+            </h3>
+            <button type="button" class="modal-confirmacao-acao-venda-fechar w-10 h-10 flex items-center justify-center rounded-full hover:bg-emerald-600 text-white font-bold transition" title="Fechar">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+        <div class="p-8">
+            <p id="modal-confirmacao-acao-venda-mensagem" class="text-gray-700 dark:text-gray-200 text-base leading-relaxed"></p>
+            <div class="flex flex-wrap gap-4 mt-8 justify-end">
+                <button type="button" class="modal-confirmacao-acao-venda-fechar bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-6 py-2.5 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 transition flex items-center font-medium">
+                    <i data-lucide="x" class="w-4 h-4 mr-2"></i>Cancelar
+                </button>
+                <button type="button" id="modal-confirmacao-acao-venda-btn-confirmar" class="bg-emerald-700 hover:bg-emerald-600 text-white px-6 py-2.5 rounded-xl transition flex items-center font-medium">
+                    <i data-lucide="check" class="w-4 h-4 mr-2"></i>Confirmar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+(function() {
+    function fecharModalConfirmacaoAcaoVenda() {
+        var wrap = document.getElementById('modal-confirmacao-acao-venda-wrap');
+        if (wrap) {
+            wrap.classList.add('hidden');
+            wrap.setAttribute('aria-hidden', 'true');
+        }
+        window._confirmacaoAcaoVendaCallback = null;
+    }
+
+    function abrirModalConfirmacaoAcaoVenda(mensagem, onConfirm) {
+        var wrap = document.getElementById('modal-confirmacao-acao-venda-wrap');
+        var msgEl = document.getElementById('modal-confirmacao-acao-venda-mensagem');
+        if (!wrap || !msgEl) {
+            if (typeof onConfirm === 'function' && window.confirm(mensagem)) onConfirm();
+            return;
+        }
+        msgEl.textContent = mensagem || '';
+        window._confirmacaoAcaoVendaCallback = (typeof onConfirm === 'function') ? onConfirm : null;
+        wrap.classList.remove('hidden');
+        wrap.setAttribute('aria-hidden', 'false');
+        if (typeof lucide !== 'undefined' && lucide.createIcons) {
+            try { lucide.createIcons(); } catch (_) {}
+        }
+    }
+
+    window.abrirModalConfirmacaoAcaoVenda = abrirModalConfirmacaoAcaoVenda;
+    window.fecharModalConfirmacaoAcaoVenda = fecharModalConfirmacaoAcaoVenda;
+
+    function initModalConfirmacaoAcaoVenda() {
+        var wrap = document.getElementById('modal-confirmacao-acao-venda-wrap');
+        if (!wrap || wrap.dataset.bound === '1') return;
+        wrap.dataset.bound = '1';
+        var overlay = document.getElementById('modal-confirmacao-acao-venda-overlay');
+        var btnConfirmar = document.getElementById('modal-confirmacao-acao-venda-btn-confirmar');
+        var btnsFechar = document.querySelectorAll('.modal-confirmacao-acao-venda-fechar');
+
+        function onFechar() { fecharModalConfirmacaoAcaoVenda(); }
+        if (overlay) overlay.addEventListener('click', onFechar);
+        btnsFechar.forEach(function(btn) { btn.addEventListener('click', onFechar); });
+        if (btnConfirmar) {
+            btnConfirmar.addEventListener('click', function() {
+                var cb = window._confirmacaoAcaoVendaCallback;
+                fecharModalConfirmacaoAcaoVenda();
+                if (typeof cb === 'function') cb();
+            });
+        }
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && wrap && !wrap.classList.contains('hidden')) {
+                fecharModalConfirmacaoAcaoVenda();
+            }
+        });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initModalConfirmacaoAcaoVenda);
+    } else {
+        initModalConfirmacaoAcaoVenda();
+    }
 })();
 </script>
 
