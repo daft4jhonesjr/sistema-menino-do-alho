@@ -796,6 +796,29 @@ function toggleDropdownNovoCliente(event) {
         return formatado;
     }
 
+    // Números copiados do WhatsApp vêm como "+55 87 98801-8104". Sem esse
+    // tratamento, os 2 primeiros dígitos ("55") são lidos como DDD pela
+    // máscara progressiva (que só aceita 11 dígitos), truncando o final
+    // do número real. Detecta e remove o DDI 55 apenas quando a contagem
+    // de dígitos é compatível com "55 + número nacional" (12 ou 13 dígitos).
+    function limparDdiTelefoneColado(texto) {
+        var digitos = (texto || '').replace(/\D/g, '');
+        if (digitos.length >= 12 && digitos.length <= 13 && digitos.substring(0, 2) === '55') {
+            digitos = digitos.substring(2);
+        }
+        return digitos;
+    }
+
+    document.addEventListener('paste', function(e) {
+        if (!e.target.matches('input[name="telefone"], .input-telefone')) return;
+        e.preventDefault();
+        var textoColado = (e.clipboardData || window.clipboardData).getData('text');
+        e.target.value = limparDdiTelefoneColado(textoColado);
+        // Redispara 'input' para a máscara progressiva formatar o valor
+        // recém-colado no padrão local (mesmo listener abaixo).
+        e.target.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
     document.addEventListener('input', function(e) {
         if (e.target.matches('input[name="telefone"], .input-telefone')) {
             e.target.value = formatarTelefoneWhatsapp(e.target.value);

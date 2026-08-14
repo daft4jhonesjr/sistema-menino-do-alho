@@ -29,9 +29,9 @@
             </label>
             <input type="tel" id="telefone" name="telefone" 
                    value="{{ cliente.telefone if cliente else '' }}"
-                   placeholder="(99) 99999-9999"
+                   placeholder="87 9 9999-9999" maxlength="15"
                    autocomplete="tel" inputmode="tel"
-                   class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
+                   class="input-telefone w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
         </div>
 
         <div class="mb-4">
@@ -85,4 +85,57 @@
         </div>
     </form>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Máscara progressiva de Telefone/WhatsApp: "XX X XXXX-XXXX" + tratamento
+// de paste com DDI (+55). Este formulário não compartilha script com
+// clientes/listar.html, então a lógica é replicada aqui para o campo
+// #telefone funcionar igual em toda a área de Clientes.
+(function() {
+    var campoTelefone = document.getElementById('telefone');
+    if (!campoTelefone) return;
+
+    function formatarTelefoneWhatsapp(valor) {
+        var v = (valor || '').replace(/\D/g, '').substring(0, 11);
+        var formatado = '';
+        if (v.length > 0) formatado = v.substring(0, 2);
+        if (v.length > 2) formatado += ' ' + v.substring(2, 3);
+        if (v.length > 3) formatado += ' ' + v.substring(3, 7);
+        if (v.length > 7) formatado += '-' + v.substring(7, 11);
+        return formatado;
+    }
+
+    // Números copiados do WhatsApp vêm como "+55 87 98801-8104". Sem esse
+    // tratamento, os 2 primeiros dígitos ("55") são lidos como DDD pela
+    // máscara progressiva (que só aceita 11 dígitos), truncando o final
+    // do número real. Só remove o DDI quando a contagem de dígitos é
+    // compatível com "55 + número nacional" (12 ou 13 dígitos).
+    function limparDdiTelefoneColado(texto) {
+        var digitos = (texto || '').replace(/\D/g, '');
+        if (digitos.length >= 12 && digitos.length <= 13 && digitos.substring(0, 2) === '55') {
+            digitos = digitos.substring(2);
+        }
+        return digitos;
+    }
+
+    campoTelefone.addEventListener('paste', function(e) {
+        e.preventDefault();
+        var textoColado = (e.clipboardData || window.clipboardData).getData('text');
+        campoTelefone.value = limparDdiTelefoneColado(textoColado);
+        // Redispara 'input' para o listener abaixo formatar o valor colado.
+        campoTelefone.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    campoTelefone.addEventListener('input', function() {
+        campoTelefone.value = formatarTelefoneWhatsapp(campoTelefone.value);
+    });
+
+    // Valor inicial (edição) pode vir sem formatação (dado antigo) — normaliza ao carregar.
+    if (campoTelefone.value) {
+        campoTelefone.value = formatarTelefoneWhatsapp(campoTelefone.value);
+    }
+})();
+</script>
 {% endblock %}
