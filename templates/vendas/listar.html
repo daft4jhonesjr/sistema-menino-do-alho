@@ -3616,6 +3616,133 @@ function toggleAnaliseVendas(event) {
 })();
 </script>
 
+<script>
+/* Copiar Pedido NF — texto formatado para o setor de faturamento (WhatsApp).
+   Dados vêm dos data-* no botão (.btn-copiar-pedido-nf) em _linhas_venda /
+   _cards_venda. Delegação no document cobre também linhas carregadas via
+   infinite scroll (AJAX). O modelo Cliente não tem campo UF: se a cidade
+   vier como "Cidade-SP" / "Cidade/SP", o JS separa automaticamente. */
+(function() {
+    function formatarCnpjNF(cnpj) {
+        var digitos = String(cnpj || '').replace(/\D/g, '');
+        if (digitos.length !== 14) return String(cnpj || '').trim();
+        return digitos.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+    }
+
+    function separarCidadeUf(cidadeRaw, ufRaw) {
+        var cidade = String(cidadeRaw || '').trim();
+        var uf = String(ufRaw || '').trim().toUpperCase();
+        if (uf) return { cidade: cidade, uf: uf };
+        var m = cidade.match(/^(.+?)\s*[-–\/]\s*([A-Za-z]{2})$/);
+        if (m) return { cidade: m[1].trim(), uf: m[2].toUpperCase() };
+        return { cidade: cidade, uf: '' };
+    }
+
+    function parseItensNF(raw) {
+        if (!raw) return [];
+        try {
+            var parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (_) {
+            return [];
+        }
+    }
+
+    function montarTextoPedidoNF(btn) {
+        var razao = (btn.getAttribute('data-razao') || '').trim();
+        var cnpj = formatarCnpjNF(btn.getAttribute('data-cnpj') || '');
+        var loc = separarCidadeUf(btn.getAttribute('data-cidade'), btn.getAttribute('data-uf'));
+        var pagamento = (btn.getAttribute('data-pagamento') || '').trim();
+        var itens = parseItensNF(btn.getAttribute('data-itens'));
+
+        var linhasItens = itens.map(function(item) {
+            var qtd = item.q != null ? item.q : (item.qtd != null ? item.qtd : '');
+            var nome = String(item.n || item.nome || '').trim();
+            var preco = String(item.p || item.preco || '').trim();
+            return [qtd, nome, preco].filter(function(p) { return p !== '' && p != null; }).join(' ');
+        }).filter(Boolean);
+
+        var cidadeLinha = '';
+        if (loc.cidade && loc.uf) cidadeLinha = loc.cidade + '-' + loc.uf;
+        else if (loc.cidade) cidadeLinha = loc.cidade;
+        else if (loc.uf) cidadeLinha = loc.uf;
+
+        var partes = [];
+        if (razao) partes.push(razao);
+        if (cnpj) partes.push(cnpj);
+        partes.push('');
+        if (linhasItens.length) {
+            partes = partes.concat(linhasItens);
+        }
+        partes.push('');
+        if (cidadeLinha) partes.push(cidadeLinha);
+        if (pagamento) partes.push(pagamento);
+
+        return partes.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    }
+
+    function feedbackPedidoNFCopiado() {
+        if (typeof showToast === 'function') {
+            showToast('Pedido copiado para NF!', 'success');
+            return;
+        }
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                icon: 'success',
+                title: 'Pedido copiado para NF!',
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                timer: 2000,
+                timerProgressBar: true
+            });
+            return;
+        }
+        alert('Pedido copiado para NF!');
+    }
+
+    function copiarTextoPedidoNF(texto) {
+        if (!texto) return;
+        function ok() { feedbackPedidoNFCopiado(); }
+        function falhou() {
+            if (typeof showToast === 'function') showToast('Não foi possível copiar o pedido.', 'error');
+            else alert('Não foi possível copiar o pedido.');
+        }
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(texto).then(ok).catch(falhou);
+            return;
+        }
+        var ta = document.createElement('textarea');
+        ta.value = texto;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        try {
+            document.execCommand('copy');
+            ok();
+        } catch (_) {
+            falhou();
+        }
+        document.body.removeChild(ta);
+    }
+
+    window.copiarPedidoNF = function(btn) {
+        if (!btn) return;
+        copiarTextoPedidoNF(montarTextoPedidoNF(btn));
+    };
+
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest('.btn-copiar-pedido-nf');
+        if (!btn) return;
+        e.preventDefault();
+        window.copiarPedidoNF(btn);
+    });
+})();
+</script>
+
 <!-- Modal Confirmar Ação (reversão de pagamento — mesmo padrão visual da exclusão) -->
 <div id="modal-confirmacao-acao-venda-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
     <div class="fixed inset-0 bg-black/50" id="modal-confirmacao-acao-venda-overlay"></div>
