@@ -147,6 +147,32 @@
 {% endblock %}
 
 {% block content %}
+{# Calendário mensal estilo "Apple Calendar" com pendências de entrega logística.
+   data-pendentes: datas YYYY-MM-DD com vendas ainda não ENTREGUE (ano ativo).
+   Posicionado no topo absoluto da página, antes do cabeçalho "Vendas". #}
+<section id="calendario-pendencias-vendas"
+         class="mb-8 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 sm:p-6 shadow-sm"
+         data-pendentes='{{ (datas_entrega_pendente or [])|tojson }}'
+         aria-label="Calendário mensal de entregas pendentes">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-bold text-gray-900 dark:text-white capitalize" id="calendar-month-year"></h2>
+        <span class="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400 flex-shrink-0">
+            <span class="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse"></span>
+            Pendência de entrega
+        </span>
+    </div>
+    <div class="grid grid-cols-7 text-right text-xs font-medium text-gray-500 dark:text-gray-400 pb-2 border-b border-gray-200 dark:border-gray-700">
+        <div class="pr-1">Dom.</div>
+        <div class="pr-1">Seg.</div>
+        <div class="pr-1">Ter.</div>
+        <div class="pr-1">Qua.</div>
+        <div class="pr-1">Qui.</div>
+        <div class="pr-1">Sex.</div>
+        <div class="pr-1">Sáb.</div>
+    </div>
+    <div id="calendar-grid" class="grid grid-cols-7 border-l border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/20" role="grid"></div>
+</section>
+
 <div class="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
     <div>
         <h2 class="text-3xl font-bold text-emerald-700 dark:text-emerald-400 mb-2">Vendas</h2>
@@ -182,26 +208,6 @@
         </div>
     </div>
 </div>
-
-{# Calendário mensal completo de pendências logísticas (dia 1 até o fim do mês atual).
-   data-pendentes: datas YYYY-MM-DD com vendas ainda não ENTREGUE (ano ativo). #}
-<section id="calendario-pendencias-vendas"
-         class="mb-6 bg-white dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 rounded-lg p-3 sm:p-4"
-         data-pendentes='{{ (datas_entrega_pendente or [])|tojson }}'
-         aria-label="Calendário mensal de entregas pendentes">
-    <div class="flex items-center justify-between gap-3 mb-3">
-        <div class="flex items-center gap-2 min-w-0">
-            <i data-lucide="calendar-days" class="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0"></i>
-            <h3 id="calendario-pendencias-titulo" class="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">Agenda de Entregas</h3>
-        </div>
-        <span class="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400 flex-shrink-0">
-            <span class="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse"></span>
-            Pendente
-        </span>
-    </div>
-    <div id="calendario-pendencias-semana" class="grid grid-cols-7 gap-1 sm:gap-2 mb-1"></div>
-    <div id="calendario-pendencias-track" class="grid grid-cols-7 gap-1 sm:gap-2" role="grid"></div>
-</section>
 
 <div id="modal-relatorio-vendas-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
     <div class="fixed inset-0 bg-black/50" id="modal-relatorio-vendas-overlay"></div>
@@ -3170,16 +3176,14 @@ function ordenarVendasTabela(colIndex, tipo) {
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
-<!-- Calendário mensal completo de pendências (Agenda de Entregas) -->
+<!-- Calendário mensal estilo Apple Calendar (Agenda de Entregas) -->
 <script>
 (function() {
     var secao = document.getElementById('calendario-pendencias-vendas');
-    var linhaSemana = document.getElementById('calendario-pendencias-semana');
-    var track = document.getElementById('calendario-pendencias-track');
-    var titulo = document.getElementById('calendario-pendencias-titulo');
-    if (!secao || !track || !linhaSemana) return;
+    var grid = document.getElementById('calendar-grid');
+    var tituloMes = document.getElementById('calendar-month-year');
+    if (!secao || !grid) return;
 
-    var DIAS_ABREV = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
     var MESES_PT = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
         'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
@@ -3201,29 +3205,23 @@ function ordenarVendasTabela(colIndex, tipo) {
     var anoAtual = hoje.getFullYear();
     var mesAtual = hoje.getMonth();
 
-    if (titulo) {
-        titulo.textContent = MESES_PT[mesAtual] + ' ' + anoAtual;
+    if (tituloMes) {
+        tituloMes.textContent = MESES_PT[mesAtual] + ' ' + anoAtual;
     }
-
-    // Cabeçalho fixo com os dias da semana.
-    linhaSemana.innerHTML = '';
-    DIAS_ABREV.forEach(function(nome) {
-        var celula = document.createElement('div');
-        celula.className = 'text-center text-[10px] sm:text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide py-0.5';
-        celula.textContent = nome;
-        linhaSemana.appendChild(celula);
-    });
 
     var primeiroDiaSemana = new Date(anoAtual, mesAtual, 1).getDay(); // 0=Dom ... 6=Sáb
     var totalDiasMes = new Date(anoAtual, mesAtual + 1, 0).getDate();
 
-    track.innerHTML = '';
+    var CELULA_BASE = 'border-r border-t border-gray-200 dark:border-gray-700 min-h-[80px] sm:min-h-[100px] p-2 flex flex-col justify-start items-end transition-colors';
 
-    // Espaços vazios para alinhar o dia 1 na coluna correta da semana.
+    grid.innerHTML = '';
+
+    // Espaços vazios (antes do dia 1) mantêm a estrutura da grade, com opacidade reduzida.
     for (var vazio = 0; vazio < primeiroDiaSemana; vazio++) {
         var espaco = document.createElement('div');
         espaco.setAttribute('aria-hidden', 'true');
-        track.appendChild(espaco);
+        espaco.className = CELULA_BASE + ' bg-gray-100/60 dark:bg-gray-900/40 opacity-50';
+        grid.appendChild(espaco);
     }
 
     for (var dia = 1; dia <= totalDiasMes; dia++) {
@@ -3234,21 +3232,22 @@ function ordenarVendasTabela(colIndex, tipo) {
         var celulaDia = document.createElement('div');
         celulaDia.setAttribute('role', 'gridcell');
         celulaDia.setAttribute('title', temPendencia ? 'Há entrega(s) pendente(s) nesse dia' : 'Sem pendências');
-        celulaDia.className = 'h-10 sm:h-12 w-full flex flex-col items-center justify-center rounded-md border text-sm transition-colors select-none ' +
-            (isHoje
-                ? 'bg-emerald-600/20 border-emerald-500 text-emerald-700 dark:text-emerald-400 font-bold'
-                : 'bg-gray-50 dark:bg-gray-800/30 border-gray-200 dark:border-gray-700/50 text-gray-600 dark:text-gray-300');
+        celulaDia.className = CELULA_BASE + ' hover:bg-gray-100 dark:hover:bg-gray-800/50';
 
-        celulaDia.innerHTML = '<span class="leading-none">' + dia + '</span>';
+        var numeroHtml = isHoje
+            ? '<span class="bg-red-500 text-white w-6 h-6 flex items-center justify-center rounded-full text-sm font-medium">' + dia + '</span>'
+            : '<span class="text-sm font-medium text-gray-700 dark:text-gray-300">' + dia + '</span>';
+
+        celulaDia.innerHTML = numeroHtml;
 
         if (temPendencia) {
-            var dot = document.createElement('span');
-            dot.className = 'w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse mt-0.5';
-            dot.setAttribute('aria-hidden', 'true');
-            celulaDia.appendChild(dot);
+            var barra = document.createElement('div');
+            barra.className = 'mt-1 w-full text-left text-[10px] bg-orange-500/20 text-orange-600 dark:text-orange-400 rounded px-1 truncate';
+            barra.textContent = 'Pendências';
+            celulaDia.appendChild(barra);
         }
 
-        track.appendChild(celulaDia);
+        grid.appendChild(celulaDia);
     }
 })();
 </script>
