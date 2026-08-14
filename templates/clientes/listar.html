@@ -141,9 +141,9 @@
                                 title="{{ 'Reativar cliente' if cli_inativo else 'Inativar cliente' }}">
                             <i data-lucide="power" class="w-4 h-4"></i>
                         </button>
-                        <form action="{{ url_for('clientes.excluir_cliente', id=cliente.id) }}" method="POST" class="inline" onsubmit="return confirm('Tem certeza que deseja excluir este cliente?');">
+                        <form action="{{ url_for('clientes.excluir_cliente', id=cliente.id) }}" method="POST" class="inline form-excluir-cliente" data-nome="{{ cliente.nome_cliente }}">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                            <button type="submit" class="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 inline-flex items-center">
+                            <button type="submit" class="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 inline-flex items-center" title="Excluir cliente">
                                 <i data-lucide="trash-2" class="w-4 h-4"></i>
                             </button>
                         </form>
@@ -809,6 +809,110 @@ function toggleDropdownNovoCliente(event) {
             e.target.value = v;
         }
     });
+})();
+</script>
+
+<!-- Modal Confirmar Exclusão de Cliente (mesmo padrão visual do Dashboard/Vendas) -->
+<div id="modal-confirmacao-exclusao-cliente-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
+    <div class="fixed inset-0 bg-black/50" id="modal-confirmacao-exclusao-cliente-overlay"></div>
+    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-xl shadow-sm dark:shadow-none border border-gray-200 dark:border-gray-700 z-50" onclick="event.stopPropagation()" role="dialog" aria-modal="true" aria-labelledby="modal-confirmacao-exclusao-cliente-titulo">
+        <div class="sticky top-0 flex justify-between items-center px-8 py-5 bg-emerald-700 text-white rounded-t-xl z-10">
+            <h3 id="modal-confirmacao-exclusao-cliente-titulo" class="text-xl font-bold flex items-center">
+                <i data-lucide="trash-2" class="w-5 h-5 mr-2"></i>Confirmar Exclusão
+            </h3>
+            <button type="button" class="modal-confirmacao-exclusao-cliente-fechar w-10 h-10 flex items-center justify-center rounded-full hover:bg-emerald-600 text-white font-bold transition" title="Fechar">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+        <div class="p-8">
+            <p id="modal-confirmacao-exclusao-cliente-mensagem" class="text-gray-700 dark:text-gray-200 text-base leading-relaxed"></p>
+            <div class="flex flex-wrap gap-4 mt-8 justify-end">
+                <button type="button" class="modal-confirmacao-exclusao-cliente-fechar bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-6 py-2.5 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 transition flex items-center font-medium">
+                    <i data-lucide="x" class="w-4 h-4 mr-2"></i>Cancelar
+                </button>
+                <button type="button" id="modal-confirmacao-exclusao-cliente-btn-excluir" class="bg-red-600 hover:bg-red-700 text-white px-6 py-2.5 rounded-xl transition flex items-center font-medium">
+                    <i data-lucide="trash-2" class="w-4 h-4 mr-2"></i>Excluir
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+(function() {
+    function fecharModalConfirmacaoExclusaoCliente() {
+        var wrap = document.getElementById('modal-confirmacao-exclusao-cliente-wrap');
+        if (wrap) {
+            wrap.classList.add('hidden');
+            wrap.setAttribute('aria-hidden', 'true');
+        }
+        window._confirmacaoExclusaoClienteCallback = null;
+    }
+
+    function abrirModalConfirmacaoExclusaoCliente(mensagem, onConfirm) {
+        var wrap = document.getElementById('modal-confirmacao-exclusao-cliente-wrap');
+        var msgEl = document.getElementById('modal-confirmacao-exclusao-cliente-mensagem');
+        if (!wrap || !msgEl) {
+            if (typeof onConfirm === 'function' && window.confirm(mensagem)) onConfirm();
+            return;
+        }
+        msgEl.textContent = mensagem || '';
+        window._confirmacaoExclusaoClienteCallback = (typeof onConfirm === 'function') ? onConfirm : null;
+        wrap.classList.remove('hidden');
+        wrap.setAttribute('aria-hidden', 'false');
+        if (typeof lucide !== 'undefined' && lucide.createIcons) {
+            try { lucide.createIcons(); } catch (_) {}
+        }
+    }
+
+    window.abrirModalConfirmacaoExclusaoCliente = abrirModalConfirmacaoExclusaoCliente;
+    window.fecharModalConfirmacaoExclusaoCliente = fecharModalConfirmacaoExclusaoCliente;
+
+    function initModalConfirmacaoExclusaoCliente() {
+        var wrap = document.getElementById('modal-confirmacao-exclusao-cliente-wrap');
+        if (!wrap || wrap.dataset.bound === '1') return;
+        wrap.dataset.bound = '1';
+        var overlay = document.getElementById('modal-confirmacao-exclusao-cliente-overlay');
+        var btnExcluir = document.getElementById('modal-confirmacao-exclusao-cliente-btn-excluir');
+        var btnsFechar = document.querySelectorAll('.modal-confirmacao-exclusao-cliente-fechar');
+
+        function onFechar() { fecharModalConfirmacaoExclusaoCliente(); }
+        if (overlay) overlay.addEventListener('click', onFechar);
+        btnsFechar.forEach(function(btn) { btn.addEventListener('click', onFechar); });
+        if (btnExcluir) {
+            btnExcluir.addEventListener('click', function() {
+                var cb = window._confirmacaoExclusaoClienteCallback;
+                fecharModalConfirmacaoExclusaoCliente();
+                if (typeof cb === 'function') cb();
+            });
+        }
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && wrap && !wrap.classList.contains('hidden')) {
+                fecharModalConfirmacaoExclusaoCliente();
+            }
+        });
+    }
+
+    document.addEventListener('submit', function(e) {
+        var form = e.target && e.target.closest ? e.target.closest('.form-excluir-cliente') : null;
+        if (!form) return;
+        e.preventDefault();
+        e.stopPropagation();
+        var nome = form.getAttribute('data-nome') || 'este cliente';
+        var mensagem = 'Tem certeza que deseja excluir o cliente "' + nome + '" de vez? Esta ação não pode ser desfeita.';
+        if (typeof window.abrirModalConfirmacaoExclusaoCliente === 'function') {
+            window.abrirModalConfirmacaoExclusaoCliente(mensagem, function() {
+                HTMLFormElement.prototype.submit.call(form);
+            });
+        } else if (window.confirm(mensagem)) {
+            HTMLFormElement.prototype.submit.call(form);
+        }
+    });
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initModalConfirmacaoExclusaoCliente);
+    } else {
+        initModalConfirmacaoExclusaoCliente();
+    }
 })();
 </script>
 {% endblock %}
