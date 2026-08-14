@@ -118,6 +118,9 @@ def _categoria_produto(nome_produto_bruto):
     return palavras[0] if palavras else 'OUTROS'
 
 
+LIMITE_DIAS_RADAR_INATIVO = 60
+
+
 def get_radar_recompra():
     """Calcula alertas de recompra com fórmula histórica robusta.
 
@@ -210,6 +213,8 @@ def get_radar_recompra():
         if dias_restantes > 4:
             continue
 
+        dias_desde_ultima = (hoje - data_ultima).days
+
         if dias_restantes < 0:
             status = 'Atrasado'
             cor = 'text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/30'
@@ -230,10 +235,24 @@ def get_radar_recompra():
             'status': status,
             'cor': cor,
             'dias_restantes': dias_restantes,
+            'dias_desde_ultima_compra': dias_desde_ultima,
         })
 
     alertas.sort(key=lambda x: x['dias_restantes'])
     return alertas
+
+
+def dividir_radar_recompra(alertas):
+    """Separa alertas em recorrentes (última compra <= 60 dias) e inativos."""
+    radar_ativos = [
+        a for a in alertas
+        if int(a.get('dias_desde_ultima_compra', 0) or 0) <= LIMITE_DIAS_RADAR_INATIVO
+    ]
+    radar_inativos = [
+        a for a in alertas
+        if int(a.get('dias_desde_ultima_compra', 0) or 0) > LIMITE_DIAS_RADAR_INATIVO
+    ]
+    return radar_ativos, radar_inativos
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -905,10 +924,22 @@ def api_radar_recompra():
     (toda mutação que invalida o dashboard invalida o radar também).
     """
     try:
-        return jsonify({'alertas': get_radar_recompra()})
+        alertas = get_radar_recompra()
+        radar_ativos, radar_inativos = dividir_radar_recompra(alertas)
+        return jsonify({
+            'alertas': alertas,
+            'radar_ativos': radar_ativos,
+            'radar_inativos': radar_inativos,
+            'limite_dias_inativo': LIMITE_DIAS_RADAR_INATIVO,
+        })
     except Exception:
         current_app.logger.exception('Falha ao calcular radar de recompra')
-        return jsonify({'alertas': []}), 200
+        return jsonify({
+            'alertas': [],
+            'radar_ativos': [],
+            'radar_inativos': [],
+            'limite_dias_inativo': LIMITE_DIAS_RADAR_INATIVO,
+        }), 200
 
 
 @dashboard_bp.route('/api/cobrancas_pendentes')

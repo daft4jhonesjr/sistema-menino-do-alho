@@ -366,10 +366,9 @@
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
-    function render(alertas) {
+    function renderTabelaRadar(alertas) {
         if (!alertas || !alertas.length) {
-            cont.innerHTML = '<p class="text-gray-500 dark:text-gray-400 py-6 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-center">Nenhum alerta de recompra no momento. Clientes precisam ter pelo menos 2 compras do mesmo produto para gerar a previsão.</p>';
-            return;
+            return '<p class="text-gray-500 dark:text-gray-400 py-6 text-center">Nenhum cliente nesta aba no momento.</p>';
         }
         const linhas = alertas.map(a => `
             <tr class="hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition">
@@ -380,7 +379,7 @@
                 <td class="px-4 py-4 text-sm text-gray-600 dark:text-gray-400 font-semibold">${escapeHtml(a.duracao_dias)}</td>
                 <td class="px-4 py-4"><span class="px-3 py-1 text-xs font-semibold rounded-full ${escapeHtml(a.cor)}">${escapeHtml(a.status)}</span></td>
             </tr>`).join('');
-        cont.innerHTML = `
+        return `
             <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-hidden">
                 <div class="overflow-x-auto">
                     <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -399,10 +398,59 @@
                 </div>
             </div>`;
     }
+
+    function mudarAbaRadar(aba) {
+        const tabAtivos = document.getElementById('radar-tab-ativos');
+        const tabInativos = document.getElementById('radar-tab-inativos');
+        const panelAtivos = document.getElementById('radar-panel-ativos');
+        const panelInativos = document.getElementById('radar-panel-inativos');
+        if (!tabAtivos || !tabInativos || !panelAtivos || !panelInativos) return;
+
+        const ativaClasses = 'text-emerald-600 dark:text-emerald-400 border-emerald-500 bg-emerald-50/50 dark:bg-emerald-900/20';
+        const inativaClasses = 'text-gray-500 dark:text-gray-400 border-transparent hover:bg-gray-50 dark:hover:bg-gray-700';
+
+        if (aba === 'inativos') {
+            tabAtivos.className = 'flex-1 py-2.5 text-sm font-bold border-b-2 transition-all ' + inativaClasses;
+            tabInativos.className = 'flex-1 py-2.5 text-sm font-bold border-b-2 transition-all ' + ativaClasses;
+            panelAtivos.classList.add('hidden');
+            panelInativos.classList.remove('hidden');
+        } else {
+            tabAtivos.className = 'flex-1 py-2.5 text-sm font-bold border-b-2 transition-all ' + ativaClasses;
+            tabInativos.className = 'flex-1 py-2.5 text-sm font-bold border-b-2 transition-all ' + inativaClasses;
+            panelAtivos.classList.remove('hidden');
+            panelInativos.classList.add('hidden');
+        }
+    }
+
+    function render(data) {
+        const ativos = (data && data.radar_ativos) || (data && data.alertas) || [];
+        const inativos = (data && data.radar_inativos) || [];
+        const total = ativos.length + inativos.length;
+        if (!total) {
+            cont.innerHTML = '<p class="text-gray-500 dark:text-gray-400 py-6 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-center">Nenhum alerta de recompra no momento. Clientes precisam ter pelo menos 2 compras do mesmo produto para gerar a previsão.</p>';
+            return;
+        }
+        cont.innerHTML = `
+            <div class="flex border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-t-xl overflow-hidden">
+                <button type="button" id="radar-tab-ativos" class="flex-1 py-2.5 text-sm font-bold text-emerald-600 dark:text-emerald-400 border-b-2 border-emerald-500 bg-emerald-50/50 dark:bg-emerald-900/20 transition-all">
+                    Recorrentes (${ativos.length})
+                </button>
+                <button type="button" id="radar-tab-inativos" class="flex-1 py-2.5 text-sm font-bold text-gray-500 dark:text-gray-400 border-b-2 border-transparent hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
+                    Inativos (+60 dias) (${inativos.length})
+                </button>
+            </div>
+            <div id="radar-panel-ativos">${renderTabelaRadar(ativos)}</div>
+            <div id="radar-panel-inativos" class="hidden">${renderTabelaRadar(inativos)}</div>`;
+
+        const tabAtivos = document.getElementById('radar-tab-ativos');
+        const tabInativos = document.getElementById('radar-tab-inativos');
+        if (tabAtivos) tabAtivos.addEventListener('click', function() { mudarAbaRadar('ativos'); });
+        if (tabInativos) tabInativos.addEventListener('click', function() { mudarAbaRadar('inativos'); });
+    }
     function carregar() {
         fetch(url, { credentials: 'same-origin' })
             .then(r => r.ok ? r.json() : Promise.reject(r.status))
-            .then(data => render((data && data.alertas) || []))
+            .then(data => render(data))
             .catch(() => { cont.innerHTML = '<p class="text-gray-500 dark:text-gray-400 py-6 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-center">Não foi possível carregar o radar de recompra agora.</p>'; });
     }
     if ('requestIdleCallback' in window) {
