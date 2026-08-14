@@ -1494,6 +1494,14 @@ def venda_adicionar_item():
 
 @vendas_bp.route('/vendas/editar/<int:id>', methods=['GET', 'POST'])
 def editar_venda(id):
+    # Higiene defensiva (P0 — laudo de crash em /vendas/editar): uma
+    # transação pendente deixada por outra rota/request anterior na mesma
+    # conexão do pool pode "contaminar" esta requisição antes mesmo do
+    # primeiro SELECT. Mesmo padrão já usado em routes/caixa.py:adicionar_caixa.
+    try:
+        db.session.rollback()
+    except Exception:
+        pass
     venda = query_tenant(Venda).filter_by(id=id).first_or_404()
     if not _usuario_pode_gerenciar_venda(venda):
         return _resposta_sem_permissao()
@@ -1541,16 +1549,40 @@ def editar_venda(id):
                 quantidade_venda = 1
 
             if not produto_id:
+                db.session.rollback()
                 flash('Produto é obrigatório.', 'error')
                 return redirect(url_for('vendas.listar_vendas'))
 
-            produto = query_tenant(Produto).filter(Produto.id == produto_id).with_for_update().first()
+            # Blindagem anti-deadlock (P0 — laudo de crash em /vendas/editar):
+            # quando o produto é trocado, duas linhas de `Produto` precisam
+            # ser travadas (a nova e a original). Travar sempre pelo MENOR
+            # id primeiro — nunca "novo, depois original" ou vice-versa —
+            # elimina matematicamente o ciclo de espera (deadlock) com outras
+            # rotas que também travam múltiplos produtos em lote
+            # (processar_carrinho, excluir_venda, vendas_deletar_massa).
+            produto_original_id = produto_original.id if produto_original else None
+            ids_para_travar = sorted({
+                pid for pid in (produto_id, produto_original_id) if pid is not None
+            })
+
+            produtos_travados = {}
+            for pid in ids_para_travar:
+                p = query_tenant(Produto).filter(Produto.id == pid).with_for_update().first()
+                if p:
+                    produtos_travados[pid] = p
+
+            produto = produtos_travados.get(produto_id)
             if not produto:
                 db.session.rollback()
                 flash('Produto não encontrado.', 'error')
                 return redirect(url_for('vendas.listar_vendas'))
 
-            if produto.id == produto_original.id:
+            if produto_original_id is not None and produto_original_id in produtos_travados:
+                produto_original = produtos_travados[produto_original_id]
+
+            mesmo_produto = (produto.id == produto_original_id)
+
+            if mesmo_produto:
                 estoque_disponivel = produto.estoque_atual + quantidade_original
             else:
                 estoque_disponivel = produto.estoque_atual
@@ -1560,10 +1592,7 @@ def editar_venda(id):
                 flash(f'Estoque insuficiente! Disponível: {estoque_disponivel}', 'error')
                 return redirect(url_for('vendas.listar_vendas'))
 
-            if produto.id != produto_original.id:
-                db.session.refresh(produto_original, with_for_update=True)
-
-            if produto.id == produto_original.id:
+            if mesmo_produto:
                 produto.estoque_atual = produto.estoque_atual + quantidade_original - quantidade_venda
             else:
                 produto_original.estoque_atual += quantidade_original

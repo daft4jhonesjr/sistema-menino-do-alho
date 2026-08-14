@@ -2077,6 +2077,24 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
     'max_overflow': 20       # Em pico, pode abrir mais 20
 }
 
+# Blindagem contra worker travado (P0 — laudo de crash em /vendas/editar):
+# sem lock_timeout/statement_timeout, um `SELECT ... FOR UPDATE` que espera
+# um lock já segurado por outra transação (ou por uma transação "fantasma"
+# deixada por um worker morto anteriormente) fica pendurado INDEFINIDAMENTE
+# no Postgres. O Gunicorn só mata o worker após --timeout 60s (Procfile),
+# sem gerar erro 500 — a conexão do cliente é simplesmente derrubada.
+# Com estes timeouts no nível da conexão, o próprio Postgres aborta a
+# operação travada em 10-15s, devolvendo uma exceção capturável pelo
+# `except Exception` das rotas (rollback + flash de erro) muito antes do
+# Gunicorn precisar recorrer ao SIGKILL. Só se aplica a Postgres — SQLite
+# (fallback de desenvolvimento) não aceita esses parâmetros via `options`.
+if app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgres'):
+    app.config['SQLALCHEMY_ENGINE_OPTIONS']['connect_args'] = {
+        # lock_timeout: tempo máximo esperando para ADQUIRIR um lock (ex.: FOR UPDATE).
+        # statement_timeout: teto absoluto para qualquer statement (rede de segurança).
+        'options': '-c lock_timeout=10000 -c statement_timeout=15000'
+    }
+
 # Configuração de E-mail (Relatório Mensal)
 MAIL_SERVER = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
 MAIL_PORT = int(os.environ.get('MAIL_PORT', 587))
@@ -3873,6 +3891,36 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
                 db.session.commit()
             except (OperationalError, Exception):
                 db.session.rollback()
+        # Migração P0 (laudo de crash em /vendas/editar — Achado #2):
+        # editar_venda / _resincronizar_pagamento_venda / _apagar_lancamentos_
+        # caixa_por_vendas fazem `descricao LIKE 'Venda #<id> -%'` para achar
+        # os lançamentos de uma venda — SEM índice, isso é sequential scan em
+        # `lancamentos_caixa`, repetido uma vez por item do pedido, tudo
+        # ENQUANTO a transação segura o FOR UPDATE do produto (ver laudo).
+        # NÃO trocamos para filtrar por `venda_id` aqui: a maioria dos pontos
+        # de criação desses lançamentos em routes/vendas.py e routes/caixa.py
+        # ainda não preenche `venda_id` (só routes/clientes.py o faz hoje),
+        # então migrar a query quebraria o resync de pagamento para a maior
+        # parte do histórico. A correção segura e aditiva é acelerar o
+        # próprio LIKE com um índice dedicado. No Postgres, um índice B-tree
+        # comum só acelera `LIKE 'prefixo%'` sob collation "C"; para
+        # funcionar também sob collations locale-aware (ex.: en_US.UTF-8,
+        # comum na Render), é necessário `varchar_pattern_ops` explicitamente.
+        try:
+            _uri_atual = app.config.get('SQLALCHEMY_DATABASE_URI', '')
+            if _uri_atual.startswith('postgres'):
+                db.session.execute(text(
+                    'CREATE INDEX IF NOT EXISTS ix_lancamentos_caixa_descricao_pattern '
+                    'ON lancamentos_caixa (descricao varchar_pattern_ops)'
+                ))
+            else:
+                db.session.execute(text(
+                    'CREATE INDEX IF NOT EXISTS ix_lancamentos_caixa_descricao_pattern '
+                    'ON lancamentos_caixa (descricao)'
+                ))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
         # Jhones sempre admin; criar se não existir.
         # IMPORTANTE: NUNCA logar a senha gerada — em produção o log da Render
         # fica acessível via painel e isso é um vazamento. Exigimos que o
