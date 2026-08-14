@@ -598,6 +598,19 @@ class PushSubscription(db.Model):
     auth = db.Column(db.String(64), nullable=False)
     criado_em = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
+    @property
+    def usuario_id(self):
+        """Alias semântico para ``user_id`` (compatível com nomenclatura do domínio)."""
+        return self.user_id
+
+    @property
+    def keys_p256dh(self):
+        return self.p256dh
+
+    @property
+    def keys_auth(self):
+        return self.auth
+
     def __repr__(self):
         return f'<PushSubscription user_id={self.user_id} endpoint={self.endpoint[:40]}...>'
 

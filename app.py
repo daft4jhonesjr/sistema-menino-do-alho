@@ -2084,7 +2084,7 @@ MAIL_USERNAME = os.environ.get('MAIL_USERNAME')
 MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
 CRON_SECRET = os.environ.get('CRON_SECRET')
 
-# Chaves VAPID para Web Push — gere com: python -c "from py_vapid import Vapid; v=Vapid(); v.generate_keys(); print('PRIV:', v.private_pem().decode()); print('PUB:', v.public_key.public_bytes(__import__('cryptography.hazmat.primitives.serialization', fromlist=['Encoding','PublicFormat']).Encoding.X962, __import__('cryptography.hazmat.primitives.serialization', fromlist=['PublicFormat']).PublicFormat.UncompressedPoint).hex())"
+# Chaves VAPID para Web Push — gere com: python scripts_dev/gerar_vapid.py
 # Ou via: npx web-push generate-vapid-keys
 VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY')
 VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY')
@@ -2349,35 +2349,22 @@ def _executar_backup_diario_job() -> None:
         return
 
     # Enviar URL via Web Push para admins inscritos
-    if url_cloudinary and VAPID_PRIVATE_KEY and VAPID_PUBLIC_KEY:
+    if url_cloudinary:
         try:
-            from pywebpush import webpush, WebPushException
+            from services.push_service import enviar_push_para_subscriptions, montar_payload_push
             subscriptions = (
                 PushSubscription.query
                 .join(Usuario, PushSubscription.user_id == Usuario.id)
                 .filter(Usuario.role == 'admin')
                 .all()
             )
-            payload = json.dumps({
-                'title': '📦 Backup Diário Disponível',
-                'body': f'O backup de hoje foi salvo na nuvem. Acesse para baixar.',
-                'url': url_cloudinary,
-            })
-            for sub in subscriptions:
-                try:
-                    webpush(
-                        subscription_info={
-                            'endpoint': sub.endpoint,
-                            'keys': {'p256dh': sub.p256dh, 'auth': sub.auth},
-                        },
-                        data=payload,
-                        vapid_private_key=pad_base64(VAPID_PRIVATE_KEY),
-                        vapid_claims={'sub': VAPID_CLAIM_EMAIL},
-                    )
-                except WebPushException as wpe:
-                    if wpe.response and wpe.response.status_code in (404, 410):
-                        db.session.delete(sub)
-                        db.session.commit()
+            payload = montar_payload_push(
+                '📦 Backup Diário Disponível',
+                'O backup de hoje foi salvo na nuvem. Acesse para baixar.',
+                url_cloudinary,
+                tag='backup-diario',
+            )
+            enviar_push_para_subscriptions(subscriptions, payload)
         except Exception as e_push:
             _log.warning(f"[backup] Web Push falhou: {e_push}")
 
@@ -4324,7 +4311,7 @@ def _resincronizar_pagamento_venda_seguro(venda):
 
 @app.route('/sw.js')
 def service_worker():
-    """Serve o Service Worker com o tipo MIME correto."""
+    """Serve o Service Worker com escopo na raiz (/) para Web Push em background."""
     return send_file('static/sw.js', mimetype='application/javascript')
 
 
@@ -4497,104 +4484,6 @@ def backup_diario_email():
         )
 
 
-@app.route('/api/vapid-public-key', methods=['GET'])
-def vapid_public_key():
-    """Retorna a VAPID Public Key em formato ApplicationServerKey para o frontend.
-
-    O frontend usa esta chave ao chamar PushManager.subscribe().
-    Returns:
-        JSON com o campo ``publicKey``.
-    """
-    if not VAPID_PUBLIC_KEY:
-        return jsonify({'erro': 'VAPID_PUBLIC_KEY não configurada no ambiente.'}), 503
-    return jsonify({'publicKey': VAPID_PUBLIC_KEY}), 200
-
-
-@app.route('/api/subscribe', methods=['POST'])
-@login_required
-@csrf.exempt
-@limiter.limit("20 per hour")
-def push_subscribe():
-    """Recebe e persiste uma inscrição de Web Push do browser.
-
-    O corpo da requisição deve ser o JSON gerado por PushManager.subscribe(),
-    com os campos ``endpoint``, ``keys.p256dh`` e ``keys.auth``.
-
-    Returns:
-        JSON indicando se a inscrição foi criada ou já existia.
-    """
-    data = request.get_json(silent=True) or {}
-    endpoint = data.get('endpoint')
-    keys = data.get('keys', {})
-    p256dh = keys.get('p256dh')
-    auth_key = keys.get('auth')
-
-    if not endpoint or not p256dh or not auth_key:
-        return jsonify({'erro': 'Dados de inscrição incompletos (endpoint, p256dh, auth obrigatórios).'}), 400
-
-    existing = PushSubscription.query.filter_by(endpoint=endpoint).first()
-    if existing:
-        # Atualiza as chaves caso o browser as tenha renovado
-        existing.p256dh = p256dh
-        existing.auth = auth_key
-        existing.user_id = current_user.id if current_user.is_authenticated else None
-        try:
-            db.session.commit()
-            return jsonify({'status': 'atualizado'}), 200
-        except Exception as e:
-            db.session.rollback()
-            current_app.logger.error(f"Erro ao atualizar PushSubscription: {e}")
-            return jsonify({'erro': 'Erro ao atualizar inscrição.'}), 500
-
-    sub = PushSubscription(
-        user_id=current_user.id if current_user.is_authenticated else None,
-        endpoint=endpoint,
-        p256dh=p256dh,
-        auth=auth_key
-    )
-    try:
-        db.session.add(sub)
-        db.session.commit()
-        current_app.logger.info(f"Nova PushSubscription user_id={sub.user_id} endpoint={endpoint[:40]}...")
-        return jsonify({'status': 'criado'}), 201
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Erro ao salvar PushSubscription: {e}")
-        return jsonify({'erro': 'Erro ao salvar inscrição.'}), 500
-
-
-@app.route('/api/unsubscribe', methods=['POST'])
-@login_required
-@csrf.exempt
-def push_unsubscribe():
-    """Remove uma inscrição de Web Push do banco de dados.
-
-    Chamado pelo frontend quando o usuário cancela as notificações.
-    Body JSON: ``{ "endpoint": "..." }``
-    """
-    data = request.get_json(silent=True) or {}
-    endpoint = data.get('endpoint')
-    if not endpoint:
-        return jsonify({'erro': 'endpoint obrigatório.'}), 400
-
-    sub = PushSubscription.query.filter_by(endpoint=endpoint).first()
-    if sub:
-        # Bloqueia IDOR: só permite remover a própria subscription. Sem essa
-        # checagem, qualquer usuário autenticado conseguiria silenciar push
-        # de outro só conhecendo o endpoint (que circula em logs/proxy).
-        if sub.user_id is not None and sub.user_id != current_user.id:
-            return jsonify({'erro': 'Acesso negado.'}), 403
-        try:
-            db.session.delete(sub)
-            db.session.commit()
-            return jsonify({'status': 'removido'}), 200
-        except Exception as e:
-            db.session.rollback()
-            current_app.logger.error(f"Erro ao remover PushSubscription: {e}")
-            return jsonify({'erro': 'Erro ao remover inscrição.'}), 500
-
-    return jsonify({'status': 'não encontrado'}), 404
-
 
 def _debug_routes_habilitadas() -> bool:
     """Endpoints com prefixo ``/debug`` só ficam ativos quando
@@ -4625,17 +4514,16 @@ def debug_testar_push():
     """
     if not _debug_routes_habilitadas():
         return _resposta_debug_desabilitado()
-    vapid_private_key = pad_base64(VAPID_PRIVATE_KEY)
-    vapid_public_key = pad_base64(VAPID_PUBLIC_KEY)
 
-    if not vapid_private_key or not vapid_public_key:
+    from services.push_service import enviar_notificacao_push, vapid_configurado
+
+    if not vapid_configurado():
         return jsonify({
             'status': 'erro',
             'mensagem': 'VAPID_PRIVATE_KEY ou VAPID_PUBLIC_KEY não configuradas no ambiente (Render). '
                         'Adicione as variáveis de ambiente e faça o deploy novamente.'
         }), 503
 
-    # Busca a subscription mais recente do usuário logado
     sub = (
         PushSubscription.query
         .filter_by(user_id=current_user.id)
@@ -4650,76 +4538,36 @@ def debug_testar_push():
                         'Ative as notificações na seção "Notificações no Dispositivo" acima e tente novamente.'
         }), 404
 
-    try:
-        from pywebpush import webpush, WebPushException
-    except ImportError:
-        return jsonify({
-            'status': 'erro',
-            'mensagem': 'Biblioteca pywebpush não instalada no servidor. '
-                        'Verifique o requirements.txt e aguarde o próximo deploy.'
-        }), 503
+    resultado = enviar_notificacao_push(
+        current_user.id,
+        'Teste de Conexão 🟢',
+        'Se você está lendo isso, o Menino do Alho está conectado em background no seu aparelho!',
+        '/dashboard',
+        tag='push-teste',
+    )
 
-    payload = json.dumps({
-        'title': 'Teste de Conexão 🟢',
-        'body': 'Se você está lendo isso, o Menino do Alho está conectado em background no seu aparelho!',
-        'icon': '/static/images/logo_menino_do_alho_amarelo1.jpeg',
-        'badge': '/static/images/logo_menino_do_alho_amarelo1.jpeg',
-        'tag': 'push-teste',
-        'url': '/dashboard'
-    })
-
-    try:
-        webpush(
-            subscription_info={
-                'endpoint': sub.endpoint,
-                'keys': {'p256dh': sub.p256dh, 'auth': sub.auth}
-            },
-            data=payload,
-            vapid_private_key=vapid_private_key,
-            vapid_claims={'sub': VAPID_CLAIM_EMAIL},
-            timeout=_EXTERNAL_TIMEOUT
-        )
-        current_app.logger.info(
-            f"[DEBUG] Push de teste enviado para user_id={current_user.id} sub_id={sub.id}"
-        )
-        return jsonify({
-            'status': 'ok',
-            'mensagem': '✅ Notificação de teste enviada! Verifique seu dispositivo. '
-                        'Se não aparecer, certifique-se que o app está fechado e que as permissões estão ativas.',
-            'endpoint': sub.endpoint[:50] + '...',
-            'sub_id': sub.id
-        }), 200
-
-    except WebPushException as ex:
-        status_code = ex.response.status_code if ex.response else None
-        current_app.logger.warning(
-            f"[DEBUG] WebPushException para sub_id={sub.id}: HTTP {status_code} — {ex}"
-        )
-        # 404/410 = subscription revogada pelo browser; remove do banco
-        if status_code in (404, 410):
-            try:
-                db.session.delete(sub)
-                db.session.commit()
-            except Exception:
-                db.session.rollback()
+    if resultado['enviados'] < 1:
+        if resultado['removidos'] > 0:
             return jsonify({
                 'status': 'erro',
-                'mensagem': f'🔴 Subscription expirada ou revogada pelo navegador (HTTP {status_code}). '
-                            'A inscrição foi removida. Desative e reative as notificações para se inscrever novamente.',
-                'codigo': status_code
+                'mensagem': 'Subscription expirada ou revogada pelo navegador. '
+                            'Desative e reative as notificações para se inscrever novamente.',
             }), 410
         return jsonify({
             'status': 'erro',
-            'mensagem': f'Erro no envio Push (HTTP {status_code}): {str(ex)}',
-            'codigo': status_code
-        }), 500
+            'mensagem': 'Falha ao enviar push de teste. Verifique as chaves VAPID e tente novamente.',
+        }), 502
 
-    except Exception as ex:
-        current_app.logger.error(f"[DEBUG] Erro inesperado no teste push: {ex}")
-        return jsonify({
-            'status': 'erro',
-            'mensagem': f'Erro inesperado: {str(ex)}'
-        }), 500
+    current_app.logger.info(
+        f"[DEBUG] Push de teste enviado para user_id={current_user.id} sub_id={sub.id}"
+    )
+    return jsonify({
+        'status': 'ok',
+        'mensagem': '✅ Notificação de teste enviada! Verifique seu dispositivo. '
+                    'Se não aparecer, certifique-se que o app está fechado e que as permissões estão ativas.',
+        'endpoint': sub.endpoint[:50] + '...',
+        'sub_id': sub.id
+    }), 200
 
 
 @app.route('/api/cron/enviar_frase_diaria', methods=['GET', 'POST'])
@@ -4785,79 +4633,31 @@ def enviar_frase_diaria():
         except Exception as e:
             current_app.logger.error(f"Erro ao enviar frase diária por e-mail: {e}")
 
-    # ── 2. Envio por Web Push (pywebpush) ────────────────────────────────────
+    # ── 2. Envio por Web Push ────────────────────────────────────────────────
     push_enviados = 0
     push_erros = 0
-    vapid_private_key = pad_base64(VAPID_PRIVATE_KEY)
-    vapid_public_key = pad_base64(VAPID_PUBLIC_KEY)
-    if vapid_private_key and vapid_public_key:
-        try:
-            from pywebpush import webpush, WebPushException
-        except ImportError:
-            current_app.logger.warning("pywebpush não instalado; pulando Web Push.")
-            webpush = None
-            WebPushException = Exception
+    push_removidos = 0
+    from services.push_service import enviar_push_para_subscriptions, montar_payload_push, vapid_configurado
 
-        if webpush:
-            # Obtém IDs dos usuários que querem a frase
-            ids_notifica = {u.id for u in destinatarios}
-
-            # Busca todas as subscriptions de usuários que opted-in
-            # Inclui também subscriptions cujo user_id não está na lista (null ou não encontrado)
-            subs = PushSubscription.query.filter(
-                PushSubscription.user_id.in_(ids_notifica)
-            ).all()
-
-            payload = json.dumps({
-                'title': 'Sabedoria do Dia 🏛️',
-                'body': f'"{frase["texto"]}" — {frase["autor"]}',
-                'icon': '/static/images/logo_menino_do_alho_amarelo1.jpeg',
-                'badge': '/static/images/logo_menino_do_alho_amarelo1.jpeg',
-                'tag': 'frase-diaria',
-                'url': '/'
-            })
-
-            subs_para_remover = []
-            for sub in subs:
-                try:
-                    webpush(
-                        subscription_info={
-                            'endpoint': sub.endpoint,
-                            'keys': {'p256dh': sub.p256dh, 'auth': sub.auth}
-                        },
-                        data=payload,
-                        vapid_private_key=vapid_private_key,
-                        vapid_claims={'sub': VAPID_CLAIM_EMAIL},
-                        timeout=_EXTERNAL_TIMEOUT
-                    )
-                    push_enviados += 1
-                except WebPushException as ex:
-                    push_erros += 1
-                    # 410 Gone = browser revogou a subscription; remove do banco
-                    if ex.response and ex.response.status_code in (404, 410):
-                        subs_para_remover.append(sub)
-                    else:
-                        current_app.logger.warning(f"Web Push falhou para sub {sub.id}: {ex}")
-                except Exception as ex:
-                    push_erros += 1
-                    current_app.logger.warning(f"Erro genérico no Web Push sub {sub.id}: {ex}")
-
-            # Remove subscriptions expiradas
-            for sub in subs_para_remover:
-                try:
-                    db.session.delete(sub)
-                except Exception:
-                    pass
-            if subs_para_remover:
-                try:
-                    db.session.commit()
-                except Exception:
-                    db.session.rollback()
-
-            current_app.logger.info(
-                f"Web Push frase diária: {push_enviados} ok, {push_erros} erros, "
-                f"{len(subs_para_remover)} subscriptions removidas."
-            )
+    if vapid_configurado():
+        ids_notifica = {u.id for u in destinatarios}
+        subs = PushSubscription.query.filter(
+            PushSubscription.user_id.in_(ids_notifica)
+        ).all()
+        payload = montar_payload_push(
+            'Sabedoria do Dia 🏛️',
+            f'"{frase["texto"]}" — {frase["autor"]}',
+            '/',
+            tag='frase-diaria',
+        )
+        resultado_push = enviar_push_para_subscriptions(subs, payload)
+        push_enviados = resultado_push['enviados']
+        push_erros = resultado_push['erros']
+        push_removidos = resultado_push['removidos']
+        current_app.logger.info(
+            f"Web Push frase diária: {push_enviados} ok, {push_erros} erros, "
+            f"{push_removidos} subscriptions removidas."
+        )
 
     total_enviados = emails_enviados + push_enviados
     if total_enviados == 0 and not destinatarios:
@@ -4924,7 +4724,7 @@ def backup_excel():
 from routes.caixa import _limpar_valor_moeda  # re-export para vendas/produtos
 from routes import (
     auth_bp, master_bp, clientes_bp, produtos_bp,
-    vendas_bp, documentos_bp, dashboard_bp, caixa_bp,
+    vendas_bp, documentos_bp, dashboard_bp, caixa_bp, push_bp,
 )
 
 app.register_blueprint(auth_bp)
@@ -4935,6 +4735,7 @@ app.register_blueprint(vendas_bp)
 app.register_blueprint(documentos_bp)
 app.register_blueprint(dashboard_bp)
 app.register_blueprint(caixa_bp)
+app.register_blueprint(push_bp)
 
 # CSRF exemption CIRÚRGICA — somente endpoints chamados por bots externos
 # (autenticação via token no header Authorization). Todas as demais rotas
@@ -4946,7 +4747,9 @@ app.register_blueprint(caixa_bp)
 # após ``register_blueprint`` (que é o que fazemos abaixo).
 for _endpoint in ('documentos.upload_documento',
                   'documentos.api_receber_automatico',
-                  'documentos.api_bot_upload'):
+                  'documentos.api_bot_upload',
+                  'push.push_subscribe',
+                  'push.push_unsubscribe'):
     _vf = app.view_functions.get(_endpoint)
     if _vf is not None:
         csrf.exempt(_vf)

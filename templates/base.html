@@ -1111,6 +1111,7 @@
 
     {% block scripts %}{% endblock %}
     <script>(function(){ if (typeof lucide !== 'undefined') lucide.createIcons(); })();</script>
+    <script src="{{ url_for('static', filename='js/push-notifications.js') }}"></script>
     
     <!-- Service Worker Registration -->
     <script>

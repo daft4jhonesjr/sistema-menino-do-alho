@@ -47,6 +47,8 @@ Estado atual:
                            /caixa/<id>/toggle_status_cheque,
                            /upload_imagem_cheque, /caixa/gaveta/{salvar,carregar},
                            /caixa/{salvar_gaveta,obter_gaveta}
+    * ``push_bp``        → /api/push/subscribe, /api/push/unsubscribe,
+                           /api/push/vapid-public-key, /api/vapid-public-key (legado)
 
 Convenção (Fase 5 finalizada):
     Cada blueprint expõe uma única variável module-level ``<nome>_bp`` que
@@ -85,6 +87,7 @@ from .vendas import vendas_bp
 from .documentos import documentos_bp
 from .dashboard import dashboard_bp
 from .caixa import caixa_bp
+from .push import push_bp
 
 __all__ = [
     'auth_bp',
@@ -95,4 +98,5 @@ __all__ = [
     'documentos_bp',
     'dashboard_bp',
     'caixa_bp',
+    'push_bp',
 ]

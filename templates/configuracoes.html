@@ -264,109 +264,34 @@ document.addEventListener('DOMContentLoaded', function() {
 
     atualizarEstadoNotificacoes();
 
-    // Converte base64url → Uint8Array (formato exigido pelo PushManager)
-    function urlBase64ToUint8Array(base64String) {
-        var padding = '='.repeat((4 - base64String.length % 4) % 4);
-        var base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-        var rawData = window.atob(base64);
-        var outputArray = new Uint8Array(rawData.length);
-        for (var i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
-        return outputArray;
-    }
-
     async function ativarPushNotificacoes() {
-        if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-            mostrarStatus('aviso', '⚠️ Seu navegador não suporta Push Notifications em segundo plano.');
-            return false;
-        }
-        var permissao = await Notification.requestPermission();
-        if (permissao !== 'granted') {
-            mostrarStatus('bloqueado', '🚫 Permissão negada. Toque no 🔒 na barra de endereço > Notificações > Permitir.');
-            return false;
-        }
-
-        try {
-            // Busca a VAPID public key do servidor
-            var keyResp = await fetch('/api/vapid-public-key');
-            if (!keyResp.ok) {
-                // Servidor sem VAPID configurado — usa apenas Notification API local
-                localStorage.setItem('menino_alho_device_notif', 'true');
-                mostrarStatus('ativo', '✅ Notificações locais ativas (Push background não configurado ainda).');
-                return true;
-            }
-            var keyData = await keyResp.json();
-            var applicationServerKey = urlBase64ToUint8Array(keyData.publicKey);
-
-            var reg = await navigator.serviceWorker.ready;
-            var subscription = await reg.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: applicationServerKey
+        if (window.MeninoAlhoPush) {
+            return window.MeninoAlhoPush.ativar({
+                onStatus: function(tipo, msg) {
+                    if (tipo === 'ativo') mostrarStatus('ativo', '✅ ' + msg);
+                    else if (tipo === 'bloqueado') mostrarStatus('bloqueado', '🚫 ' + msg);
+                    else mostrarStatus('aviso', '⚠️ ' + msg);
+                }
             });
-
-            // Envia a subscription ao backend
-            var headers = { 'Content-Type': 'application/json' };
-            if (typeof getCsrfHeaders === 'function') {
-                var csrfH = getCsrfHeaders();
-                for (var k in csrfH) headers[k] = csrfH[k];
-            }
-            var subResp = await fetch('/api/subscribe', {
-                method: 'POST',
-                headers: headers,
-                body: JSON.stringify(subscription.toJSON())
-            });
-
-            if (subResp.ok) {
-                localStorage.setItem('menino_alho_device_notif', 'true');
-                mostrarStatus('ativo', '✅ Push Notifications ativas! Você receberá alertas mesmo com o app fechado.');
-                return true;
-            } else {
-                mostrarStatus('aviso', '⚠️ Inscrito no browser, mas erro ao salvar no servidor. Tente novamente.');
-                return false;
-            }
-        } catch (err) {
-            mostrarStatus('aviso', '⚠️ Erro ao ativar push: ' + (err.message || 'desconhecido'));
-            return false;
         }
+        mostrarStatus('aviso', '⚠️ Módulo de push não carregado. Recarregue a página.');
+        return false;
     }
 
     async function desativarPushNotificacoes() {
-        localStorage.setItem('menino_alho_device_notif', 'false');
-        try {
-            if ('serviceWorker' in navigator && 'PushManager' in window) {
-                var reg = await navigator.serviceWorker.ready;
-                var sub = await reg.pushManager.getSubscription();
-                if (sub) {
-                    // Avisa o backend para remover a subscription
-                    var headers = { 'Content-Type': 'application/json' };
-                    if (typeof getCsrfHeaders === 'function') {
-                        var csrfH = getCsrfHeaders();
-                        for (var k in csrfH) headers[k] = csrfH[k];
-                    }
-                    await fetch('/api/unsubscribe', {
-                        method: 'POST',
-                        headers: headers,
-                        body: JSON.stringify({ endpoint: sub.endpoint })
-                    });
-                    await sub.unsubscribe();
-                }
-            }
-        } catch (err) {
-            console.warn('Erro ao cancelar push subscription:', err);
+        if (window.MeninoAlhoPush) {
+            await window.MeninoAlhoPush.desativar();
+        } else {
+            localStorage.setItem('menino_alho_device_notif', 'false');
         }
         atualizarEstadoNotificacoes();
     }
 
-    // Ao carregar, verifica se já há subscription ativa no PushManager
     (async function verificarSubscriptionAtual() {
-        if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
-        try {
-            var reg = await navigator.serviceWorker.ready;
-            var sub = await reg.pushManager.getSubscription();
-            if (sub) {
-                localStorage.setItem('menino_alho_device_notif', 'true');
-                atualizarEstadoNotificacoes();
-            }
-        } catch (e) { /* silencia */ }
+        if (window.MeninoAlhoPush) {
+            var ativa = await window.MeninoAlhoPush.verificarSubscriptionAtiva();
+            if (ativa) atualizarEstadoNotificacoes();
+        }
     })();
 
     if (toggleNotif) {
