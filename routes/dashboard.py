@@ -29,17 +29,21 @@ Cache:
 """
 
 from datetime import datetime, timedelta
+from decimal import Decimal
+import csv
+import io
+import zipfile
 
 from flask import (
     Blueprint, render_template, request, redirect, url_for,
-    flash, jsonify, session, current_app,
+    flash, jsonify, session, current_app, send_file,
 )
 from flask_login import current_user
 from sqlalchemy import and_, case, desc, func, or_
 from sqlalchemy.orm import joinedload
 
 from extensions import cache
-from models import db, Cliente, Produto, Venda, Documento
+from models import db, Cliente, Produto, Venda, Documento, LancamentoCaixa
 from services.auth_utils import (
     tenant_required, _e_admin_tenant, _usuario_pode_gerenciar_venda,
 )
@@ -1114,3 +1118,155 @@ def api_detalhes_mes(ano, mes):
     except Exception as e:
         db.session.rollback()
         return erro_json(e, 'Falha ao processar dados do mês.', contexto='api_detalhes_mes')
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Backup completo (ZIP de CSVs) — botão "Baixar Backup (CSV)" do Dashboard
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _csv_bytes_com_bom(cabecalho, linhas):
+    """Serializa uma tabela (cabeçalho + linhas) em bytes CSV com BOM UTF-8.
+
+    BOM + delimitador ``;`` seguem o mesmo padrão dos demais exports do
+    projeto (``routes/vendas.py``/``routes/produtos.py``) para abrir
+    corretamente acentuação no Excel/LibreOffice em pt-BR.
+    """
+    buffer = io.StringIO()
+    buffer.write('\ufeff')
+    writer = csv.writer(buffer, delimiter=';')
+    writer.writerow(cabecalho)
+    writer.writerows(linhas)
+    return buffer.getvalue().encode('utf-8')
+
+
+def _fmt_num_backup(valor):
+    """Número → string BR ("1234,56"). Vazio para None (célula em branco)."""
+    if valor is None:
+        return ''
+    try:
+        return f"{Decimal(str(valor)):.2f}".replace('.', ',')
+    except Exception:
+        return str(valor)
+
+
+def _fmt_data_backup(valor):
+    """Date/Datetime → "DD/MM/AAAA". Vazio para None."""
+    if not valor:
+        return ''
+    return valor.strftime('%d/%m/%Y') if hasattr(valor, 'strftime') else str(valor)
+
+
+def _fmt_bool_backup(valor):
+    return 'Sim' if valor else 'Não'
+
+
+@dashboard_bp.route('/api/backup/exportar_tudo')
+def exportar_backup_completo():
+    """Backup completo do tenant atual: um .zip com um .csv por tabela.
+
+    Ao contrário do backup MASTER-only (``backup_excel`` em ``app.py``, que
+    é global e cross-tenant), esta rota usa ``query_tenant()`` em cada
+    consulta — cada empresa só exporta os próprios dados. Como o sistema é
+    relacional, gerar um único CSV misturaria clientes/produtos/vendas/caixa
+    numa sopa ilegível; por isso cada tabela vira um arquivo isolado dentro
+    do ZIP.
+
+    Restrito a admin do tenant (DONO/MASTER) — é um dump financeiro/de
+    clientes completo, não deve ficar disponível para qualquer funcionário.
+    """
+    if not _e_admin_tenant():
+        flash('Acesso restrito a administradores.', 'warning')
+        return redirect(url_for('dashboard.dashboard'))
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+        # ── Clientes ──────────────────────────────────────────────────
+        clientes = query_tenant(Cliente).order_by(Cliente.id).all()
+        linhas = [
+            [
+                c.id, c.nome_cliente or '', c.razao_social or '', c.cnpj or '',
+                c.cidade or '', c.telefone or '', c.endereco or '',
+                _fmt_bool_backup(c.ativo),
+            ]
+            for c in clientes
+        ]
+        zf.writestr('clientes.csv', _csv_bytes_com_bom(
+            ['ID', 'Nome', 'Razao Social', 'CNPJ', 'Cidade', 'Telefone', 'Endereco', 'Ativo'],
+            linhas,
+        ))
+
+        # ── Produtos ──────────────────────────────────────────────────
+        produtos = query_tenant(Produto).order_by(Produto.id).all()
+        linhas = [
+            [
+                p.id, p.nome_produto or '', p.tipo or '', p.nacionalidade or '',
+                p.marca or '', p.tamanho or '', p.fornecedor or '', p.caminhoneiro or '',
+                _fmt_num_backup(p.preco_custo), _fmt_num_backup(p.preco_venda_alvo),
+                p.quantidade_entrada, p.estoque_atual, p.quantidade_devolvida,
+                _fmt_data_backup(p.data_chegada),
+            ]
+            for p in produtos
+        ]
+        zf.writestr('produtos.csv', _csv_bytes_com_bom(
+            ['ID', 'Nome', 'Tipo', 'Nacionalidade', 'Marca', 'Tamanho', 'Fornecedor',
+             'Caminhoneiro', 'Preco Custo', 'Preco Venda Alvo', 'Qtd Entrada',
+             'Estoque Atual', 'Qtd Devolvida', 'Data Chegada'],
+            linhas,
+        ))
+
+        # ── Vendas (cada linha da tabela já é um item de pedido) ────────
+        vendas = query_tenant(Venda).options(
+            joinedload(Venda.cliente), joinedload(Venda.produto),
+        ).order_by(Venda.id).all()
+        linhas = []
+        for v in vendas:
+            linhas.append([
+                v.id,
+                v.cliente.nome_cliente if v.cliente else (v.cliente_avulso or ''),
+                v.produto.nome_produto if v.produto else '',
+                v.nf or '',
+                _fmt_data_backup(v.data_venda),
+                _fmt_num_backup(v.preco_venda),
+                v.quantidade_venda,
+                _fmt_num_backup(v.calcular_total()),
+                _fmt_num_backup(v.calcular_lucro()),
+                v.empresa_faturadora or '',
+                v.situacao or '',
+                _fmt_num_backup(v.valor_pago),
+                v.forma_pagamento or '',
+                v.tipo_operacao or '',
+                v.status_entrega or '',
+                _fmt_data_backup(v.data_vencimento),
+            ])
+        zf.writestr('vendas.csv', _csv_bytes_com_bom(
+            ['ID', 'Cliente', 'Produto', 'NF', 'Data Venda', 'Preco Unitario',
+             'Quantidade', 'Valor Total', 'Lucro', 'Empresa Faturadora',
+             'Situacao', 'Valor Pago', 'Forma Pagamento', 'Tipo Operacao',
+             'Status Entrega', 'Data Vencimento'],
+            linhas,
+        ))
+
+        # ── Lançamentos de Caixa ─────────────────────────────────────
+        lancamentos = query_tenant(LancamentoCaixa).order_by(LancamentoCaixa.id).all()
+        linhas = [
+            [
+                l.id, _fmt_data_backup(l.data), l.descricao or '', l.tipo or '',
+                l.categoria or '', l.forma_pagamento or '', l.setor or '',
+                _fmt_num_backup(l.valor), l.venda_id or '',
+            ]
+            for l in lancamentos
+        ]
+        zf.writestr('lancamentos_caixa.csv', _csv_bytes_com_bom(
+            ['ID', 'Data', 'Descricao', 'Tipo', 'Categoria', 'Forma Pagamento',
+             'Setor', 'Valor', 'Venda ID'],
+            linhas,
+        ))
+
+    zip_buffer.seek(0)
+    nome_arquivo = f"backup_completo_{datetime.now().strftime('%Y_%m_%d')}.zip"
+    return send_file(
+        zip_buffer,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=nome_arquivo,
+    )
