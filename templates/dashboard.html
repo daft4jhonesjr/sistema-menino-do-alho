@@ -733,9 +733,15 @@
                     <thead class="bg-gray-50 dark:bg-gray-700">
                         <tr>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">ID</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cliente</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Descrição</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Data</th>
+                            <th onclick="ordenarTabelaDetalhes(1, 'texto')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-200 select-none" title="Ordenar por Cliente" data-sort-col="1">
+                                Cliente <span class="sort-indicator opacity-50" aria-hidden="true">↕</span>
+                            </th>
+                            <th onclick="ordenarTabelaDetalhes(2, 'texto')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-200 select-none" title="Ordenar por Descrição" data-sort-col="2">
+                                Descrição <span class="sort-indicator opacity-50" aria-hidden="true">↕</span>
+                            </th>
+                            <th onclick="ordenarTabelaDetalhes(3, 'data')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-200 select-none" title="Ordenar por Data" data-sort-col="3">
+                                Data <span class="sort-indicator opacity-50" aria-hidden="true">↕</span>
+                            </th>
                             <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Valor</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
                         </tr>
@@ -1617,12 +1623,86 @@ function fecharModalDetalhesMes() {
     liberarFundo();
 }
 
+var _detalhesSortState = { col: null, dir: 'asc' };
+
+function _parseDataBrParaOrdenacao(texto) {
+    var m = String(texto || '').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (!m) return 0;
+    var dia = parseInt(m[1], 10);
+    var mes = parseInt(m[2], 10) - 1;
+    var ano = parseInt(m[3], 10);
+    return new Date(ano, mes, dia).getTime() || 0;
+}
+
+function _atualizarIndicadoresSortDetalhes(colAtiva, dir) {
+    var ths = document.querySelectorAll('#modal-dashboard-detalhes-conteudo thead th[data-sort-col]');
+    ths.forEach(function(th) {
+        var ind = th.querySelector('.sort-indicator');
+        if (!ind) return;
+        var col = parseInt(th.getAttribute('data-sort-col'), 10);
+        if (col === colAtiva) {
+            ind.textContent = dir === 'asc' ? '↑' : '↓';
+            ind.classList.remove('opacity-50');
+            ind.classList.add('opacity-100', 'text-emerald-600', 'dark:text-emerald-400');
+        } else {
+            ind.textContent = '↕';
+            ind.classList.add('opacity-50');
+            ind.classList.remove('opacity-100', 'text-emerald-600', 'dark:text-emerald-400');
+        }
+    });
+}
+
+function ordenarTabelaDetalhes(colIndex, tipo) {
+    var tbody = document.getElementById('tabela-detalhes-body');
+    if (!tbody) return;
+
+    var linhas = Array.prototype.slice.call(tbody.querySelectorAll('tr')).filter(function(tr) {
+        return !tr.querySelector('td[colspan]');
+    });
+    if (linhas.length < 2) return;
+
+    if (_detalhesSortState.col === colIndex) {
+        _detalhesSortState.dir = _detalhesSortState.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+        _detalhesSortState.col = colIndex;
+        _detalhesSortState.dir = 'asc';
+    }
+    var dir = _detalhesSortState.dir;
+    var fator = dir === 'asc' ? 1 : -1;
+
+    linhas.sort(function(a, b) {
+        var celA = a.children[colIndex];
+        var celB = b.children[colIndex];
+        var textoA = celA ? (celA.textContent || '').trim() : '';
+        var textoB = celB ? (celB.textContent || '').trim() : '';
+
+        if (tipo === 'data') {
+            return (_parseDataBrParaOrdenacao(textoA) - _parseDataBrParaOrdenacao(textoB)) * fator;
+        }
+        return textoA.localeCompare(textoB, 'pt-BR', { sensitivity: 'base', numeric: true }) * fator;
+    });
+
+    var fragment = document.createDocumentFragment();
+    linhas.forEach(function(tr, index) {
+        tr.className = (index % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-700');
+        tr.classList.remove('hidden', 'linha-paginada');
+        fragment.appendChild(tr);
+    });
+    tbody.appendChild(fragment);
+
+    _atualizarIndicadoresSortDetalhes(colIndex, dir);
+    inicializarScrollInfinito('tabela-detalhes-body', 'sentinela-detalhes', 'scroll-container-detalhes');
+}
+
 function abrirModalDashboard(filtro, titulo) {
     var overlay = document.getElementById('modal-dashboard-detalhes-overlay');
     var tituloEl = document.getElementById('modal-dashboard-detalhes-titulo');
     var tbody = document.getElementById('tabela-detalhes-body');
     var loading = document.getElementById('modal-dashboard-detalhes-loading');
     var conteudo = document.getElementById('modal-dashboard-detalhes-conteudo');
+
+    _detalhesSortState = { col: null, dir: 'asc' };
+    _atualizarIndicadoresSortDetalhes(null, 'asc');
 
     tituloEl.innerHTML = '<i data-lucide="list" class="w-5 h-5 mr-2"></i>' + titulo;
     tbody.innerHTML = '';
