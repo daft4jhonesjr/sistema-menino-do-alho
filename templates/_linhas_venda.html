@@ -1,3 +1,5 @@
+{# weekday() 0=Segunda ... 6=Domingo — evita strftime('%A') (locale en_US na Render). #}
+{% set _dias_semana_pt = ('Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo') %}
 {% if pedidos %}
 {% for pedido in pedidos %}
 {% set str_data_venda = (pedido.data_venda | string)[:10] %}
@@ -35,7 +37,7 @@
     <td class="px-4 py-4 text-center">
         <i data-lucide="chevron-down" class="w-5 h-5 text-emerald-700 dark:text-emerald-400 pedido-chevron transition-transform"></i>
     </td>
-    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100" data-sort-valor="{{ pedido.data_venda.toordinal() }}">{{ pedido.data_venda.strftime('%d/%m') }}</td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100" data-sort-valor="{{ pedido.data_venda.toordinal() }}">{{ pedido.data_venda.strftime('%d/%m') }} ({{ _dias_semana_pt[pedido.data_venda.weekday()] }})</td>
     {% set pedido_pendente_entrega = pedido.vendas|rejectattr('status_entrega', 'equalto', 'ENTREGUE')|list|length > 0 %}
     <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 dark:text-gray-100">
         <div class="inline-flex items-center gap-2">
