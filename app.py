@@ -42,7 +42,7 @@ from sqlalchemy.engine import Engine
 import pytz
 from functools import wraps
 import hmac
-from sqlalchemy import func, desc, asc, text, or_, extract, case, cast, inspect
+from sqlalchemy import func, desc, asc, text, or_, and_, extract, case, cast, inspect
 from sqlalchemy.orm import joinedload, contains_eager, selectinload
 from sqlalchemy.exc import IntegrityError, OperationalError
 import pandas as pd
@@ -2925,6 +2925,18 @@ def _contar_cobrancas_pendentes_visiveis():
       quando a venda não tem a data; o caminho admin antigo ignorava isso.
     - A situacao efetiva é a do **pedido agregado**, não a de cada linha.
 
+    Performance (P0 — laudo de crash intermitente em páginas não relacionadas,
+    ex. ``/clientes/editar``): esta função roda a cada 60s, em cache de sessão,
+    para todo usuário com ``notifica_boletos=True`` (default) em QUALQUER
+    página HTML cheia — não só em Vendas. A versão anterior carregava TODAS
+    as vendas do ano corrente como objetos ORM (``joinedload(Venda.cliente)``)
+    e reagrupava/somava tudo em Python, o que podia significar milhares de
+    linhas materializadas na memória do worker a cada minuto, prendendo um
+    dos (poucos) workers do Gunicorn e derrubando requisições concorrentes.
+    Agora a soma/contagem por pedido é feita via agregação SQL (``func.sum``/
+    ``func.min`` + ``GROUP BY``) — nenhuma instância de ``Venda`` é criada; o
+    Python só itera sobre os grupos resultantes (pedidos), não sobre as vendas.
+
     Multi-tenant: restringe ao tenant atual. MASTER (sem empresa_id) recebe 0.
     """
     try:
@@ -2943,79 +2955,76 @@ def _contar_cobrancas_pendentes_visiveis():
             Produto.tipo.ilike('%bacalhau%'),
         )
 
-        ids_ano = db.session.query(Venda.id).join(
-            Produto, Venda.produto_id == Produto.id
-        ).filter(
-            Venda.empresa_id == eid,
-            _ano_ini, _ano_fim,
-            ~filtro_bacalhau_expr,
+        tipo_op_norm = func.upper(func.coalesce(Venda.tipo_operacao, 'VENDA'))
+        eh_perda = tipo_op_norm == 'PERDA'
+
+        # Mesma regra de "consumidor final" usada no agrupamento de pedidos
+        # da listagem: CNPJ nulo/vazio/"0"/"00000000000000".
+        is_consumidor_final = or_(
+            Cliente.cnpj.is_(None),
+            Cliente.cnpj.in_(['0', '00000000000000', '']),
+        )
+        nf_norm = func.coalesce(func.trim(Venda.nf), '')
+        avulso_norm = func.upper(func.coalesce(func.trim(Venda.cliente_avulso), ''))
+        # Discriminador único do pedido: NF para clientes normais, "avulso"
+        # para consumidor final — replica exatamente a chave de agrupamento
+        # em Python que existia antes (evita misturar pedidos diferentes).
+        discriminador_pedido = case(
+            (is_consumidor_final, avulso_norm),
+            else_=nf_norm,
         )
 
-        vendas = query_tenant(Venda).options(
-            joinedload(Venda.cliente),
-        ).filter(
-            Venda.id.in_(ids_ano),
-        ).all()
+        valor_financeiro = case((eh_perda, 0), else_=(Venda.preco_venda * Venda.quantidade_venda))
+        pago_financeiro = case((eh_perda, 0), else_=func.coalesce(Venda.valor_pago, 0))
+        eh_financeira = case((eh_perda, 0), else_=1)
+        nao_pago_financeira = case(
+            (
+                and_(~eh_perda, func.upper(func.coalesce(Venda.situacao, '')) != 'PAGO'),
+                1,
+            ),
+            else_=0,
+        )
 
-        if not vendas:
+        # Agregação 100% no banco: um linha por pedido (grupo), não por venda.
+        # ``func.min(data_vencimento)`` cobre o caso comum (vencimento direto
+        # na venda); ``func.min(caminho_boleto)`` só é usado como "pista" para
+        # o fallback via Documento, resolvido depois em lote (não por pedido).
+        grupos = (
+            db.session.query(
+                func.sum(valor_financeiro).label('total_valor'),
+                func.sum(pago_financeiro).label('total_pago'),
+                func.sum(eh_financeira).label('qtd_financeiras'),
+                func.sum(nao_pago_financeira).label('qtd_nao_pago'),
+                func.min(Venda.data_vencimento).label('dv_direto'),
+                func.min(Venda.caminho_boleto).label('caminho_repr'),
+            )
+            .select_from(Venda)
+            .join(Produto, Venda.produto_id == Produto.id)
+            .join(Cliente, Venda.cliente_id == Cliente.id)
+            .filter(
+                Venda.empresa_id == eid,
+                _ano_ini, _ano_fim,
+                ~filtro_bacalhau_expr,
+            )
+            .group_by(Venda.cliente_id, Venda.data_venda, is_consumidor_final, discriminador_pedido)
+            .all()
+        )
+
+        if not grupos:
             return 0
 
-        # Pré-fetch de documentos por caminho_boleto (fallback de data_vencimento).
-        caminhos_boleto = list({
-            str(getattr(v, 'caminho_boleto', None) or '').strip()
-            for v in vendas
-            if str(getattr(v, 'caminho_boleto', None) or '').strip()
-        })
-        docs_por_caminho: dict = {}
-        if caminhos_boleto:
-            docs_boleto = query_documentos_tenant().with_entities(
-                Documento.caminho_arquivo, Documento.data_vencimento
-            ).filter(Documento.caminho_arquivo.in_(caminhos_boleto)).all()
-            docs_por_caminho = {
-                str(d.caminho_arquivo or '').strip(): d for d in docs_boleto
-            }
-
-        # Agrupa como listar_vendas: consumidor final = (cliente, data, avulso);
-        # demais = (cliente, NF, data).
-        pedidos: dict = {}
-        for venda in vendas:
-            cliente = venda.cliente
-            cnpj_cliente = (cliente.cnpj if cliente else None) or ''
-            is_consumidor_final = cnpj_cliente in ('0', '00000000000000', '')
-            data_venda_normalizada = (
-                venda.data_venda.date()
-                if hasattr(venda.data_venda, 'date')
-                else venda.data_venda
-            )
-            if is_consumidor_final:
-                avulso_norm = str(getattr(venda, 'cliente_avulso', '') or '').strip().upper()
-                pedido_key = (venda.cliente_id, data_venda_normalizada, avulso_norm)
-            else:
-                nf_normalizada = str(venda.nf).strip() if venda.nf else ''
-                pedido_key = (venda.cliente_id, nf_normalizada, data_venda_normalizada)
-            pedidos.setdefault(pedido_key, []).append(venda)
-
         total = 0
-        for vendas_do_pedido in pedidos.values():
-            vendas_financeiras = [
-                v for v in vendas_do_pedido
-                if str(getattr(v, 'tipo_operacao', 'VENDA') or 'VENDA').upper() != 'PERDA'
-            ]
-            if not vendas_financeiras:
+        pendentes_sem_dv_direto = []  # caminhos_boleto que precisam do fallback via Documento
+
+        for g in grupos:
+            qtd_financeiras = int(g.qtd_financeiras or 0)
+            if qtd_financeiras == 0:
                 continue
 
-            total_valor_financeiro = sum(
-                float(v.calcular_total() or 0) for v in vendas_financeiras
-            )
-            total_pago_financeiro = sum(
-                float(getattr(v, 'valor_pago', None) or 0) for v in vendas_financeiras
-            )
-            situacoes_financeiras = [
-                str(v.situacao or '').strip().upper() for v in vendas_financeiras
-            ]
-            todas_pagas = situacoes_financeiras and all(
-                s == 'PAGO' for s in situacoes_financeiras
-            )
+            total_valor_financeiro = float(g.total_valor or 0)
+            total_pago_financeiro = float(g.total_pago or 0)
+            todas_pagas = int(g.qtd_nao_pago or 0) == 0
+
             if todas_pagas or (
                 total_valor_financeiro > 0
                 and total_pago_financeiro >= total_valor_financeiro - 0.01
@@ -3029,23 +3038,27 @@ def _contar_cobrancas_pendentes_visiveis():
             if situacao_pedido not in ('PENDENTE', 'PARCIAL'):
                 continue
 
-            dv = None
-            for vv in vendas_do_pedido:
-                if getattr(vv, 'data_vencimento', None) is not None:
-                    dv = vv.data_vencimento
-                    break
-            if dv is None:
-                for vv in vendas_do_pedido:
-                    cb = str(getattr(vv, 'caminho_boleto', None) or '').strip()
-                    if not cb:
-                        continue
-                    doc = docs_por_caminho.get(cb)
-                    if doc and getattr(doc, 'data_vencimento', None) is not None:
-                        dv = doc.data_vencimento
-                        break
+            if g.dv_direto is not None:
+                if g.dv_direto < hoje:
+                    total += 1
+            elif g.caminho_repr:
+                pendentes_sem_dv_direto.append(g.caminho_repr)
 
-            if dv is not None and dv < hoje:
-                total += 1
+        # Fallback em lote (uma única query) para pedidos sem data_vencimento
+        # direta na venda, mas com um boleto vinculado (Documento).
+        if pendentes_sem_dv_direto:
+            docs_boleto = query_documentos_tenant().with_entities(
+                Documento.caminho_arquivo, Documento.data_vencimento
+            ).filter(Documento.caminho_arquivo.in_(pendentes_sem_dv_direto)).all()
+            venc_por_caminho = {
+                d.caminho_arquivo: d.data_vencimento
+                for d in docs_boleto
+                if d.data_vencimento is not None
+            }
+            for caminho in pendentes_sem_dv_direto:
+                dv = venc_por_caminho.get(caminho)
+                if dv is not None and dv < hoje:
+                    total += 1
 
         return total
     except Exception:
