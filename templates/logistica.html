@@ -32,6 +32,10 @@
                 <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path></svg>
                 <span class="whitespace-nowrap">Rota no Maps</span>
             </button>
+            <button type="button" id="btn-copiar-whatsapp" onclick="copiarRomaneioWhatsApp()" title="Copiar romaneio formatado para enviar ao entregador via WhatsApp" class="w-full sm:w-auto justify-center bg-white hover:bg-emerald-50 dark:bg-gray-800 dark:hover:bg-gray-700/80 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center gap-2 transition-colors">
+                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+                <span class="whitespace-nowrap" id="btn-copiar-whatsapp-label">Copiar p/ WhatsApp</span>
+            </button>
             {% else %}
             <button type="button" onclick="atualizarStatusMassa('PENDENTE')" class="w-full sm:w-auto justify-center bg-gray-200 hover:bg-gray-300 text-gray-800 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200 px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center gap-2 transition-colors">
                 <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
@@ -333,6 +337,102 @@ function gerarRotaMaps() {
         url += '&waypoints=' + enderecos.join('%7C');
     }
     window.open(url, '_blank');
+}
+
+/* ── Romaneio para WhatsApp ───────────────────────────────────────────── */
+function copiarRomaneioWhatsApp() {
+    const selecionados = document.querySelectorAll('.check-entrega:checked');
+
+    if (selecionados.length === 0) {
+        _swalAviso('Selecione pelo menos um pedido para gerar o romaneio!');
+        return;
+    }
+
+    const blocos = [];
+    selecionados.forEach(function(cb) {
+        const tr = cb.closest('tr');
+        if (!tr || !tr.cells || tr.cells.length < 6) return;
+
+        // Ordem das colunas na tabela: [checkbox, Data, Cliente, Endereço, Produto, Total, Ações]
+        const cliente  = (tr.cells[2].innerText || '').replace(/\s+/g, ' ').trim();
+        const endereco = (tr.cells[3].innerText || '').replace(/\s+/g, ' ').trim();
+        const total    = (tr.cells[5].innerText || '').replace(/\s+/g, ' ').trim();
+
+        const produtosTd = tr.cells[4];
+        const itensProduto = Array.from(produtosTd.querySelectorAll('li'))
+            .map(function(li) { return li.innerText.replace(/\s+/g, ' ').trim(); })
+            .filter(Boolean);
+        const produtoTexto = itensProduto.length
+            ? itensProduto.join(', ')
+            : (produtosTd.innerText || '').replace(/\s+/g, ' ').trim();
+
+        blocos.push(
+            '📦 *Cliente:* ' + (cliente || '—') + '\n' +
+            '📍 *Endereço:* ' + (endereco && endereco !== '—' ? endereco : 'Não informado') + '\n' +
+            '🛍 *Produto:* ' + (produtoTexto || '—') + '\n' +
+            '💰 *Total:* ' + (total || '—') + '\n' +
+            '---------------------------'
+        );
+    });
+
+    if (blocos.length === 0) {
+        _swalAviso('Não foi possível extrair os dados dos pedidos selecionados.');
+        return;
+    }
+
+    const dataFormatada = new Date().toLocaleDateString('pt-BR');
+    const textoFinal = '🚚 *ROMANEIO DE ENTREGAS* 🚚\n'
+        + '🗓 ' + dataFormatada + ' — ' + blocos.length + ' pedido(s)\n\n'
+        + blocos.join('\n\n');
+
+    _copiarTextoRomaneio(textoFinal);
+}
+
+function _copiarTextoRomaneio(texto) {
+    function marcarSucesso() {
+        const btn = document.getElementById('btn-copiar-whatsapp');
+        const label = document.getElementById('btn-copiar-whatsapp-label');
+        if (btn && label) {
+            const textoOriginal = label.textContent;
+            label.textContent = 'Copiado!';
+            btn.classList.add('bg-emerald-100', 'dark:bg-emerald-900/40');
+            setTimeout(function() {
+                label.textContent = textoOriginal;
+                btn.classList.remove('bg-emerald-100', 'dark:bg-emerald-900/40');
+            }, 2000);
+        }
+        Swal.fire(Object.assign(_swalBase(), {
+            icon: 'success',
+            title: 'Romaneio copiado!',
+            text: 'Já pode colar (Ctrl+V) na conversa do WhatsApp com o entregador.',
+            confirmButtonText: 'Ok',
+            timer: 2500,
+            timerProgressBar: true,
+        }));
+    }
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(texto).then(marcarSucesso).catch(function() {
+            _swalErro('Não foi possível copiar automaticamente. Tente novamente.');
+        });
+        return;
+    }
+
+    // Fallback para navegadores/contextos sem Clipboard API (ex.: sem HTTPS)
+    const textarea = document.createElement('textarea');
+    textarea.value = texto;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    try {
+        document.execCommand('copy');
+        marcarSucesso();
+    } catch (err) {
+        _swalErro('Não foi possível copiar automaticamente. Tente novamente.');
+    }
+    document.body.removeChild(textarea);
 }
 
 /* ── Atualizar em massa ───────────────────────────────────────────────── */

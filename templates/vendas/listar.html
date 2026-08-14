@@ -535,6 +535,12 @@
         <span class="btn-copiar-nfs-label">Copiar NFs</span>
     </button>
     {% endif %}
+    {% if pagination and pagination.has_next %}
+    <button type="button" id="btn-carregar-tudo" class="px-3 py-1.5 rounded-md text-sm font-semibold bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 transition-colors inline-flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed" title="Carrega de uma vez todas as vendas restantes, sem precisar rolar a página">
+        <i data-lucide="download" class="w-4 h-4"></i>
+        <span id="btn-carregar-tudo-label">Carregar todos os dados</span>
+    </button>
+    {% endif %}
 </div>
 
 <div class="relative">
@@ -2680,6 +2686,70 @@ document.addEventListener('DOMContentLoaded', function() {
         carregando = false;
         if (observer) observer.disconnect();
         if (sentinela) sentinela.remove();
+        // Fim da lista atingido (via scroll ou via "Carregar todos os dados") — some com o botão.
+        var btnTudoFim = document.getElementById('btn-carregar-tudo');
+        if (btnTudoFim) btnTudoFim.remove();
+    }
+
+    // Loop assíncrono encadeado: chama carregarMaisVendas() repetidamente até
+    // `fimDaLista` virar true. Detecta ausência de progresso (ex.: falha de
+    // rede silenciosa, já que carregarMaisVendas() engole erros internamente)
+    // para evitar um loop infinito martelando o servidor.
+    function carregarTodasAsVendas(tentativasSemProgresso) {
+        tentativasSemProgresso = tentativasSemProgresso || 0;
+        if (fimDaLista) return Promise.resolve();
+
+        var paginaAntesDaChamada = paginaAtual;
+        return carregarMaisVendas().then(function() {
+            if (fimDaLista) return;
+
+            if (paginaAtual === paginaAntesDaChamada) {
+                tentativasSemProgresso++;
+                if (tentativasSemProgresso >= 3) {
+                    throw new Error('Sem progresso ao carregar vendas após múltiplas tentativas.');
+                }
+            } else {
+                tentativasSemProgresso = 0;
+            }
+
+            return carregarTodasAsVendas(tentativasSemProgresso);
+        });
+    }
+
+    var btnCarregarTudo = document.getElementById('btn-carregar-tudo');
+    if (btnCarregarTudo) {
+        btnCarregarTudo.addEventListener('click', function() {
+            if (carregando || fimDaLista) return;
+
+            var label = document.getElementById('btn-carregar-tudo-label');
+            var textoOriginal = label ? label.textContent : 'Carregar todos os dados';
+            btnCarregarTudo.disabled = true;
+            if (label) label.textContent = 'Carregando...';
+
+            carregarTodasAsVendas()
+                .catch(function(erro) {
+                    console.error('Erro ao carregar todas as vendas:', erro);
+                    if (btnCarregarTudo && btnCarregarTudo.isConnected) {
+                        btnCarregarTudo.disabled = false;
+                        if (label) label.textContent = textoOriginal;
+                    }
+                    var dark = document.documentElement.classList.contains('dark');
+                    if (typeof Swal !== 'undefined') {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Erro',
+                            text: 'Não foi possível carregar todas as vendas. Tente novamente.',
+                            confirmButtonColor: '#059669',
+                            background: dark ? '#1F2937' : '#FFFFFF',
+                            color: dark ? '#F9FAFB' : '#111827'
+                        });
+                    } else {
+                        alert('Não foi possível carregar todas as vendas. Tente novamente.');
+                    }
+                });
+            // Sucesso completo: fimDaLista vira true dentro do loop e
+            // pararScroll() já cuida de remover este botão da tela.
+        });
     }
 
     observer = new IntersectionObserver(function(entries) {
