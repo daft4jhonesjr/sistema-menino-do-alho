@@ -183,25 +183,24 @@
     </div>
 </div>
 
-{# Calendário horizontal de pendências logísticas (últimos 2 + hoje + próximos 4).
+{# Calendário mensal completo de pendências logísticas (dia 1 até o fim do mês atual).
    data-pendentes: datas YYYY-MM-DD com vendas ainda não ENTREGUE (ano ativo). #}
 <section id="calendario-pendencias-vendas"
-         class="mb-6 bg-white dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 rounded-lg p-4"
+         class="mb-6 bg-white dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 rounded-lg p-3 sm:p-4"
          data-pendentes='{{ (datas_entrega_pendente or [])|tojson }}'
-         aria-label="Calendário de entregas pendentes">
+         aria-label="Calendário mensal de entregas pendentes">
     <div class="flex items-center justify-between gap-3 mb-3">
         <div class="flex items-center gap-2 min-w-0">
             <i data-lucide="calendar-days" class="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0"></i>
-            <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">Agenda de Entregas</h3>
+            <h3 id="calendario-pendencias-titulo" class="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">Agenda de Entregas</h3>
         </div>
         <span class="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400 flex-shrink-0">
             <span class="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse"></span>
             Pendente
         </span>
     </div>
-    <div id="calendario-pendencias-track"
-         class="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scroll-smooth"
-         role="list"></div>
+    <div id="calendario-pendencias-semana" class="grid grid-cols-7 gap-1 sm:gap-2 mb-1"></div>
+    <div id="calendario-pendencias-track" class="grid grid-cols-7 gap-1 sm:gap-2" role="grid"></div>
 </section>
 
 <div id="modal-relatorio-vendas-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
@@ -3171,14 +3170,18 @@ function ordenarVendasTabela(colIndex, tipo) {
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
-<!-- Calendário horizontal de pendências (Agenda de Entregas) -->
+<!-- Calendário mensal completo de pendências (Agenda de Entregas) -->
 <script>
 (function() {
     var secao = document.getElementById('calendario-pendencias-vendas');
+    var linhaSemana = document.getElementById('calendario-pendencias-semana');
     var track = document.getElementById('calendario-pendencias-track');
-    if (!secao || !track) return;
+    var titulo = document.getElementById('calendario-pendencias-titulo');
+    if (!secao || !track || !linhaSemana) return;
 
     var DIAS_ABREV = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    var MESES_PT = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
     var datasPendentes = [];
     try {
@@ -3189,53 +3192,64 @@ function ordenarVendasTabela(colIndex, tipo) {
     var setPendentes = {};
     datasPendentes.forEach(function(d) { setPendentes[d] = true; });
 
-    function toISO(d) {
-        var ano = d.getFullYear();
-        var mes = String(d.getMonth() + 1).padStart(2, '0');
-        var dia = String(d.getDate()).padStart(2, '0');
-        return ano + '-' + mes + '-' + dia;
+    function toISO(ano, mes, dia) {
+        return ano + '-' + String(mes + 1).padStart(2, '0') + '-' + String(dia).padStart(2, '0');
     }
 
     var hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
+    var anoAtual = hoje.getFullYear();
+    var mesAtual = hoje.getMonth();
 
-    // Janela: últimos 2 dias + hoje + próximos 4 dias = 7 blocos.
-    var blocos = [];
-    for (var offset = -2; offset <= 4; offset++) {
-        var d = new Date(hoje);
-        d.setDate(hoje.getDate() + offset);
-        blocos.push(d);
+    if (titulo) {
+        titulo.textContent = MESES_PT[mesAtual] + ' ' + anoAtual;
     }
 
+    // Cabeçalho fixo com os dias da semana.
+    linhaSemana.innerHTML = '';
+    DIAS_ABREV.forEach(function(nome) {
+        var celula = document.createElement('div');
+        celula.className = 'text-center text-[10px] sm:text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide py-0.5';
+        celula.textContent = nome;
+        linhaSemana.appendChild(celula);
+    });
+
+    var primeiroDiaSemana = new Date(anoAtual, mesAtual, 1).getDay(); // 0=Dom ... 6=Sáb
+    var totalDiasMes = new Date(anoAtual, mesAtual + 1, 0).getDate();
+
     track.innerHTML = '';
-    blocos.forEach(function(d) {
-        var iso = toISO(d);
-        var isHoje = d.getTime() === hoje.getTime();
+
+    // Espaços vazios para alinhar o dia 1 na coluna correta da semana.
+    for (var vazio = 0; vazio < primeiroDiaSemana; vazio++) {
+        var espaco = document.createElement('div');
+        espaco.setAttribute('aria-hidden', 'true');
+        track.appendChild(espaco);
+    }
+
+    for (var dia = 1; dia <= totalDiasMes; dia++) {
+        var iso = toISO(anoAtual, mesAtual, dia);
+        var isHoje = dia === hoje.getDate() && mesAtual === hoje.getMonth() && anoAtual === hoje.getFullYear();
         var temPendencia = !!setPendentes[iso];
 
-        var card = document.createElement('div');
-        card.setAttribute('role', 'listitem');
-        card.setAttribute('title', temPendencia ? 'Há entrega(s) pendente(s) nesse dia' : 'Sem pendências');
-        card.className = 'relative flex-shrink-0 w-16 sm:w-[72px] flex flex-col items-center justify-center gap-0.5 py-2.5 rounded-lg border transition-colors select-none ' +
+        var celulaDia = document.createElement('div');
+        celulaDia.setAttribute('role', 'gridcell');
+        celulaDia.setAttribute('title', temPendencia ? 'Há entrega(s) pendente(s) nesse dia' : 'Sem pendências');
+        celulaDia.className = 'h-10 sm:h-12 w-full flex flex-col items-center justify-center rounded-md border text-sm transition-colors select-none ' +
             (isHoje
-                ? 'bg-emerald-600/20 border-emerald-500 text-emerald-700 dark:text-emerald-400'
-                : 'bg-gray-50 dark:bg-gray-900/40 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300');
+                ? 'bg-emerald-600/20 border-emerald-500 text-emerald-700 dark:text-emerald-400 font-bold'
+                : 'bg-gray-50 dark:bg-gray-800/30 border-gray-200 dark:border-gray-700/50 text-gray-600 dark:text-gray-300');
 
-        card.innerHTML =
-            '<span class="text-[10px] font-semibold uppercase tracking-wide">' + DIAS_ABREV[d.getDay()] + '</span>' +
-            '<span class="text-lg font-bold leading-none">' + d.getDate() + '</span>' +
-            (isHoje ? '<span class="text-[9px] font-medium uppercase tracking-wide">Hoje</span>' : '');
+        celulaDia.innerHTML = '<span class="leading-none">' + dia + '</span>';
 
         if (temPendencia) {
             var dot = document.createElement('span');
-            dot.className = 'absolute top-1.5 right-1.5 w-2 h-2 rounded-full animate-pulse ' +
-                (isHoje ? 'bg-orange-400' : 'bg-orange-500');
+            dot.className = 'w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse mt-0.5';
             dot.setAttribute('aria-hidden', 'true');
-            card.appendChild(dot);
+            celulaDia.appendChild(dot);
         }
 
-        track.appendChild(card);
-    });
+        track.appendChild(celulaDia);
+    }
 })();
 </script>
 
