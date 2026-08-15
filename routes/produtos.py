@@ -325,9 +325,9 @@ def listar_produtos():
     """
     ano_ativo = session.get('ano_ativo', datetime.now().year)
 
-    ordem_data = (request.args.get('ordem_data') or 'crescente').strip().lower()
+    ordem_data = (request.args.get('ordem_data') or 'decrescente').strip().lower()
     if ordem_data not in ('crescente', 'decrescente'):
-        ordem_data = 'crescente'
+        ordem_data = 'decrescente'
 
     # Query base com filtro por ano (data_chegada) e eager loading para evitar Query N+1
     # selectinload(Produto.fotos) evita N+1 ao exibir galeria de fotos no modal
@@ -385,7 +385,6 @@ def listar_produtos():
 
     # Agrupar TODOS os produtos por tipo para calcular totais globais
     produtos_por_tipo_todos = {}
-    reverse_order = (ordem_data == 'decrescente')
     for item in produtos_com_entrada_todos:
         tipo_key = _normalizar_tipo_ui(item['produto'].tipo, tipos_cadastrados_set)
         if tipo_key not in produtos_por_tipo_todos:
@@ -502,21 +501,21 @@ def listar_produtos():
             produtos_por_tipo[tipo_key] = []
         produtos_por_tipo[tipo_key].append(item)
 
-    # Ordenar produtos dentro de cada tipo mantendo prioridade de estoque (>0 antes de 0).
+    # Ordenar dentro de cada tipo: ativos primeiro, depois esgotados;
+    # em ambos os grupos, ordena por data_chegada (padrão: decrescente).
     for tipo in produtos_por_tipo:
-        produtos_por_tipo[tipo].sort(
-            key=lambda x: (
-                0 if (x['produto'].estoque_atual or 0) > 0 else 1,
-                x['produto'].data_chegada.date() if hasattr(x['produto'].data_chegada, 'date') else x['produto'].data_chegada
-            ),
-            reverse=False
-        )
-        if reverse_order:
-            ativos = [it for it in produtos_por_tipo[tipo] if (it['produto'].estoque_atual or 0) > 0]
-            inativos = [it for it in produtos_por_tipo[tipo] if (it['produto'].estoque_atual or 0) <= 0]
-            ativos.reverse()
-            inativos.reverse()
-            produtos_por_tipo[tipo] = ativos + inativos
+        def _data_key(x):
+            d = x['produto'].data_chegada
+            if d is None:
+                return date.min
+            return d.date() if hasattr(d, 'date') else d
+
+        ativos = [it for it in produtos_por_tipo[tipo] if (it['produto'].estoque_atual or 0) > 0]
+        inativos = [it for it in produtos_por_tipo[tipo] if (it['produto'].estoque_atual or 0) <= 0]
+        desc_data = (ordem_data == 'decrescente')
+        ativos.sort(key=_data_key, reverse=desc_data)
+        inativos.sort(key=_data_key, reverse=desc_data)
+        produtos_por_tipo[tipo] = ativos + inativos
 
     # Ordem dinâmica multi-tenant: primeiro os TipoProduto cadastrados da empresa
     # (na ordem alfabética do cadastro), depois quaisquer tipos que apareçam em
