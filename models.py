@@ -678,6 +678,33 @@ class Lembrete(db.Model):
         return f'<Lembrete {self.id} {self.data} {self.descricao[:30]}>'
 
 
+class VotoFrase(db.Model):
+    """Avaliação (like/dislike) da Frase do Dia, por tenant."""
+
+    __tablename__ = 'votos_frase'
+    __table_args__ = (
+        db.UniqueConstraint('empresa_id', 'frase_texto', name='uq_votos_frase_empresa_texto'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    # Isolamento multi-tenant (equivalente ao "tenant_id" do desenho funcional).
+    empresa_id = db.Column(
+        db.Integer,
+        db.ForeignKey('empresas.id', ondelete='CASCADE'),
+        nullable=False,
+        index=True,
+    )
+    frase_texto = db.Column(db.String(500), nullable=False)
+    autor = db.Column(db.String(200), nullable=True)
+    gostou = db.Column(db.Boolean, nullable=False)  # True = like, False = dislike
+    criado_em = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    empresa = db.relationship('Empresa', backref=db.backref('votos_frase', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<VotoFrase {self.id} gostou={self.gostou}>'
+
+
 class Documento(db.Model):
     """
     Documento PDF (boleto ou nota fiscal) armazenado no Cloudinary.

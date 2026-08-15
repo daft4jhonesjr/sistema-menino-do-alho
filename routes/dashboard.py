@@ -11,6 +11,8 @@ Rotas extraídas do legado ``app.py``:
 * ``GET  /api/empresa-frequente/<cliente>``           — autocomplete de empresa faturadora
 * ``GET  /api/cobrancas_pendentes``                  — push notification preflight
 * ``GET  /api/dashboard/detalhes_mes/<ano>/<mes>``   — drill-down do gráfico mensal
+* ``POST /api/frases/votar``                         — like/dislike da Frase do Dia
+* ``GET  /api/frases/voto``                          — voto atual do tenant na frase
 
 Helpers exclusivos:
 
@@ -43,7 +45,7 @@ from sqlalchemy import and_, case, desc, func, or_
 from sqlalchemy.orm import joinedload
 
 from extensions import cache
-from models import db, Cliente, Produto, Venda, Documento, LancamentoCaixa
+from models import db, Cliente, Produto, Venda, Documento, LancamentoCaixa, VotoFrase
 from services.auth_utils import (
     tenant_required, _e_admin_tenant, _usuario_pode_gerenciar_venda,
 )
@@ -589,6 +591,62 @@ def dashboard():
 # ─────────────────────────────────────────────────────────────────────────────
 # APIs auxiliares (consumidas via fetch pelo dashboard.html)
 # ─────────────────────────────────────────────────────────────────────────────
+
+@dashboard_bp.route('/api/frases/votar', methods=['POST'])
+def api_frases_votar():
+    """Registra ou atualiza like/dislike da Frase do Dia para o tenant atual."""
+    data = request.get_json(silent=True) or {}
+    frase = (data.get('frase') or '').strip()[:500]
+    autor = (data.get('autor') or '').strip()[:200] or None
+    voto = (data.get('voto') or '').strip().lower()
+
+    if not frase:
+        return jsonify({'status': 'error', 'erro': 'Frase não informada.'}), 400
+    if voto not in ('like', 'dislike'):
+        return jsonify({'status': 'error', 'erro': 'Voto inválido. Use like ou dislike.'}), 400
+
+    eid = empresa_id_atual()
+    if not eid:
+        return jsonify({'status': 'error', 'erro': 'Tenant não identificado.'}), 403
+
+    gostou = voto == 'like'
+    try:
+        registro = query_tenant(VotoFrase).filter_by(frase_texto=frase).first()
+        if registro:
+            registro.gostou = gostou
+            if autor is not None:
+                registro.autor = autor
+        else:
+            registro = VotoFrase(
+                empresa_id=eid,
+                frase_texto=frase,
+                autor=autor,
+                gostou=gostou,
+            )
+            db.session.add(registro)
+        db.session.commit()
+        return jsonify({'status': 'success', 'voto': voto})
+    except Exception:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'erro': 'Erro ao salvar voto.'}), 500
+
+
+@dashboard_bp.route('/api/frases/voto')
+def api_frases_voto_atual():
+    """Retorna o voto atual do tenant para uma frase (ou a frase do dia)."""
+    from quotes import frase_do_dia as _frase_do_dia
+
+    frase = (request.args.get('frase') or '').strip()
+    if not frase:
+        frase = (_frase_do_dia().get('texto') or '').strip()
+    if not frase:
+        return jsonify({'voto': None})
+
+    registro = query_tenant(VotoFrase).filter_by(frase_texto=frase[:500]).first()
+    if not registro:
+        return jsonify({'voto': None})
+    return jsonify({'voto': 'like' if registro.gostou else 'dislike'})
+
 
 @dashboard_bp.route('/api/vendas_por_filtro')
 def api_vendas_por_filtro():

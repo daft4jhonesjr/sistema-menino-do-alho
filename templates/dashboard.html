@@ -20,11 +20,33 @@
 </div>
 
 {% if frase_do_dia %}
-<div class="mb-6 px-5 py-4 rounded-xl bg-white/60 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-700/50 backdrop-blur-sm">
-    <p class="text-sm italic text-gray-500 dark:text-gray-400 leading-relaxed">
+<div id="frase-do-dia-card" class="mb-6 px-5 py-4 rounded-xl bg-white/60 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-700/50 backdrop-blur-sm"
+     data-frase="{{ frase_do_dia.texto|e }}"
+     data-autor="{{ frase_do_dia.autor|e }}">
+    <p id="frase-do-dia-texto" class="text-sm italic text-gray-500 dark:text-gray-400 leading-relaxed">
         <span class="text-lg text-gray-300 dark:text-gray-600 mr-1">&ldquo;</span>{{ frase_do_dia.texto }}<span class="text-lg text-gray-300 dark:text-gray-600 ml-1">&rdquo;</span>
     </p>
-    <p class="text-xs text-gray-400 dark:text-gray-500 mt-1.5 font-medium tracking-wide text-right">&mdash; {{ frase_do_dia.autor }}</p>
+    <div class="mt-1.5 flex items-center justify-end gap-3">
+        <p class="text-xs text-gray-400 dark:text-gray-500 font-medium tracking-wide">&mdash; {{ frase_do_dia.autor }}</p>
+        <div class="flex items-center gap-1.5" role="group" aria-label="Avaliar frase do dia">
+            <button type="button" id="btn-frase-like" onclick="votarFrase('like', this)"
+                    title="Gostei desta frase"
+                    class="p-1 rounded text-gray-500 hover:text-emerald-400 cursor-pointer transition-colors bg-transparent border-none"
+                    aria-pressed="false">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3H14zM7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/>
+                </svg>
+            </button>
+            <button type="button" id="btn-frase-dislike" onclick="votarFrase('dislike', this)"
+                    title="Não gostei desta frase"
+                    class="p-1 rounded text-gray-500 hover:text-red-400 cursor-pointer transition-colors bg-transparent border-none"
+                    aria-pressed="false">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M10 15v4a3 3 0 003 3l4-9V2H5.72a2 2 0 00-2 1.7l-1.38 9a2 2 0 002 2.3H10zM17 2h3a2 2 0 012 2v7a2 2 0 01-2 2h-3"/>
+                </svg>
+            </button>
+        </div>
+    </div>
 </div>
 {% endif %}
 
@@ -1192,6 +1214,84 @@ document.addEventListener('DOMContentLoaded', function() {
             tag: 'frase-diaria'
         });
     }, 3000);
+})();
+
+function _aplicarEstadoVotoFrase(voto) {
+    var btnLike = document.getElementById('btn-frase-like');
+    var btnDislike = document.getElementById('btn-frase-dislike');
+    if (!btnLike || !btnDislike) return;
+
+    btnLike.classList.remove('text-emerald-400', 'text-gray-500');
+    btnDislike.classList.remove('text-red-400', 'text-gray-500');
+
+    if (voto === 'like') {
+        btnLike.classList.add('text-emerald-400');
+        btnDislike.classList.add('text-gray-500');
+        btnLike.setAttribute('aria-pressed', 'true');
+        btnDislike.setAttribute('aria-pressed', 'false');
+        btnLike.querySelector('svg').setAttribute('fill', 'currentColor');
+        btnDislike.querySelector('svg').setAttribute('fill', 'none');
+    } else if (voto === 'dislike') {
+        btnDislike.classList.add('text-red-400');
+        btnLike.classList.add('text-gray-500');
+        btnLike.setAttribute('aria-pressed', 'false');
+        btnDislike.setAttribute('aria-pressed', 'true');
+        btnDislike.querySelector('svg').setAttribute('fill', 'currentColor');
+        btnLike.querySelector('svg').setAttribute('fill', 'none');
+    } else {
+        btnLike.classList.add('text-gray-500');
+        btnDislike.classList.add('text-gray-500');
+        btnLike.setAttribute('aria-pressed', 'false');
+        btnDislike.setAttribute('aria-pressed', 'false');
+        btnLike.querySelector('svg').setAttribute('fill', 'none');
+        btnDislike.querySelector('svg').setAttribute('fill', 'none');
+    }
+}
+
+function votarFrase(tipo, elemento) {
+    var card = document.getElementById('frase-do-dia-card');
+    if (!card) return;
+    var frase = (card.getAttribute('data-frase') || '').trim();
+    var autor = (card.getAttribute('data-autor') || '').trim();
+    if (!frase || (tipo !== 'like' && tipo !== 'dislike')) return;
+
+    var btnLike = document.getElementById('btn-frase-like');
+    var btnDislike = document.getElementById('btn-frase-dislike');
+    if (btnLike) btnLike.disabled = true;
+    if (btnDislike) btnDislike.disabled = true;
+
+    fetch('/api/frases/votar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ frase: frase, autor: autor, voto: tipo })
+    })
+    .then(function(r) { return r.json().then(function(body) { return { ok: r.ok, body: body }; }); })
+    .then(function(res) {
+        if (res.ok && res.body && res.body.status === 'success') {
+            _aplicarEstadoVotoFrase(tipo);
+        } else if (typeof showToast === 'function') {
+            showToast((res.body && res.body.erro) || 'Não foi possível registrar o voto.', 'error');
+        }
+    })
+    .catch(function() {
+        if (typeof showToast === 'function') showToast('Erro de conexão ao votar.', 'error');
+    })
+    .finally(function() {
+        if (btnLike) btnLike.disabled = false;
+        if (btnDislike) btnDislike.disabled = false;
+    });
+}
+
+(function carregarVotoFraseAtual() {
+    var card = document.getElementById('frase-do-dia-card');
+    if (!card) return;
+    var frase = encodeURIComponent((card.getAttribute('data-frase') || '').trim());
+    fetch('/api/frases/voto?frase=' + frase, { headers: { 'Accept': 'application/json' } })
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(data) {
+            if (data && data.voto) _aplicarEstadoVotoFrase(data.voto);
+        })
+        .catch(function() {});
 })();
 {% endif %}
 </script>

@@ -30,6 +30,7 @@ from models import (
     LogAtividade,
     Empresa,
     Lembrete,
+    VotoFrase,
     PERFIL_MASTER,
     PERFIL_DONO,
     PERFIL_FUNCIONARIO,
