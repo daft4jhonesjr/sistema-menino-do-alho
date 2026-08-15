@@ -136,6 +136,19 @@ def criar_lembrete():
         return jsonify({'ok': False, 'erro': 'Erro ao salvar lembrete.'}), 500
 
 
+@vendas_bp.route('/lembretes/<int:id>/concluir', methods=['POST'])
+def concluir_lembrete(id):
+    """Marca o lembrete como concluído removendo-o do banco."""
+    lembrete = query_tenant(Lembrete).filter_by(id=id).first_or_404()
+    try:
+        db.session.delete(lembrete)
+        db.session.commit()
+        return jsonify({'ok': True})
+    except Exception:
+        db.session.rollback()
+        return jsonify({'ok': False, 'erro': 'Erro ao concluir lembrete.'}), 500
+
+
 @vendas_bp.route('/lembretes/<int:id>/excluir', methods=['POST'])
 def excluir_lembrete(id):
     """Remove um lembrete do calendário."""
