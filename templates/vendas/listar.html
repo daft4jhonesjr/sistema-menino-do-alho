@@ -3378,10 +3378,14 @@ function ordenarVendasTabela(colIndex, tipo) {
                 cel.setAttribute('data-iso', iso);
                 cel.setAttribute('tabindex', '0');
                 cel.setAttribute('title', tooltips.length ? tooltips.join(' · ') : 'Sem compromissos');
-                cel.className = CELULA_DIA;
+                // Célula de hoje recebe destaque verde na borda+fundo; demais células usam o padrão.
+                cel.className = isHoje
+                    ? CELULA_BASE + ' cursor-pointer bg-emerald-950/40 dark:bg-emerald-950/60 border-emerald-500 hover:bg-emerald-900/40 dark:hover:bg-emerald-900/50'
+                    : CELULA_DIA;
 
+                // Número do dia: verde e negrito para hoje, cinza para os demais.
                 cel.innerHTML = isHoje
-                    ? '<span class="bg-red-500 text-white w-6 h-6 flex items-center justify-center rounded-full text-sm font-medium">' + diaAtual + '</span>'
+                    ? '<span class="text-sm font-bold text-emerald-400">' + diaAtual + '</span>'
                     : '<span class="text-sm font-medium text-gray-700 dark:text-gray-300">' + diaAtual + '</span>';
 
                 if (temEntrega) {
