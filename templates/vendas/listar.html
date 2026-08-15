@@ -147,45 +147,7 @@
 {% endblock %}
 
 {% block content %}
-{# Split Calendar: calendário mensal (esq.) + painel de detalhes do dia (dir.).
-   data-detalhes-pendentes: mapa YYYY-MM-DD -> [{cliente, itens, valor}, ...]
-   Posicionado no topo absoluto da página, antes do cabeçalho "Vendas". #}
-<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8 w-full items-start"
-     id="calendario-split-wrap"
-     data-detalhes-pendentes='{{ (detalhes_entrega_pendente or {})|tojson }}'
-     data-pendentes='{{ (datas_entrega_pendente or [])|tojson }}'>
-
-    <section id="calendario-pendencias-vendas"
-             class="lg:col-span-7 xl:col-span-8 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 sm:p-5 shadow-sm"
-             aria-label="Calendário mensal de entregas pendentes">
-        <div class="flex justify-between items-center mb-4">
-            <h2 class="text-xl font-bold text-gray-900 dark:text-white capitalize" id="calendar-month-year"></h2>
-            <span class="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400 flex-shrink-0">
-                <span class="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse"></span>
-                Pendência de entrega
-            </span>
-        </div>
-        <div class="grid grid-cols-7 text-right text-xs font-medium text-gray-500 dark:text-gray-400 pb-2 border-b border-gray-200 dark:border-gray-700">
-            <div class="pr-1">Dom.</div>
-            <div class="pr-1">Seg.</div>
-            <div class="pr-1">Ter.</div>
-            <div class="pr-1">Qua.</div>
-            <div class="pr-1">Qui.</div>
-            <div class="pr-1">Sex.</div>
-            <div class="pr-1">Sáb.</div>
-        </div>
-        <div id="calendar-grid" class="grid grid-cols-7 border-l border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/20" role="grid"></div>
-    </section>
-
-    <aside class="lg:col-span-5 xl:col-span-4 bg-white dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 rounded-xl p-5 flex flex-col h-full min-h-[400px] shadow-sm"
-           aria-label="Detalhes das entregas do dia selecionado">
-        <h3 id="display-data-titulo" class="text-lg font-bold text-gray-900 dark:text-white mb-4 border-b border-gray-200 dark:border-gray-700 pb-2">Selecione um dia</h3>
-        <div id="display-conteudo" class="flex-1 overflow-y-auto space-y-3 max-h-[480px]">
-            <p class="text-gray-500 dark:text-gray-400 text-sm italic">Clique em um dia no calendário para ver os detalhes das entregas pendentes.</p>
-        </div>
-    </aside>
-</div>
-
+{# Cabeçalho principal da página — topo absoluto, antes do calendário. #}
 <div class="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
     <div>
         <h2 class="text-3xl font-bold text-emerald-700 dark:text-emerald-400 mb-2">Vendas</h2>
@@ -220,6 +182,48 @@
             </div>
         </div>
     </div>
+</div>
+
+{# Split Calendar: calendário mensal (esq.) + painel de detalhes do dia (dir.).
+   data-detalhes-pendentes: mapa YYYY-MM-DD -> [{cliente, itens, valor}, ...] #}
+<div class="flex items-center gap-2 mb-4 text-emerald-700 dark:text-emerald-400">
+    <i data-lucide="calendar-days" class="w-5 h-5"></i>
+    <h2 class="text-xl font-bold tracking-wide mb-0">Calendário de Entregas</h2>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8 w-full items-start"
+     id="calendario-split-wrap"
+     data-detalhes-pendentes='{{ (detalhes_entrega_pendente or {})|tojson }}'
+     data-pendentes='{{ (datas_entrega_pendente or [])|tojson }}'>
+
+    <section id="calendario-pendencias-vendas"
+             class="lg:col-span-7 xl:col-span-8 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 sm:p-5 shadow-sm"
+             aria-label="Calendário mensal de entregas pendentes">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white capitalize" id="calendar-month-year"></h2>
+            <span class="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400 flex-shrink-0">
+                <span class="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse"></span>
+                Pendência de entrega
+            </span>
+        </div>
+        <div class="grid grid-cols-7 text-right text-xs font-medium text-gray-500 dark:text-gray-400 pb-2 border-b border-gray-200 dark:border-gray-700">
+            <div class="pr-1">Dom.</div>
+            <div class="pr-1">Seg.</div>
+            <div class="pr-1">Ter.</div>
+            <div class="pr-1">Qua.</div>
+            <div class="pr-1">Qui.</div>
+            <div class="pr-1">Sex.</div>
+            <div class="pr-1">Sáb.</div>
+        </div>
+        <div id="calendar-grid" class="grid grid-cols-7 border-l border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/20" role="grid"></div>
+    </section>
+
+    <aside class="lg:col-span-5 xl:col-span-4 bg-white dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 rounded-xl p-5 flex flex-col h-full min-h-[400px] shadow-sm"
+           aria-label="Detalhes das entregas do dia selecionado">
+        <h3 id="display-data-titulo" class="text-lg font-bold text-gray-900 dark:text-white mb-4 border-b border-gray-200 dark:border-gray-700 pb-2">Selecione um dia</h3>
+        <div id="display-conteudo" class="flex-1 overflow-y-auto space-y-3 max-h-[480px]">
+            <p class="text-gray-500 dark:text-gray-400 text-sm italic">Clique em um dia no calendário para ver os detalhes das entregas pendentes.</p>
+        </div>
+    </aside>
 </div>
 
 <div id="modal-relatorio-vendas-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
