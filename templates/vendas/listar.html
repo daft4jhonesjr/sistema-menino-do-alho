@@ -3258,7 +3258,10 @@ function ordenarVendasTabela(colIndex, tipo) {
     var CSRF_TOKEN        = wrap.getAttribute('data-csrf') || '';
 
     var setPendentes = {};
-    Object.keys(detalhesPendentes).forEach(function(d) { setPendentes[d] = true; });
+    Object.keys(detalhesPendentes).forEach(function(d) {
+        var itens = detalhesPendentes[d] || [];
+        if (itens.some(function(it) { return !it.entregue; })) setPendentes[d] = true;
+    });
     if (!Object.keys(setPendentes).length) {
         (_parseAttr('data-pendentes', [])).forEach(function(d) { setPendentes[d] = true; });
     }
@@ -3308,13 +3311,21 @@ function ordenarVendasTabela(colIndex, tipo) {
         // ─── Entregas ───────────────────────────────────────────────
         if (entregas.length) {
             html += '<div class="mb-4">' +
-                '<p class="text-[10px] font-bold uppercase tracking-widest text-orange-600 dark:text-orange-400 mb-2 flex items-center gap-1"><span>🚚</span> Entregas Pendentes</p>' +
+                '<p class="text-[10px] font-bold uppercase tracking-widest text-orange-600 dark:text-orange-400 mb-2 flex items-center gap-1"><span>🚚</span> Entregas do Dia</p>' +
                 '<div class="space-y-2">';
             entregas.forEach(function(item) {
-                html += '<div class="bg-gray-50 dark:bg-gray-700/30 p-3 rounded-lg border-l-4 border-orange-500">' +
-                    '<p class="font-semibold text-sm text-gray-900 dark:text-white">' + esc(item.cliente || 'Cliente') + '</p>' +
-                    '<p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">' + esc(item.itens || '—') + '</p>' +
-                    '<p class="text-sm font-bold text-emerald-600 dark:text-emerald-400 mt-1">' + esc(item.valor || '') + '</p></div>';
+                var entregue = !!item.entregue;
+                var borderCls = entregue ? 'border-emerald-500' : 'border-orange-500';
+                var textoCls = entregue ? 'line-through opacity-70' : '';
+                var badge = entregue
+                    ? '<span class="ml-2 px-2 py-0.5 text-[10px] font-bold bg-emerald-500/20 text-emerald-400 rounded whitespace-nowrap">ENTREGUE</span>'
+                    : '';
+                html += '<div class="bg-gray-50 dark:bg-gray-700/30 p-3 rounded-lg border-l-4 ' + borderCls + '">' +
+                    '<p class="font-semibold text-sm text-gray-900 dark:text-white flex items-center flex-wrap ' + textoCls + '">' +
+                        esc(item.cliente || 'Cliente') + badge +
+                    '</p>' +
+                    '<p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-snug ' + textoCls + '">' + esc(item.itens || '—') + '</p>' +
+                    '<p class="text-sm font-bold text-emerald-600 dark:text-emerald-400 mt-1 ' + textoCls + '">' + esc(item.valor || '') + '</p></div>';
             });
             html += '</div></div>';
         }
@@ -3416,16 +3427,29 @@ function ordenarVendasTabela(colIndex, tipo) {
     // ── Helpers globais de lembretes ─────────────────────────────
 
     function _htmlLembrete(iso, lem) {
-        return '<div class="flex items-start justify-between gap-2 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg px-3 py-2 text-sm group" id="lem-' + lem.id + '">' +
-            '<span class="text-gray-800 dark:text-gray-200 leading-snug flex-1 pr-1">' + esc(lem.descricao) + '</span>' +
+        var concluido = !!lem.concluido;
+        var cardCls = concluido
+            ? 'flex items-start justify-between gap-2 bg-gray-800/30 border border-gray-700 rounded-lg px-3 py-2 text-sm group'
+            : 'flex items-start justify-between gap-2 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg px-3 py-2 text-sm group';
+        var textoCls = concluido
+            ? 'line-through text-gray-500 opacity-70 leading-snug flex-1 pr-1'
+            : 'text-gray-800 dark:text-gray-200 leading-snug flex-1 pr-1';
+        var btnTitulo = concluido ? 'Desfazer conclusão' : 'Marcar como concluído';
+        var btnCls = concluido
+            ? 'inline-flex items-center gap-1 text-[11px] font-medium text-gray-500 hover:text-gray-300 hover:bg-gray-700/40 rounded-md px-1.5 py-0.5 transition-colors'
+            : 'inline-flex items-center gap-1 text-[11px] font-medium text-gray-400 dark:text-gray-500 hover:text-emerald-500 dark:hover:text-emerald-400 hover:bg-emerald-500/10 rounded-md px-1.5 py-0.5 transition-colors';
+        var btnLabel = concluido ? 'Desfazer' : 'Concluído';
+
+        return '<div class="' + cardCls + '" id="lem-' + lem.id + '" data-concluido="' + (concluido ? '1' : '0') + '">' +
+            '<span class="' + textoCls + '">' + esc(lem.descricao) + '</span>' +
             '<div class="flex items-center gap-1.5 flex-shrink-0 mt-0.5">' +
                 '<button type="button" onclick="concluirLembrete(' + lem.id + ',\'' + esc(iso) + '\', this)" ' +
-                    'title="Marcar como concluído" ' +
-                    'class="inline-flex items-center gap-1 text-[11px] font-medium text-gray-400 dark:text-gray-500 hover:text-emerald-500 dark:hover:text-emerald-400 hover:bg-emerald-500/10 rounded-md px-1.5 py-0.5 transition-colors">' +
+                    'title="' + btnTitulo + '" ' +
+                    'class="' + btnCls + '">' +
                     '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">' +
                         '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>' +
                     '</svg>' +
-                    '<span class="hidden sm:inline">Concluído</span>' +
+                    '<span class="hidden sm:inline">' + btnLabel + '</span>' +
                 '</button>' +
                 '<button type="button" onclick="excluirLembrete(' + lem.id + ',\'' + esc(iso) + '\', this)" ' +
                     'title="Excluir lembrete" ' +
@@ -3470,6 +3494,28 @@ function ordenarVendasTabela(colIndex, tipo) {
         }
     }
 
+    function _atualizarCardLembrete(id, iso, concluido) {
+        if (lembretes[iso]) {
+            lembretes[iso].forEach(function(l) {
+                if (l.id === id) l.concluido = !!concluido;
+            });
+        }
+        var card = document.getElementById('lem-' + id);
+        if (!card) return;
+        var lem = { id: id, descricao: '', concluido: !!concluido };
+        if (lembretes[iso]) {
+            for (var i = 0; i < lembretes[iso].length; i++) {
+                if (lembretes[iso][i].id === id) {
+                    lem = lembretes[iso][i];
+                    break;
+                }
+            }
+        }
+        var tmp = document.createElement('div');
+        tmp.innerHTML = _htmlLembrete(iso, lem);
+        card.replaceWith(tmp.firstElementChild);
+    }
+
     window.concluirLembrete = function(id, iso, btn) {
         if (btn) btn.disabled = true;
         var fd = new FormData();
@@ -3482,7 +3528,7 @@ function ordenarVendasTabela(colIndex, tipo) {
                     if (btn) btn.disabled = false;
                     return;
                 }
-                _removerLembreteDoPainel(id, iso);
+                _atualizarCardLembrete(id, iso, res.concluido);
             })
             .catch(function() {
                 if (btn) btn.disabled = false;
@@ -3532,7 +3578,7 @@ function ordenarVendasTabela(colIndex, tipo) {
                     return;
                 }
                 if (!lembretes[iso]) lembretes[iso] = [];
-                lembretes[iso].push({ id: res.id, descricao: res.descricao });
+                lembretes[iso].push({ id: res.id, descricao: res.descricao, concluido: false });
                 setLembretes[iso] = true;
 
                 var empty = document.getElementById('empty-lembretes-' + iso);
@@ -3541,7 +3587,7 @@ function ordenarVendasTabela(colIndex, tipo) {
                 var lista = document.getElementById('lista-lembretes-' + iso);
                 if (lista) {
                     var tmp = document.createElement('div');
-                    tmp.innerHTML = _htmlLembrete(iso, { id: res.id, descricao: res.descricao });
+                    tmp.innerHTML = _htmlLembrete(iso, { id: res.id, descricao: res.descricao, concluido: false });
                     lista.appendChild(tmp.firstElementChild);
                 }
 

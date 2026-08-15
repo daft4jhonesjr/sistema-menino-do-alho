@@ -130,6 +130,7 @@ def criar_lembrete():
             'id': lembrete.id,
             'data': data_obj.isoformat(),
             'descricao': lembrete.descricao,
+            'concluido': False,
         })
     except Exception:
         db.session.rollback()
@@ -138,12 +139,17 @@ def criar_lembrete():
 
 @vendas_bp.route('/lembretes/<int:id>/concluir', methods=['POST'])
 def concluir_lembrete(id):
-    """Marca o lembrete como concluído removendo-o do banco."""
+    """Alterna o status concluído do lembrete (soft-completion)."""
     lembrete = query_tenant(Lembrete).filter_by(id=id).first_or_404()
     try:
-        db.session.delete(lembrete)
+        lembrete.concluido = not bool(lembrete.concluido)
         db.session.commit()
-        return jsonify({'ok': True})
+        return jsonify({
+            'ok': True,
+            'id': lembrete.id,
+            'concluido': bool(lembrete.concluido),
+            'descricao': lembrete.descricao,
+        })
     except Exception:
         db.session.rollback()
         return jsonify({'ok': False, 'erro': 'Erro ao concluir lembrete.'}), 500
@@ -837,7 +843,6 @@ def listar_vendas():
             .filter(
                 _ini_cal,
                 _fim_cal,
-                func.upper(func.coalesce(Venda.status_entrega, 'PENDENTE')) != 'ENTREGUE',
             )
             .order_by(Venda.data_venda.asc(), Venda.cliente_id.asc(), Venda.id.asc())
             .limit(2000)
@@ -860,6 +865,9 @@ def listar_vendas():
                 _nf = str(_v.nf).strip() if _v.nf else ''
                 _pkey = (_iso, _v.cliente_id, _nf)
 
+            _st = str(getattr(_v, 'status_entrega', None) or 'PENDENTE').strip().upper()
+            _eh_entregue = (_st == 'ENTREGUE')
+
             if _pkey not in _pedidos_cal:
                 _nome = str(
                     (_v.cliente.nome_cliente if _v.cliente else None)
@@ -871,7 +879,11 @@ def listar_vendas():
                     'cliente': _nome,
                     'itens_parts': [],
                     'valor': Decimal('0.00'),
+                    # Se qualquer item do pedido ainda não estiver entregue, fica pendente.
+                    'entregue': _eh_entregue,
                 }
+            elif not _eh_entregue:
+                _pedidos_cal[_pkey]['entregue'] = False
 
             _prod = (
                 _v.produto.nome_produto if _v.produto else 'Produto'
@@ -890,10 +902,15 @@ def listar_vendas():
                 'cliente': _p['cliente'],
                 'itens': ' · '.join(_p['itens_parts']) if _p['itens_parts'] else '—',
                 'valor': _fmt_moeda_cal(_p['valor']),
+                'entregue': bool(_p['entregue']),
             })
 
         detalhes_entrega_pendente = dict(sorted(_det.items()))
-        datas_entrega_pendente = sorted(detalhes_entrega_pendente.keys())
+        # Indicador laranja do calendário: só dias com pelo menos 1 pendente.
+        datas_entrega_pendente = sorted(
+            iso for iso, itens in detalhes_entrega_pendente.items()
+            if any(not it.get('entregue') for it in itens)
+        )
     except Exception:
         db.session.rollback()
         datas_entrega_pendente = []
@@ -992,6 +1009,7 @@ def listar_vendas():
             lembretes_por_data.setdefault(_iso_l, []).append({
                 'id': _l.id,
                 'descricao': _l.descricao,
+                'concluido': bool(getattr(_l, 'concluido', False)),
             })
     except Exception:
         db.session.rollback()
