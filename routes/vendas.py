@@ -2578,7 +2578,7 @@ def logistica_remanejo():
         entry['total'] = sum(float(v.calcular_total()) for v in entry['vendas'])
         pedidos.append(entry)
 
-    return render_template('vendas/remanejo.html', pedidos=pedidos)
+    return render_template('vendas/remanejo.html', pedidos=pedidos, now=date.today())
 
 
 @vendas_bp.route('/api/pedidos')
