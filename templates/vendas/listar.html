@@ -147,31 +147,44 @@
 {% endblock %}
 
 {% block content %}
-{# Calendário mensal estilo "Apple Calendar" com pendências de entrega logística.
-   data-pendentes: datas YYYY-MM-DD com vendas ainda não ENTREGUE (ano ativo).
+{# Split Calendar: calendário mensal (esq.) + painel de detalhes do dia (dir.).
+   data-detalhes-pendentes: mapa YYYY-MM-DD -> [{cliente, itens, valor}, ...]
    Posicionado no topo absoluto da página, antes do cabeçalho "Vendas". #}
-<section id="calendario-pendencias-vendas"
-         class="mb-8 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 sm:p-6 shadow-sm"
-         data-pendentes='{{ (datas_entrega_pendente or [])|tojson }}'
-         aria-label="Calendário mensal de entregas pendentes">
-    <div class="flex justify-between items-center mb-4">
-        <h2 class="text-xl font-bold text-gray-900 dark:text-white capitalize" id="calendar-month-year"></h2>
-        <span class="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400 flex-shrink-0">
-            <span class="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse"></span>
-            Pendência de entrega
-        </span>
-    </div>
-    <div class="grid grid-cols-7 text-right text-xs font-medium text-gray-500 dark:text-gray-400 pb-2 border-b border-gray-200 dark:border-gray-700">
-        <div class="pr-1">Dom.</div>
-        <div class="pr-1">Seg.</div>
-        <div class="pr-1">Ter.</div>
-        <div class="pr-1">Qua.</div>
-        <div class="pr-1">Qui.</div>
-        <div class="pr-1">Sex.</div>
-        <div class="pr-1">Sáb.</div>
-    </div>
-    <div id="calendar-grid" class="grid grid-cols-7 border-l border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/20" role="grid"></div>
-</section>
+<div class="grid grid-cols-1 lg:grid-cols-[55%_45%] gap-6 mb-8"
+     id="calendario-split-wrap"
+     data-detalhes-pendentes='{{ (detalhes_entrega_pendente or {})|tojson }}'
+     data-pendentes='{{ (datas_entrega_pendente or [])|tojson }}'>
+
+    <section id="calendario-pendencias-vendas"
+             class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 sm:p-5 shadow-sm"
+             aria-label="Calendário mensal de entregas pendentes">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white capitalize" id="calendar-month-year"></h2>
+            <span class="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400 flex-shrink-0">
+                <span class="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse"></span>
+                Pendência de entrega
+            </span>
+        </div>
+        <div class="grid grid-cols-7 text-right text-xs font-medium text-gray-500 dark:text-gray-400 pb-2 border-b border-gray-200 dark:border-gray-700">
+            <div class="pr-1">Dom.</div>
+            <div class="pr-1">Seg.</div>
+            <div class="pr-1">Ter.</div>
+            <div class="pr-1">Qua.</div>
+            <div class="pr-1">Qui.</div>
+            <div class="pr-1">Sex.</div>
+            <div class="pr-1">Sáb.</div>
+        </div>
+        <div id="calendar-grid" class="grid grid-cols-7 border-l border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/20" role="grid"></div>
+    </section>
+
+    <aside class="bg-white dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 rounded-xl p-5 flex flex-col min-h-[280px] lg:min-h-0 shadow-sm"
+           aria-label="Detalhes das entregas do dia selecionado">
+        <h3 id="display-data-titulo" class="text-lg font-bold text-gray-900 dark:text-white mb-4 border-b border-gray-200 dark:border-gray-700 pb-2">Selecione um dia</h3>
+        <div id="display-conteudo" class="flex-1 overflow-y-auto space-y-3 max-h-[420px] lg:max-h-none">
+            <p class="text-gray-500 dark:text-gray-400 text-sm italic">Clique em um dia no calendário para ver os detalhes das entregas pendentes.</p>
+        </div>
+    </aside>
+</div>
 
 <div class="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
     <div>
@@ -3176,28 +3189,97 @@ function ordenarVendasTabela(colIndex, tipo) {
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
-<!-- Calendário mensal estilo Apple Calendar (Agenda de Entregas) -->
+<!-- Split Calendar: calendário mensal + painel de detalhes do dia -->
 <script>
 (function() {
-    var secao = document.getElementById('calendario-pendencias-vendas');
+    var wrap = document.getElementById('calendario-split-wrap');
     var grid = document.getElementById('calendar-grid');
     var tituloMes = document.getElementById('calendar-month-year');
-    if (!secao || !grid) return;
+    var displayTitulo = document.getElementById('display-data-titulo');
+    var displayConteudo = document.getElementById('display-conteudo');
+    if (!wrap || !grid) return;
 
     var MESES_PT = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
         'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    var DIAS_SEMANA_PT = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira',
+        'Quinta-feira', 'Sexta-feira', 'Sábado'];
 
-    var datasPendentes = [];
+    var CELULA_BASE = 'border-r border-t border-gray-200 dark:border-gray-700 min-h-[72px] sm:min-h-[88px] p-2 flex flex-col justify-start items-end transition-colors';
+    var CELULA_DIA = CELULA_BASE + ' cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/50';
+    var CELULA_SELECIONADA = ' ring-2 ring-inset ring-emerald-500 bg-emerald-50/60 dark:bg-emerald-900/20';
+
+    var detalhesPendentes = {};
     try {
-        datasPendentes = JSON.parse(secao.getAttribute('data-pendentes') || '[]');
+        detalhesPendentes = JSON.parse(wrap.getAttribute('data-detalhes-pendentes') || '{}') || {};
     } catch (_) {
-        datasPendentes = [];
+        detalhesPendentes = {};
     }
+
     var setPendentes = {};
-    datasPendentes.forEach(function(d) { setPendentes[d] = true; });
+    Object.keys(detalhesPendentes).forEach(function(d) { setPendentes[d] = true; });
+    if (!Object.keys(setPendentes).length) {
+        try {
+            var arr = JSON.parse(wrap.getAttribute('data-pendentes') || '[]') || [];
+            arr.forEach(function(d) { setPendentes[d] = true; });
+        } catch (_) {}
+    }
 
     function toISO(ano, mes, dia) {
         return ano + '-' + String(mes + 1).padStart(2, '0') + '-' + String(dia).padStart(2, '0');
+    }
+
+    function escapeHtml(str) {
+        return String(str == null ? '' : str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function formatarTituloDia(iso) {
+        var partes = iso.split('-');
+        if (partes.length !== 3) return iso;
+        var d = new Date(parseInt(partes[0], 10), parseInt(partes[1], 10) - 1, parseInt(partes[2], 10));
+        var diaNum = d.getDate();
+        var mesNome = MESES_PT[d.getMonth()];
+        var diaSemana = DIAS_SEMANA_PT[d.getDay()];
+        return diaNum + ' de ' + mesNome + ', ' + diaSemana;
+    }
+
+    var celulaSelecionada = null;
+
+    function selecionarDia(celula, iso) {
+        if (celulaSelecionada) {
+            celulaSelecionada.className = celulaSelecionada.className
+                .replace(/\s*ring-2\s+ring-inset\s+ring-emerald-500\s+bg-emerald-50\/60\s+dark:bg-emerald-900\/20/g, '');
+        }
+        celulaSelecionada = celula;
+        if (celula && celula.className.indexOf('ring-2 ring-inset ring-emerald-500') === -1) {
+            celula.className += CELULA_SELECIONADA;
+        }
+
+        if (displayTitulo) {
+            displayTitulo.textContent = formatarTituloDia(iso);
+        }
+        if (!displayConteudo) return;
+
+        var lista = detalhesPendentes[iso] || [];
+        if (!lista.length) {
+            displayConteudo.innerHTML = '<p class="text-gray-500 dark:text-gray-400 text-sm italic">Nenhuma entrega pendente para este dia.</p>';
+            return;
+        }
+
+        var html = '';
+        lista.forEach(function(item) {
+            html +=
+                '<div class="bg-gray-100 dark:bg-gray-700/30 p-3 rounded border-l-4 border-orange-500">' +
+                    '<strong class="text-gray-900 dark:text-white">' + escapeHtml(item.cliente || 'Cliente') + '</strong><br>' +
+                    '<span class="text-sm text-gray-600 dark:text-gray-300">' + escapeHtml(item.itens || '—') + '</span><br>' +
+                    '<span class="text-sm font-semibold text-emerald-600 dark:text-emerald-400">' + escapeHtml(item.valor || '') + '</span>' +
+                '</div>';
+        });
+        displayConteudo.innerHTML = html;
     }
 
     var hoje = new Date();
@@ -3209,14 +3291,13 @@ function ordenarVendasTabela(colIndex, tipo) {
         tituloMes.textContent = MESES_PT[mesAtual] + ' ' + anoAtual;
     }
 
-    var primeiroDiaSemana = new Date(anoAtual, mesAtual, 1).getDay(); // 0=Dom ... 6=Sáb
+    var primeiroDiaSemana = new Date(anoAtual, mesAtual, 1).getDay();
     var totalDiasMes = new Date(anoAtual, mesAtual + 1, 0).getDate();
-
-    var CELULA_BASE = 'border-r border-t border-gray-200 dark:border-gray-700 min-h-[80px] sm:min-h-[100px] p-2 flex flex-col justify-start items-end transition-colors';
+    var celulaHoje = null;
+    var isoHoje = toISO(anoAtual, mesAtual, hoje.getDate());
 
     grid.innerHTML = '';
 
-    // Espaços vazios (antes do dia 1) mantêm a estrutura da grade, com opacidade reduzida.
     for (var vazio = 0; vazio < primeiroDiaSemana; vazio++) {
         var espaco = document.createElement('div');
         espaco.setAttribute('aria-hidden', 'true');
@@ -3225,29 +3306,49 @@ function ordenarVendasTabela(colIndex, tipo) {
     }
 
     for (var dia = 1; dia <= totalDiasMes; dia++) {
-        var iso = toISO(anoAtual, mesAtual, dia);
-        var isHoje = dia === hoje.getDate() && mesAtual === hoje.getMonth() && anoAtual === hoje.getFullYear();
-        var temPendencia = !!setPendentes[iso];
+        (function(diaAtual) {
+            var iso = toISO(anoAtual, mesAtual, diaAtual);
+            var isHoje = iso === isoHoje;
+            var temPendencia = !!setPendentes[iso];
 
-        var celulaDia = document.createElement('div');
-        celulaDia.setAttribute('role', 'gridcell');
-        celulaDia.setAttribute('title', temPendencia ? 'Há entrega(s) pendente(s) nesse dia' : 'Sem pendências');
-        celulaDia.className = CELULA_BASE + ' hover:bg-gray-100 dark:hover:bg-gray-800/50';
+            var celulaDia = document.createElement('div');
+            celulaDia.setAttribute('role', 'gridcell');
+            celulaDia.setAttribute('data-iso', iso);
+            celulaDia.setAttribute('tabindex', '0');
+            celulaDia.setAttribute('title', temPendencia ? 'Há entrega(s) pendente(s) nesse dia' : 'Sem pendências');
+            celulaDia.className = CELULA_DIA;
 
-        var numeroHtml = isHoje
-            ? '<span class="bg-red-500 text-white w-6 h-6 flex items-center justify-center rounded-full text-sm font-medium">' + dia + '</span>'
-            : '<span class="text-sm font-medium text-gray-700 dark:text-gray-300">' + dia + '</span>';
+            var numeroHtml = isHoje
+                ? '<span class="bg-red-500 text-white w-6 h-6 flex items-center justify-center rounded-full text-sm font-medium">' + diaAtual + '</span>'
+                : '<span class="text-sm font-medium text-gray-700 dark:text-gray-300">' + diaAtual + '</span>';
 
-        celulaDia.innerHTML = numeroHtml;
+            celulaDia.innerHTML = numeroHtml;
 
-        if (temPendencia) {
-            var barra = document.createElement('div');
-            barra.className = 'mt-1 w-full text-left text-[10px] bg-orange-500/20 text-orange-600 dark:text-orange-400 rounded px-1 truncate';
-            barra.textContent = 'Pendências';
-            celulaDia.appendChild(barra);
-        }
+            if (temPendencia) {
+                var barra = document.createElement('div');
+                barra.className = 'mt-1 w-full text-left text-[10px] bg-orange-500/20 text-orange-600 dark:text-orange-400 rounded px-1 truncate';
+                barra.textContent = 'Pendências';
+                celulaDia.appendChild(barra);
+            }
 
-        grid.appendChild(celulaDia);
+            celulaDia.addEventListener('click', function() {
+                selecionarDia(celulaDia, iso);
+            });
+            celulaDia.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    selecionarDia(celulaDia, iso);
+                }
+            });
+
+            if (isHoje) celulaHoje = celulaDia;
+            grid.appendChild(celulaDia);
+        })(dia);
+    }
+
+    // INIT: seleciona automaticamente o dia de hoje.
+    if (celulaHoje) {
+        selecionarDia(celulaHoje, isoHoje);
     }
 })();
 </script>

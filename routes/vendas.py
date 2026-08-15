@@ -749,35 +749,91 @@ def listar_vendas():
     if len(erros_doc) > 0:
         flash(f"Erro ao processar {len(erros_doc)} documento(s).", 'error')
 
-    # Datas (YYYY-MM-DD) com ao menos uma venda ainda não ENTREGUE — alimenta
-    # o calendário horizontal de pendências logísticas no topo de Vendas.
-    # Query leve (DISTINCT data), escopo do ano ativo + tenant atual.
+    # Calendário split (topo de Vendas): datas + detalhes agrupados por dia.
+    # Estrutura de detalhes_entrega_pendente:
+    #   {"2026-08-17": [{"cliente": "...", "itens": "10x ALHO...", "valor": "R$ 1.900,00"}, ...]}
     datas_entrega_pendente = []
+    detalhes_entrega_pendente = {}
     try:
         _ano_cal = session.get('ano_ativo', datetime.now().year)
         _ini_cal, _fim_cal = filtro_ano_data_venda(_ano_cal, Venda.data_venda)
-        _rows_cal = (
+
+        def _fmt_moeda_cal(valor):
+            try:
+                num = float(valor or 0)
+            except (TypeError, ValueError):
+                num = 0.0
+            negativo = num < 0
+            s = f'R$ {abs(num):,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+            return ('-' + s) if negativo else s
+
+        _vendas_cal = (
             query_tenant(Venda)
+            .options(joinedload(Venda.cliente), joinedload(Venda.produto))
             .filter(
                 Venda.data_venda >= _ini_cal,
                 Venda.data_venda < _fim_cal,
                 func.upper(func.coalesce(Venda.status_entrega, 'PENDENTE')) != 'ENTREGUE',
             )
-            .with_entities(Venda.data_venda)
-            .distinct()
-            .limit(400)
+            .order_by(Venda.data_venda.asc(), Venda.cliente_id.asc(), Venda.id.asc())
+            .limit(2000)
             .all()
         )
-        _set_cal = set()
-        for (_dv,) in _rows_cal:
-            if not _dv:
+
+        # Agrupa linhas de venda em "pedidos" por (data, cliente, nf/avulso).
+        _pedidos_cal = {}
+        for _v in _vendas_cal:
+            if not _v.data_venda:
                 continue
-            _d = _dv.date() if hasattr(_dv, 'date') else _dv
-            _set_cal.add(_d.isoformat())
-        datas_entrega_pendente = sorted(_set_cal)
+            _d = _v.data_venda.date() if hasattr(_v.data_venda, 'date') else _v.data_venda
+            _iso = _d.isoformat()
+            _cnpj = (_v.cliente.cnpj if _v.cliente else '') or ''
+            _is_cf = _cnpj in ('0', '00000000000000', '')
+            if _is_cf:
+                _avulso = str(getattr(_v, 'cliente_avulso', '') or '').strip().upper()
+                _pkey = (_iso, _v.cliente_id, _avulso)
+            else:
+                _nf = str(_v.nf).strip() if _v.nf else ''
+                _pkey = (_iso, _v.cliente_id, _nf)
+
+            if _pkey not in _pedidos_cal:
+                _nome = str(
+                    (_v.cliente.nome_cliente if _v.cliente else None)
+                    or getattr(_v, 'cliente_avulso', None)
+                    or 'Cliente'
+                ).strip()
+                _pedidos_cal[_pkey] = {
+                    'iso': _iso,
+                    'cliente': _nome,
+                    'itens_parts': [],
+                    'valor': Decimal('0.00'),
+                }
+
+            _prod = (
+                _v.produto.nome_produto if _v.produto else 'Produto'
+            )
+            _qtd = int(getattr(_v, 'quantidade_venda', 0) or 0)
+            _pedidos_cal[_pkey]['itens_parts'].append(f'{_qtd}x {_prod}')
+            try:
+                _pedidos_cal[_pkey]['valor'] += Decimal(str(_v.calcular_total() or 0))
+            except Exception:
+                pass
+
+        _det = {}
+        for _p in _pedidos_cal.values():
+            _iso = _p['iso']
+            _det.setdefault(_iso, []).append({
+                'cliente': _p['cliente'],
+                'itens': ' · '.join(_p['itens_parts']) if _p['itens_parts'] else '—',
+                'valor': _fmt_moeda_cal(_p['valor']),
+            })
+
+        detalhes_entrega_pendente = dict(sorted(_det.items()))
+        datas_entrega_pendente = sorted(detalhes_entrega_pendente.keys())
     except Exception:
         db.session.rollback()
         datas_entrega_pendente = []
+        detalhes_entrega_pendente = {}
 
     return render_template(
         'vendas/listar.html',
@@ -810,6 +866,7 @@ def listar_vendas():
         vinculos_novos=vinculos_novos,
         erros=len(erros_doc),
         datas_entrega_pendente=datas_entrega_pendente,
+        detalhes_entrega_pendente=detalhes_entrega_pendente,
     )
 
 
