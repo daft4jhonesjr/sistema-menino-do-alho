@@ -200,7 +200,19 @@
              class="lg:col-span-7 xl:col-span-8 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 sm:p-5 shadow-sm"
              aria-label="Calendário mensal de entregas pendentes">
         <div class="flex justify-between items-center mb-4">
-            <h2 class="text-xl font-bold text-gray-900 dark:text-white capitalize" id="calendar-month-year"></h2>
+            <div class="flex items-center gap-1">
+                <button id="cal-prev-mes" type="button"
+                        class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                        aria-label="Mês anterior">
+                    <i data-lucide="chevron-left" class="w-4 h-4"></i>
+                </button>
+                <h2 class="text-base sm:text-xl font-bold text-gray-900 dark:text-white capitalize min-w-[130px] text-center" id="calendar-month-year"></h2>
+                <button id="cal-next-mes" type="button"
+                        class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                        aria-label="Próximo mês">
+                    <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                </button>
+            </div>
             <span class="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400 flex-shrink-0">
                 <span class="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse"></span>
                 Pendência de entrega
@@ -3241,7 +3253,6 @@ function ordenarVendasTabela(colIndex, tipo) {
     var detalhesPendentes = _parseAttr('data-detalhes-pendentes', {});
     var vencimentos       = _parseAttr('data-vencimentos', {});
 
-    // Fallback para o array simples se o mapa detalhado estiver vazio.
     var setPendentes = {};
     Object.keys(detalhesPendentes).forEach(function(d) { setPendentes[d] = true; });
     if (!Object.keys(setPendentes).length) {
@@ -3270,7 +3281,6 @@ function ordenarVendasTabela(colIndex, tipo) {
     var celulaSelecionada = null;
 
     function selecionarDia(celula, iso) {
-        // Remove destaque anterior.
         if (celulaSelecionada) {
             celulaSelecionada.className = celulaSelecionada.className
                 .replace(/\s*ring-2\s+ring-inset\s+ring-emerald-500\s+bg-emerald-50\/60\s+dark:bg-emerald-900\/20/g, '');
@@ -3283,8 +3293,8 @@ function ordenarVendasTabela(colIndex, tipo) {
         if (displayTitulo) displayTitulo.textContent = formatarTituloDia(iso);
         if (!displayConteudo) return;
 
-        var entregas   = detalhesPendentes[iso] || [];
-        var boletos    = vencimentos[iso]        || [];
+        var entregas = detalhesPendentes[iso] || [];
+        var boletos  = vencimentos[iso]       || [];
 
         if (!entregas.length && !boletos.length) {
             displayConteudo.innerHTML =
@@ -3293,125 +3303,138 @@ function ordenarVendasTabela(colIndex, tipo) {
         }
 
         var html = '';
-
-        // --- Seção Entregas ---
         if (entregas.length) {
             html += '<div class="mb-4">' +
-                '<p class="text-[10px] font-bold uppercase tracking-widest text-orange-600 dark:text-orange-400 mb-2 flex items-center gap-1">' +
-                    '<span>🚚</span> Entregas Pendentes</p>' +
+                '<p class="text-[10px] font-bold uppercase tracking-widest text-orange-600 dark:text-orange-400 mb-2 flex items-center gap-1"><span>🚚</span> Entregas Pendentes</p>' +
                 '<div class="space-y-2">';
             entregas.forEach(function(item) {
-                html +=
-                    '<div class="bg-gray-50 dark:bg-gray-700/30 p-3 rounded-lg border-l-4 border-orange-500">' +
-                        '<p class="font-semibold text-sm text-gray-900 dark:text-white">' + esc(item.cliente || 'Cliente') + '</p>' +
-                        '<p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">' + esc(item.itens || '—') + '</p>' +
-                        '<p class="text-sm font-bold text-emerald-600 dark:text-emerald-400 mt-1">' + esc(item.valor || '') + '</p>' +
-                    '</div>';
+                html += '<div class="bg-gray-50 dark:bg-gray-700/30 p-3 rounded-lg border-l-4 border-orange-500">' +
+                    '<p class="font-semibold text-sm text-gray-900 dark:text-white">' + esc(item.cliente || 'Cliente') + '</p>' +
+                    '<p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">' + esc(item.itens || '—') + '</p>' +
+                    '<p class="text-sm font-bold text-emerald-600 dark:text-emerald-400 mt-1">' + esc(item.valor || '') + '</p></div>';
             });
             html += '</div></div>';
         }
-
-        // --- Seção Vencimentos ---
         if (boletos.length) {
             html += '<div>' +
-                '<p class="text-[10px] font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400 mb-2 flex items-center gap-1">' +
-                    '<span>💰</span> Vencimentos de Boletos</p>' +
+                '<p class="text-[10px] font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400 mb-2 flex items-center gap-1"><span>💰</span> Vencimentos de Boletos</p>' +
                 '<div class="space-y-2">';
             boletos.forEach(function(item) {
-                var statusCls = item.status === 'PARCIAL'
-                    ? 'text-amber-600 dark:text-amber-400'
-                    : 'text-red-600 dark:text-red-400';
-                var statusLabel = item.status === 'PARCIAL' ? 'Parcial' : 'Pendente';
-                html +=
-                    '<div class="bg-gray-50 dark:bg-gray-700/30 p-3 rounded-lg border-l-4 border-blue-500">' +
-                        '<p class="font-semibold text-sm text-gray-900 dark:text-white">' + esc(item.titulo || 'Cliente') + '</p>' +
-                        '<p class="text-xs ' + statusCls + ' mt-0.5">' + esc(statusLabel) + '</p>' +
-                        '<p class="text-sm font-bold text-blue-600 dark:text-blue-400 mt-1">' + esc(item.valor || '') + '</p>' +
-                    '</div>';
+                var sc = item.status === 'PARCIAL' ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
+                html += '<div class="bg-gray-50 dark:bg-gray-700/30 p-3 rounded-lg border-l-4 border-blue-500">' +
+                    '<p class="font-semibold text-sm text-gray-900 dark:text-white">' + esc(item.titulo || 'Cliente') + '</p>' +
+                    '<p class="text-xs ' + sc + ' mt-0.5">' + esc(item.status === 'PARCIAL' ? 'Parcial' : 'Pendente') + '</p>' +
+                    '<p class="text-sm font-bold text-blue-600 dark:text-blue-400 mt-1">' + esc(item.valor || '') + '</p></div>';
             });
             html += '</div></div>';
         }
-
         displayConteudo.innerHTML = html;
     }
 
+    // --- Estado de navegação ---
     var hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
-    var anoAtual = hoje.getFullYear();
-    var mesAtual = hoje.getMonth();
+    var isoHoje = toISO(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
 
-    if (tituloMes) tituloMes.textContent = MESES_PT[mesAtual] + ' ' + anoAtual;
+    var calAno = hoje.getFullYear();
+    var calMes = hoje.getMonth(); // 0-based
 
-    var primeiroDiaSemana = new Date(anoAtual, mesAtual, 1).getDay();
-    var totalDiasMes = new Date(anoAtual, mesAtual + 1, 0).getDate();
-    var celulaHoje = null;
-    var isoHoje = toISO(anoAtual, mesAtual, hoje.getDate());
+    // ---- Função principal de renderização ----
+    function renderMes(ano, mes) {
+        calAno = ano;
+        calMes = mes;
 
-    grid.innerHTML = '';
+        if (tituloMes) tituloMes.textContent = MESES_PT[mes] + ' ' + ano;
 
-    for (var vazio = 0; vazio < primeiroDiaSemana; vazio++) {
-        var espaco = document.createElement('div');
-        espaco.setAttribute('aria-hidden', 'true');
-        espaco.className = CELULA_BASE + ' bg-gray-100/60 dark:bg-gray-900/40 opacity-50';
-        grid.appendChild(espaco);
+        var primeiroDiaSemana = new Date(ano, mes, 1).getDay();
+        var totalDiasMes      = new Date(ano, mes + 1, 0).getDate();
+
+        celulaSelecionada = null;
+        grid.innerHTML = '';
+
+        // Espaços vazios de alinhamento.
+        for (var vz = 0; vz < primeiroDiaSemana; vz++) {
+            var esp = document.createElement('div');
+            esp.setAttribute('aria-hidden', 'true');
+            esp.className = CELULA_BASE + ' bg-gray-100/60 dark:bg-gray-900/40 opacity-50';
+            grid.appendChild(esp);
+        }
+
+        var celulaHoje = null;
+
+        for (var dia = 1; dia <= totalDiasMes; dia++) {
+            (function(diaAtual) {
+                var iso        = toISO(ano, mes, diaAtual);
+                var isHoje     = iso === isoHoje;
+                var temEntrega = !!setPendentes[iso];
+                var temBoleto  = !!setVencimentos[iso];
+
+                var tooltips = [];
+                if (temEntrega) tooltips.push('entrega(s) pendente(s)');
+                if (temBoleto)  tooltips.push('boleto(s) a vencer');
+
+                var cel = document.createElement('div');
+                cel.setAttribute('role', 'gridcell');
+                cel.setAttribute('data-iso', iso);
+                cel.setAttribute('tabindex', '0');
+                cel.setAttribute('title', tooltips.length ? tooltips.join(' · ') : 'Sem compromissos');
+                cel.className = CELULA_DIA;
+
+                cel.innerHTML = isHoje
+                    ? '<span class="bg-red-500 text-white w-6 h-6 flex items-center justify-center rounded-full text-sm font-medium">' + diaAtual + '</span>'
+                    : '<span class="text-sm font-medium text-gray-700 dark:text-gray-300">' + diaAtual + '</span>';
+
+                if (temEntrega) {
+                    var barEnt = document.createElement('div');
+                    barEnt.className = 'mt-1 w-full text-left text-[10px] bg-orange-500/20 text-orange-600 dark:text-orange-400 rounded px-1 truncate';
+                    barEnt.textContent = '🚚 Entrega';
+                    cel.appendChild(barEnt);
+                }
+                if (temBoleto) {
+                    var qtd = (vencimentos[iso] || []).length;
+                    var barBol = document.createElement('div');
+                    barBol.className = 'mt-0.5 w-full text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded px-1 flex items-center justify-between gap-1';
+                    barBol.innerHTML =
+                        '<span>💰 Boleto</span>' +
+                        '<span class="bg-red-500 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full shadow-sm flex-shrink-0">' + qtd + '</span>';
+                    cel.appendChild(barBol);
+                }
+
+                cel.addEventListener('click', function() { selecionarDia(cel, iso); });
+                cel.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selecionarDia(cel, iso); }
+                });
+
+                if (isHoje) celulaHoje = cel;
+                grid.appendChild(cel);
+            })(dia);
+        }
+
+        // Auto-seleciona hoje se estiver no mês atual.
+        if (celulaHoje) selecionarDia(celulaHoje, isoHoje);
     }
 
-    for (var dia = 1; dia <= totalDiasMes; dia++) {
-        (function(diaAtual) {
-            var iso = toISO(anoAtual, mesAtual, diaAtual);
-            var isHoje     = iso === isoHoje;
-            var temEntrega = !!setPendentes[iso];
-            var temBoleto  = !!setVencimentos[iso];
+    // --- Botões de navegação ---
+    var btnPrev = document.getElementById('cal-prev-mes');
+    var btnNext = document.getElementById('cal-next-mes');
 
-            var tooltips = [];
-            if (temEntrega) tooltips.push('entrega(s) pendente(s)');
-            if (temBoleto)  tooltips.push('boleto(s) a vencer');
-
-            var celulaDia = document.createElement('div');
-            celulaDia.setAttribute('role', 'gridcell');
-            celulaDia.setAttribute('data-iso', iso);
-            celulaDia.setAttribute('tabindex', '0');
-            celulaDia.setAttribute('title', tooltips.length ? tooltips.join(' · ') : 'Sem compromissos');
-            celulaDia.className = CELULA_DIA;
-
-            var numeroHtml = isHoje
-                ? '<span class="bg-red-500 text-white w-6 h-6 flex items-center justify-center rounded-full text-sm font-medium">' + diaAtual + '</span>'
-                : '<span class="text-sm font-medium text-gray-700 dark:text-gray-300">' + diaAtual + '</span>';
-
-            celulaDia.innerHTML = numeroHtml;
-
-            // Barra laranja – entregas pendentes.
-            if (temEntrega) {
-                var barEnt = document.createElement('div');
-                barEnt.className = 'mt-1 w-full text-left text-[10px] bg-orange-500/20 text-orange-600 dark:text-orange-400 rounded px-1 truncate';
-                barEnt.textContent = '🚚 Entrega';
-                celulaDia.appendChild(barEnt);
-            }
-
-            // Barra azul – vencimentos de boletos.
-            if (temBoleto) {
-                var qtdBoletos = (vencimentos[iso] || []).length;
-                var barBol = document.createElement('div');
-                barBol.className = 'mt-0.5 w-full text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded px-1 flex items-center justify-between gap-1';
-                barBol.innerHTML =
-                    '<span>💰 Boleto</span>' +
-                    '<span class="bg-red-500 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full shadow-sm flex-shrink-0">' +
-                        qtdBoletos +
-                    '</span>';
-                celulaDia.appendChild(barBol);
-            }
-
-            celulaDia.addEventListener('click', function() { selecionarDia(celulaDia, iso); });
-            celulaDia.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selecionarDia(celulaDia, iso); }
-            });
-
-            if (isHoje) celulaHoje = celulaDia;
-            grid.appendChild(celulaDia);
-        })(dia);
+    if (btnPrev) {
+        btnPrev.addEventListener('click', function() {
+            var m = calMes - 1, a = calAno;
+            if (m < 0) { m = 11; a--; }
+            renderMes(a, m);
+        });
+    }
+    if (btnNext) {
+        btnNext.addEventListener('click', function() {
+            var m = calMes + 1, a = calAno;
+            if (m > 11) { m = 0; a++; }
+            renderMes(a, m);
+        });
     }
 
-    if (celulaHoje) selecionarDia(celulaHoje, isoHoje);
+    // Render inicial no mês atual.
+    renderMes(hoje.getFullYear(), hoje.getMonth());
 })();
 </script>
 
