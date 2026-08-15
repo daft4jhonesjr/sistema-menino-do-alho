@@ -752,20 +752,21 @@ def listar_vendas():
     # Calendário split (topo de Vendas): datas + detalhes agrupados por dia.
     # Estrutura de detalhes_entrega_pendente:
     #   {"2026-08-17": [{"cliente": "...", "itens": "10x ALHO...", "valor": "R$ 1.900,00"}, ...]}
+    def _fmt_moeda_cal(valor):
+        """Formata Decimal/float como moeda BR para uso nos dois calendários."""
+        try:
+            num = float(valor or 0)
+        except (TypeError, ValueError):
+            num = 0.0
+        negativo = num < 0
+        s = f'R$ {abs(num):,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+        return ('-' + s) if negativo else s
+
     datas_entrega_pendente = []
     detalhes_entrega_pendente = {}
     try:
         _ano_cal = session.get('ano_ativo', datetime.now().year)
         _ini_cal, _fim_cal = filtro_ano_data_venda(_ano_cal, Venda.data_venda)
-
-        def _fmt_moeda_cal(valor):
-            try:
-                num = float(valor or 0)
-            except (TypeError, ValueError):
-                num = 0.0
-            negativo = num < 0
-            s = f'R$ {abs(num):,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
-            return ('-' + s) if negativo else s
 
         _vendas_cal = (
             query_tenant(Venda)
@@ -835,6 +836,83 @@ def listar_vendas():
         datas_entrega_pendente = []
         detalhes_entrega_pendente = {}
 
+    # Vencimentos de boletos no mesmo calendário: agrupa pedidos com
+    # data_vencimento definida e situação ainda pendente/parcial.
+    # Estrutura: {"2026-08-17": [{"titulo": "AMARELÃO", "valor": "R$ 1.900,00", "status": "PENDENTE"}]}
+    vencimentos_por_data = {}
+    try:
+        _ano_vc = session.get('ano_ativo', datetime.now().year)
+        _ini_vc, _fim_vc = filtro_ano_data_venda(_ano_vc, Venda.data_vencimento)
+
+        _vendas_vc = (
+            query_tenant(Venda)
+            .options(joinedload(Venda.cliente))
+            .filter(
+                _ini_vc,
+                _fim_vc,
+                Venda.data_vencimento.isnot(None),
+                func.upper(func.coalesce(Venda.situacao, 'PENDENTE')).in_(
+                    ['PENDENTE', 'PARCIAL']
+                ),
+                func.upper(func.coalesce(Venda.tipo_operacao, 'VENDA')) != 'PERDA',
+            )
+            .order_by(
+                Venda.data_vencimento.asc(),
+                Venda.cliente_id.asc(),
+                Venda.id.asc(),
+            )
+            .limit(1000)
+            .all()
+        )
+
+        _pedidos_vc = {}
+        for _vv in _vendas_vc:
+            _dvc = _vv.data_vencimento
+            if not _dvc:
+                continue
+            _dv = _dvc.date() if hasattr(_dvc, 'date') else _dvc
+            _iso_vc = _dv.isoformat()
+            _cnpj_vc = (_vv.cliente.cnpj if _vv.cliente else '') or ''
+            _is_cf_vc = _cnpj_vc in ('0', '00000000000000', '')
+            if _is_cf_vc:
+                _av_vc = str(getattr(_vv, 'cliente_avulso', '') or '').strip().upper()
+                _pk_vc = (_iso_vc, _vv.cliente_id, _av_vc)
+            else:
+                _nf_vc = str(_vv.nf).strip() if _vv.nf else ''
+                _pk_vc = (_iso_vc, _vv.cliente_id, _nf_vc)
+
+            if _pk_vc not in _pedidos_vc:
+                _nm_vc = str(
+                    (_vv.cliente.nome_cliente if _vv.cliente else None)
+                    or getattr(_vv, 'cliente_avulso', None)
+                    or 'Cliente'
+                ).strip()
+                _pedidos_vc[_pk_vc] = {
+                    'iso': _iso_vc,
+                    'titulo': _nm_vc,
+                    'valor': Decimal('0.00'),
+                    'status': str(_vv.situacao or 'PENDENTE').upper(),
+                }
+
+            try:
+                _pedidos_vc[_pk_vc]['valor'] += Decimal(str(_vv.calcular_total() or 0))
+                if str(_vv.situacao or '').upper() == 'PARCIAL':
+                    _pedidos_vc[_pk_vc]['status'] = 'PARCIAL'
+            except Exception:
+                pass
+
+        for _pvc in _pedidos_vc.values():
+            vencimentos_por_data.setdefault(_pvc['iso'], []).append({
+                'titulo': _pvc['titulo'],
+                'valor': _fmt_moeda_cal(_pvc['valor']),
+                'status': _pvc['status'],
+            })
+
+        vencimentos_por_data = dict(sorted(vencimentos_por_data.items()))
+    except Exception:
+        db.session.rollback()
+        vencimentos_por_data = {}
+
     return render_template(
         'vendas/listar.html',
         pedidos=pedidos_paginados,
@@ -867,6 +945,7 @@ def listar_vendas():
         erros=len(erros_doc),
         datas_entrega_pendente=datas_entrega_pendente,
         detalhes_entrega_pendente=detalhes_entrega_pendente,
+        vencimentos_por_data=vencimentos_por_data,
     )
 
 

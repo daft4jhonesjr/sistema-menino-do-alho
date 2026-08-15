@@ -193,7 +193,8 @@
 <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8 w-full items-start"
      id="calendario-split-wrap"
      data-detalhes-pendentes='{{ (detalhes_entrega_pendente or {})|tojson }}'
-     data-pendentes='{{ (datas_entrega_pendente or [])|tojson }}'>
+     data-pendentes='{{ (datas_entrega_pendente or [])|tojson }}'
+     data-vencimentos='{{ (vencimentos_por_data or {})|tojson }}'>
 
     <section id="calendario-pendencias-vendas"
              class="lg:col-span-7 xl:col-span-8 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 sm:p-5 shadow-sm"
@@ -352,7 +353,25 @@
 <!-- Alerta de erro (discreto, acima dos campos) -->
 <div id="venda-erro" class="hidden mb-4 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl text-red-800 dark:text-red-300 text-sm shadow-sm"></div>
 
-<div id="container-nova-venda" class="hidden transition-all duration-300 ease-in-out">
+<div id="container-nova-venda"
+     class="hidden fixed inset-0 z-50"
+     role="dialog" aria-modal="true" aria-label="Nova Venda">
+    <!-- Backdrop: click fora fecha o drawer -->
+    <div class="fixed inset-0 bg-black/60" id="nova-venda-backdrop"></div>
+    <!-- Drawer lateral direito -->
+    <div class="fixed right-0 top-0 h-full w-full max-w-3xl flex flex-col bg-white dark:bg-gray-900 shadow-2xl border-l border-gray-200 dark:border-gray-700" style="z-index:10">
+        <div class="flex items-center justify-between px-6 py-4 bg-emerald-700 text-white flex-shrink-0">
+            <h2 class="text-xl font-bold flex items-center gap-2">
+                <i data-lucide="shopping-cart" class="w-5 h-5"></i> Nova Venda
+            </h2>
+            <button type="button" id="btn-fechar-nova-venda"
+                    class="w-9 h-9 flex items-center justify-center rounded-full hover:bg-emerald-600 transition"
+                    title="Fechar (Esc)">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+        <div class="flex-1 overflow-y-auto p-5 space-y-4">
+
 <!-- Linha de inserção: campos alinhados com a tabela -->
 <div id="container-formulario-venda" class="mb-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-hidden">
         <form id="form-nova-venda-inline" action="{{ url_for('vendas.add_venda') }}" method="POST" class="p-4" novalidate>
@@ -503,6 +522,8 @@
         </div>
     </div>
 </div>
+        </div>
+    </div>
 </div>
 
 <!-- Documentos Recém-Chegados (migrado do Dashboard — centraliza o fluxo de vendas) -->
@@ -3193,7 +3214,7 @@ function ordenarVendasTabela(colIndex, tipo) {
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
-<!-- Split Calendar: calendário mensal + painel de detalhes do dia -->
+<!-- Split Calendar: calendário mensal + painel de detalhes (Entregas + Vencimentos) -->
 <script>
 (function() {
     var wrap = document.getElementById('calendario-split-wrap');
@@ -3212,48 +3233,44 @@ function ordenarVendasTabela(colIndex, tipo) {
     var CELULA_DIA = CELULA_BASE + ' cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/50';
     var CELULA_SELECIONADA = ' ring-2 ring-inset ring-emerald-500 bg-emerald-50/60 dark:bg-emerald-900/20';
 
-    var detalhesPendentes = {};
-    try {
-        detalhesPendentes = JSON.parse(wrap.getAttribute('data-detalhes-pendentes') || '{}') || {};
-    } catch (_) {
-        detalhesPendentes = {};
+    function _parseAttr(attr, fallback) {
+        try { return JSON.parse(wrap.getAttribute(attr) || JSON.stringify(fallback)) || fallback; }
+        catch (_) { return fallback; }
     }
 
+    var detalhesPendentes = _parseAttr('data-detalhes-pendentes', {});
+    var vencimentos       = _parseAttr('data-vencimentos', {});
+
+    // Fallback para o array simples se o mapa detalhado estiver vazio.
     var setPendentes = {};
     Object.keys(detalhesPendentes).forEach(function(d) { setPendentes[d] = true; });
     if (!Object.keys(setPendentes).length) {
-        try {
-            var arr = JSON.parse(wrap.getAttribute('data-pendentes') || '[]') || [];
-            arr.forEach(function(d) { setPendentes[d] = true; });
-        } catch (_) {}
+        (_parseAttr('data-pendentes', [])).forEach(function(d) { setPendentes[d] = true; });
     }
+    var setVencimentos = {};
+    Object.keys(vencimentos).forEach(function(d) { setVencimentos[d] = true; });
 
     function toISO(ano, mes, dia) {
         return ano + '-' + String(mes + 1).padStart(2, '0') + '-' + String(dia).padStart(2, '0');
     }
 
-    function escapeHtml(str) {
+    function esc(str) {
         return String(str == null ? '' : str)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
     function formatarTituloDia(iso) {
-        var partes = iso.split('-');
-        if (partes.length !== 3) return iso;
-        var d = new Date(parseInt(partes[0], 10), parseInt(partes[1], 10) - 1, parseInt(partes[2], 10));
-        var diaNum = d.getDate();
-        var mesNome = MESES_PT[d.getMonth()];
-        var diaSemana = DIAS_SEMANA_PT[d.getDay()];
-        return diaNum + ' de ' + mesNome + ', ' + diaSemana;
+        var p = iso.split('-');
+        if (p.length !== 3) return iso;
+        var d = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
+        return d.getDate() + ' de ' + MESES_PT[d.getMonth()] + ', ' + DIAS_SEMANA_PT[d.getDay()];
     }
 
     var celulaSelecionada = null;
 
     function selecionarDia(celula, iso) {
+        // Remove destaque anterior.
         if (celulaSelecionada) {
             celulaSelecionada.className = celulaSelecionada.className
                 .replace(/\s*ring-2\s+ring-inset\s+ring-emerald-500\s+bg-emerald-50\/60\s+dark:bg-emerald-900\/20/g, '');
@@ -3263,26 +3280,58 @@ function ordenarVendasTabela(colIndex, tipo) {
             celula.className += CELULA_SELECIONADA;
         }
 
-        if (displayTitulo) {
-            displayTitulo.textContent = formatarTituloDia(iso);
-        }
+        if (displayTitulo) displayTitulo.textContent = formatarTituloDia(iso);
         if (!displayConteudo) return;
 
-        var lista = detalhesPendentes[iso] || [];
-        if (!lista.length) {
-            displayConteudo.innerHTML = '<p class="text-gray-500 dark:text-gray-400 text-sm italic">Nenhuma entrega pendente para este dia.</p>';
+        var entregas   = detalhesPendentes[iso] || [];
+        var boletos    = vencimentos[iso]        || [];
+
+        if (!entregas.length && !boletos.length) {
+            displayConteudo.innerHTML =
+                '<p class="text-gray-500 dark:text-gray-400 text-sm italic">Sem compromissos para este dia.</p>';
             return;
         }
 
         var html = '';
-        lista.forEach(function(item) {
-            html +=
-                '<div class="bg-gray-100 dark:bg-gray-700/30 p-3 rounded border-l-4 border-orange-500">' +
-                    '<strong class="text-gray-900 dark:text-white">' + escapeHtml(item.cliente || 'Cliente') + '</strong><br>' +
-                    '<span class="text-sm text-gray-600 dark:text-gray-300">' + escapeHtml(item.itens || '—') + '</span><br>' +
-                    '<span class="text-sm font-semibold text-emerald-600 dark:text-emerald-400">' + escapeHtml(item.valor || '') + '</span>' +
-                '</div>';
-        });
+
+        // --- Seção Entregas ---
+        if (entregas.length) {
+            html += '<div class="mb-4">' +
+                '<p class="text-[10px] font-bold uppercase tracking-widest text-orange-600 dark:text-orange-400 mb-2 flex items-center gap-1">' +
+                    '<span>🚚</span> Entregas Pendentes</p>' +
+                '<div class="space-y-2">';
+            entregas.forEach(function(item) {
+                html +=
+                    '<div class="bg-gray-50 dark:bg-gray-700/30 p-3 rounded-lg border-l-4 border-orange-500">' +
+                        '<p class="font-semibold text-sm text-gray-900 dark:text-white">' + esc(item.cliente || 'Cliente') + '</p>' +
+                        '<p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">' + esc(item.itens || '—') + '</p>' +
+                        '<p class="text-sm font-bold text-emerald-600 dark:text-emerald-400 mt-1">' + esc(item.valor || '') + '</p>' +
+                    '</div>';
+            });
+            html += '</div></div>';
+        }
+
+        // --- Seção Vencimentos ---
+        if (boletos.length) {
+            html += '<div>' +
+                '<p class="text-[10px] font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400 mb-2 flex items-center gap-1">' +
+                    '<span>💰</span> Vencimentos de Boletos</p>' +
+                '<div class="space-y-2">';
+            boletos.forEach(function(item) {
+                var statusCls = item.status === 'PARCIAL'
+                    ? 'text-amber-600 dark:text-amber-400'
+                    : 'text-red-600 dark:text-red-400';
+                var statusLabel = item.status === 'PARCIAL' ? 'Parcial' : 'Pendente';
+                html +=
+                    '<div class="bg-gray-50 dark:bg-gray-700/30 p-3 rounded-lg border-l-4 border-blue-500">' +
+                        '<p class="font-semibold text-sm text-gray-900 dark:text-white">' + esc(item.titulo || 'Cliente') + '</p>' +
+                        '<p class="text-xs ' + statusCls + ' mt-0.5">' + esc(statusLabel) + '</p>' +
+                        '<p class="text-sm font-bold text-blue-600 dark:text-blue-400 mt-1">' + esc(item.valor || '') + '</p>' +
+                    '</div>';
+            });
+            html += '</div></div>';
+        }
+
         displayConteudo.innerHTML = html;
     }
 
@@ -3291,9 +3340,7 @@ function ordenarVendasTabela(colIndex, tipo) {
     var anoAtual = hoje.getFullYear();
     var mesAtual = hoje.getMonth();
 
-    if (tituloMes) {
-        tituloMes.textContent = MESES_PT[mesAtual] + ' ' + anoAtual;
-    }
+    if (tituloMes) tituloMes.textContent = MESES_PT[mesAtual] + ' ' + anoAtual;
 
     var primeiroDiaSemana = new Date(anoAtual, mesAtual, 1).getDay();
     var totalDiasMes = new Date(anoAtual, mesAtual + 1, 0).getDate();
@@ -3312,14 +3359,19 @@ function ordenarVendasTabela(colIndex, tipo) {
     for (var dia = 1; dia <= totalDiasMes; dia++) {
         (function(diaAtual) {
             var iso = toISO(anoAtual, mesAtual, diaAtual);
-            var isHoje = iso === isoHoje;
-            var temPendencia = !!setPendentes[iso];
+            var isHoje     = iso === isoHoje;
+            var temEntrega = !!setPendentes[iso];
+            var temBoleto  = !!setVencimentos[iso];
+
+            var tooltips = [];
+            if (temEntrega) tooltips.push('entrega(s) pendente(s)');
+            if (temBoleto)  tooltips.push('boleto(s) a vencer');
 
             var celulaDia = document.createElement('div');
             celulaDia.setAttribute('role', 'gridcell');
             celulaDia.setAttribute('data-iso', iso);
             celulaDia.setAttribute('tabindex', '0');
-            celulaDia.setAttribute('title', temPendencia ? 'Há entrega(s) pendente(s) nesse dia' : 'Sem pendências');
+            celulaDia.setAttribute('title', tooltips.length ? tooltips.join(' · ') : 'Sem compromissos');
             celulaDia.className = CELULA_DIA;
 
             var numeroHtml = isHoje
@@ -3328,21 +3380,25 @@ function ordenarVendasTabela(colIndex, tipo) {
 
             celulaDia.innerHTML = numeroHtml;
 
-            if (temPendencia) {
-                var barra = document.createElement('div');
-                barra.className = 'mt-1 w-full text-left text-[10px] bg-orange-500/20 text-orange-600 dark:text-orange-400 rounded px-1 truncate';
-                barra.textContent = 'Pendências';
-                celulaDia.appendChild(barra);
+            // Barra laranja – entregas pendentes.
+            if (temEntrega) {
+                var barEnt = document.createElement('div');
+                barEnt.className = 'mt-1 w-full text-left text-[10px] bg-orange-500/20 text-orange-600 dark:text-orange-400 rounded px-1 truncate';
+                barEnt.textContent = '🚚 Entrega';
+                celulaDia.appendChild(barEnt);
             }
 
-            celulaDia.addEventListener('click', function() {
-                selecionarDia(celulaDia, iso);
-            });
+            // Barra azul – vencimentos de boletos.
+            if (temBoleto) {
+                var barBol = document.createElement('div');
+                barBol.className = 'mt-0.5 w-full text-left text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded px-1 truncate';
+                barBol.textContent = '💰 Boleto';
+                celulaDia.appendChild(barBol);
+            }
+
+            celulaDia.addEventListener('click', function() { selecionarDia(celulaDia, iso); });
             celulaDia.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    selecionarDia(celulaDia, iso);
-                }
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selecionarDia(celulaDia, iso); }
             });
 
             if (isHoje) celulaHoje = celulaDia;
@@ -3350,10 +3406,7 @@ function ordenarVendasTabela(colIndex, tipo) {
         })(dia);
     }
 
-    // INIT: seleciona automaticamente o dia de hoje.
-    if (celulaHoje) {
-        selecionarDia(celulaHoje, isoHoje);
-    }
+    if (celulaHoje) selecionarDia(celulaHoje, isoHoje);
 })();
 </script>
 
@@ -3366,14 +3419,47 @@ document.addEventListener('DOMContentLoaded', function() {
     const btnMenuRelatorio = document.getElementById('btn-menu-relatorio');
     const containerVenda = document.getElementById('container-nova-venda');
 
-    // 1) Botão principal: mostrar/esconder formulário + carrinho
-    if (btnToggleForm && containerVenda) {
+    // --- Funções de abertura/fechamento do drawer Nova Venda ---
+    function abrirModalNovaVenda() {
+        if (!containerVenda) return;
+        containerVenda.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+        if (typeof lucide !== 'undefined') { try { lucide.createIcons(); } catch(_) {} }
+    }
+    function fecharModalNovaVenda() {
+        if (!containerVenda) return;
+        containerVenda.classList.add('hidden');
+        document.body.style.overflow = '';
+    }
+    // Expõe globalmente para o backdrop (onclick inline)
+    window.fecharModalNovaVenda = fecharModalNovaVenda;
+    window.abrirModalNovaVenda  = abrirModalNovaVenda;
+
+    // 1) Botão principal "Nova Venda"
+    if (btnToggleForm) {
         btnToggleForm.addEventListener('click', function(e) {
             e.preventDefault();
-            containerVenda.classList.toggle('hidden');
+            containerVenda && containerVenda.classList.contains('hidden')
+                ? abrirModalNovaVenda()
+                : fecharModalNovaVenda();
             if (menuDropdown) menuDropdown.classList.add('hidden');
         });
     }
+
+    // Botão X dentro do drawer
+    const btnFecharDrawer = document.getElementById('btn-fechar-nova-venda');
+    if (btnFecharDrawer) btnFecharDrawer.addEventListener('click', fecharModalNovaVenda);
+
+    // Backdrop do drawer
+    const backdropDrawer = document.getElementById('nova-venda-backdrop');
+    if (backdropDrawer) backdropDrawer.addEventListener('click', fecharModalNovaVenda);
+
+    // ESC fecha o drawer
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && containerVenda && !containerVenda.classList.contains('hidden')) {
+            fecharModalNovaVenda();
+        }
+    });
 
     // 2) Setinha: abrir/fechar dropdown de ações
     if (btnDropdownSeta && menuDropdown) {
@@ -3391,11 +3477,11 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Opção "Lançar Venda" no dropdown
-    if (btnMenuLancarVenda && btnToggleForm) {
+    if (btnMenuLancarVenda) {
         btnMenuLancarVenda.addEventListener('click', function(e) {
             e.preventDefault();
             if (menuDropdown) menuDropdown.classList.add('hidden');
-            btnToggleForm.click();
+            abrirModalNovaVenda();
         });
     }
 
