@@ -43,10 +43,14 @@
         <div class="inline-flex items-center gap-2">
             <span>{{ pedido.cliente_nome }}</span>
             {% if pedido_pendente_entrega %}
-            <span class="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium text-orange-700 dark:text-orange-300 bg-orange-100 dark:bg-orange-900/40 rounded-full border border-orange-200 dark:border-orange-800" title="Pedido ainda não entregue — acompanhe na Logística">
+            <button type="button"
+                    class="badge-baixa-entrega inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium text-orange-700 dark:text-orange-300 bg-orange-100 dark:bg-orange-900/40 rounded-full border border-orange-200 dark:border-orange-800 cursor-pointer hover:scale-105 hover:bg-orange-200 dark:hover:bg-orange-800/60 transition-all"
+                    title="Clique para marcar como Entregue"
+                    data-venda-id="{{ pedido.primeira_venda_id }}"
+                    onclick="event.stopPropagation(); marcarComoEntregueRapido({{ pedido.primeira_venda_id }}, this);">
                 <i data-lucide="truck" class="w-3 h-3 flex-shrink-0"></i>
                 A Entregar
-            </span>
+            </button>
             {% endif %}
         </div>
     </td>

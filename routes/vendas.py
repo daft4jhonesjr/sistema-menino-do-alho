@@ -1374,6 +1374,27 @@ def toggle_entrega(venda_id):
     return redirect(url_for('vendas.logistica', status=status))
 
 
+@vendas_bp.route('/vendas/<int:id>/marcar_entregue', methods=['POST'])
+def marcar_entregue_rapido(id):
+    """Baixa rápida: marca todos os itens do pedido como ENTREGUE (JSON)."""
+    venda = query_tenant(Venda).filter_by(id=id).first_or_404()
+    if not _e_admin_tenant() and not _usuario_pode_gerenciar_venda(venda):
+        return jsonify({'ok': False, 'erro': 'Sem permissão para alterar esta venda.'}), 403
+
+    try:
+        vendas_pedido = _vendas_do_pedido(venda) or [venda]
+        ids = [v.id for v in vendas_pedido]
+        query_tenant(Venda).filter(Venda.id.in_(ids)).update(
+            {'status_entrega': 'ENTREGUE'},
+            synchronize_session=False,
+        )
+        db.session.commit()
+        return jsonify({'ok': True, 'status': 'ENTREGUE', 'ids': ids})
+    except Exception:
+        db.session.rollback()
+        return jsonify({'ok': False, 'erro': 'Erro ao marcar como entregue.'}), 500
+
+
 @vendas_bp.route('/logistica/bulk_update', methods=['POST'])
 def logistica_bulk_update():
     """Atualiza status de entrega de vários pedidos de uma vez (ação em massa)."""

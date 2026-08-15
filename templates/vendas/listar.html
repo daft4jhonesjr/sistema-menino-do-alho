@@ -4427,6 +4427,58 @@ function toggleAnaliseVendas(event) {
 </script>
 
 <script>
+/* Baixa rápida de entrega pelo badge "A Entregar" na tabela/cards de Vendas. */
+window.marcarComoEntregueRapido = function(id, elementoBadge) {
+    if (!id || !elementoBadge || elementoBadge.dataset.busy === '1') return;
+    elementoBadge.dataset.busy = '1';
+    elementoBadge.disabled = true;
+    elementoBadge.classList.add('opacity-60');
+
+    fetch('/vendas/' + id + '/marcar_entregue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        credentials: 'same-origin',
+        body: '{}'
+    })
+    .then(function(r) { return r.json().then(function(j) { return { ok: r.ok, j: j }; }); })
+    .then(function(res) {
+        if (!res.ok || !res.j || !res.j.ok) {
+            elementoBadge.dataset.busy = '0';
+            elementoBadge.disabled = false;
+            elementoBadge.classList.remove('opacity-60');
+            var msg = (res.j && res.j.erro) ? res.j.erro : 'Não foi possível marcar como entregue.';
+            if (typeof showToast === 'function') showToast(msg, 'error');
+            else alert(msg);
+            return;
+        }
+
+        elementoBadge.removeAttribute('onclick');
+        elementoBadge.onclick = null;
+        elementoBadge.removeAttribute('data-venda-id');
+        elementoBadge.className =
+            'inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium ' +
+            'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/40 ' +
+            'rounded-full border border-emerald-200 dark:border-emerald-800';
+        elementoBadge.title = 'Entregue';
+        elementoBadge.innerHTML =
+            '<i data-lucide="check" class="w-3 h-3 flex-shrink-0"></i> Entregue';
+        elementoBadge.disabled = true;
+        if (typeof lucide !== 'undefined') {
+            try { lucide.createIcons(); } catch (_) {}
+        }
+        if (typeof showToast === 'function') showToast('Pedido marcado como entregue!', 'success');
+    })
+    .catch(function() {
+        elementoBadge.dataset.busy = '0';
+        elementoBadge.disabled = false;
+        elementoBadge.classList.remove('opacity-60');
+        if (typeof showToast === 'function') showToast('Erro de conexão ao marcar entrega.', 'error');
+        else alert('Erro de conexão ao marcar entrega.');
+    });
+};
+</script>
+
+<script>
 /* Enviar resumo do pedido no WhatsApp para o telefone cadastrado do cliente.
    Substitui o antigo link de cobrança (enviar_whatsapp_boleto), que falhava
    quando não havia boleto vinculado. Dados vêm dos data-* no botão. */
