@@ -41,6 +41,10 @@
                 <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
                 <span class="whitespace-nowrap" id="btn-copiar-whatsapp-label">Copiar p/ WhatsApp</span>
             </button>
+            <button type="button" onclick="gerarDocumentoRemanejo()" title="Gerar documento de remanejo para impressão (sem canhoto)" class="w-full sm:w-auto justify-center bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center gap-2 transition-colors">
+                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+                <span class="whitespace-nowrap">Gerar Remanejo</span>
+            </button>
             {% else %}
             <button type="button" onclick="atualizarStatusMassa('PENDENTE')" class="w-full sm:w-auto justify-center bg-gray-200 hover:bg-gray-300 text-gray-800 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200 px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center gap-2 transition-colors">
                 <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
@@ -438,6 +442,27 @@ function _copiarTextoRomaneio(texto) {
         _swalErro('Não foi possível copiar automaticamente. Tente novamente.');
     }
     document.body.removeChild(textarea);
+}
+
+/* ── Remanejo: documento de impressão sem canhoto ────────────────────── */
+function gerarDocumentoRemanejo() {
+    const selecionados = document.querySelectorAll('.check-entrega:checked');
+    const idsSet = new Set();
+    selecionados.forEach(function(cb) {
+        const raw = cb.getAttribute('data-ids') || cb.value || '';
+        raw.split(',').forEach(function(idTxt) {
+            const id = parseInt((idTxt || '').trim(), 10);
+            if (!isNaN(id)) idsSet.add(id);
+        });
+    });
+    const ids = Array.from(idsSet);
+
+    if (ids.length === 0) {
+        _swalAviso('Selecione pelo menos um pedido para gerar o documento de remanejo!');
+        return;
+    }
+
+    window.open('/logistica/remanejo?ids=' + ids.join(','), '_blank');
 }
 
 /* ── Atualizar em massa ───────────────────────────────────────────────── */

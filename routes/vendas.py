@@ -2515,6 +2515,71 @@ def recibo_venda(id):
     )
 
 
+@vendas_bp.route('/logistica/remanejo')
+def logistica_remanejo():
+    """Gera documento de remanejo para impressão (sem canhoto).
+
+    Recebe uma lista de IDs de vendas via query string ``ids=1,2,3``.
+    Agrupa cada ID pelo seu pedido (cliente + data + NF) e renderiza
+    um template limpo — uma seção por pedido, sem segunda via.
+    """
+    ids_raw = request.args.get('ids', '').strip()
+    if not ids_raw:
+        return 'Nenhum pedido informado.', 400
+
+    try:
+        ids = [int(x) for x in ids_raw.split(',') if x.strip().lstrip('-').isdigit()]
+    except ValueError:
+        return 'IDs inválidos.', 400
+
+    if not ids:
+        return 'Nenhum ID válido informado.', 400
+
+    vendas = (
+        query_tenant(Venda)
+        .options(joinedload(Venda.cliente), joinedload(Venda.produto))
+        .filter(Venda.id.in_(ids))
+        .order_by(Venda.data_venda.asc(), Venda.id.asc())
+        .all()
+    )
+
+    if not vendas:
+        return 'Nenhuma venda encontrada para os IDs informados.', 404
+
+    # Agrupa vendas em pedidos (cliente + data + NF)
+    from collections import OrderedDict
+
+    pedidos_dict = OrderedDict()
+    for v in vendas:
+        cliente = v.cliente
+        if not cliente:
+            continue
+        cnpj = (cliente.cnpj or '').strip()
+        is_cf = cnpj in ('0', '00000000000000', '')
+        data_norm = v.data_venda.date() if hasattr(v.data_venda, 'date') else v.data_venda
+        if is_cf:
+            key = (v.cliente_id, data_norm)
+        else:
+            key = (v.cliente_id, (v.nf or '').strip(), data_norm)
+
+        if key not in pedidos_dict:
+            pedidos_dict[key] = {
+                'venda_base': v,
+                'cliente': cliente,
+                'vendas': [],
+                'data_emissao': date.today(),
+            }
+        pedidos_dict[key]['vendas'].append(v)
+
+    # Calcula total por pedido
+    pedidos = []
+    for entry in pedidos_dict.values():
+        entry['total'] = sum(float(v.calcular_total()) for v in entry['vendas'])
+        pedidos.append(entry)
+
+    return render_template('vendas/remanejo.html', pedidos=pedidos)
+
+
 @vendas_bp.route('/api/pedidos')
 def api_pedidos():
     """Lista pedidos recentes para o modal Vincular à Venda.

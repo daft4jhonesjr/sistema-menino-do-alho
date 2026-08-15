@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Documento de Remanejo - Menino do Alho</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            font-size: 12pt;
+            line-height: 1.4;
+            color: #000;
+            background: #fff;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 21cm;
+            margin: 0 auto;
+            padding: 1cm;
+        }
+
+        /* ── Cada pedido ocupa sua própria seção ────────────────────── */
+        .pedido-remanejo {
+            break-inside: avoid;
+            page-break-inside: avoid;
+            margin-bottom: 24px;
+        }
+
+        /* Quebra de página entre pedidos (exceto o último) */
+        .pedido-remanejo + .pedido-remanejo {
+            page-break-before: always;
+            break-before: page;
+        }
+
+        /* ── Cabeçalho ──────────────────────────────────────────────── */
+        .via-header {
+            text-align: center;
+            margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .logo-recibo {
+            height: 80px;
+            width: auto;
+            margin-bottom: 8px;
+            object-fit: contain;
+        }
+
+        .titulo-via {
+            font-size: 10pt;
+            font-weight: bold;
+            color: #047857;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            border: 2px solid #047857;
+            padding: 4px 16px;
+            border-radius: 9999px;
+            background: #f0fdf4;
+        }
+
+        /* ── Informações da empresa ─────────────────────────────────── */
+        .empresa-info {
+            font-size: 10pt;
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        /* ── Dados do cliente ───────────────────────────────────────── */
+        .cliente-section {
+            margin: 20px 0;
+            padding: 10px;
+            background: #f9fafb;
+            border-left: 3px solid #047857;
+        }
+
+        .cliente-section h2 {
+            font-size: 12pt;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #047857;
+        }
+
+        .cliente-section p {
+            font-size: 10pt;
+            margin: 3px 0;
+        }
+
+        /* ── Tabela de produtos ─────────────────────────────────────── */
+        .tabela-produtos {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+
+        .tabela-produtos th {
+            background: #047857;
+            color: #fff;
+            padding: 8px;
+            text-align: left;
+            font-size: 10pt;
+            font-weight: bold;
+            border: 1px solid #000;
+        }
+
+        .tabela-produtos td {
+            padding: 8px;
+            border: 1px solid #000;
+            font-size: 10pt;
+        }
+
+        .tabela-produtos .text-right  { text-align: right; }
+        .tabela-produtos .text-center { text-align: center; }
+
+        /* ── Total ──────────────────────────────────────────────────── */
+        .total-section {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f0fdf4;
+            border: 2px solid #047857;
+            text-align: right;
+        }
+
+        .total-section .label {
+            font-size: 12pt;
+            font-weight: bold;
+            margin-right: 20px;
+        }
+
+        .total-section .valor {
+            font-size: 16pt;
+            font-weight: bold;
+            color: #047857;
+        }
+
+        /* ── Rodapé / Assinatura ────────────────────────────────────── */
+        .rodape {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #ccc;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .rodape .data         { font-size: 10pt; }
+        .rodape .assinatura   { font-size: 10pt; text-align: center; width: 200px; }
+
+        .rodape .assinatura .linha {
+            border-top: 1px solid #000;
+            margin-top: 50px;
+            padding-top: 5px;
+        }
+
+        /* ── Botão de impressão (só na tela) ────────────────────────── */
+        .no-print {
+            display: none;
+        }
+
+        @media screen {
+            .no-print {
+                display: block;
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                z-index: 1000;
+            }
+
+            .btn-print {
+                background: #047857;
+                color: #fff;
+                padding: 10px 20px;
+                border: none;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 14pt;
+                font-weight: bold;
+            }
+
+            .btn-print:hover { background: #065f46; }
+        }
+
+        @media print {
+            @page {
+                size: A4 portrait;
+                margin: 0.5cm !important;
+            }
+
+            body, html {
+                margin: 0 !important;
+                padding: 0 !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                background: white !important;
+                zoom: 0.85 !important;
+            }
+
+            button, .no-print, .print-hidden {
+                display: none !important;
+            }
+
+            .container {
+                max-height: none !important;
+                overflow: visible !important;
+                padding: 0.3cm !important;
+            }
+
+            .pedido-remanejo {
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+                padding: 0 !important;
+                margin-bottom: 8px !important;
+            }
+
+            .pedido-remanejo + .pedido-remanejo {
+                page-break-before: always !important;
+                break-before: page !important;
+            }
+
+            .via-header   { margin-bottom: 10px !important; }
+            .logo-recibo  { height: 60px !important; }
+            .cliente-section { margin: 12px 0 !important; padding: 8px !important; }
+            .tabela-produtos { margin: 12px 0 !important; }
+            .tabela-produtos th,
+            .tabela-produtos td { padding: 5px !important; font-size: 9pt !important; }
+            .total-section { margin-top: 12px !important; padding: 10px !important; }
+            .rodape       { margin-top: 15px !important; padding-top: 12px !important; }
+            .rodape .assinatura .linha { margin-top: 30px !important; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="no-print">
+    <button class="btn-print" onclick="window.print()">🖨️ Imprimir Remanejo</button>
+</div>
+
+<div class="container">
+{% for pedido in pedidos %}
+    <div class="pedido-remanejo">
+
+        <div class="via-header">
+            <img src="{{ url_for('static', filename='images/logo_menino_do_alho_amarelo1.jpeg') }}"
+                 class="logo-recibo" alt="Menino do Alho">
+            <span class="titulo-via">Documento de Remanejo</span>
+        </div>
+
+        <div class="empresa-info">
+            <p><strong>Empresa Faturadora:</strong> {{ pedido.venda_base.empresa_faturadora or '—' }}</p>
+            <p><strong>Nota Fiscal:</strong> {{ pedido.venda_base.nf or 'N/A' }}</p>
+            <p><strong>Data da Venda:</strong> {{ pedido.venda_base.data_venda.strftime('%d/%m/%Y') }}</p>
+        </div>
+
+        <div class="cliente-section">
+            <h2>DADOS DO CLIENTE</h2>
+            <p><strong>Nome:</strong> {{ pedido.cliente.nome_cliente }}</p>
+            {% if pedido.cliente.razao_social %}
+            <p><strong>Razão Social:</strong> {{ pedido.cliente.razao_social }}</p>
+            {% endif %}
+            {% if pedido.cliente.cnpj %}
+            <p><strong>CNPJ:</strong> {{ pedido.cliente.cnpj }}</p>
+            {% endif %}
+            {% if pedido.cliente.cidade %}
+            <p><strong>Cidade:</strong> {{ pedido.cliente.cidade }}</p>
+            {% endif %}
+            {% if pedido.cliente.endereco %}
+            <p><strong>Endereço:</strong> {{ pedido.cliente.endereco }}</p>
+            {% endif %}
+        </div>
+
+        <table class="tabela-produtos">
+            <thead>
+                <tr>
+                    <th>Produto</th>
+                    <th class="text-center">Quantidade</th>
+                    <th class="text-right">Preço Unitário</th>
+                    <th class="text-right">Valor Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for v in pedido.vendas %}
+                <tr>
+                    <td>{{ v.produto.nome_produto if v.produto else '-' }}</td>
+                    <td class="text-center">{{ v.quantidade_venda }}</td>
+                    <td class="text-right">
+                        R$ {{ ("{:,.2f}".format(v.calcular_total() / v.quantidade_venda if v.quantidade_venda > 0 else 0)).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                    </td>
+                    <td class="text-right">
+                        R$ {{ ("{:,.2f}".format(v.calcular_total())).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="total-section">
+            <span class="label">VALOR TOTAL:</span>
+            <span class="valor">R$ {{ ("{:,.2f}".format(pedido.total)).replace(',', 'X').replace('.', ',').replace('X', '.') }}</span>
+        </div>
+
+        <div class="rodape">
+            <div class="data">
+                <p><strong>Data de Emissão:</strong> {{ pedido.data_emissao.strftime('%d/%m/%Y') }}</p>
+            </div>
+            <div class="assinatura">
+                <div class="linha">
+                    <p>Assinatura</p>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- fim .pedido-remanejo -->
+{% endfor %}
+</div>
+
+</body>
+</html>
