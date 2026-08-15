@@ -90,8 +90,8 @@
         background-color: #374151;
         color: #f3f4f6;
     }
-    .vendas-cliente-dropdown { border-radius: 0.375rem !important; border-color: #e5e7eb !important; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1) !important; max-height: 280px !important; }
-    .vendas-cliente-dropdown .option { padding: 0.5rem 0.75rem; }
+    .vendas-cliente-dropdown { border-radius: 0.375rem !important; border-color: #e5e7eb !important; box-shadow: 0 10px 25px rgb(0 0 0 / 0.25) !important; max-height: 220px !important; z-index: 9999 !important; overflow-y: auto !important; }
+    .vendas-cliente-dropdown .option { padding: 0.75rem 0.875rem; min-height: 44px; display: flex; align-items: center; font-size: 0.875rem; cursor: pointer; }
     .vendas-cliente-dropdown .option.active { background-color: #ecfdf5; color: #047857; }
     .vendas-cliente-dropdown .no-results { padding: 0.75rem 1rem; color: #6b7280; font-size: 0.875rem; }
     /* TomSelect dropdown - modo escuro */
@@ -100,9 +100,11 @@
         background-color: #1f2937 !important;
         border-color: #374151 !important;
         color: #f3f4f6 !important;
+        box-shadow: 0 10px 25px rgb(0 0 0 / 0.5) !important;
     }
     .dark .vendas-cliente-dropdown .option {
         color: #f3f4f6 !important;
+        border-bottom: 1px solid #374151 !important;
     }
     .dark .vendas-cliente-dropdown .option:hover,
     .dark .vendas-cliente-dropdown .option.active {
@@ -387,7 +389,7 @@
         <div class="flex-1 overflow-y-auto p-5 space-y-4">
 
 <!-- Linha de inserção: campos alinhados com a tabela -->
-<div id="container-formulario-venda" class="mb-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-hidden">
+<div id="container-formulario-venda" class="mb-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-visible">
         <form id="form-nova-venda-inline" action="{{ url_for('vendas.add_venda') }}" method="POST" class="p-4" novalidate>
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         <div class="venda-input-group flex flex-col gap-5 w-full">
@@ -2496,10 +2498,44 @@ document.addEventListener('DOMContentLoaded', function() {
             placeholder: 'Digite o nome do cliente...',
             maxOptions: null,
             dropdownParent: 'body',
+            dropdownClass: 'vendas-cliente-dropdown',
             render: {
                 no_results: function(data, escape) {
                     return '<div class="no-results">Cliente não encontrado</div>';
                 }
+            },
+            // Corrige posicionamento dentro de drawer position:fixed no mobile.
+            // Usa atribuições individuais para NÃO sobrescrever display/outros
+            // estilos internos que o TomSelect controla.
+            onDropdownOpen: function(dropdown) {
+                var ctrl = this.control;
+                var rect = ctrl.getBoundingClientRect();
+                var spaceBelow = window.innerHeight - rect.bottom;
+                var spaceAbove = rect.top;
+                var maxH = Math.min(220, spaceBelow >= 120 ? spaceBelow - 8 : Math.max(120, spaceAbove - 8));
+                dropdown.style.position  = 'fixed';
+                dropdown.style.zIndex    = '9999';
+                dropdown.style.left      = rect.left + 'px';
+                dropdown.style.width     = rect.width + 'px';
+                dropdown.style.maxHeight = maxH + 'px';
+                dropdown.style.overflowY = 'auto';
+                if (spaceBelow >= 120 || spaceBelow >= spaceAbove) {
+                    dropdown.style.top    = (rect.bottom + 2) + 'px';
+                    dropdown.style.bottom = '';
+                } else {
+                    dropdown.style.bottom = (window.innerHeight - rect.top + 2) + 'px';
+                    dropdown.style.top    = '';
+                }
+            },
+            onDropdownClose: function(dropdown) {
+                dropdown.style.position  = '';
+                dropdown.style.zIndex    = '';
+                dropdown.style.left      = '';
+                dropdown.style.width     = '';
+                dropdown.style.maxHeight = '';
+                dropdown.style.overflowY = '';
+                dropdown.style.top       = '';
+                dropdown.style.bottom    = '';
             },
             onItemAdd: function(value) {
                 var wrap = document.querySelector('#cliente-select-wrap .ts-wrapper');
@@ -2572,9 +2608,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 var ev = new Event('change', { bubbles: true });
                 clienteSelectEl.dispatchEvent(ev);
             },
-            onDropdownOpen: function(dropdown) {
-                if (dropdown) dropdown.classList.add('vendas-cliente-dropdown');
-            }
         });
     }
 
@@ -2588,6 +2621,16 @@ document.addEventListener('DOMContentLoaded', function() {
     if (typeof TomSelect !== 'undefined' && clienteSelectEl) {
         initClienteSearch();
     }
+
+    // Fix iOS Safari: impede que touchstart no dropdown dispare blur no input antes
+    // da seleção ser registrada. TomSelect usa mousedown internamente, mas no iOS
+    // o evento touchstart precisa de preventDefault para não gerar um blur prematuro.
+    document.addEventListener('touchstart', function(e) {
+        var dropdown = document.querySelector('.ts-dropdown.vendas-cliente-dropdown');
+        if (dropdown && dropdown.contains(e.target)) {
+            e.preventDefault();
+        }
+    }, { passive: false });
 
     window.vendasClienteSearch = { init: initClienteSearch, destroy: destroyClienteSearch };
     
