@@ -655,6 +655,28 @@ class LogAtividade(db.Model):
         return f'<LogAtividade {self.acao}/{self.modulo} by user_id={self.usuario_id}>'
 
 
+class Lembrete(db.Model):
+    """Lembrete manual vinculado a uma data, criado pelo operador no calendário de Vendas."""
+
+    __tablename__ = 'lembretes'
+
+    id         = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    empresa_id = db.Column(
+        db.Integer,
+        db.ForeignKey('empresas.id', ondelete='CASCADE'),
+        nullable=False,
+        index=True,
+    )
+    data       = db.Column(db.Date, nullable=False, index=True)
+    descricao  = db.Column(db.String(500), nullable=False)
+    criado_em  = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    empresa = db.relationship('Empresa', backref=db.backref('lembretes', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<Lembrete {self.id} {self.data} {self.descricao[:30]}>'
+
+
 class Documento(db.Model):
     """
     Documento PDF (boleto ou nota fiscal) armazenado no Cloudinary.

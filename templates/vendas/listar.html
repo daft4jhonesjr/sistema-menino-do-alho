@@ -194,7 +194,9 @@
      id="calendario-split-wrap"
      data-detalhes-pendentes='{{ (detalhes_entrega_pendente or {})|tojson }}'
      data-pendentes='{{ (datas_entrega_pendente or [])|tojson }}'
-     data-vencimentos='{{ (vencimentos_por_data or {})|tojson }}'>
+     data-vencimentos='{{ (vencimentos_por_data or {})|tojson }}'
+     data-lembretes='{{ (lembretes_por_data or {})|tojson }}'
+     data-csrf='{{ csrf_token() }}'>
 
     <section id="calendario-pendencias-vendas"
              class="lg:col-span-7 xl:col-span-8 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 sm:p-5 shadow-sm"
@@ -3252,6 +3254,8 @@ function ordenarVendasTabela(colIndex, tipo) {
 
     var detalhesPendentes = _parseAttr('data-detalhes-pendentes', {});
     var vencimentos       = _parseAttr('data-vencimentos', {});
+    var lembretes         = _parseAttr('data-lembretes', {});
+    var CSRF_TOKEN        = wrap.getAttribute('data-csrf') || '';
 
     var setPendentes = {};
     Object.keys(detalhesPendentes).forEach(function(d) { setPendentes[d] = true; });
@@ -3260,6 +3264,8 @@ function ordenarVendasTabela(colIndex, tipo) {
     }
     var setVencimentos = {};
     Object.keys(vencimentos).forEach(function(d) { setVencimentos[d] = true; });
+    var setLembretes = {};
+    Object.keys(lembretes).forEach(function(d) { setLembretes[d] = true; });
 
     function toISO(ano, mes, dia) {
         return ano + '-' + String(mes + 1).padStart(2, '0') + '-' + String(dia).padStart(2, '0');
@@ -3293,16 +3299,13 @@ function ordenarVendasTabela(colIndex, tipo) {
         if (displayTitulo) displayTitulo.textContent = formatarTituloDia(iso);
         if (!displayConteudo) return;
 
-        var entregas = detalhesPendentes[iso] || [];
-        var boletos  = vencimentos[iso]       || [];
-
-        if (!entregas.length && !boletos.length) {
-            displayConteudo.innerHTML =
-                '<p class="text-gray-500 dark:text-gray-400 text-sm italic">Sem compromissos para este dia.</p>';
-            return;
-        }
+        var entregas     = detalhesPendentes[iso] || [];
+        var boletos      = vencimentos[iso]        || [];
+        var listaLembs   = lembretes[iso]          || [];
 
         var html = '';
+
+        // ─── Entregas ───────────────────────────────────────────────
         if (entregas.length) {
             html += '<div class="mb-4">' +
                 '<p class="text-[10px] font-bold uppercase tracking-widest text-orange-600 dark:text-orange-400 mb-2 flex items-center gap-1"><span>🚚</span> Entregas Pendentes</p>' +
@@ -3315,8 +3318,10 @@ function ordenarVendasTabela(colIndex, tipo) {
             });
             html += '</div></div>';
         }
+
+        // ─── Boletos ────────────────────────────────────────────────
         if (boletos.length) {
-            html += '<div>' +
+            html += '<div class="mb-4">' +
                 '<p class="text-[10px] font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400 mb-2 flex items-center gap-1"><span>💰</span> Vencimentos de Boletos</p>' +
                 '<div class="space-y-2">';
             boletos.forEach(function(item) {
@@ -3352,10 +3357,200 @@ function ordenarVendasTabela(colIndex, tipo) {
 
             html += '</div>';
         }
-        displayConteudo.innerHTML = html;
+
+        // ─── Lembretes ──────────────────────────────────────────────
+        html += '<div id="painel-lembretes" class="mt-2">' +
+            '<div class="flex items-center justify-between mb-2">' +
+                '<p class="text-[10px] font-bold uppercase tracking-widest text-purple-600 dark:text-purple-400 flex items-center gap-1"><span>📌</span> Lembretes do Dia</p>' +
+                '<button type="button" onclick="abrirFormLembrete(\'' + esc(iso) + '\')" ' +
+                    'class="text-xs text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-200 flex items-center gap-1 transition-colors">' +
+                    '+ Novo Lembrete' +
+                '</button>' +
+            '</div>' +
+            '<div id="lista-lembretes-' + iso + '" class="space-y-1">';
+
+        if (listaLembs.length) {
+            listaLembs.forEach(function(lem) {
+                html += _htmlLembrete(iso, lem);
+            });
+        } else {
+            html += '<p class="text-xs text-gray-400 dark:text-gray-500 italic" id="empty-lembretes-' + iso + '">Nenhum lembrete para este dia.</p>';
+        }
+
+        html += '</div>' +
+            // formulário inline (oculto por padrão)
+            '<div id="form-lembrete-' + iso + '" class="hidden mt-2">' +
+                '<div class="flex gap-2 items-start">' +
+                    '<input type="text" id="input-lembrete-' + iso + '" maxlength="500" placeholder="Descrição do lembrete…" ' +
+                        'class="flex-1 text-sm bg-white dark:bg-gray-800 border border-purple-400 dark:border-purple-700 rounded-lg px-3 py-1.5 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none" />' +
+                    '<button type="button" onclick="salvarLembrete(\'' + esc(iso) + '\')" ' +
+                        'class="text-xs bg-purple-600 hover:bg-purple-700 text-white rounded-lg px-3 py-1.5 font-semibold transition-colors whitespace-nowrap">' +
+                        'Salvar' +
+                    '</button>' +
+                    '<button type="button" onclick="fecharFormLembrete(\'' + esc(iso) + '\')" ' +
+                        'class="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors">' +
+                        '✕' +
+                    '</button>' +
+                '</div>' +
+                '<p id="erro-lembrete-' + iso + '" class="hidden text-xs text-red-500 mt-1"></p>' +
+            '</div>' +
+        '</div>';
+
+        if (!entregas.length && !boletos.length && !listaLembs.length) {
+            // Adiciona mensagem de sem compromissos acima dos lembretes mas só se os 3 estiverem vazios
+            displayConteudo.innerHTML =
+                '<p class="text-gray-500 dark:text-gray-400 text-sm italic mb-4">Sem entregas ou boletos para este dia.</p>' + html;
+        } else {
+            displayConteudo.innerHTML = html;
+        }
+
+        // Foca o input se o formulário já estiver visível (reaberto ao trocar de dia)
+        var inp = document.getElementById('input-lembrete-' + iso);
+        if (inp && document.getElementById('form-lembrete-' + iso) &&
+            !document.getElementById('form-lembrete-' + iso).classList.contains('hidden')) {
+            inp.focus();
+        }
     }
 
-    // --- Estado de navegação ---
+    // ── Helpers globais de lembretes ─────────────────────────────
+
+    function _htmlLembrete(iso, lem) {
+        return '<div class="flex items-start justify-between gap-2 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg px-3 py-2 text-sm group" id="lem-' + lem.id + '">' +
+            '<span class="text-gray-800 dark:text-gray-200 leading-snug flex-1">' + esc(lem.descricao) + '</span>' +
+            '<button type="button" onclick="excluirLembrete(' + lem.id + ',\'' + esc(iso) + '\')" ' +
+                'title="Excluir lembrete" ' +
+                'class="text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0 text-xs leading-none mt-0.5">' +
+                '✕' +
+            '</button>' +
+        '</div>';
+    }
+
+    window.abrirFormLembrete = function(iso) {
+        var frm = document.getElementById('form-lembrete-' + iso);
+        if (!frm) return;
+        frm.classList.remove('hidden');
+        var inp = document.getElementById('input-lembrete-' + iso);
+        if (inp) { inp.value = ''; inp.focus(); }
+    };
+
+    window.fecharFormLembrete = function(iso) {
+        var frm = document.getElementById('form-lembrete-' + iso);
+        if (frm) frm.classList.add('hidden');
+        var err = document.getElementById('erro-lembrete-' + iso);
+        if (err) err.classList.add('hidden');
+    };
+
+    window.salvarLembrete = function(iso) {
+        var inp  = document.getElementById('input-lembrete-' + iso);
+        var err  = document.getElementById('erro-lembrete-' + iso);
+        if (!inp) return;
+        var descricao = inp.value.trim();
+        if (!descricao) {
+            if (err) { err.textContent = 'A descrição não pode estar vazia.'; err.classList.remove('hidden'); }
+            inp.focus();
+            return;
+        }
+        if (err) err.classList.add('hidden');
+
+        var btn = inp.parentElement.querySelector('button');
+        if (btn) btn.disabled = true;
+
+        var fd = new FormData();
+        fd.append('data', iso);
+        fd.append('descricao', descricao);
+        fd.append('csrf_token', CSRF_TOKEN);
+
+        fetch('/lembretes/criar', { method: 'POST', body: fd })
+            .then(function(r) { return r.json(); })
+            .then(function(res) {
+                if (btn) btn.disabled = false;
+                if (!res.ok) {
+                    if (err) { err.textContent = res.erro || 'Erro ao salvar.'; err.classList.remove('hidden'); }
+                    return;
+                }
+                // Actualiza memória local
+                if (!lembretes[iso]) lembretes[iso] = [];
+                lembretes[iso].push({ id: res.id, descricao: res.descricao });
+                setLembretes[iso] = true;
+
+                // Remove mensagem de vazio se existir
+                var empty = document.getElementById('empty-lembretes-' + iso);
+                if (empty) empty.remove();
+
+                // Injeta o novo card na lista
+                var lista = document.getElementById('lista-lembretes-' + iso);
+                if (lista) {
+                    var tmp = document.createElement('div');
+                    tmp.innerHTML = _htmlLembrete(iso, { id: res.id, descricao: res.descricao });
+                    lista.appendChild(tmp.firstElementChild);
+                }
+
+                // Fecha o formulário e limpa
+                fecharFormLembrete(iso);
+
+                // Actualiza (ou adiciona) o indicador roxo na célula do calendário
+                _atualizarBarraLembrete(iso);
+            })
+            .catch(function() {
+                if (btn) btn.disabled = false;
+                if (err) { err.textContent = 'Erro de conexão. Tente novamente.'; err.classList.remove('hidden'); }
+            });
+    };
+
+    window.excluirLembrete = function(id, iso) {
+        if (!confirm('Excluir este lembrete?')) return;
+
+        var fd = new FormData();
+        fd.append('csrf_token', CSRF_TOKEN);
+
+        fetch('/lembretes/' + id + '/excluir', { method: 'POST', body: fd })
+            .then(function(r) { return r.json(); })
+            .then(function(res) {
+                if (!res.ok) { alert(res.erro || 'Erro ao excluir.'); return; }
+                // Remove da memória local
+                if (lembretes[iso]) {
+                    lembretes[iso] = lembretes[iso].filter(function(l) { return l.id !== id; });
+                    if (!lembretes[iso].length) delete lembretes[iso];
+                }
+                // Remove card do painel
+                var card = document.getElementById('lem-' + id);
+                if (card) card.remove();
+                // Mostra mensagem de vazio se necessário
+                var lista = document.getElementById('lista-lembretes-' + iso);
+                if (lista && !lista.querySelector('[id^="lem-"]')) {
+                    var p = document.createElement('p');
+                    p.className = 'text-xs text-gray-400 dark:text-gray-500 italic';
+                    p.id = 'empty-lembretes-' + iso;
+                    p.textContent = 'Nenhum lembrete para este dia.';
+                    lista.appendChild(p);
+                }
+                // Remove indicador roxo na célula se não houver mais lembretes
+                if (!lembretes[iso] || !lembretes[iso].length) {
+                    delete setLembretes[iso];
+                    _atualizarBarraLembrete(iso);
+                }
+            })
+            .catch(function() { alert('Erro de conexão.'); });
+    };
+
+    function _atualizarBarraLembrete(iso) {
+        var cel = grid.querySelector('[data-iso="' + iso + '"]');
+        if (!cel) return;
+        var bar = cel.querySelector('.cal-bar-lembrete');
+        if (lembretes[iso] && lembretes[iso].length) {
+            if (!bar) {
+                var newBar = document.createElement('div');
+                newBar.className = 'mt-0.5 w-full text-left text-[10px] bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded px-1 truncate cal-bar-lembrete';
+                newBar.setAttribute('data-iso-lem', iso);
+                newBar.textContent = '📌 Lembrete';
+                cel.appendChild(newBar);
+            }
+        } else {
+            if (bar) bar.remove();
+        }
+    }
+
+    // ── Estado de navegação ──────────────────────────────────────
     var hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
     var isoHoje = toISO(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
@@ -3392,10 +3587,12 @@ function ordenarVendasTabela(colIndex, tipo) {
                 var isHoje     = iso === isoHoje;
                 var temEntrega = !!setPendentes[iso];
                 var temBoleto  = !!setVencimentos[iso];
+                var temLembrete = !!setLembretes[iso];
 
                 var tooltips = [];
-                if (temEntrega) tooltips.push('entrega(s) pendente(s)');
-                if (temBoleto)  tooltips.push('boleto(s) a vencer');
+                if (temEntrega)  tooltips.push('entrega(s) pendente(s)');
+                if (temBoleto)   tooltips.push('boleto(s) a vencer');
+                if (temLembrete) tooltips.push('lembrete(s)');
 
                 var cel = document.createElement('div');
                 cel.setAttribute('role', 'gridcell');
@@ -3426,6 +3623,13 @@ function ordenarVendasTabela(colIndex, tipo) {
                         '<span>💰 Boleto</span>' +
                         '<span class="bg-red-500 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full shadow-sm flex-shrink-0">' + qtd + '</span>';
                     cel.appendChild(barBol);
+                }
+                if (temLembrete) {
+                    var barLem = document.createElement('div');
+                    barLem.className = 'mt-0.5 w-full text-left text-[10px] bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded px-1 truncate cal-bar-lembrete';
+                    barLem.setAttribute('data-iso-lem', iso);
+                    barLem.textContent = '📌 Lembrete';
+                    cel.appendChild(barLem);
                 }
 
                 cel.addEventListener('click', function() { selecionarDia(cel, iso); });

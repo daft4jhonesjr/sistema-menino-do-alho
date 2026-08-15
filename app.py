@@ -29,6 +29,7 @@ from models import (
     PushSubscription,
     LogAtividade,
     Empresa,
+    Lembrete,
     PERFIL_MASTER,
     PERFIL_DONO,
     PERFIL_FUNCIONARIO,

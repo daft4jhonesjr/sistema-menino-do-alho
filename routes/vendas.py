@@ -50,7 +50,7 @@ from sqlalchemy.orm import joinedload
 import pandas as pd
 from werkzeug.utils import secure_filename
 
-from models import db, Cliente, Produto, Venda, Documento, LancamentoCaixa
+from models import db, Cliente, Produto, Venda, Documento, LancamentoCaixa, Lembrete
 from services.auth_utils import (
     tenant_required, admin_required, _is_ajax,
     _e_admin_tenant, _usuario_pode_gerenciar_venda,
@@ -97,6 +97,56 @@ def _exigir_tenant_em_todas_rotas():
         return None
 
     return _ok()
+
+
+# ============================================================
+# Lembretes do Calendário de Vendas
+# ============================================================
+@vendas_bp.route('/lembretes/criar', methods=['POST'])
+def criar_lembrete():
+    """Cria um lembrete manual para o calendário de entregas/vendas."""
+    data_raw   = (request.form.get('data') or '').strip()
+    descricao  = (request.form.get('descricao') or '').strip()[:500]
+
+    if not data_raw or not descricao:
+        return jsonify({'ok': False, 'erro': 'Data e descrição são obrigatórias.'}), 400
+
+    try:
+        from datetime import date as _date
+        data_obj = _date.fromisoformat(data_raw)
+    except ValueError:
+        return jsonify({'ok': False, 'erro': 'Data inválida.'}), 400
+
+    try:
+        lembrete = Lembrete(
+            empresa_id=empresa_id_atual(),
+            data=data_obj,
+            descricao=descricao,
+        )
+        db.session.add(lembrete)
+        db.session.commit()
+        return jsonify({
+            'ok': True,
+            'id': lembrete.id,
+            'data': data_obj.isoformat(),
+            'descricao': lembrete.descricao,
+        })
+    except Exception:
+        db.session.rollback()
+        return jsonify({'ok': False, 'erro': 'Erro ao salvar lembrete.'}), 500
+
+
+@vendas_bp.route('/lembretes/<int:id>/excluir', methods=['POST'])
+def excluir_lembrete(id):
+    """Remove um lembrete do calendário."""
+    lembrete = query_tenant(Lembrete).filter_by(id=id).first_or_404()
+    try:
+        db.session.delete(lembrete)
+        db.session.commit()
+        return jsonify({'ok': True})
+    except Exception:
+        db.session.rollback()
+        return jsonify({'ok': False, 'erro': 'Erro ao excluir lembrete.'}), 500
 
 
 # ============================================================
@@ -913,6 +963,27 @@ def listar_vendas():
         db.session.rollback()
         vencimentos_por_data = {}
 
+    # Lembretes manuais do operador para o calendário (qualquer data do ano ativo).
+    lembretes_por_data = {}
+    try:
+        _ano_lem = session.get('ano_ativo', datetime.now().year)
+        _ini_lem, _fim_lem = filtro_ano_data_venda(_ano_lem, Lembrete.data)
+        _lembs = (
+            query_tenant(Lembrete)
+            .filter(_ini_lem, _fim_lem)
+            .order_by(Lembrete.data.asc(), Lembrete.criado_em.asc())
+            .all()
+        )
+        for _l in _lembs:
+            _iso_l = _l.data.isoformat()
+            lembretes_por_data.setdefault(_iso_l, []).append({
+                'id': _l.id,
+                'descricao': _l.descricao,
+            })
+    except Exception:
+        db.session.rollback()
+        lembretes_por_data = {}
+
     return render_template(
         'vendas/listar.html',
         pedidos=pedidos_paginados,
@@ -946,6 +1017,7 @@ def listar_vendas():
         datas_entrega_pendente=datas_entrega_pendente,
         detalhes_entrega_pendente=detalhes_entrega_pendente,
         vencimentos_por_data=vencimentos_por_data,
+        lembretes_por_data=lembretes_por_data,
     )
 
 
