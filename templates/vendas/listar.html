@@ -198,7 +198,6 @@
      data-pendentes='{{ (datas_entrega_pendente or [])|tojson }}'
      data-vencimentos='{{ (vencimentos_por_data or {})|tojson }}'
      data-lembretes='{{ (lembretes_por_data or {})|tojson }}'
-     data-frase-do-dia='{{ (frase_do_dia or {})|tojson }}'
      data-csrf='{{ csrf_token() }}'>
 
     <section id="calendario-pendencias-vendas"
@@ -3282,6 +3281,17 @@ function ordenarVendasTabela(colIndex, tipo) {
     var displayConteudo = document.getElementById('display-conteudo');
     if (!wrap || !grid) return;
 
+    var _todasFrases = {{ todas_frases | tojson }};
+
+    function obterFrasePorData(isoString) {
+        if (!_todasFrases || !_todasFrases.length) return null;
+        var soma = 0;
+        for (var i = 0; i < isoString.length; i++) {
+            soma += isoString.charCodeAt(i);
+        }
+        return _todasFrases[soma % _todasFrases.length];
+    }
+
     var MESES_PT = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
         'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
     var DIAS_SEMANA_PT = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira',
@@ -3299,13 +3309,13 @@ function ordenarVendasTabela(colIndex, tipo) {
     var detalhesPendentes = _parseAttr('data-detalhes-pendentes', {});
     var vencimentos       = _parseAttr('data-vencimentos', {});
     var lembretes         = _parseAttr('data-lembretes', {});
-    var fraseDoDia        = _parseAttr('data-frase-do-dia', {});
     var CSRF_TOKEN        = wrap.getAttribute('data-csrf') || '';
 
-    function _htmlFraseDoDia() {
-        var texto = (fraseDoDia && fraseDoDia.texto) ? String(fraseDoDia.texto).trim() : '';
-        if (!texto) return '';
-        var autor = (fraseDoDia && fraseDoDia.autor) ? String(fraseDoDia.autor).trim() : '';
+    function _htmlFraseDoDia(iso) {
+        var frase = obterFrasePorData(iso);
+        if (!frase || !frase.texto) return '';
+        var texto = String(frase.texto).trim();
+        var autor = (frase.autor || '').trim();
         return (
             '<div class="mt-8 pt-6 border-t border-gray-700/50 text-center">' +
                 '<p class="text-sm italic text-gray-400 font-serif leading-relaxed px-4">&ldquo;' + esc(texto) + '&rdquo;</p>' +
@@ -3479,7 +3489,7 @@ function ordenarVendasTabela(colIndex, tipo) {
             '</div>' +
         '</div>';
 
-        html += _htmlFraseDoDia();
+        html += _htmlFraseDoDia(iso);
 
         if (!entregas.length && !boletos.length && !listaLembs.length) {
             // Adiciona mensagem de sem compromissos acima dos lembretes mas só se os 3 estiverem vazios
