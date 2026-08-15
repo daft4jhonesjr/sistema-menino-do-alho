@@ -402,11 +402,16 @@ def dashboard():
     total_vendas = float(kpis_consolidados.vendas or 0)
     total_pedidos = int(kpis_consolidados.pedidos or 0)
 
-    vendas_com_prejuizo = query_tenant(Venda).options(
-        joinedload(Venda.cliente), joinedload(Venda.produto)
-    ).join(Produto, Venda.produto_id == Produto.id) \
-     .filter(prejuizo_expr < 0, *filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome) \
-     .order_by(Venda.data_venda.desc()).all()
+    vendas_com_prejuizo = []
+    try:
+        vendas_com_prejuizo = query_tenant(Venda).options(
+            joinedload(Venda.cliente), joinedload(Venda.produto)
+        ).join(Produto, Venda.produto_id == Produto.id) \
+         .filter(prejuizo_expr < 0, *filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome) \
+         .order_by(Venda.data_venda.desc()).all()
+    except Exception as _e_prej:
+        db.session.rollback()
+        current_app.logger.warning(f'dashboard: falha ao carregar vendas_com_prejuizo: {_e_prej}')
     detalhes_prejuizo = []
     for v in vendas_com_prejuizo:
         nome_cliente = v.cliente.nome_cliente if v.cliente else "Desconhecido"
@@ -642,7 +647,11 @@ def api_frases_voto_atual():
     if not frase:
         return jsonify({'voto': None})
 
-    registro = query_tenant(VotoFrase).filter_by(frase_texto=frase[:500]).first()
+    try:
+        registro = query_tenant(VotoFrase).filter_by(frase_texto=frase[:500]).first()
+    except Exception:
+        db.session.rollback()
+        return jsonify({'voto': None})
     if not registro:
         return jsonify({'voto': None})
     return jsonify({'voto': 'like' if registro.gostou else 'dislike'})

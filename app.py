@@ -3771,6 +3771,13 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             _adicionar_coluna_se_ausente('clientes', 'endereco', 'VARCHAR(255)')
         except (OperationalError, Exception):
             db.session.rollback()
+        # Migração: estado em clientes (UF, ex: "PE", "BA")
+        # CRÍTICO: sem esta migração o SQLAlchemy inclui clientes.estado no SELECT
+        # de joinedload e quebra todas as rotas que carregam objetos Cliente.
+        try:
+            _adicionar_coluna_se_ausente('clientes', 'estado', 'VARCHAR(2)')
+        except (OperationalError, Exception):
+            db.session.rollback()
         # Migração: status_entrega em vendas (status logístico independente do financeiro)
         try:
             _adicionar_coluna_se_ausente('vendas', 'status_entrega', "VARCHAR(50) DEFAULT 'PENDENTE'")
