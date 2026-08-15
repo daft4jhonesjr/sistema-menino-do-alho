@@ -4332,34 +4332,36 @@ function toggleAnaliseVendas(event) {
     }
 
     function montarTextoPedidoNF(btn) {
-        var razao = (btn.getAttribute('data-razao') || '').trim();
-        var cnpj = formatarCnpjNF(btn.getAttribute('data-cnpj') || '');
-        var loc = separarCidadeUf(btn.getAttribute('data-cidade'), btn.getAttribute('data-uf'));
-        var itens = parseItensNF(btn.getAttribute('data-itens'));
+        var razao  = (btn.getAttribute('data-razao') || '').trim();
+        var cnpj   = formatarCnpjNF(btn.getAttribute('data-cnpj') || '');
+        var loc    = separarCidadeUf(btn.getAttribute('data-cidade'), btn.getAttribute('data-uf'));
+        var itens  = parseItensNF(btn.getAttribute('data-itens'));
 
         var linhasItens = itens.map(function(item) {
-            var qtd = item.q != null ? item.q : (item.qtd != null ? item.qtd : '');
-            var nome = String(item.n || item.nome || '').trim();
-            var preco = String(item.p || item.preco || '').trim();
-            return [qtd, nome, preco].filter(function(p) { return p !== '' && p != null; }).join(' ');
+            var qtd   = String(item.q  != null ? item.q  : (item.qtd  != null ? item.qtd  : '')).trim();
+            var nome  = String(item.n  || item.nome  || '').trim();
+            var preco = String(item.p  || item.preco || '').trim();
+            var partes = [qtd, nome, preco].filter(Boolean);
+            return partes.length ? '▪️ ' + partes.join(' ') : '';
         }).filter(Boolean);
 
-        var cidadeLinha = '';
-        if (loc.cidade && loc.uf) cidadeLinha = loc.cidade + '-' + loc.uf;
-        else if (loc.cidade) cidadeLinha = loc.cidade;
-        else if (loc.uf) cidadeLinha = loc.uf;
+        var cidadeLinha = [loc.cidade, loc.uf].filter(Boolean).join('-');
 
-        var partes = [];
-        if (razao) partes.push(razao);
-        if (cnpj) partes.push(cnpj);
-        partes.push('');
+        var blocos = [];
+
+        // Cabeçalho do cliente
+        var cabecalho = [];
+        if (razao) cabecalho.push('🏢 *' + razao + '*');
+        if (cnpj)  cabecalho.push('📄 CNPJ: ' + cnpj);
+        if (cidadeLinha) cabecalho.push('📍 ' + cidadeLinha);
+        if (cabecalho.length) blocos.push(cabecalho.join('\n'));
+
+        // Detalhes do pedido
         if (linhasItens.length) {
-            partes = partes.concat(linhasItens);
+            blocos.push('📦 *Detalhes do Pedido:*\n' + linhasItens.join('\n'));
         }
-        partes.push('');
-        if (cidadeLinha) partes.push(cidadeLinha);
 
-        return partes.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+        return blocos.join('\n\n').trim();
     }
 
     function feedbackPedidoNFCopiado() {
