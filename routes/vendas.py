@@ -1326,6 +1326,18 @@ def logistica():
     entregas = pedidos_agrupados[start_idx:end_idx]
     has_next = end_idx < total_pedidos
 
+    # Volume a carregar: soma de quantidades ainda PENDENTES (sempre, independente da aba).
+    if filtro_status == 'PENDENTE':
+        total_caixas_pendentes = sum(int(getattr(v, 'quantidade_venda', 0) or 0) for v in vendas)
+    else:
+        total_caixas_pendentes = int(
+            query_tenant(Venda)
+            .with_entities(func.coalesce(func.sum(Venda.quantidade_venda), 0))
+            .filter(Venda.status_entrega == 'PENDENTE')
+            .scalar()
+            or 0
+        )
+
     if is_ajax:
         return jsonify({
             'success': True,
@@ -1333,6 +1345,7 @@ def logistica():
             'has_next': has_next,
             'page': page,
             'status': filtro_status,
+            'total_caixas_pendentes': total_caixas_pendentes,
         })
 
     return render_template(
@@ -1340,6 +1353,7 @@ def logistica():
         entregas=entregas,
         filtro_status=filtro_status,
         has_next_logistica=has_next,
+        total_caixas_pendentes=total_caixas_pendentes,
     )
 
 
