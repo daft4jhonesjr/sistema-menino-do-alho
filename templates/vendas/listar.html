@@ -4427,11 +4427,10 @@ function toggleAnaliseVendas(event) {
 </script>
 
 <script>
-/* Baixa rápida de entrega pelo badge "A Entregar" na tabela/cards de Vendas. */
+/* Toggle rápido de entrega pelo badge "A Entregar" / "Entregue" na tabela/cards. */
 window.marcarComoEntregueRapido = function(id, elementoBadge) {
     if (!id || !elementoBadge || elementoBadge.dataset.busy === '1') return;
     elementoBadge.dataset.busy = '1';
-    elementoBadge.disabled = true;
     elementoBadge.classList.add('opacity-60');
 
     fetch('/vendas/' + id + '/marcar_entregue', {
@@ -4442,38 +4441,56 @@ window.marcarComoEntregueRapido = function(id, elementoBadge) {
     })
     .then(function(r) { return r.json().then(function(j) { return { ok: r.ok, j: j }; }); })
     .then(function(res) {
-        if (!res.ok || !res.j || !res.j.ok) {
-            elementoBadge.dataset.busy = '0';
-            elementoBadge.disabled = false;
-            elementoBadge.classList.remove('opacity-60');
-            var msg = (res.j && res.j.erro) ? res.j.erro : 'Não foi possível marcar como entregue.';
+        elementoBadge.dataset.busy = '0';
+        elementoBadge.classList.remove('opacity-60');
+
+        if (!res.ok || !res.j || !(res.j.ok || res.j.success)) {
+            var msg = (res.j && res.j.erro) ? res.j.erro : 'Não foi possível atualizar a entrega.';
             if (typeof showToast === 'function') showToast(msg, 'error');
             else alert(msg);
             return;
         }
 
-        elementoBadge.removeAttribute('onclick');
-        elementoBadge.onclick = null;
-        elementoBadge.removeAttribute('data-venda-id');
-        elementoBadge.className =
-            'inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium ' +
-            'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/40 ' +
-            'rounded-full border border-emerald-200 dark:border-emerald-800';
-        elementoBadge.title = 'Entregue';
-        elementoBadge.innerHTML =
-            '<i data-lucide="check" class="w-3 h-3 flex-shrink-0"></i> Entregue';
-        elementoBadge.disabled = true;
+        var entregue = !!res.j.entregue;
+        var base =
+            'badge-baixa-entrega inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium ' +
+            'rounded-full border cursor-pointer hover:scale-105 transition-all ';
+
+        if (entregue) {
+            elementoBadge.className = base +
+                'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/40 ' +
+                'border-emerald-200 dark:border-emerald-800 hover:bg-emerald-200 dark:hover:bg-emerald-800/60';
+            elementoBadge.title = 'Clique para desfazer e voltar para A Entregar';
+            elementoBadge.innerHTML =
+                '<i data-lucide="check" class="w-3 h-3 flex-shrink-0"></i> Entregue';
+            if (typeof showToast === 'function') showToast('Pedido marcado como entregue!', 'success');
+        } else {
+            elementoBadge.className = base +
+                'text-orange-700 dark:text-orange-300 bg-orange-100 dark:bg-orange-900/40 ' +
+                'border-orange-200 dark:border-orange-800 hover:bg-orange-200 dark:hover:bg-orange-800/60';
+            elementoBadge.title = 'Clique para marcar como Entregue';
+            elementoBadge.innerHTML =
+                '<i data-lucide="truck" class="w-3 h-3 flex-shrink-0"></i> A Entregar';
+            if (typeof showToast === 'function') showToast('Entrega desfeita — voltou para A Entregar.', 'success');
+        }
+
+        // Mantém o botão clicável (toggle contínuo).
+        elementoBadge.setAttribute(
+            'onclick',
+            'event.stopPropagation(); marcarComoEntregueRapido(' + id + ', this);'
+        );
+        elementoBadge.setAttribute('data-venda-id', String(id));
+        elementoBadge.disabled = false;
+
         if (typeof lucide !== 'undefined') {
             try { lucide.createIcons(); } catch (_) {}
         }
-        if (typeof showToast === 'function') showToast('Pedido marcado como entregue!', 'success');
     })
     .catch(function() {
         elementoBadge.dataset.busy = '0';
-        elementoBadge.disabled = false;
         elementoBadge.classList.remove('opacity-60');
-        if (typeof showToast === 'function') showToast('Erro de conexão ao marcar entrega.', 'error');
-        else alert('Erro de conexão ao marcar entrega.');
+        if (typeof showToast === 'function') showToast('Erro de conexão ao atualizar entrega.', 'error');
+        else alert('Erro de conexão ao atualizar entrega.');
     });
 };
 </script>

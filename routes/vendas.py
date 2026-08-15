@@ -1376,23 +1376,32 @@ def toggle_entrega(venda_id):
 
 @vendas_bp.route('/vendas/<int:id>/marcar_entregue', methods=['POST'])
 def marcar_entregue_rapido(id):
-    """Baixa rápida: marca todos os itens do pedido como ENTREGUE (JSON)."""
+    """Toggle rápido: alterna status_entrega do pedido entre PENDENTE e ENTREGUE."""
     venda = query_tenant(Venda).filter_by(id=id).first_or_404()
     if not _e_admin_tenant() and not _usuario_pode_gerenciar_venda(venda):
         return jsonify({'ok': False, 'erro': 'Sem permissão para alterar esta venda.'}), 403
 
     try:
+        atual = str(getattr(venda, 'status_entrega', None) or 'PENDENTE').strip().upper()
+        novo_status = 'PENDENTE' if atual == 'ENTREGUE' else 'ENTREGUE'
         vendas_pedido = _vendas_do_pedido(venda) or [venda]
         ids = [v.id for v in vendas_pedido]
         query_tenant(Venda).filter(Venda.id.in_(ids)).update(
-            {'status_entrega': 'ENTREGUE'},
+            {'status_entrega': novo_status},
             synchronize_session=False,
         )
         db.session.commit()
-        return jsonify({'ok': True, 'status': 'ENTREGUE', 'ids': ids})
+        entregue = (novo_status == 'ENTREGUE')
+        return jsonify({
+            'ok': True,
+            'success': True,
+            'entregue': entregue,
+            'status': novo_status,
+            'ids': ids,
+        })
     except Exception:
         db.session.rollback()
-        return jsonify({'ok': False, 'erro': 'Erro ao marcar como entregue.'}), 500
+        return jsonify({'ok': False, 'erro': 'Erro ao atualizar status de entrega.'}), 500
 
 
 @vendas_bp.route('/logistica/bulk_update', methods=['POST'])
