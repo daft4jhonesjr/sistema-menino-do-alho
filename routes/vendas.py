@@ -771,8 +771,8 @@ def listar_vendas():
             query_tenant(Venda)
             .options(joinedload(Venda.cliente), joinedload(Venda.produto))
             .filter(
-                Venda.data_venda >= _ini_cal,
-                Venda.data_venda < _fim_cal,
+                _ini_cal,
+                _fim_cal,
                 func.upper(func.coalesce(Venda.status_entrega, 'PENDENTE')) != 'ENTREGUE',
             )
             .order_by(Venda.data_venda.asc(), Venda.cliente_id.asc(), Venda.id.asc())
