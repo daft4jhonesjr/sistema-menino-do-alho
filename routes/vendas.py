@@ -51,6 +51,7 @@ import pandas as pd
 from werkzeug.utils import secure_filename
 
 from models import db, Cliente, Produto, Venda, Documento, LancamentoCaixa, Lembrete
+from quotes import frase_do_dia
 from services.auth_utils import (
     tenant_required, admin_required, _is_ajax,
     _e_admin_tenant, _usuario_pode_gerenciar_venda,
@@ -1051,6 +1052,7 @@ def listar_vendas():
         detalhes_entrega_pendente=detalhes_entrega_pendente,
         vencimentos_por_data=vencimentos_por_data,
         lembretes_por_data=lembretes_por_data,
+        frase_do_dia=frase_do_dia(),
     )
 
 
