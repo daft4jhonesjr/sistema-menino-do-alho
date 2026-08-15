@@ -876,6 +876,7 @@ def listar_vendas():
                 ).strip()
                 _pedidos_cal[_pkey] = {
                     'iso': _iso,
+                    'id': _v.id,  # 1ª venda do grupo — usada no toggle rápido
                     'cliente': _nome,
                     'itens_parts': [],
                     'valor': Decimal('0.00'),
@@ -899,6 +900,7 @@ def listar_vendas():
         for _p in _pedidos_cal.values():
             _iso = _p['iso']
             _det.setdefault(_iso, []).append({
+                'id': _p['id'],
                 'cliente': _p['cliente'],
                 'itens': ' · '.join(_p['itens_parts']) if _p['itens_parts'] else '—',
                 'valor': _fmt_moeda_cal(_p['valor']),

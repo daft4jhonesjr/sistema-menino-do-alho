@@ -3356,19 +3356,33 @@ function ordenarVendasTabela(colIndex, tipo) {
             html += '<div class="mb-4">' +
                 '<p class="text-[10px] font-bold uppercase tracking-widest text-orange-600 dark:text-orange-400 mb-2 flex items-center gap-1"><span>🚚</span> Entregas do Dia</p>' +
                 '<div class="space-y-2">';
-            entregas.forEach(function(item) {
+            entregas.forEach(function(item, idx) {
                 var entregue = !!item.entregue;
+                var pid = item.id != null ? item.id : '';
                 var borderCls = entregue ? 'border-emerald-500' : 'border-orange-500';
                 var textoCls = entregue ? 'line-through opacity-70' : '';
                 var badge = entregue
-                    ? '<span class="ml-2 px-2 py-0.5 text-[10px] font-bold bg-emerald-500/20 text-emerald-400 rounded whitespace-nowrap">ENTREGUE</span>'
+                    ? '<span class="cal-badge-entregue ml-2 px-2 py-0.5 text-[10px] font-bold bg-emerald-500/20 text-emerald-400 rounded whitespace-nowrap">ENTREGUE</span>'
                     : '';
-                html += '<div class="bg-gray-50 dark:bg-gray-700/30 p-3 rounded-lg border-l-4 ' + borderCls + '">' +
-                    '<p class="font-semibold text-sm text-gray-900 dark:text-white flex items-center flex-wrap ' + textoCls + '">' +
-                        esc(item.cliente || 'Cliente') + badge +
-                    '</p>' +
-                    '<p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-snug ' + textoCls + '">' + esc(item.itens || '—') + '</p>' +
-                    '<p class="text-sm font-bold text-emerald-600 dark:text-emerald-400 mt-1 ' + textoCls + '">' + esc(item.valor || '') + '</p></div>';
+                var btnLabel = entregue ? 'Desfazer' : '✓ Concluir';
+                var btnCls = entregue
+                    ? 'text-xs text-gray-400 hover:text-white transition-colors'
+                    : 'text-xs font-semibold text-emerald-500 hover:text-emerald-400 transition-colors';
+                html +=
+                    '<div class="cal-card-entrega bg-gray-50 dark:bg-gray-700/30 p-3 rounded-lg border-l-4 ' + borderCls + '" ' +
+                        'data-iso="' + esc(iso) + '" data-idx="' + idx + '" data-venda-id="' + pid + '" data-entregue="' + (entregue ? '1' : '0') + '">' +
+                        '<p class="cal-entrega-cliente font-semibold text-sm text-gray-900 dark:text-white flex items-center flex-wrap ' + textoCls + '">' +
+                            esc(item.cliente || 'Cliente') + badge +
+                        '</p>' +
+                        '<p class="cal-entrega-itens text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-snug ' + textoCls + '">' + esc(item.itens || '—') + '</p>' +
+                        '<div class="mt-1 flex items-center justify-between gap-2">' +
+                            '<p class="cal-entrega-valor text-sm font-bold text-emerald-600 dark:text-emerald-400 ' + textoCls + '">' + esc(item.valor || '') + '</p>' +
+                            (pid !== ''
+                                ? '<button type="button" class="cal-btn-toggle-entrega flex-shrink-0 ' + btnCls + '" ' +
+                                    'onclick="toggleEntregaPainel(' + pid + ', this)">' + btnLabel + '</button>'
+                                : '') +
+                        '</div>' +
+                    '</div>';
             });
             html += '</div></div>';
         }
@@ -3468,6 +3482,126 @@ function ordenarVendasTabela(colIndex, tipo) {
     }
 
     // ── Helpers globais de lembretes ─────────────────────────────
+
+    function _atualizarBarraEntrega(iso) {
+        var temPendente = false;
+        var lista = detalhesPendentes[iso] || [];
+        for (var i = 0; i < lista.length; i++) {
+            if (!lista[i].entregue) { temPendente = true; break; }
+        }
+        if (temPendente) setPendentes[iso] = true;
+        else delete setPendentes[iso];
+
+        var cel = grid.querySelector('[data-iso="' + iso + '"]');
+        if (!cel) return;
+        var bar = cel.querySelector('.cal-bar-entrega');
+        if (temPendente) {
+            if (!bar) {
+                var newBar = document.createElement('div');
+                newBar.className = 'mt-1 w-full text-left text-[10px] bg-orange-500/20 text-orange-600 dark:text-orange-400 rounded px-1 truncate cal-bar-entrega';
+                newBar.textContent = '🚚 Entrega';
+                // Insere após o número do dia (primeiro filho)
+                var first = cel.firstElementChild;
+                if (first && first.nextSibling) cel.insertBefore(newBar, first.nextSibling);
+                else cel.appendChild(newBar);
+            }
+        } else if (bar) {
+            bar.remove();
+        }
+    }
+
+    function _aplicarVisualCardEntrega(card, entregue) {
+        if (!card) return;
+        card.setAttribute('data-entregue', entregue ? '1' : '0');
+        card.classList.remove('border-orange-500', 'border-emerald-500');
+        card.classList.add(entregue ? 'border-emerald-500' : 'border-orange-500');
+
+        var clienteEl = card.querySelector('.cal-entrega-cliente');
+        var itensEl = card.querySelector('.cal-entrega-itens');
+        var valorEl = card.querySelector('.cal-entrega-valor');
+        var btn = card.querySelector('.cal-btn-toggle-entrega');
+        var badge = card.querySelector('.cal-badge-entregue');
+
+        [clienteEl, itensEl, valorEl].forEach(function(el) {
+            if (!el) return;
+            if (entregue) el.classList.add('line-through', 'opacity-70');
+            else el.classList.remove('line-through', 'opacity-70');
+        });
+
+        if (entregue) {
+            if (!badge && clienteEl) {
+                var span = document.createElement('span');
+                span.className = 'cal-badge-entregue ml-2 px-2 py-0.5 text-[10px] font-bold bg-emerald-500/20 text-emerald-400 rounded whitespace-nowrap';
+                span.textContent = 'ENTREGUE';
+                clienteEl.appendChild(span);
+            }
+            if (btn) {
+                btn.textContent = 'Desfazer';
+                btn.className = 'cal-btn-toggle-entrega flex-shrink-0 text-xs text-gray-400 hover:text-white transition-colors';
+            }
+        } else {
+            if (badge) badge.remove();
+            if (btn) {
+                btn.textContent = '✓ Concluir';
+                btn.className = 'cal-btn-toggle-entrega flex-shrink-0 text-xs font-semibold text-emerald-500 hover:text-emerald-400 transition-colors';
+            }
+        }
+    }
+
+    window.toggleEntregaPainel = function(id, buttonElement) {
+        if (!id || !buttonElement || buttonElement.dataset.busy === '1') return;
+        var card = buttonElement.closest('.cal-card-entrega');
+        if (!card) return;
+        buttonElement.dataset.busy = '1';
+        buttonElement.classList.add('opacity-60');
+
+        fetch('/vendas/' + id + '/marcar_entregue', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin',
+            body: '{}'
+        })
+        .then(function(r) { return r.json().then(function(j) { return { ok: r.ok, j: j }; }); })
+        .then(function(res) {
+            buttonElement.dataset.busy = '0';
+            buttonElement.classList.remove('opacity-60');
+            if (!res.ok || !res.j || !(res.j.ok || res.j.success)) {
+                var msg = (res.j && res.j.erro) ? res.j.erro : 'Não foi possível atualizar a entrega.';
+                if (typeof showToast === 'function') showToast(msg, 'error');
+                else alert(msg);
+                return;
+            }
+
+            var entregue = !!res.j.entregue;
+            var iso = card.getAttribute('data-iso');
+            var idx = parseInt(card.getAttribute('data-idx'), 10);
+
+            // Atualiza memória local (evita reverter ao trocar de dia)
+            if (iso && detalhesPendentes[iso] && !isNaN(idx) && detalhesPendentes[iso][idx]) {
+                detalhesPendentes[iso][idx].entregue = entregue;
+            } else if (iso && detalhesPendentes[iso]) {
+                detalhesPendentes[iso].forEach(function(it) {
+                    if (it.id === id) it.entregue = entregue;
+                });
+            }
+
+            _aplicarVisualCardEntrega(card, entregue);
+            if (iso) _atualizarBarraEntrega(iso);
+
+            if (typeof showToast === 'function') {
+                showToast(
+                    entregue ? 'Pedido marcado como entregue!' : 'Entrega desfeita — voltou para A Entregar.',
+                    'success'
+                );
+            }
+        })
+        .catch(function() {
+            buttonElement.dataset.busy = '0';
+            buttonElement.classList.remove('opacity-60');
+            if (typeof showToast === 'function') showToast('Erro de conexão ao atualizar entrega.', 'error');
+            else alert('Erro de conexão ao atualizar entrega.');
+        });
+    };
 
     function _htmlLembrete(iso, lem) {
         var concluido = !!lem.concluido;
@@ -3740,7 +3874,7 @@ function ordenarVendasTabela(colIndex, tipo) {
 
                 if (temEntrega) {
                     var barEnt = document.createElement('div');
-                    barEnt.className = 'mt-1 w-full text-left text-[10px] bg-orange-500/20 text-orange-600 dark:text-orange-400 rounded px-1 truncate';
+                    barEnt.className = 'mt-1 w-full text-left text-[10px] bg-orange-500/20 text-orange-600 dark:text-orange-400 rounded px-1 truncate cal-bar-entrega';
                     barEnt.textContent = '🚚 Entrega';
                     cel.appendChild(barEnt);
                 }
