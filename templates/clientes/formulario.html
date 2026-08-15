@@ -96,13 +96,50 @@
         </div>
 
         <div class="mb-4">
-            <label for="cidade" class="block text-sm font-medium text-gray-700 mb-2">
-                Cidade
-            </label>
-            <input type="text" id="cidade" name="cidade" 
-                   value="{{ cliente.cidade if cliente else '' }}"
-                   autocapitalize="words" autocomplete="off" spellcheck="false"
-                   class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
+            <div class="flex gap-3">
+                <div class="flex-1 min-w-0">
+                    <label for="cidade" class="block text-sm font-medium text-gray-700 mb-2">
+                        Cidade
+                    </label>
+                    <input type="text" id="cidade" name="cidade"
+                           value="{{ cliente.cidade if cliente else '' }}"
+                           autocapitalize="words" autocomplete="off" spellcheck="false"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
+                </div>
+                <div style="width:110px;flex-shrink:0">
+                    <label for="estado" class="block text-sm font-medium text-gray-700 mb-2">UF</label>
+                    <select id="estado" name="estado" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent text-sm">
+                        <option value="">—</option>
+                        <option value="AC" {{ 'selected' if cliente and cliente.estado == 'AC' }}>AC</option>
+                        <option value="AL" {{ 'selected' if cliente and cliente.estado == 'AL' }}>AL</option>
+                        <option value="AP" {{ 'selected' if cliente and cliente.estado == 'AP' }}>AP</option>
+                        <option value="AM" {{ 'selected' if cliente and cliente.estado == 'AM' }}>AM</option>
+                        <option value="BA" {{ 'selected' if cliente and cliente.estado == 'BA' }}>BA</option>
+                        <option value="CE" {{ 'selected' if cliente and cliente.estado == 'CE' }}>CE</option>
+                        <option value="DF" {{ 'selected' if cliente and cliente.estado == 'DF' }}>DF</option>
+                        <option value="ES" {{ 'selected' if cliente and cliente.estado == 'ES' }}>ES</option>
+                        <option value="GO" {{ 'selected' if cliente and cliente.estado == 'GO' }}>GO</option>
+                        <option value="MA" {{ 'selected' if cliente and cliente.estado == 'MA' }}>MA</option>
+                        <option value="MT" {{ 'selected' if cliente and cliente.estado == 'MT' }}>MT</option>
+                        <option value="MS" {{ 'selected' if cliente and cliente.estado == 'MS' }}>MS</option>
+                        <option value="MG" {{ 'selected' if cliente and cliente.estado == 'MG' }}>MG</option>
+                        <option value="PA" {{ 'selected' if cliente and cliente.estado == 'PA' }}>PA</option>
+                        <option value="PB" {{ 'selected' if cliente and cliente.estado == 'PB' }}>PB</option>
+                        <option value="PR" {{ 'selected' if cliente and cliente.estado == 'PR' }}>PR</option>
+                        <option value="PE" {{ 'selected' if cliente and cliente.estado == 'PE' }}>PE</option>
+                        <option value="PI" {{ 'selected' if cliente and cliente.estado == 'PI' }}>PI</option>
+                        <option value="RJ" {{ 'selected' if cliente and cliente.estado == 'RJ' }}>RJ</option>
+                        <option value="RN" {{ 'selected' if cliente and cliente.estado == 'RN' }}>RN</option>
+                        <option value="RS" {{ 'selected' if cliente and cliente.estado == 'RS' }}>RS</option>
+                        <option value="RO" {{ 'selected' if cliente and cliente.estado == 'RO' }}>RO</option>
+                        <option value="RR" {{ 'selected' if cliente and cliente.estado == 'RR' }}>RR</option>
+                        <option value="SC" {{ 'selected' if cliente and cliente.estado == 'SC' }}>SC</option>
+                        <option value="SP" {{ 'selected' if cliente and cliente.estado == 'SP' }}>SP</option>
+                        <option value="SE" {{ 'selected' if cliente and cliente.estado == 'SE' }}>SE</option>
+                        <option value="TO" {{ 'selected' if cliente and cliente.estado == 'TO' }}>TO</option>
+                    </select>
+                </div>
+            </div>
         </div>
 
         <div class="mb-6">
@@ -181,6 +218,31 @@
 
     ativarMascaraTelefone(document.getElementById('telefone'));
     ativarMascaraTelefone(document.getElementById('telefone_secundario'));
+})();
+
+/* Autocompletar UF ao digitar a cidade */
+(function() {
+    var CIDADE_ESTADO = {
+        'petrolina': 'PE', 'juazeiro': 'BA',
+        'paulo afonso': 'BA', 'salgueiro': 'PE', 'caruaru': 'PE',
+        'recife': 'PE', 'fortaleza': 'CE', 'salvador': 'BA',
+        'sao paulo': 'SP', 'rio de janeiro': 'RJ', 'belo horizonte': 'MG',
+        'brasilia': 'DF', 'manaus': 'AM', 'curitiba': 'PR',
+        'porto alegre': 'RS', 'goiania': 'GO', 'belem': 'PA',
+        'teresina': 'PI', 'natal': 'RN', 'campo grande': 'MS',
+        'maceio': 'AL', 'joao pessoa': 'PB', 'aracaju': 'SE',
+        'porto velho': 'RO', 'macapa': 'AP', 'boa vista': 'RR',
+        'palmas': 'TO', 'cuiaba': 'MT', 'vitoria': 'ES', 'florianopolis': 'SC',
+        'sao luis': 'MA',
+    };
+    var cidadeEl = document.getElementById('cidade');
+    var estadoEl = document.getElementById('estado');
+    if (!cidadeEl || !estadoEl) return;
+    cidadeEl.addEventListener('input', function() {
+        var n = cidadeEl.value.trim().toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        if (CIDADE_ESTADO[n]) estadoEl.value = CIDADE_ESTADO[n];
+    });
 })();
 </script>
 {% endblock %}

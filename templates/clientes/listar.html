@@ -128,7 +128,7 @@
                             {% endif %}
                         </div>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ cliente.cidade or '-' }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ cliente.cidade or '-' }}{% if cliente.cidade and cliente.estado %} — {{ cliente.estado }}{% elif cliente.estado %}{{ cliente.estado }}{% endif %}</td>
                     <td class="px-6 py-4">
                         {% if cliente.endereco %}
                         <a href="https://www.google.com/maps/search/?api=1&query={{ cliente.endereco | urlencode }}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 font-medium transition-colors">
@@ -156,6 +156,7 @@
                                 data-razao="{{ cliente.razao_social or '' }}"
                                 data-cnpj="{{ cliente.cnpj or '' }}"
                                 data-cidade="{{ cliente.cidade or '' }}"
+                                data-estado="{{ cliente.estado or '' }}"
                                 data-endereco="{{ cliente.endereco or '' }}"
                                 title="Editar cliente">
                             <i data-lucide="pencil" class="w-4 h-4"></i>
@@ -273,6 +274,7 @@
                             data-razao="{{ cliente.razao_social or '' }}"
                             data-cnpj="{{ cliente.cnpj or '' }}"
                             data-cidade="{{ cliente.cidade or '' }}"
+                            data-estado="{{ cliente.estado or '' }}"
                             data-endereco="{{ cliente.endereco or '' }}"
                             title="Editar cliente">
                         <i data-lucide="pencil" class="w-5 h-5"></i>
@@ -355,8 +357,25 @@
                     <input type="text" id="modal-cnpj" name="cnpj" placeholder="00.000.000/0000-00" maxlength="18" class="input-cnpj w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                 </div>
                 <div class="mb-5">
-                    <label for="modal-cidade" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Cidade</label>
-                    <input type="text" id="modal-cidade" name="cidade" autocapitalize="words" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
+                    <div class="flex gap-3">
+                        <div class="flex-1 min-w-0">
+                            <label for="modal-cidade" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Cidade</label>
+                            <input type="text" id="modal-cidade" name="cidade" autocapitalize="words" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
+                        </div>
+                        <div style="width:110px;flex-shrink:0">
+                            <label for="modal-estado" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">UF</label>
+                            <select id="modal-estado" name="estado" class="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100 text-sm">
+                                <option value="">—</option>
+                                <option value="AC">AC</option><option value="AL">AL</option><option value="AP">AP</option><option value="AM">AM</option>
+                                <option value="BA">BA</option><option value="CE">CE</option><option value="DF">DF</option><option value="ES">ES</option>
+                                <option value="GO">GO</option><option value="MA">MA</option><option value="MT">MT</option><option value="MS">MS</option>
+                                <option value="MG">MG</option><option value="PA">PA</option><option value="PB">PB</option><option value="PR">PR</option>
+                                <option value="PE">PE</option><option value="PI">PI</option><option value="RJ">RJ</option><option value="RN">RN</option>
+                                <option value="RS">RS</option><option value="RO">RO</option><option value="RR">RR</option><option value="SC">SC</option>
+                                <option value="SP">SP</option><option value="SE">SE</option><option value="TO">TO</option>
+                            </select>
+                        </div>
+                    </div>
                 </div>
                 <div class="mb-6">
                     <label for="modal-endereco" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Endereço Completo</label>
@@ -491,8 +510,25 @@
                     <input type="text" id="edit_cnpj" name="cnpj" placeholder="00.000.000/0000-00" maxlength="18" class="input-cnpj w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                 </div>
                 <div class="mb-5">
-                    <label for="edit_cidade" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Cidade</label>
-                    <input type="text" id="edit_cidade" name="cidade" maxlength="100" autocapitalize="words" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
+                    <div class="flex gap-3">
+                        <div class="flex-1 min-w-0">
+                            <label for="edit_cidade" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Cidade</label>
+                            <input type="text" id="edit_cidade" name="cidade" maxlength="100" autocapitalize="words" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
+                        </div>
+                        <div style="width:110px;flex-shrink:0">
+                            <label for="edit_estado" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">UF</label>
+                            <select id="edit_estado" name="estado" class="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100 text-sm">
+                                <option value="">—</option>
+                                <option value="AC">AC</option><option value="AL">AL</option><option value="AP">AP</option><option value="AM">AM</option>
+                                <option value="BA">BA</option><option value="CE">CE</option><option value="DF">DF</option><option value="ES">ES</option>
+                                <option value="GO">GO</option><option value="MA">MA</option><option value="MT">MT</option><option value="MS">MS</option>
+                                <option value="MG">MG</option><option value="PA">PA</option><option value="PB">PB</option><option value="PR">PR</option>
+                                <option value="PE">PE</option><option value="PI">PI</option><option value="RJ">RJ</option><option value="RN">RN</option>
+                                <option value="RS">RS</option><option value="RO">RO</option><option value="RR">RR</option><option value="SC">SC</option>
+                                <option value="SP">SP</option><option value="SE">SE</option><option value="TO">TO</option>
+                            </select>
+                        </div>
+                    </div>
                 </div>
                 <div class="mb-6">
                     <label for="edit_endereco" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Endereço Completo</label>
@@ -723,6 +759,7 @@ function toggleDropdownNovoCliente(event) {
         var razao = btn.getAttribute('data-razao') || '';
         var cnpj = btn.getAttribute('data-cnpj') || '';
         var cidade = btn.getAttribute('data-cidade') || '';
+        var estado = btn.getAttribute('data-estado') || '';
         var endereco = btn.getAttribute('data-endereco') || '';
         form.action = actionBase.replace(/\/0$/, '/') + id;
         document.getElementById('edit_nome').value = nome;
@@ -733,6 +770,7 @@ function toggleDropdownNovoCliente(event) {
         document.getElementById('edit_razao').value = razao;
         document.getElementById('edit_cnpj').value = mascaraCNPJ(cnpj);
         document.getElementById('edit_cidade').value = cidade;
+        document.getElementById('edit_estado').value = estado;
         document.getElementById('edit_endereco').value = endereco;
         wrap.classList.remove('hidden');
         travarFundo();
@@ -845,44 +883,57 @@ function toggleDropdownNovoCliente(event) {
 
     if (form) {
         form.addEventListener('submit', function(e) {
-            if (form.getAttribute('data-submitting') === '1') {
-                e.preventDefault();
-                return;
-            }
             e.preventDefault();
 
-            function enviarEdicaoCliente() {
-                form.setAttribute('data-submitting', '1');
-                var btnSalvar = document.getElementById('btn-salvar-editar-cliente');
-                if (btnSalvar) {
-                    btnSalvar.disabled = true;
-                    btnSalvar.classList.add('opacity-60', 'cursor-not-allowed');
+            var btnSalvar = document.getElementById('btn-salvar-editar-cliente');
+            if (form.getAttribute('data-submitting') === '1') return;
+            form.setAttribute('data-submitting', '1');
+
+            if (btnSalvar) {
+                btnSalvar.disabled = true;
+                btnSalvar.classList.add('opacity-60', 'cursor-not-allowed');
+                btnSalvar.innerHTML = '<span class="animate-spin inline-block mr-2">⏳</span> Salvando...';
+            }
+
+            fetch(form.action, {
+                method: 'POST',
+                headers: Object.assign({ 'X-Requested-With': 'XMLHttpRequest' }, window.getCsrfHeaders ? window.getCsrfHeaders() : {}),
+                body: new FormData(form)
+            })
+            .then(function(r) { return r.json().then(function(j) { return { status: r.status, json: j }; }); })
+            .then(function(x) {
+                form.removeAttribute('data-submitting');
+                if (x.json.ok) {
+                    fecharModal();
+                    if (typeof showToast === 'function') {
+                        showToast('Cliente atualizado com sucesso!', 'success');
+                        setTimeout(function() { window.location.reload(); }, 900);
+                    } else {
+                        window.location.reload();
+                    }
+                    return;
                 }
-                HTMLFormElement.prototype.submit.call(form);
-            }
-
-            // Fallback se SweetAlert2 não carregar.
-            if (typeof Swal === 'undefined') {
-                if (!confirm('Tem certeza que deseja alterar os dados deste cliente?')) return;
-                enviarEdicaoCliente();
-                return;
-            }
-
-            var dark = document.documentElement.classList.contains('dark');
-            Swal.fire({
-                title: 'Confirmar Alteração?',
-                text: 'Tem certeza que deseja alterar os dados deste cliente?',
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonColor: '#059669',
-                cancelButtonColor: '#6B7280',
-                confirmButtonText: 'Sim, salvar!',
-                cancelButtonText: 'Cancelar',
-                background: dark ? '#1F2937' : '#FFFFFF',
-                color: dark ? '#F9FAFB' : '#111827'
-            }).then(function(result) {
-                if (!result.isConfirmed) return;
-                enviarEdicaoCliente();
+                if (btnSalvar) {
+                    btnSalvar.disabled = false;
+                    btnSalvar.classList.remove('opacity-60', 'cursor-not-allowed');
+                    btnSalvar.innerHTML = '<i data-lucide="check" class="w-4 h-4 mr-2"></i>Salvar';
+                    if (typeof lucide !== 'undefined') lucide.createIcons();
+                }
+                var msg = (x.json && x.json.mensagem) || 'Erro ao salvar cliente.';
+                if (typeof showToast === 'function') showToast(msg, 'error');
+                else alert(msg);
+            })
+            .catch(function() {
+                form.removeAttribute('data-submitting');
+                if (btnSalvar) {
+                    btnSalvar.disabled = false;
+                    btnSalvar.classList.remove('opacity-60', 'cursor-not-allowed');
+                    btnSalvar.innerHTML = '<i data-lucide="check" class="w-4 h-4 mr-2"></i>Salvar';
+                    if (typeof lucide !== 'undefined') lucide.createIcons();
+                }
+                var msg = 'Erro de conexão. Tente novamente.';
+                if (typeof showToast === 'function') showToast(msg, 'error');
+                else alert(msg);
             });
         });
     }
@@ -1191,6 +1242,47 @@ document.addEventListener('DOMContentLoaded', function() {
     } else {
         initModalConfirmacaoExclusaoCliente();
     }
+})();
+
+/* ── Autocompletar UF pela cidade digitada ─────────────────────────── */
+(function() {
+    var CIDADE_ESTADO = {
+        'petrolina': 'PE', 'juazeiro': 'BA',
+        'paulo afonso': 'BA', 'salgueiro': 'PE', 'caruaru': 'PE',
+        'recife': 'PE', 'fortaleza': 'CE', 'salvador': 'BA',
+        'sao paulo': 'SP', 'rio de janeiro': 'RJ', 'belo horizonte': 'MG',
+        'brasilia': 'DF', 'manaus': 'AM', 'curitiba': 'PR',
+        'porto alegre': 'RS', 'goiania': 'GO', 'belem': 'PA',
+        'teresina': 'PI', 'natal': 'RN', 'campo grande': 'MS',
+        'maceio': 'AL', 'joao pessoa': 'PB', 'aracaju': 'SE',
+        'porto velho': 'RO', 'macapa': 'AP', 'boa vista': 'RR',
+        'palmas': 'TO', 'cuiaba': 'MT', 'vitoria': 'ES', 'florianopolis': 'SC',
+        'sao luis': 'MA',
+    };
+
+    function _normalizar(str) {
+        return str.trim().toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    }
+
+    function _autoUF(cidadeInput, estadoSelect) {
+        if (!cidadeInput || !estadoSelect) return;
+        cidadeInput.addEventListener('input', function() {
+            var normalizado = _normalizar(cidadeInput.value);
+            if (CIDADE_ESTADO[normalizado]) {
+                estadoSelect.value = CIDADE_ESTADO[normalizado];
+            }
+        });
+    }
+
+    _autoUF(
+        document.getElementById('modal-cidade'),
+        document.getElementById('modal-estado')
+    );
+    _autoUF(
+        document.getElementById('edit_cidade'),
+        document.getElementById('edit_estado')
+    );
 })();
 </script>
 {% endblock %}

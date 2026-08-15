@@ -245,6 +245,7 @@ def novo_cliente():
                 razao_social=request.form.get('razao_social', ''),
                 cnpj=cnpj,
                 cidade=request.form.get('cidade', ''),
+                estado=(request.form.get('estado') or '').strip().upper()[:2] or None,
                 endereco=request.form.get('endereco', '') or None,
                 empresa_id=empresa_id_atual(),
             )
@@ -291,6 +292,7 @@ def editar_cliente(id):
             nome_raw = (request.form.get('nome_cliente') or '').strip() or (cliente.nome_cliente or '')
             razao_raw = (request.form.get('razao_social') or '').strip()
             cidade_raw = (request.form.get('cidade') or '').strip()
+            estado_raw = (request.form.get('estado') or '').strip().upper()[:2] or None
             endereco_raw = (request.form.get('endereco') or '').strip() or None
             telefone_raw = (request.form.get('telefone', '') or '').strip() or None
             nome_contato_raw = (request.form.get('nome_contato', '') or '').strip() or None
@@ -305,14 +307,19 @@ def editar_cliente(id):
             cliente.razao_social = razao_raw[:200] if razao_raw else ''
             cliente.cnpj = cnpj
             cliente.cidade = cidade_raw[:100] if cidade_raw else ''
+            cliente.estado = estado_raw
             cliente.endereco = endereco_raw[:255] if endereco_raw else None
             try:
                 db.session.commit()
             except IntegrityError:
                 db.session.rollback()
+                if _is_ajax():
+                    return jsonify(ok=False, mensagem='Erro: Este CNPJ já está cadastrado no sistema.'), 400
                 flash('Erro: Este CNPJ já está cadastrado no sistema.', 'error')
                 return redirect(url_for('clientes.listar_clientes'))
             registrar_log('EDITAR', 'CLIENTES', f"Cliente #{cliente.id} — {cliente.nome_cliente} editado.")
+            if _is_ajax():
+                return jsonify(ok=True, mensagem='Cliente atualizado com sucesso!')
             flash('Cliente atualizado com sucesso!', 'success')
             return redirect(url_for('clientes.listar_clientes'))
 
@@ -320,6 +327,8 @@ def editar_cliente(id):
 
     except IntegrityError:
         db.session.rollback()
+        if _is_ajax():
+            return jsonify(ok=False, mensagem='Erro: Este CNPJ já está cadastrado no sistema.'), 400
         flash('Erro: Este CNPJ já está cadastrado no sistema.', 'error')
         return redirect(url_for('clientes.listar_clientes'))
     except (OperationalError, SATimeoutError) as e:
