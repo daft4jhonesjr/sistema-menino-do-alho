@@ -3368,7 +3368,7 @@ function ordenarVendasTabela(colIndex, tipo) {
         // ─── Entregas ───────────────────────────────────────────────
         if (entregas.length) {
             html += '<div class="mb-4">' +
-                '<p class="text-[10px] font-bold uppercase tracking-widest text-orange-600 dark:text-orange-400 mb-2 flex items-center gap-1"><span>🚚</span> Entregas do Dia</p>' +
+                '<p class="text-sm font-bold uppercase tracking-wider text-orange-600 dark:text-orange-400 mb-2 flex items-center gap-1"><span>🚚</span> Entregas do Dia</p>' +
                 '<div class="space-y-2">';
             entregas.forEach(function(item, idx) {
                 var entregue = !!item.entregue;
@@ -3404,7 +3404,7 @@ function ordenarVendasTabela(colIndex, tipo) {
         // ─── Boletos ────────────────────────────────────────────────
         if (boletos.length) {
             html += '<div class="mb-4">' +
-                '<p class="text-[10px] font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400 mb-2 flex items-center gap-1"><span>💰</span> Vencimentos de Boletos</p>' +
+                '<p class="text-sm font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 mb-2 flex items-center gap-1"><span>💰</span> Vencimentos de Boletos</p>' +
                 '<div class="space-y-2">';
             boletos.forEach(function(item) {
                 var sc = item.status === 'PARCIAL' ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400';
@@ -3443,7 +3443,7 @@ function ordenarVendasTabela(colIndex, tipo) {
         // ─── Lembretes ──────────────────────────────────────────────
         html += '<div id="painel-lembretes" class="mt-2">' +
             '<div class="flex items-center justify-between mb-2">' +
-                '<p class="text-[10px] font-bold uppercase tracking-widest text-purple-600 dark:text-purple-400 flex items-center gap-1"><span>📌</span> Lembretes do Dia</p>' +
+                '<p class="text-sm font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400 flex items-center gap-1"><span>📌</span> Lembretes do Dia</p>' +
                 '<button type="button" onclick="abrirFormLembrete(\'' + esc(iso) + '\')" ' +
                     'class="text-xs text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-200 flex items-center gap-1 transition-colors">' +
                     '+ Novo Lembrete' +
