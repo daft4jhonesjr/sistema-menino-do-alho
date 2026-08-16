@@ -163,9 +163,7 @@
             <button type="button"
                     onclick="event.preventDefault(); event.stopPropagation(); desvincularDocumento({{ pedido.primeira_venda_id }}, 'nf')"
                     title="Desvincular NF"
-                    class="hidden md:flex absolute -top-1.5 -right-1.5 w-3.5 h-3.5 bg-red-500 hover:bg-red-600 text-white rounded-full items-center justify-center shadow shadow-black/50 transition-colors z-10">
-                <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
-            </button>
+                    class="hidden md:inline-flex absolute -top-0.5 -right-0.5 leading-none text-[10px] font-bold text-red-500 hover:text-red-400 bg-transparent border-none p-0 cursor-pointer z-10 transition-colors">×</button>
         </div>
         {% elif pedido.nf and pedido.nf != '-' %}
         <button type="button"
@@ -185,9 +183,7 @@
             <button type="button"
                     onclick="event.preventDefault(); event.stopPropagation(); desvincularDocumento({{ pedido.primeira_venda_id }}, 'boleto')"
                     title="Desvincular Boleto"
-                    class="hidden md:flex absolute -top-1.5 -right-1.5 w-3.5 h-3.5 bg-red-500 hover:bg-red-600 text-white rounded-full items-center justify-center shadow shadow-black/50 transition-colors z-10">
-                <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
-            </button>
+                    class="hidden md:inline-flex absolute -top-0.5 -right-0.5 leading-none text-[10px] font-bold text-red-500 hover:text-red-400 bg-transparent border-none p-0 cursor-pointer z-10 transition-colors">×</button>
         </div>
         {% elif pedido.nf and pedido.nf != '-' %}
         <button type="button"
