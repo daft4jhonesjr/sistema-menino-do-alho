@@ -18,6 +18,7 @@ Rotas extraídas do legado ``app.py`` (Fase 3 da refatoração):
     * GET  /venda/recibo/<id>                       recibo_venda
     * GET  /api/pedidos                             api_pedidos
     * POST /api/vendas/sincronizar_transferencias   sincronizar_transferencias
+    * POST /api/vendas/<id>/desvincular/<tipo>      desvincular_documento_rapido
     * POST /vendas/deletar_massa                    vendas_deletar_massa
     * GET/POST /vendas/importar                     importar_vendas       (admin)
 
@@ -2980,6 +2981,100 @@ def sincronizar_transferencias():
             if atualizados
             else 'Nenhuma transferência pendente de boleto encontrada.'
         ),
+    })
+
+
+@vendas_bp.route('/api/vendas/<int:id>/desvincular/<tipo_documento>', methods=['POST'])
+def desvincular_documento_rapido(id, tipo_documento):
+    """Desvincula NF ou boleto de um pedido (todas as linhas do agrupamento).
+
+    ``tipo_documento``: ``nf`` | ``boleto``.
+    Limpa ``caminho_nf`` / ``caminho_boleto`` (+ ``data_vencimento`` no boleto)
+    e zera ``Documento.venda_id``. Não apaga o arquivo nem o número da NF.
+    """
+    tipo_raw = (tipo_documento or '').strip().lower()
+    if tipo_raw not in ('nf', 'boleto'):
+        return jsonify({
+            'status': 'error',
+            'ok': False,
+            'mensagem': 'Tipo inválido. Use nf ou boleto.',
+        }), 400
+
+    venda = query_tenant(Venda).filter_by(id=id).first_or_404()
+    if not _usuario_pode_gerenciar_venda(venda):
+        return _resposta_sem_permissao()
+
+    is_boleto = tipo_raw == 'boleto'
+    tipos_doc = ['BOLETO'] if is_boleto else ['NF', 'NOTA_FISCAL']
+
+    try:
+        vendas_pedido = _vendas_do_pedido(venda)
+        caminhos_alvo = set()
+        for vv in vendas_pedido:
+            if is_boleto:
+                cb = (vv.caminho_boleto or '').strip()
+                if cb:
+                    caminhos_alvo.add(cb)
+            else:
+                cn = (vv.caminho_nf or '').strip()
+                if cn:
+                    caminhos_alvo.add(cn)
+
+        venda_ids_pedido = [v.id for v in vendas_pedido]
+        docs_q = query_documentos_tenant().filter(Documento.tipo.in_(tipos_doc))
+        if venda_ids_pedido and caminhos_alvo:
+            docs_q = docs_q.filter(or_(
+                Documento.venda_id.in_(venda_ids_pedido),
+                Documento.caminho_arquivo.in_(list(caminhos_alvo)),
+                Documento.url_arquivo.in_(list(caminhos_alvo)),
+            ))
+        elif venda_ids_pedido:
+            docs_q = docs_q.filter(Documento.venda_id.in_(venda_ids_pedido))
+        elif caminhos_alvo:
+            docs_q = docs_q.filter(or_(
+                Documento.caminho_arquivo.in_(list(caminhos_alvo)),
+                Documento.url_arquivo.in_(list(caminhos_alvo)),
+            ))
+        else:
+            docs_q = docs_q.filter(False)
+
+        documentos_afetados = docs_q.all()
+        for doc in documentos_afetados:
+            doc.venda_id = None
+
+        for vv in vendas_pedido:
+            if is_boleto:
+                vv.caminho_boleto = None
+                vv.data_vencimento = None
+            else:
+                vv.caminho_nf = None
+
+        db.session.commit()
+        limpar_cache_dashboard()
+        registrar_log(
+            'EDITAR',
+            'VENDAS',
+            f"Desvinculou {'boleto' if is_boleto else 'NF'} do pedido venda#{id}.",
+        )
+    except Exception as e:
+        db.session.rollback()
+        return erro_json(
+            e,
+            'Erro ao desvincular documento.',
+            chave_mensagem='mensagem',
+            contexto='desvincular_documento_rapido',
+        )
+
+    return jsonify({
+        'status': 'success',
+        'ok': True,
+        'mensagem': (
+            'Boleto desvinculado do pedido.'
+            if is_boleto
+            else 'Nota fiscal desvinculada do pedido.'
+        ),
+        'tipo': tipo_raw,
+        'removidos': len(documentos_afetados),
     })
 
 

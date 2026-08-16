@@ -4440,46 +4440,81 @@ function toggleAnaliseVendas(event) {
         var tipo = (btn.getAttribute('data-tipo') || '').toUpperCase();
         if (!vendaId || (tipo !== 'BOLETO' && tipo !== 'NF')) return;
 
-        var rotuloDoc = (tipo === 'BOLETO') ? 'boleto' : 'nota fiscal';
-        var cliente = btn.getAttribute('data-cliente') || '';
-        var nf = btn.getAttribute('data-nf') || '';
-        var detalhe = cliente ? ('\nCliente: ' + cliente + (nf ? ' / NF: ' + nf : '')) : '';
-
-        if (!confirm('Tem certeza que deseja desvincular este ' + rotuloDoc + ' do pedido?' + detalhe + '\n\nO documento NÃO será excluído — apenas o vínculo com este pedido será removido.')) {
-            return;
+        var tipoApi = (tipo === 'BOLETO') ? 'boleto' : 'nf';
+        if (typeof window.desvincularDocumento === 'function') {
+            window.desvincularDocumento(vendaId, tipoApi);
         }
+    });
+})();
 
-        btn.disabled = true;
-        btn.style.opacity = '0.5';
+window.desvincularDocumento = function(id, tipo) {
+    var tipoNorm = String(tipo || '').toLowerCase();
+    if (!id || (tipoNorm !== 'nf' && tipoNorm !== 'boleto')) return;
 
+    var rotulo = (tipoNorm === 'boleto') ? 'Boleto' : 'Nota Fiscal';
+    var mensagem = 'Deseja remover o vínculo deste documento (' + rotulo + ')? O arquivo NÃO será excluído — apenas o vínculo com este pedido será removido.';
+
+    function executar() {
         var headers = Object.assign(
             { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             window.getCsrfHeaders ? window.getCsrfHeaders() : {}
         );
-
-        fetch('/venda/' + encodeURIComponent(vendaId) + '/desvincular_documento', {
+        fetch('/api/vendas/' + encodeURIComponent(id) + '/desvincular/' + encodeURIComponent(tipoNorm), {
             method: 'POST',
             headers: headers,
-            body: JSON.stringify({ tipo: tipo })
+            body: JSON.stringify({})
         })
-            .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, body: d }; }); })
-            .then(function(res) {
-                if (res.ok && res.body && res.body.ok) {
-                    window.location.reload();
-                } else {
-                    var msg = (res.body && (res.body.mensagem || res.body.erro)) || 'Erro ao desvincular documento.';
-                    alert(msg);
-                    btn.disabled = false;
-                    btn.style.opacity = '1';
+        .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, body: d }; }); })
+        .then(function(res) {
+            if (res.ok && res.body && (res.body.status === 'success' || res.body.ok)) {
+                if (typeof showToast === 'function') {
+                    showToast(res.body.mensagem || 'Documento desvinculado.', 'success');
+                } else if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'success',
+                        title: res.body.mensagem || 'Documento desvinculado.',
+                        confirmButtonColor: '#059669',
+                        timer: 1400,
+                        showConfirmButton: false
+                    });
                 }
-            })
-            .catch(function() {
-                alert('Erro na comunicação com o servidor.');
-                btn.disabled = false;
-                btn.style.opacity = '1';
-            });
-    });
-})();
+                setTimeout(function() { window.location.reload(); }, 400);
+            } else {
+                var msg = (res.body && (res.body.mensagem || res.body.erro)) || 'Erro ao desvincular documento.';
+                if (typeof showToast === 'function') showToast(msg, 'error');
+                else if (typeof Swal !== 'undefined') {
+                    Swal.fire({ icon: 'error', title: msg, confirmButtonColor: '#059669' });
+                } else {
+                    alert(msg);
+                }
+            }
+        })
+        .catch(function() {
+            var msg = 'Erro na comunicação com o servidor.';
+            if (typeof showToast === 'function') showToast(msg, 'error');
+            else alert(msg);
+        });
+    }
+
+    if (typeof window.abrirModalConfirmacaoAcaoVenda === 'function') {
+        window.abrirModalConfirmacaoAcaoVenda(mensagem, executar);
+    } else if (typeof Swal !== 'undefined') {
+        Swal.fire({
+            icon: 'warning',
+            title: 'Desvincular documento?',
+            text: mensagem,
+            showCancelButton: true,
+            confirmButtonText: 'Sim, desvincular',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#dc2626',
+            cancelButtonColor: '#6b7280'
+        }).then(function(result) {
+            if (result.isConfirmed) executar();
+        });
+    } else if (window.confirm(mensagem)) {
+        executar();
+    }
+};
 
 // Filtro dinâmico por Empresa (tabela + cards, sem recarregar)
 // Usa classe CSS dedicada para não conflitar com o toggle hidden do expandir/recolher
