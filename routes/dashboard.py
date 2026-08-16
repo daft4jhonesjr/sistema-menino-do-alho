@@ -274,6 +274,9 @@ def radar_alertas_para_agenda(alertas=None, hoje=None):
     """Converte alertas do Radar (É Hoje! / Atrasado) em itens de agenda.
 
     Não persiste no banco — eventos dinâmicos injetados no calendário.
+    Ignora clientes inativos: última compra há mais de
+    ``LIMITE_DIAS_RADAR_INATIVO`` (60) dias — mesmo critério da aba
+    Inativos do Radar no dashboard.
     """
     if hoje is None:
         hoje = get_hoje_brasil()
@@ -292,6 +295,23 @@ def radar_alertas_para_agenda(alertas=None, hoje=None):
         if dias > 0:
             continue
 
+        # Mesmo corte da aba Inativos do Radar: não poluir a agenda
+        # com clientes abandonados (última compra > 60 dias).
+        try:
+            dias_desde_ultima = int(a.get('dias_desde_ultima_compra', 0) or 0)
+        except (TypeError, ValueError):
+            dias_desde_ultima = 0
+        if dias_desde_ultima > LIMITE_DIAS_RADAR_INATIVO:
+            continue
+
+        # Descarta previsões absurdas (duração inválida / consumo quebrado).
+        try:
+            duracao = float(a.get('duracao_dias') or 0)
+        except (TypeError, ValueError):
+            duracao = 0
+        if duracao <= 0 or duracao > 365:
+            continue
+
         produto = a.get('produto') or 'Produto'
         cliente = a.get('cliente_nome') or 'Cliente'
         status = a.get('status') or ('Atrasado' if dias < 0 else 'É Hoje!')
@@ -306,6 +326,7 @@ def radar_alertas_para_agenda(alertas=None, hoje=None):
             'produto': produto,
             'status': status,
             'dias_restantes': dias,
+            'dias_desde_ultima_compra': dias_desde_ultima,
             'telefone': telefone,
             'data_prevista': data_prevista,
             'ultima_venda': a.get('ultima_venda') or '',
