@@ -40,6 +40,10 @@ uploads/*
 backups/
 !backups/.gitkeep
 
+# Extratos enviados via WhatsApp (HTML por tenant)
+extratos/
+!extratos/.gitkeep
+
 # IDE
 .vscode/
 .idea/

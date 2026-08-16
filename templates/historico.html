@@ -45,7 +45,7 @@
         <select name="acao"
                 class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm px-3 py-2 focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
           <option value="">Todas</option>
-          {% for a in ['CRIAR', 'EDITAR', 'EXCLUIR', 'PAGAR', 'INATIVAR', 'ATIVAR', 'BACKUP'] %}
+          {% for a in ['CRIAR', 'EDITAR', 'EXCLUIR', 'PAGAR', 'INATIVAR', 'ATIVAR', 'BACKUP', 'WHATSAPP'] %}
           <option value="{{ a }}" {% if acao_filtro == a %}selected{% endif %}>{{ a }}</option>
           {% endfor %}
         </select>
@@ -146,6 +146,7 @@
                 'INATIVAR': 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300',
                 'ATIVAR':   'bg-lime-100 text-lime-800 dark:bg-lime-900/40 dark:text-lime-300',
                 'BACKUP':   'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300',
+                'WHATSAPP': 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
               } %}
               {% set acao_icones = {
                 'CRIAR':    '＋',
@@ -155,6 +156,7 @@
                 'INATIVAR': '⊘',
                 'ATIVAR':   '⊙',
                 'BACKUP':   '⬇',
+                'WHATSAPP': '✉',
               } %}
               <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold
                            {{ acao_cores.get(log.acao, 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300') }}">
@@ -167,13 +169,14 @@
               <div class="flex flex-col sm:flex-row sm:items-start gap-2">
                 <span class="line-clamp-2 flex-1 min-w-0" title="{{ log.descricao }}">{{ log.descricao }}</span>
                 {% if log.arquivo_anexo %}
+                {% set eh_zip = ('.zip' in (log.arquivo_anexo|lower)) or log.acao == 'BACKUP' %}
                 <a href="{{ url_for('baixar_backup_historico', log_id=log.id) }}"
                    class="inline-flex items-center gap-1 flex-shrink-0 px-2.5 py-1 rounded-lg text-xs font-semibold bg-cyan-600 hover:bg-cyan-500 text-white transition-colors"
-                   title="Baixar novamente o backup deste dia">
+                   title="{{ 'Baixar novamente o backup' if eh_zip else 'Baixar arquivo anexado' }}">
                   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
                   </svg>
-                  Baixar ZIP
+                  {{ 'Baixar ZIP' if eh_zip else 'Baixar arquivo' }}
                 </a>
                 {% endif %}
               </div>

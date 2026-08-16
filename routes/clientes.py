@@ -8,6 +8,7 @@ Rotas extraídas do legado ``app.py`` (Fase 2 da refatoração):
     * POST /clientes/excluir/<id>                 excluir_cliente
     * POST /cliente/<id>/toggle_ativo             toggle_ativo_cliente
     * GET  /clientes/<id>/extrato                 extrato_cliente
+    * POST /clientes/<id>/extrato/whatsapp        extrato_whatsapp
     * POST /bulk_delete_clientes                  bulk_delete_clientes
     * GET/POST /clientes/importar                 importar_clientes  (admin)
     * POST /cliente/<id>/receber_lote             receber_lote_cliente
@@ -25,8 +26,10 @@ mantêm o decorator no próprio handler.
 """
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
+import io
 import os
 import re
+import urllib.parse
 
 from flask import (
     Blueprint, render_template, request, redirect, url_for,
@@ -45,7 +48,7 @@ from services.auth_utils import tenant_required, admin_required, _is_ajax
 from services.db_utils import query_tenant, empresa_id_atual
 from services.cache_utils import limpar_cache_dashboard
 from services.error_utils import erro_json, erro_flash
-from services.config_helpers import registrar_log
+from services.config_helpers import registrar_log, _EXTERNAL_TIMEOUT
 from services.vendas_services import _resincronizar_pagamento_venda
 from services.csv_utils import (
     _msg_linha, _strip_quotes,
@@ -54,6 +57,53 @@ from services.csv_utils import (
 
 
 clientes_bp = Blueprint('clientes', __name__)
+
+
+def _vendas_pendentes_e_total(cliente_id):
+    """Retorna (lista de vendas com saldo, total devido Decimal)."""
+    saldo_sql = (Venda.preco_venda * Venda.quantidade_venda) - func.coalesce(Venda.valor_pago, 0)
+    vendas_pendentes = query_tenant(Venda).filter(
+        Venda.cliente_id == cliente_id,
+        func.upper(func.coalesce(Venda.tipo_operacao, 'VENDA')) != 'PERDA',
+        (Venda.preco_venda * Venda.quantidade_venda) > 0,
+        or_(
+            Venda.situacao.in_(['PENDENTE', 'PARCIAL']),
+            saldo_sql > Decimal('0.01'),
+        ),
+    ).options(joinedload(Venda.produto)).order_by(Venda.data_venda).all()
+
+    total_devido = sum(
+        (
+            Decimal(str(v.calcular_total() or Decimal('0.00')))
+            - Decimal(str(v.valor_pago or Decimal('0.00')))
+        )
+        for v in vendas_pendentes
+    )
+    if total_devido < Decimal('0.00'):
+        total_devido = Decimal('0.00')
+    return vendas_pendentes, total_devido
+
+
+def _telefone_whatsapp_cliente(cliente):
+    """Normaliza telefone do cliente para wa.me (com DDI 55)."""
+    telefone = (getattr(cliente, 'telefone', None) or getattr(cliente, 'telefone_secundario', None) or '').strip()
+    if not telefone:
+        return None
+    telefone_limpo = re.sub(r'\D', '', telefone)
+    if not telefone_limpo:
+        return None
+    if len(telefone_limpo) <= 11:
+        telefone_limpo = '55' + telefone_limpo
+    return telefone_limpo
+
+
+def _fmt_brl(valor):
+    return (
+        f"{float(valor):,.2f}"
+        .replace(',', 'X')
+        .replace('.', ',')
+        .replace('X', '.')
+    )
 
 
 # ============================================================
@@ -486,38 +536,111 @@ def extrato_cliente(cliente_id):
     ``calcular_total() - valor_pago`` por venda (sem cache).
     """
     cliente = query_tenant(Cliente).filter_by(id=cliente_id).first_or_404()
-
-    # Saldo devedor calculado em SQL: (preco_venda * qtd) - valor_pago > 0.01
-    # Usa coalesce para tratar valor_pago NULL como 0.
-    saldo_sql = (Venda.preco_venda * Venda.quantidade_venda) - func.coalesce(Venda.valor_pago, 0)
-
-    vendas_pendentes = query_tenant(Venda).filter(
-        Venda.cliente_id == cliente.id,
-        # Exclui PERDA explicitamente (não gera saldo devedor)
-        func.upper(func.coalesce(Venda.tipo_operacao, 'VENDA')) != 'PERDA',
-        # Valor da nota > 0 (ignora brindes/perdas com valor zero)
-        (Venda.preco_venda * Venda.quantidade_venda) > 0,
-        # Tem saldo devedor real OU está marcada como pendente/parcial
-        or_(
-            Venda.situacao.in_(['PENDENTE', 'PARCIAL']),
-            saldo_sql > Decimal('0.01'),
-        ),
-    ).options(joinedload(Venda.produto)).order_by(Venda.data_venda).all()
-
-    # Total devido = soma dos saldos restantes (sem confiar em cache)
-    total_devido = sum(
-        (
-            Decimal(str(v.calcular_total() or Decimal('0.00')))
-            - Decimal(str(v.valor_pago or Decimal('0.00')))
-        )
-        for v in vendas_pendentes
-    )
-    # Defensivo: nunca devolver total negativo (overpayment seria bug em outro lugar)
-    if total_devido < Decimal('0.00'):
-        total_devido = Decimal('0.00')
+    vendas_pendentes, total_devido = _vendas_pendentes_e_total(cliente.id)
     data_hoje = datetime.now().strftime('%d/%m/%Y')
 
-    return render_template('extrato.html', cliente=cliente, vendas=vendas_pendentes, total=total_devido, data_hoje=data_hoje)
+    return render_template(
+        'extrato.html',
+        cliente=cliente,
+        vendas=vendas_pendentes,
+        total=total_devido,
+        data_hoje=data_hoje,
+        para_arquivo=False,
+    )
+
+
+@clientes_bp.route('/clientes/<int:cliente_id>/extrato/whatsapp', methods=['POST'])
+def extrato_whatsapp(cliente_id):
+    """Gera o extrato, salva no Histórico de Ações e abre o WhatsApp com o link."""
+    cliente = query_tenant(Cliente).filter_by(id=cliente_id).first_or_404()
+    telefone_limpo = _telefone_whatsapp_cliente(cliente)
+    if not telefone_limpo:
+        return jsonify({
+            'ok': False,
+            'erro': 'Este cliente não possui um telefone cadastrado.',
+        }), 400
+
+    vendas_pendentes, total_devido = _vendas_pendentes_e_total(cliente.id)
+    data_hoje = datetime.now().strftime('%d/%m/%Y')
+    agora = datetime.now()
+    nome_safe = re.sub(r'[^\w\-]+', '_', (cliente.nome_cliente or f'cliente_{cliente.id}'))[:40]
+    nome_arquivo = f"extrato_{nome_safe}_{agora.strftime('%Y_%m_%d_%H%M%S')}.html"
+    eid = empresa_id_atual() or 0
+
+    html_bytes = render_template(
+        'extrato.html',
+        cliente=cliente,
+        vendas=vendas_pendentes,
+        total=total_devido,
+        data_hoje=data_hoje,
+        para_arquivo=True,
+    ).encode('utf-8')
+
+    arquivo_anexo = None
+    # 1) Disco local
+    try:
+        pasta_rel = os.path.join('extratos', str(eid))
+        pasta_abs = os.path.join(current_app.root_path, pasta_rel)
+        os.makedirs(pasta_abs, exist_ok=True)
+        caminho_abs = os.path.join(pasta_abs, nome_arquivo)
+        with open(caminho_abs, 'wb') as fh:
+            fh.write(html_bytes)
+        arquivo_anexo = os.path.join(pasta_rel, nome_arquivo).replace('\\', '/')
+    except Exception as e_disk:
+        current_app.logger.warning(f'[extrato-wa] Falha ao salvar extrato local: {e_disk}')
+
+    # 2) Cloudinary (link público para o destinatário do WhatsApp)
+    url_publica = None
+    try:
+        import cloudinary.uploader
+
+        _cloudinary_configured = (
+            os.environ.get('CLOUDINARY_URL')
+            or (os.environ.get('CLOUDINARY_CLOUD_NAME')
+                and os.environ.get('CLOUDINARY_API_KEY'))
+        )
+        if _cloudinary_configured:
+            public_id = f"menino_do_alho/extratos/emp_{eid}/{nome_arquivo.replace('.html', '')}"
+            upload_result = cloudinary.uploader.upload(
+                io.BytesIO(html_bytes),
+                public_id=public_id,
+                resource_type='raw',
+                format='html',
+                timeout=_EXTERNAL_TIMEOUT,
+            )
+            url_cloud = (upload_result.get('secure_url') or upload_result.get('url') or '').strip()
+            if url_cloud:
+                url_publica = url_cloud
+                arquivo_anexo = url_cloud
+    except Exception as e_cloud:
+        current_app.logger.warning(
+            f'[extrato-wa] Upload Cloudinary falhou (mantendo cópia local se houver): {e_cloud}'
+        )
+
+    total_fmt = _fmt_brl(total_devido)
+    descricao = (
+        f'Extrato enviado via WhatsApp — {cliente.nome_cliente} '
+        f'(cliente #{cliente.id}, total R$ {total_fmt}, {len(vendas_pendentes)} item(ns)): {nome_arquivo}'
+    )
+    log_id = registrar_log('WHATSAPP', 'CLIENTES', descricao, arquivo_anexo=arquivo_anexo)
+
+    if url_publica:
+        link_extrato = url_publica
+    elif log_id:
+        link_extrato = url_for('baixar_backup_historico', log_id=log_id, _external=True)
+    else:
+        link_extrato = url_for('clientes.extrato_cliente', cliente_id=cliente.id, _external=True)
+
+    mensagem = (
+        f"Olá, tudo bem? 🧄\n\n"
+        f"Segue o extrato de cobrança de *{cliente.nome_cliente}* "
+        f"com total devido de R$ {total_fmt}.\n\n"
+        f"📄 Acesse ou baixe o extrato aqui:\n{link_extrato}\n\n"
+        f"Qualquer dúvida, estamos à disposição!"
+    )
+    url_whatsapp = f"https://wa.me/{telefone_limpo}?text={urllib.parse.quote(mensagem)}"
+
+    return jsonify({'ok': True, 'wa_url': url_whatsapp})
 
 
 @clientes_bp.route('/bulk_delete_clientes', methods=['POST'])

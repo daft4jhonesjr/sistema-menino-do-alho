@@ -115,7 +115,7 @@ def _is_ajax():
     return request.headers.get('X-Requested-With') == 'XMLHttpRequest'
 
 
-def registrar_log(acao: str, modulo: str, descricao: str, arquivo_anexo: str | None = None) -> None:
+def registrar_log(acao: str, modulo: str, descricao: str, arquivo_anexo: str | None = None) -> int | None:
     """
     Persiste uma entrada no log de auditoria do sistema.
 
@@ -124,10 +124,13 @@ def registrar_log(acao: str, modulo: str, descricao: str, arquivo_anexo: str | N
     original caso o log falhe.
 
     Args:
-        acao: Verbo da ação ('CRIAR', 'EDITAR', 'EXCLUIR', 'INATIVAR', 'ATIVAR', 'PAGAR', 'BACKUP').
+        acao: Verbo da ação ('CRIAR', 'EDITAR', 'EXCLUIR', 'INATIVAR', 'ATIVAR', 'PAGAR', 'BACKUP', 'WHATSAPP').
         modulo: Módulo do sistema ('VENDAS', 'CLIENTES', 'PRODUTOS', 'USUARIOS', 'BACKUP').
         descricao: Texto livre detalhando o que foi feito.
         arquivo_anexo: Caminho relativo ou URL de arquivo persistente (opcional).
+
+    Returns:
+        ID do ``LogAtividade`` criado, ou ``None`` se o registro falhou.
     """
     try:
         usuario_id = current_user.id if current_user and current_user.is_authenticated else None
@@ -142,9 +145,11 @@ def registrar_log(acao: str, modulo: str, descricao: str, arquivo_anexo: str | N
         )
         db.session.add(log)
         db.session.commit()
+        return log.id
     except Exception as exc:
         db.session.rollback()
         current_app.logger.warning(f"Falha ao registrar log [{acao}/{modulo}]: {exc}")
+        return None
 
 
 def _safe_db_commit() -> tuple[bool, str | None]:
@@ -4189,7 +4194,9 @@ def historico_atividades():
 @tenant_required
 @admin_required
 def baixar_backup_historico(log_id):
-    """Redownload de um backup gerado anteriormente (Histórico de Ações)."""
+    """Redownload de arquivo anexado ao Histórico de Ações (backup, extrato, etc.)."""
+    import mimetypes
+
     ids_do_tenant = [
         uid
         for (uid,) in db.session.query(Usuario.id)
@@ -4198,12 +4205,12 @@ def baixar_backup_historico(log_id):
     ]
     log = LogAtividade.query.filter_by(id=log_id).first_or_404()
     if log.usuario_id not in (ids_do_tenant or []) and log.usuario_id is not None:
-        flash('Backup não pertence a esta empresa.', 'error')
+        flash('Arquivo não pertence a esta empresa.', 'error')
         return redirect(url_for('historico_atividades'))
 
     anexo = (log.arquivo_anexo or '').strip()
     if not anexo:
-        flash('Arquivo de backup não encontrado neste registro.', 'error')
+        flash('Arquivo não encontrado neste registro.', 'error')
         return redirect(url_for('historico_atividades'))
 
     # URL externa (Cloudinary) — redireciona
@@ -4215,18 +4222,22 @@ def baixar_backup_historico(log_id):
     if not os.path.isabs(caminho):
         caminho = os.path.join(app.root_path, caminho)
     caminho = os.path.normpath(caminho)
-    # Evita path traversal fora da pasta backups/
-    backups_root = os.path.normpath(os.path.join(app.root_path, 'backups'))
-    if not caminho.startswith(backups_root + os.sep) and caminho != backups_root:
-        flash('Caminho de backup inválido.', 'error')
+    # Evita path traversal fora das pastas permitidas
+    roots_ok = [
+        os.path.normpath(os.path.join(app.root_path, 'backups')),
+        os.path.normpath(os.path.join(app.root_path, 'extratos')),
+    ]
+    if not any(caminho.startswith(root + os.sep) or caminho == root for root in roots_ok):
+        flash('Caminho de arquivo inválido.', 'error')
         return redirect(url_for('historico_atividades'))
     if not os.path.isfile(caminho):
-        flash('Arquivo de backup não está mais disponível neste servidor.', 'error')
+        flash('Arquivo não está mais disponível neste servidor.', 'error')
         return redirect(url_for('historico_atividades'))
 
+    mime = mimetypes.guess_type(caminho)[0] or 'application/octet-stream'
     return send_file(
         caminho,
-        mimetype='application/zip',
+        mimetype=mime,
         as_attachment=True,
         download_name=os.path.basename(caminho),
     )

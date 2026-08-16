@@ -7,6 +7,7 @@ Estado atual:
     * ``master_bp``      → /master-admin/*
     * ``clientes_bp``    → /clientes, /clientes/novo, /clientes/editar, /clientes/excluir,
                            /cliente/<id>/toggle_ativo, /clientes/<id>/extrato,
+                           /clientes/<id>/extrato/whatsapp,
                            /clientes/importar, /bulk_delete_clientes,
                            /cliente/<id>/receber_lote
     * ``produtos_bp``    → /produtos, /produtos/exportar_relatorio, /produtos/novo,
