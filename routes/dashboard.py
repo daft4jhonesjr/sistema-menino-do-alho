@@ -35,6 +35,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 import csv
 import io
+import os
 import re
 import zipfile
 
@@ -57,7 +58,7 @@ from services.db_utils import (
 from services.cache_utils import _dashboard_cache_key
 from services.error_utils import erro_json
 from services.query_utils import filtro_ano_data_venda
-from services.config_helpers import get_hoje_brasil
+from services.config_helpers import get_hoje_brasil, registrar_log, _EXTERNAL_TIMEOUT
 
 
 dashboard_bp = Blueprint('dashboard', __name__)
@@ -1363,6 +1364,9 @@ def exportar_backup_completo():
 
     Restrito a admin do tenant (DONO/MASTER) — é um dump financeiro/de
     clientes completo, não deve ficar disponível para qualquer funcionário.
+
+    Além do download imediato, o ZIP é persistido (disco local + Cloudinary
+    quando disponível) e registrado no Histórico de Ações para redownload.
     """
     if not _e_admin_tenant():
         flash('Acesso restrito a administradores.', 'warning')
@@ -1452,10 +1456,61 @@ def exportar_backup_completo():
             linhas,
         ))
 
-    zip_buffer.seek(0)
-    nome_arquivo = f"backup_completo_{datetime.now().strftime('%Y_%m_%d')}.zip"
+    zip_bytes = zip_buffer.getvalue()
+    agora = datetime.now()
+    nome_arquivo = f"backup_completo_{agora.strftime('%Y_%m_%d_%H%M%S')}.zip"
+    eid = empresa_id_atual() or 0
+    arquivo_anexo = None
+
+    # 1) Persistir em disco (útil em ambiente local / volume montado)
+    try:
+        pasta_rel = os.path.join('backups', str(eid))
+        pasta_abs = os.path.join(current_app.root_path, pasta_rel)
+        os.makedirs(pasta_abs, exist_ok=True)
+        caminho_abs = os.path.join(pasta_abs, nome_arquivo)
+        with open(caminho_abs, 'wb') as fh:
+            fh.write(zip_bytes)
+        arquivo_anexo = os.path.join(pasta_rel, nome_arquivo).replace('\\', '/')
+    except Exception as e_disk:
+        current_app.logger.warning(f'[backup] Falha ao salvar ZIP local: {e_disk}')
+
+    # 2) Cloudinary (persistência durável em produção / Render)
+    try:
+        import cloudinary.uploader
+
+        _cloudinary_configured = (
+            os.environ.get('CLOUDINARY_URL')
+            or (os.environ.get('CLOUDINARY_CLOUD_NAME')
+                and os.environ.get('CLOUDINARY_API_KEY'))
+        )
+        if _cloudinary_configured:
+            public_id = f"menino_do_alho/backups/emp_{eid}/{nome_arquivo.replace('.zip', '')}"
+            upload_result = cloudinary.uploader.upload(
+                io.BytesIO(zip_bytes),
+                public_id=public_id,
+                resource_type='raw',
+                format='zip',
+                timeout=_EXTERNAL_TIMEOUT,
+            )
+            url_cloud = (upload_result.get('secure_url') or upload_result.get('url') or '').strip()
+            if url_cloud:
+                arquivo_anexo = url_cloud
+    except Exception as e_cloud:
+        current_app.logger.warning(f'[backup] Upload Cloudinary falhou (mantendo cópia local se houver): {e_cloud}')
+
+    # 3) Histórico de Ações — com link permanente para redownload
+    qtd_cli = len(clientes)
+    qtd_prod = len(produtos)
+    qtd_vend = len(vendas)
+    qtd_cx = len(lancamentos)
+    descricao = (
+        f'Backup completo gerado: {nome_arquivo} '
+        f'({qtd_cli} clientes, {qtd_prod} produtos, {qtd_vend} vendas, {qtd_cx} lançamentos de caixa).'
+    )
+    registrar_log('BACKUP', 'BACKUP', descricao, arquivo_anexo=arquivo_anexo)
+
     return send_file(
-        zip_buffer,
+        io.BytesIO(zip_bytes),
         mimetype='application/zip',
         as_attachment=True,
         download_name=nome_arquivo,

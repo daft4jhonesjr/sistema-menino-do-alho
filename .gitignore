@@ -36,6 +36,10 @@ instance/
 uploads/*
 !uploads/.gitkeep
 
+# Backups manuais do dashboard (ZIP por tenant)
+backups/
+!backups/.gitkeep
+
 # IDE
 .vscode/
 .idea/

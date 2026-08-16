@@ -115,7 +115,7 @@ def _is_ajax():
     return request.headers.get('X-Requested-With') == 'XMLHttpRequest'
 
 
-def registrar_log(acao: str, modulo: str, descricao: str) -> None:
+def registrar_log(acao: str, modulo: str, descricao: str, arquivo_anexo: str | None = None) -> None:
     """
     Persiste uma entrada no log de auditoria do sistema.
 
@@ -124,9 +124,10 @@ def registrar_log(acao: str, modulo: str, descricao: str) -> None:
     original caso o log falhe.
 
     Args:
-        acao: Verbo da ação ('CRIAR', 'EDITAR', 'EXCLUIR', 'INATIVAR', 'ATIVAR', 'PAGAR').
-        modulo: Módulo do sistema ('VENDAS', 'CLIENTES', 'PRODUTOS', 'USUARIOS').
+        acao: Verbo da ação ('CRIAR', 'EDITAR', 'EXCLUIR', 'INATIVAR', 'ATIVAR', 'PAGAR', 'BACKUP').
+        modulo: Módulo do sistema ('VENDAS', 'CLIENTES', 'PRODUTOS', 'USUARIOS', 'BACKUP').
         descricao: Texto livre detalhando o que foi feito.
+        arquivo_anexo: Caminho relativo ou URL de arquivo persistente (opcional).
     """
     try:
         usuario_id = current_user.id if current_user and current_user.is_authenticated else None
@@ -137,6 +138,7 @@ def registrar_log(acao: str, modulo: str, descricao: str) -> None:
             modulo=modulo,
             descricao=descricao,
             ip_address=ip,
+            arquivo_anexo=(arquivo_anexo or None),
         )
         db.session.add(log)
         db.session.commit()
@@ -3981,6 +3983,10 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             db.session.commit()
         except (OperationalError, Exception):
             db.session.rollback()
+        try:
+            _adicionar_coluna_se_ausente('log_atividades', 'arquivo_anexo', 'VARCHAR(500)')
+        except (OperationalError, Exception):
+            db.session.rollback()
         # Migração: índices para campos filtráveis (performance em 10k+ registros)
         for idx_sql in [
             'CREATE INDEX IF NOT EXISTS ix_clientes_cnpj ON clientes(cnpj)',
@@ -4175,6 +4181,54 @@ def historico_atividades():
         acao_filtro=acao_filtro,
         usuario_filtro=usuario_filtro,
         todos_usuarios=todos_usuarios,
+    )
+
+
+@app.route('/historico/backup/<int:log_id>/baixar')
+@login_required
+@tenant_required
+@admin_required
+def baixar_backup_historico(log_id):
+    """Redownload de um backup gerado anteriormente (Histórico de Ações)."""
+    ids_do_tenant = [
+        uid
+        for (uid,) in db.session.query(Usuario.id)
+        .filter(Usuario.empresa_id == empresa_id_atual())
+        .all()
+    ]
+    log = LogAtividade.query.filter_by(id=log_id).first_or_404()
+    if log.usuario_id not in (ids_do_tenant or []) and log.usuario_id is not None:
+        flash('Backup não pertence a esta empresa.', 'error')
+        return redirect(url_for('historico_atividades'))
+
+    anexo = (log.arquivo_anexo or '').strip()
+    if not anexo:
+        flash('Arquivo de backup não encontrado neste registro.', 'error')
+        return redirect(url_for('historico_atividades'))
+
+    # URL externa (Cloudinary) — redireciona
+    if anexo.startswith('http://') or anexo.startswith('https://'):
+        return redirect(anexo)
+
+    # Caminho local relativo à raiz do app
+    caminho = anexo
+    if not os.path.isabs(caminho):
+        caminho = os.path.join(app.root_path, caminho)
+    caminho = os.path.normpath(caminho)
+    # Evita path traversal fora da pasta backups/
+    backups_root = os.path.normpath(os.path.join(app.root_path, 'backups'))
+    if not caminho.startswith(backups_root + os.sep) and caminho != backups_root:
+        flash('Caminho de backup inválido.', 'error')
+        return redirect(url_for('historico_atividades'))
+    if not os.path.isfile(caminho):
+        flash('Arquivo de backup não está mais disponível neste servidor.', 'error')
+        return redirect(url_for('historico_atividades'))
+
+    return send_file(
+        caminho,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=os.path.basename(caminho),
     )
 
 

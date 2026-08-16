@@ -628,11 +628,12 @@ class LogAtividade(db.Model):
 
     Attributes:
         usuario_id: FK para Usuario (quem executou a ação).
-        acao: Verbo da ação ('CRIAR', 'EDITAR', 'EXCLUIR', 'INATIVAR', 'ATIVAR', 'PAGAR').
-        modulo: Seção do sistema ('VENDAS', 'CLIENTES', 'PRODUTOS', 'USUARIOS').
+        acao: Verbo da ação ('CRIAR', 'EDITAR', 'EXCLUIR', 'INATIVAR', 'ATIVAR', 'PAGAR', 'BACKUP').
+        modulo: Seção do sistema ('VENDAS', 'CLIENTES', 'PRODUTOS', 'USUARIOS', 'BACKUP').
         descricao: Texto livre detalhando o que foi feito.
         data_hora: Timestamp UTC de quando ocorreu.
         ip_address: IP do cliente (opcional, para auditoria de segurança).
+        arquivo_anexo: Caminho local relativo ou URL (ex.: backup ZIP) para redownload.
     """
 
     __tablename__ = 'log_atividades'
@@ -649,6 +650,7 @@ class LogAtividade(db.Model):
     descricao = db.Column(db.Text, nullable=False)
     data_hora = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
     ip_address = db.Column(db.String(45), nullable=True)
+    arquivo_anexo = db.Column(db.String(500), nullable=True)
 
     usuario = db.relationship('Usuario', backref=db.backref('logs', lazy='dynamic'))
 
