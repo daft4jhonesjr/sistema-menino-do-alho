@@ -710,81 +710,102 @@ def listar_vendas():
     if filtro_vencidos:
         pedidos_agrupados = [p for p in pedidos_agrupados if p.get('is_vencido_para_abatimento')]
 
-    # Transferência: grupos de 2-3 pedidos com mesma NF na MESMA data — marca o
-    # de menor valor. A chave inclui a data para evitar falso-positivo quando a
-    # numeração de NF se repete em períodos distintos.
+    # Transferência: NF compartilhada entre pedidos (mesmo em dias diferentes).
+    # Conta pedidos distintos (cliente + data), não linhas de item, para não
+    # marcar um único pedido multi-produto como transferência.
+    def _nf_digits(nf_val: str) -> str:
+        s = (nf_val or '').strip()
+        return re.sub(r'\D', '', s) or s
+
+    _pedido_chave_nf = func.concat(Venda.cliente_id, '|', func.date(Venda.data_venda))
+    _nfs_multi_rows = (
+        db.session.query(Venda.nf)
+        .filter(
+            Venda.empresa_id == empresa_id_atual(),
+            Venda.nf.isnot(None),
+            Venda.nf != '',
+            Venda.nf != '-',
+        )
+        .group_by(Venda.nf)
+        .having(func.count(func.distinct(_pedido_chave_nf)) > 1)
+        .all()
+    )
+    nfs_multiplas = {(nf or '').strip() for (nf,) in _nfs_multi_rows if (nf or '').strip()}
+    nfs_multiplas_norm = {_nf_digits(nf) for nf in nfs_multiplas if _nf_digits(nf)}
+
     _nf_grupos: dict = {}
     for _p in pedidos_agrupados:
-        _p['is_transferencia'] = False
         _nf = (_p.get('nf') or '').strip()
-        if _nf and _nf not in ('-', ''):
-            _nf_key = re.sub(r'\D', '', _nf) or _nf
-            _dv = _p.get('data_venda')
-            _dv_iso = (
-                _dv.date().isoformat() if hasattr(_dv, 'date')
-                else (str(_dv)[:10] if _dv else '')
-            )
-            _nf_grupos.setdefault(f"{_nf_key}_{_dv_iso}", []).append(_p)
+        _nf_key = _nf_digits(_nf) if _nf and _nf != '-' else ''
+        _p['is_transferencia'] = bool(
+            _nf
+            and _nf != '-'
+            and (_nf in nfs_multiplas or (_nf_key and _nf_key in nfs_multiplas_norm))
+        )
+        if _p['is_transferencia'] and _nf_key:
+            _nf_grupos.setdefault(_nf_key, []).append(_p)
 
     houve_alteracao_transferencia = False
     for _grupo in _nf_grupos.values():
-        if 2 <= len(_grupo) <= 3:
-            def _total_pedido(p):
-                try:
-                    return sum(float(v.calcular_total() or 0) for v in p.get('vendas', []))
-                except Exception:
-                    return 0.0
-            _menor = min(_grupo, key=_total_pedido)
-            _menor['is_transferencia'] = True
+        if len(_grupo) < 2:
+            # Outro pedido da NF pode estar fora do filtro atual (ano/página);
+            # a tag já veio do banco — herança de boleto só entre os visíveis.
+            continue
 
-            # Herança de boleto: coluna real no banco é ``caminho_boleto``.
-            # Lê o caminho bruto das vendas (não só o dict de exibição) e
-            # propaga para TODOS os pedidos do grupo que ainda não têm arquivo.
-            def _caminho_bruto(p):
-                for v in p.get('vendas', []):
-                    cb = (getattr(v, 'caminho_boleto', None) or '').strip()
-                    if cb:
-                        return cb
-                return (p.get('caminho_boleto') or '').strip()
+        def _total_pedido(p):
+            try:
+                return sum(float(v.calcular_total() or 0) for v in p.get('vendas', []))
+            except Exception:
+                return 0.0
 
-            _fonte = max(
-                (_p for _p in _grupo if _caminho_bruto(_p)),
-                key=_total_pedido,
-                default=None,
-            )
-            if not _fonte:
+        # Herança de boleto: coluna real no banco é ``caminho_boleto``.
+        # Lê o caminho bruto das vendas (não só o dict de exibição) e
+        # propaga para TODOS os pedidos do grupo que ainda não têm arquivo.
+        def _caminho_bruto(p):
+            for v in p.get('vendas', []):
+                cb = (getattr(v, 'caminho_boleto', None) or '').strip()
+                if cb:
+                    return cb
+            return (p.get('caminho_boleto') or '').strip()
+
+        _fonte = max(
+            (_p for _p in _grupo if _caminho_bruto(_p)),
+            key=_total_pedido,
+            default=None,
+        )
+        if not _fonte:
+            continue
+        _cb_fonte = _caminho_bruto(_fonte)
+        _dv_fonte = next(
+            (v.data_vencimento for v in _fonte.get('vendas', []) if v.data_vencimento),
+            None,
+        )
+        _fp_fonte = next(
+            (
+                (getattr(v, 'forma_pagamento', None) or '').strip()
+                for v in _fonte.get('vendas', [])
+                if (getattr(v, 'forma_pagamento', None) or '').strip()
+            ),
+            None,
+        )
+        for _alvo in _grupo:
+            if _alvo is _fonte:
                 continue
-            _cb_fonte = _caminho_bruto(_fonte)
-            _dv_fonte = next(
-                (v.data_vencimento for v in _fonte.get('vendas', []) if v.data_vencimento),
-                None,
-            )
-            _fp_fonte = next(
-                (
-                    (getattr(v, 'forma_pagamento', None) or '').strip()
-                    for v in _fonte.get('vendas', [])
-                    if (getattr(v, 'forma_pagamento', None) or '').strip()
-                ),
-                None,
-            )
-            for _alvo in _grupo:
-                if _alvo is _fonte:
-                    continue
-                if _caminho_bruto(_alvo):
-                    continue
-                for _v_alvo in _alvo.get('vendas', []):
-                    if not (_v_alvo.caminho_boleto or '').strip():
-                        _v_alvo.caminho_boleto = _cb_fonte
-                        if _dv_fonte and not _v_alvo.data_vencimento:
-                            _v_alvo.data_vencimento = _dv_fonte
-                        if _fp_fonte and not (getattr(_v_alvo, 'forma_pagamento', None) or '').strip():
-                            _v_alvo.forma_pagamento = _fp_fonte
-                        houve_alteracao_transferencia = True
-                _alvo['caminho_boleto'] = _cb_fonte
-                if _fonte.get('doc_boleto') and not _alvo.get('doc_boleto'):
-                    _alvo['doc_boleto'] = _fonte.get('doc_boleto')
-                if _dv_fonte and not _alvo.get('data_vencimento'):
-                    _alvo['data_vencimento'] = _dv_fonte
+            if _caminho_bruto(_alvo):
+                continue
+            for _v_alvo in _alvo.get('vendas', []):
+                if not (_v_alvo.caminho_boleto or '').strip():
+                    _v_alvo.caminho_boleto = _cb_fonte
+                    if _dv_fonte and not _v_alvo.data_vencimento:
+                        _v_alvo.data_vencimento = _dv_fonte
+                    if _fp_fonte and not (getattr(_v_alvo, 'forma_pagamento', None) or '').strip():
+                        _v_alvo.forma_pagamento = _fp_fonte
+                    houve_alteracao_transferencia = True
+            _alvo['caminho_boleto'] = _cb_fonte
+            if _fonte.get('doc_boleto') and not _alvo.get('doc_boleto'):
+                _alvo['doc_boleto'] = _fonte.get('doc_boleto')
+            if _dv_fonte and not _alvo.get('data_vencimento'):
+                _alvo['data_vencimento'] = _dv_fonte
 
     # Auto-healing: persiste a herança de boleto nas transferências.
     # É o único write aceito nesta rota GET — acontece só quando detecta
@@ -841,8 +862,17 @@ def listar_vendas():
         # produtos, todos_*) nem agrega `graficos_data`. Tudo isso é
         # responsabilidade do caminho non-AJAX abaixo (primeira
         # renderização da página).
-        rows_html = render_template('_linhas_venda.html', pedidos=pedidos_paginados, current_page=page)
-        cards_html = render_template('_cards_venda.html', pedidos=pedidos_paginados)
+        rows_html = render_template(
+            '_linhas_venda.html',
+            pedidos=pedidos_paginados,
+            current_page=page,
+            nfs_multiplas=nfs_multiplas,
+        )
+        cards_html = render_template(
+            '_cards_venda.html',
+            pedidos=pedidos_paginados,
+            nfs_multiplas=nfs_multiplas,
+        )
         return jsonify(rows=rows_html, cards=cards_html)
 
     produto_filtro = None
@@ -1215,6 +1245,7 @@ def listar_vendas():
         forma_pagto=forma_pagto,
         filtro=filtro,
         filtro_vencidos=filtro_vencidos,
+        nfs_multiplas=nfs_multiplas,
         graficos_data=graficos_data,
         total_geral_a_receber=total_geral_a_receber,
         documentos_recem_chegados=documentos_recem_chegados,
