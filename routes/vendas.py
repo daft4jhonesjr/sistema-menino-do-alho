@@ -17,7 +17,6 @@ Rotas extraídas do legado ``app.py`` (Fase 3 da refatoração):
     * POST /vendas/<id>/atualizar_situacao_rapida   atualizar_situacao_rapida
     * GET  /venda/recibo/<id>                       recibo_venda
     * GET  /api/pedidos                             api_pedidos
-    * POST /api/vendas/sincronizar_transferencias   sincronizar_transferencias
     * POST /api/vendas/<id>/desvincular/<tipo>      desvincular_documento_rapido
     * POST /api/vendas/<id>/clonar_documentos       clonar_documentos_por_nf
     * POST /vendas/deletar_massa                    vendas_deletar_massa
@@ -2797,226 +2796,6 @@ def api_pedidos():
     return jsonify(pedidos=pedidos)
 
 
-@vendas_bp.route('/api/vendas/sincronizar_transferencias', methods=['POST'])
-def sincronizar_transferencias():
-    """Copia boleto da matriz para transferências (mesma NF + mesma data).
-
-    Coluna física do arquivo: ``Venda.caminho_boleto`` (não existe
-    ``arquivo_boleto``). Também considera Documentos ligados por
-    ``venda_id`` / ``caminho_arquivo`` / ``url_arquivo`` como fonte.
-    """
-    def _nf_chave(nf):
-        s = (nf or '').strip()
-        if not s or s == '-':
-            return ''
-        digits = re.sub(r'\D', '', s)
-        return digits if digits else s
-
-    def _data_iso(dv):
-        if not dv:
-            return ''
-        if hasattr(dv, 'date'):
-            try:
-                return dv.date().isoformat()
-            except Exception:
-                pass
-        if hasattr(dv, 'isoformat'):
-            return dv.isoformat()
-        return str(dv)[:10]
-
-    vendas = (
-        query_tenant(Venda)
-        .options(joinedload(Venda.cliente))
-        .filter(
-            Venda.nf.isnot(None),
-            Venda.nf != '',
-            Venda.nf != '-',
-        )
-        .all()
-    )
-    if not vendas:
-        return jsonify({
-            'ok': True,
-            'atualizados': 0,
-            'grupos': 0,
-            'mensagem': 'Nenhuma venda com NF encontrada.',
-        })
-
-    venda_ids = [v.id for v in vendas]
-    caminhos_existentes = [
-        (v.caminho_boleto or '').strip()
-        for v in vendas
-        if (v.caminho_boleto or '').strip()
-    ]
-
-    docs_boleto = []
-    if venda_ids or caminhos_existentes:
-        filtros_doc = [Documento.tipo == 'BOLETO']
-        or_parts = []
-        if venda_ids:
-            or_parts.append(Documento.venda_id.in_(venda_ids))
-        if caminhos_existentes:
-            or_parts.append(Documento.caminho_arquivo.in_(caminhos_existentes))
-            or_parts.append(Documento.url_arquivo.in_(caminhos_existentes))
-        if or_parts:
-            filtros_doc.append(or_(*or_parts))
-            docs_boleto = query_documentos_tenant().filter(*filtros_doc).all()
-
-    docs_por_venda_id: dict = {}
-    path_para_doc: dict = {}
-    for doc in docs_boleto:
-        if doc.venda_id:
-            docs_por_venda_id.setdefault(doc.venda_id, []).append(doc)
-        for p in ((doc.caminho_arquivo or '').strip(), (doc.url_arquivo or '').strip()):
-            if p:
-                path_para_doc[p] = doc
-
-    def _path_efetivo_venda(v):
-        """Retorna o caminho/URL do boleto na coluna correta ou via Documento."""
-        cb = (v.caminho_boleto or '').strip()
-        if cb:
-            return cb
-        for doc in docs_por_venda_id.get(v.id, []):
-            path = (doc.caminho_arquivo or '').strip() or (doc.url_arquivo or '').strip()
-            if path:
-                return path
-        return ''
-
-    # 1) Agrega itens em pedidos lógicos (cliente + NF + data).
-    pedidos: dict = {}
-    for v in vendas:
-        nf_key = _nf_chave(v.nf)
-        if not nf_key:
-            continue
-        dv_iso = _data_iso(v.data_venda)
-        if not dv_iso:
-            continue
-        cnpj = ((v.cliente.cnpj if v.cliente else None) or '').strip()
-        is_cf = cnpj in ('0', '00000000000000', '')
-        if is_cf:
-            avulso = str(getattr(v, 'cliente_avulso', '') or '').strip().upper()
-            pkey = (v.cliente_id, nf_key, dv_iso, avulso)
-        else:
-            pkey = (v.cliente_id, nf_key, dv_iso)
-
-        if pkey not in pedidos:
-            pedidos[pkey] = {
-                'nf_key': nf_key,
-                'data': dv_iso,
-                'vendas': [],
-                'total': 0.0,
-            }
-        pedidos[pkey]['vendas'].append(v)
-        try:
-            pedidos[pkey]['total'] += float(v.calcular_total() or 0)
-        except Exception:
-            pass
-
-    # 2) Agrupa pedidos pela chave composta NF + data.
-    grupos: dict = {}
-    for p in pedidos.values():
-        grupos.setdefault(f"{p['nf_key']}_{p['data']}", []).append(p)
-
-    atualizados = 0
-    grupos_sincronizados = 0
-
-    for grupo in grupos.values():
-        if not (1 < len(grupo) <= 3):
-            continue
-
-        com_boleto = []
-        sem_boleto = []
-        for p in grupo:
-            tem = any(_path_efetivo_venda(vv) for vv in p['vendas'])
-            (com_boleto if tem else sem_boleto).append(p)
-
-        if not com_boleto or not sem_boleto:
-            continue
-
-        # Matriz = pedido com boleto de maior valor.
-        matriz = max(com_boleto, key=lambda p: p['total'])
-        fonte = next(
-            (vv for vv in matriz['vendas'] if _path_efetivo_venda(vv)),
-            None,
-        )
-        if not fonte:
-            continue
-
-        cb = _path_efetivo_venda(fonte)
-        if not cb:
-            continue
-
-        # Preferir caminho_arquivo do Documento (estável) quando disponível.
-        doc_fonte = path_para_doc.get(cb)
-        if not doc_fonte:
-            for vv in matriz['vendas']:
-                docs = docs_por_venda_id.get(vv.id) or []
-                if docs:
-                    doc_fonte = docs[0]
-                    break
-        if doc_fonte:
-            cb = (
-                (doc_fonte.caminho_arquivo or '').strip()
-                or (doc_fonte.url_arquivo or '').strip()
-                or cb
-            )
-
-        dvenc = fonte.data_vencimento
-        if not dvenc and doc_fonte is not None:
-            dvenc = getattr(doc_fonte, 'data_vencimento', None)
-        situ = (fonte.situacao or '').strip() or None
-        forma = (getattr(fonte, 'forma_pagamento', None) or '').strip() or None
-        grupo_teve_copia = False
-
-        # Auto-heal na própria matriz: garante caminho_boleto preenchido.
-        for vv in matriz['vendas']:
-            if not (vv.caminho_boleto or '').strip():
-                vv.caminho_boleto = cb
-                if dvenc and not vv.data_vencimento:
-                    vv.data_vencimento = dvenc
-                atualizados += 1
-                grupo_teve_copia = True
-
-        for p in sem_boleto:
-            for vv in p['vendas']:
-                if (vv.caminho_boleto or '').strip() == cb:
-                    continue
-                vv.caminho_boleto = cb
-                if dvenc and not vv.data_vencimento:
-                    vv.data_vencimento = dvenc
-                if situ and not (vv.situacao or '').strip():
-                    vv.situacao = situ
-                if forma and not (getattr(vv, 'forma_pagamento', None) or '').strip():
-                    vv.forma_pagamento = forma
-                atualizados += 1
-                grupo_teve_copia = True
-
-        if grupo_teve_copia:
-            grupos_sincronizados += 1
-
-    if atualizados:
-        try:
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
-            return jsonify({
-                'ok': False,
-                'mensagem': 'Falha ao persistir a sincronização.',
-                'atualizados': 0,
-            }), 500
-
-    return jsonify({
-        'ok': True,
-        'atualizados': atualizados,
-        'grupos': grupos_sincronizados,
-        'mensagem': (
-            f'{atualizados} item(ns) atualizado(s) em {grupos_sincronizados} grupo(s).'
-            if atualizados
-            else 'Nenhuma transferência pendente de boleto encontrada.'
-        ),
-    })
-
-
 def _nf_chave_doc(nf):
     """Normaliza número de NF para comparação (só dígitos quando houver)."""
     s = (nf or '').strip()
@@ -3093,6 +2872,8 @@ def clonar_documentos_por_nf(id):
             'mensagem': 'Este pedido já possui NF e Boleto válidos vinculados.',
             'error': 'Este pedido já possui NF e Boleto válidos vinculados.',
         }), 400
+    # Se só um tipo já está ok, continua buscando apenas o que falta
+    # (NF e boleto podem coexistir — não bloqueia o outro).
 
     # Busca outras vendas do tenant com NF preenchida e ao menos um caminho.
     candidatas = (
@@ -3184,6 +2965,13 @@ def clonar_documentos_por_nf(id):
     if venda_atual.id not in ids_alvos:
         alvos.insert(0, venda_atual)
 
+    # Cascata: inclui outras vendas do tenant com a mesma NF.
+    for outra in outras_vendas:
+        if outra.id in ids_alvos:
+            continue
+        alvos.append(outra)
+        ids_alvos.add(outra.id)
+
     arquivos_copiados = 0
     copiou_nf = False
     copiou_boleto = False
@@ -3218,9 +3006,10 @@ def clonar_documentos_por_nf(id):
     limpar_cache_dashboard()
     mensagem = f'Sucesso! {arquivos_copiados} arquivo(s) copiado(s).'
     registrar_log(
+        'EDITAR',
+        'VENDAS',
         f'Clonagem de documentos por NF {nf_raw}: venda {venda_atual.id} '
         f'← fonte={fonte_id} (nf={copiou_nf}, boleto={copiou_boleto})',
-        categoria='documentos',
     )
     return jsonify({
         'ok': True,

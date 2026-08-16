@@ -978,13 +978,33 @@ def vincular_documento_venda(id):
         return redirect(url_for('dashboard.dashboard'))
     if not _usuario_pode_gerenciar_venda(venda):
         return _resposta_sem_permissao()
+
+    path = (documento.caminho_arquivo or '').strip() or (documento.url_arquivo or '').strip()
+    if not path:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify(ok=False, mensagem='Documento sem arquivo para vincular.'), 400
+        flash('Documento sem arquivo para vincular.', 'error')
+        return redirect(url_for('dashboard.dashboard'))
+
+    is_boleto = (documento.tipo or '').upper() == 'BOLETO'
+    # Bloqueia apenas se ESTE tipo de documento já estiver vinculado.
+    # NF e boleto podem coexistir no mesmo pedido.
+    if is_boleto and (venda.caminho_boleto or '').strip():
+        msg_bloqueio = 'Este pedido já possui boleto vinculado.'
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify(ok=False, mensagem=msg_bloqueio, error=msg_bloqueio), 400
+        flash(msg_bloqueio, 'error')
+        return redirect(url_for('dashboard.dashboard'))
+    if (not is_boleto) and (venda.caminho_nf or '').strip():
+        msg_bloqueio = 'Este pedido já possui NF vinculada.'
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify(ok=False, mensagem=msg_bloqueio, error=msg_bloqueio), 400
+        flash(msg_bloqueio, 'error')
+        return redirect(url_for('dashboard.dashboard'))
+
     try:
         documento.venda_id = venda_id
-        path = (documento.caminho_arquivo or '').strip() or (documento.url_arquivo or '').strip()
-        if not path:
-            raise ValueError('Documento sem caminho_arquivo/url_arquivo para vincular.')
         vendas_pedido = _vendas_do_pedido(venda)
-        is_boleto = (documento.tipo or '').upper() == 'BOLETO'
 
         data_venc_boleto = None
         if is_boleto and documento.data_vencimento:
@@ -1005,51 +1025,37 @@ def vincular_documento_venda(id):
             else:
                 vv.caminho_nf = path
 
-        # TRANSFERÊNCIA: mesma NF + mesma data → replica o arquivo em até 3 pedidos.
-        # Coluna física do PDF: ``caminho_boleto`` / ``caminho_nf``.
+        # Cascata por NF: replica o arquivo em TODAS as outras vendas
+        # do tenant com o mesmo número de NF (campo ainda vazio).
         nf_venda = (venda.nf or '').strip()
-        dv_venda = venda.data_venda.date() if hasattr(venda.data_venda, 'date') else venda.data_venda
-        if nf_venda and nf_venda != '-' and dv_venda is not None:
+        if nf_venda and nf_venda != '-':
             nf_digits = re.sub(r'\D', '', nf_venda) or nf_venda
             candidatas = (
                 query_tenant(Venda)
-                .options(joinedload(Venda.cliente))
                 .filter(
+                    Venda.id != venda.id,
                     Venda.nf.isnot(None),
                     Venda.nf != '',
                     Venda.nf != '-',
-                    Venda.data_venda.isnot(None),
                 )
                 .all()
             )
-            # Agrupa em pedidos lógicos e filtra mesma NF+data.
-            pedidos_grupo: dict = {}
-            for cv in candidatas:
-                nf_c = (cv.nf or '').strip()
-                nf_c_key = re.sub(r'\D', '', nf_c) or nf_c
-                if nf_c_key != nf_digits:
+            ids_pedido = {getattr(v, 'id', None) for v in vendas_pedido}
+            for outra in candidatas:
+                if outra.id in ids_pedido:
                     continue
-                dv_c = cv.data_venda.date() if hasattr(cv.data_venda, 'date') else cv.data_venda
-                if dv_c != dv_venda:
+                nf_outra = (outra.nf or '').strip()
+                nf_outra_key = re.sub(r'\D', '', nf_outra) or nf_outra
+                if nf_outra_key != nf_digits:
                     continue
-                cnpj_c = ((cv.cliente.cnpj if cv.cliente else None) or '').strip()
-                is_cf_c = cnpj_c in ('0', '00000000000000', '')
-                if is_cf_c:
-                    avulso_c = str(getattr(cv, 'cliente_avulso', '') or '').strip().upper()
-                    pk = (cv.cliente_id, nf_c_key, dv_c, avulso_c)
+                if is_boleto:
+                    if not (outra.caminho_boleto or '').strip():
+                        outra.caminho_boleto = path
+                        if data_venc_boleto and not outra.data_vencimento:
+                            outra.data_vencimento = data_venc_boleto
                 else:
-                    pk = (cv.cliente_id, nf_c_key, dv_c)
-                pedidos_grupo.setdefault(pk, []).append(cv)
-
-            if 1 < len(pedidos_grupo) <= 3:
-                for _itens in pedidos_grupo.values():
-                    for _vv in _itens:
-                        if is_boleto:
-                            _vv.caminho_boleto = path
-                            if data_venc_boleto:
-                                _vv.data_vencimento = data_venc_boleto
-                        else:
-                            _vv.caminho_nf = path
+                    if not (outra.caminho_nf or '').strip():
+                        outra.caminho_nf = path
 
         db.session.commit()
         limpar_cache_dashboard()

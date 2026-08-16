@@ -3,15 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light only">
     <title>Romaneio de Remanejo - Menino do Alho</title>
     <style>
+        /* Força esquema claro — Safari em dark mode costuma gerar PDF em branco */
+        :root { color-scheme: only light; }
+        html { color-scheme: only light; background: #fff; }
+
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            font-family: Arial, sans-serif;
+            font-family: Arial, Helvetica, sans-serif;
             font-size: 10pt;
             color: #000;
             background: #fff;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
         }
 
         .page {
@@ -19,26 +26,38 @@
             max-width: 21cm;
             margin: 0 auto;
             padding: 0.8cm 1cm;
+            background: #fff;
+            color: #000;
         }
 
         /* ── Cabeçalho único ────────────────────────────────────────── */
         .cabecalho {
-            display: flex;
-            align-items: center;
-            gap: 16px;
+            display: table;
+            width: 100%;
             border-bottom: 2px solid #047857;
             padding-bottom: 10px;
             margin-bottom: 14px;
         }
 
+        .cabecalho-logo,
+        .cabecalho-texto,
+        .cabecalho-meta {
+            display: table-cell;
+            vertical-align: middle;
+        }
+
+        .cabecalho-logo {
+            width: 72px;
+            padding-right: 12px;
+        }
+
         .cabecalho img {
             height: 56px;
             width: auto;
+            max-width: 72px;
             object-fit: contain;
-            flex-shrink: 0;
+            display: block;
         }
-
-        .cabecalho-texto { flex: 1; }
 
         .cabecalho-texto h1 {
             font-size: 13pt;
@@ -59,20 +78,21 @@
             font-size: 8pt;
             color: #444;
             white-space: nowrap;
+            width: 120px;
         }
 
         /* ── Tabela consolidada ─────────────────────────────────────── */
-        table {
+        table.romaneio {
             width: 100%;
             border-collapse: collapse;
+            table-layout: fixed;
+            background: #fff;
+            color: #000;
         }
 
-        thead tr {
+        table.romaneio thead th {
             background: #047857;
             color: #fff;
-        }
-
-        thead th {
             padding: 6px 8px;
             text-align: left;
             font-size: 8.5pt;
@@ -81,29 +101,32 @@
             white-space: nowrap;
         }
 
-        tbody tr:nth-child(even) { background: #f0fdf4; }
-        tbody tr:nth-child(odd)  { background: #fff; }
-
-        tbody td {
+        table.romaneio tbody td {
             padding: 5px 8px;
             font-size: 8.5pt;
             border: 1px solid #bbb;
             vertical-align: top;
+            color: #000;
+            background: #fff;
+        }
+
+        table.romaneio tbody tr:nth-child(even) td {
+            background: #f0fdf4;
         }
 
         .td-assinatura {
-            min-width: 80px;
+            min-height: 28px;
             border-bottom: 1px dashed #888 !important;
             vertical-align: bottom;
             padding-bottom: 3px;
         }
 
-        .produto-item { display: block; }
+        .produto-item { display: block; color: #000; }
 
         .nf-badge {
             display: inline-block;
             font-size: 7.5pt;
-            color: #555;
+            color: #333;
             background: #f3f4f6;
             border: 1px solid #d1d5db;
             border-radius: 3px;
@@ -114,70 +137,141 @@
         /* ── Rodapé de contagem ─────────────────────────────────────── */
         .rodape-romaneio {
             margin-top: 14px;
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-end;
             border-top: 1px solid #ccc;
             padding-top: 10px;
             font-size: 8pt;
-            color: #444;
+            color: #222;
+            width: 100%;
+        }
+
+        .rodape-romaneio span {
+            display: inline-block;
+            margin-right: 18px;
+            margin-bottom: 4px;
         }
 
         .rodape-romaneio strong { color: #047857; }
 
-        /* ── Botão de impressão (somente tela) ─────────────────────── */
-        .btn-print-wrap {
-            position: fixed;
-            top: 16px;
-            right: 16px;
-            z-index: 999;
-        }
+        /* ── Botão só na tela ───────────────────────────────────────── */
+        .btn-print-wrap { display: none; }
 
-        .btn-print {
-            background: #047857;
-            color: #fff;
-            padding: 8px 18px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 11pt;
-            font-weight: bold;
-            box-shadow: 0 2px 6px rgba(0,0,0,.25);
-        }
+        @media screen {
+            .btn-print-wrap {
+                display: block;
+                position: fixed;
+                top: 16px;
+                right: 16px;
+                z-index: 999;
+            }
 
-        .btn-print:hover { background: #065f46; }
+            .btn-print {
+                background: #047857;
+                color: #fff;
+                padding: 8px 18px;
+                border: none;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 11pt;
+                font-weight: bold;
+                box-shadow: 0 2px 6px rgba(0,0,0,.25);
+            }
+
+            .btn-print:hover { background: #065f46; }
+        }
 
         @media print {
-            @page { size: A4 portrait; margin: 0.5cm; }
+            @page { size: A4 portrait; margin: 0.6cm; }
 
-            body, html {
+            html, body {
                 margin: 0 !important;
                 padding: 0 !important;
+                background: #fff !important;
+                color: #000 !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                /* Ajuste Safari: evita PDF “em branco” / corte de layout */
+                zoom: 0.95;
+            }
+
+            .btn-print-wrap,
+            .btn-print { display: none !important; }
+
+            .page {
+                max-width: none !important;
+                width: 100% !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: visible !important;
+                background: #fff !important;
+                color: #000 !important;
+            }
+
+            .cabecalho,
+            .cabecalho-logo,
+            .cabecalho-texto,
+            .cabecalho-meta,
+            table.romaneio,
+            table.romaneio thead,
+            table.romaneio tbody,
+            table.romaneio tr,
+            table.romaneio th,
+            table.romaneio td,
+            .rodape-romaneio {
+                visibility: visible !important;
+                opacity: 1 !important;
+            }
+
+            table.romaneio {
+                display: table !important;
+                width: 100% !important;
+                page-break-inside: auto;
+            }
+
+            table.romaneio thead { display: table-header-group !important; }
+            table.romaneio tbody { display: table-row-group !important; }
+            table.romaneio tr { display: table-row !important; page-break-inside: avoid; }
+            table.romaneio th,
+            table.romaneio td { display: table-cell !important; }
+
+            table.romaneio thead th {
+                background: #047857 !important;
+                color: #fff !important;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
             }
 
-            .btn-print-wrap { display: none !important; }
+            table.romaneio tbody td {
+                color: #000 !important;
+                background: #fff !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
 
-            .page { padding: 0.2cm 0.3cm !important; }
+            table.romaneio tbody tr:nth-child(even) td {
+                background: #f0fdf4 !important;
+            }
 
-            thead tr { background: #047857 !important; color: #fff !important; }
-            tbody tr:nth-child(even) { background: #f0fdf4 !important; }
+            .cabecalho img {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
         }
     </style>
 </head>
 <body>
 
-<div class="btn-print-wrap">
-    <button class="btn-print" onclick="window.print()">🖨️ Imprimir Remanejo</button>
+<div class="btn-print-wrap no-print">
+    <button type="button" class="btn-print" onclick="window.print()">🖨️ Imprimir Remanejo</button>
 </div>
 
 <div class="page">
 
     <!-- ── Cabeçalho único ──────────────────────────────────────── -->
     <div class="cabecalho">
-        <img src="{{ url_for('static', filename='images/logo_menino_do_alho_amarelo1.jpeg') }}"
-             alt="Menino do Alho">
+        <div class="cabecalho-logo">
+            <img src="{{ url_for('static', filename='images/logo_menino_do_alho_amarelo1.jpeg') }}"
+                 alt="Menino do Alho">
+        </div>
         <div class="cabecalho-texto">
             <h1>Romaneio de Remanejo</h1>
             <p>Documento de controle de carga — conferência e assinatura obrigatórias</p>
@@ -189,7 +283,7 @@
     </div>
 
     <!-- ── Tabela consolidada ─────────────────────────────────── -->
-    <table>
+    <table class="romaneio">
         <thead>
             <tr>
                 <th style="width:22%">Cliente / NF</th>
@@ -223,7 +317,7 @@
                     <span style="color:#555">{{ pedido.cliente.cidade }}</span>
                     {% endif %}
                     {% if not pedido.cliente.endereco and not pedido.cliente.cidade %}
-                    <span style="color:#aaa">—</span>
+                    <span style="color:#888">—</span>
                     {% endif %}
                 </td>
 
