@@ -1199,105 +1199,195 @@ def novo_produto():
 
 @produtos_bp.route('/produtos/editar/<int:id>', methods=['GET', 'POST'])
 def editar_produto(id):
-    produto = query_tenant(Produto).filter_by(id=id).first_or_404()
-    if request.method == 'POST':
-        tamanhos_bacalhau_validos = {'7/9', '10/12', '13/15', '16/20', 'DESFIADO'}
-        fornecedor = request.form.get('fornecedor', '').strip()
-        preco_custo = request.form.get('preco_custo', '').strip()
-        caminhoneiro = request.form.get('caminhoneiro', '').strip()
+    """Edita produto (GET formulário/JSON; POST salva alterações).
 
-        if not fornecedor:
-            flash('❌ Ops! O campo Fornecedor é obrigatório. Preencha e tente novamente.', 'error')
-            return redirect(url_for('produtos.listar_produtos'))
-        if not preco_custo:
-            flash('❌ Ops! O campo Preço de Custo é obrigatório. Preencha e tente novamente.', 'error')
-            return redirect(url_for('produtos.listar_produtos'))
-        if not caminhoneiro:
-            flash('❌ Ops! O campo Caminhoneiro é obrigatório. Preencha e tente novamente.', 'error')
+    Blindagem: qualquer falha inesperada faz rollback, responde JSON em
+    XHR e redireciona com flash em navegação normal — evita derrubar o
+    worker / cortar a conexão no Safari.
+    """
+    def _ajax():
+        return bool(_is_ajax() or request.is_json)
+
+    try:
+        produto = query_tenant(Produto).filter_by(id=id).first()
+        if not produto:
+            msg = 'Produto não encontrado.'
+            if _ajax():
+                return jsonify({'ok': False, 'success': False, 'error': msg}), 404
+            flash(msg, 'error')
             return redirect(url_for('produtos.listar_produtos'))
 
-        tipo = (request.form.get('tipo') or '').strip()
-        tipo_upper = tipo.upper()
-        nacionalidade = request.form.get('nacionalidade', '').strip()
-        marca = request.form.get('marca', '').strip()
-        tamanho = request.form.get('tamanho', '').strip()
-        tamanho_bacalhau = (request.form.get('tamanho', '') or '').strip().upper()
-        try:
-            quantidade_entrada = int(request.form.get('quantidade_entrada', 0))
-        except (ValueError, TypeError):
-            quantidade_entrada = 0
-        try:
-            nacionalidade, marca, tamanho = _validar_sacola(tipo, nacionalidade, marca, tamanho)
-        except ValueError as e:
-            flash(str(e), 'error')
-            return redirect(url_for('produtos.listar_produtos'))
-        if tipo_upper == 'BACALHAU':
-            if not marca:
-                marca = 'NORGY'
-            if not fornecedor:
-                fornecedor = 'ARMAZEM LACERDA'
-            if tamanho_bacalhau not in tamanhos_bacalhau_validos:
-                flash('Selecione um tamanho válido para BACALHAU (7/9, 10/12, 13/15, 16/20 ou DESFIADO).', 'error')
+        if request.method == 'POST':
+            tamanhos_bacalhau_validos = {'7/9', '10/12', '13/15', '16/20', 'DESFIADO'}
+            fornecedor = request.form.get('fornecedor', '').strip()
+            preco_custo = request.form.get('preco_custo', '').strip()
+            caminhoneiro = request.form.get('caminhoneiro', '').strip()
+
+            def _erro_validacao(msg, status=400):
+                if _ajax():
+                    return jsonify({'ok': False, 'success': False, 'error': msg}), status
+                flash(msg, 'error')
                 return redirect(url_for('produtos.listar_produtos'))
-            tamanho = tamanho_bacalhau
 
-        # Atualiza data de chegada se fornecida, senão mantém a atual
-        data_chegada_raw = request.form.get('data_chegada')
-        if data_chegada_raw:
-            data_chegada = date.fromisoformat(data_chegada_raw)
-        else:
+            if not fornecedor:
+                return _erro_validacao('❌ Ops! O campo Fornecedor é obrigatório. Preencha e tente novamente.')
+            if not preco_custo:
+                return _erro_validacao('❌ Ops! O campo Preço de Custo é obrigatório. Preencha e tente novamente.')
+            if not caminhoneiro:
+                return _erro_validacao('❌ Ops! O campo Caminhoneiro é obrigatório. Preencha e tente novamente.')
+
+            tipo = (request.form.get('tipo') or '').strip()
+            tipo_upper = tipo.upper()
+            nacionalidade = request.form.get('nacionalidade', '').strip()
+            marca = request.form.get('marca', '').strip()
+            tamanho = request.form.get('tamanho', '').strip()
+            tamanho_bacalhau = (request.form.get('tamanho', '') or '').strip().upper()
+            try:
+                quantidade_entrada = int(request.form.get('quantidade_entrada', 0))
+            except (ValueError, TypeError):
+                quantidade_entrada = 0
+            try:
+                nacionalidade, marca, tamanho = _validar_sacola(tipo, nacionalidade, marca, tamanho)
+            except ValueError as e:
+                return _erro_validacao(str(e))
+            if tipo_upper == 'BACALHAU':
+                if not marca:
+                    marca = 'NORGY'
+                if not fornecedor:
+                    fornecedor = 'ARMAZEM LACERDA'
+                if tamanho_bacalhau not in tamanhos_bacalhau_validos:
+                    return _erro_validacao(
+                        'Selecione um tamanho válido para BACALHAU (7/9, 10/12, 13/15, 16/20 ou DESFIADO).'
+                    )
+                tamanho = tamanho_bacalhau
+
+            data_chegada_raw = request.form.get('data_chegada')
+            if data_chegada_raw:
+                data_chegada = date.fromisoformat(data_chegada_raw)
+            else:
+                data_chegada = produto.data_chegada
+
+            if tipo_upper == 'BACALHAU':
+                nome_produto = _montar_nome_produto(tipo_upper, (marca or 'NORGY').strip().upper(), tamanho)
+            else:
+                nome_produto = gerar_nome_produto(tipo_upper, nacionalidade, marca, data_chegada, tamanho)
+
+            if quantidade_entrada > 0:
+                produto = _produto_com_lock(produto.id)
+                if produto is None:
+                    return _erro_validacao('Não foi possível localizar o produto para atualizar o estoque.', 404)
+                produto.estoque_atual += quantidade_entrada
+
+            produto.tipo = tipo_upper
+            produto.nacionalidade = nacionalidade
+            produto.marca = marca
+            produto.tamanho = tamanho
+            produto.fornecedor = fornecedor
+            produto.caminhoneiro = caminhoneiro
+            produto.preco_custo = Decimal(str(_limpar_valor_moeda(preco_custo)))
+            produto.data_chegada = data_chegada
+            produto.nome_produto = nome_produto
+
+            fotos_existentes = ProdutoFoto.query.filter_by(produto_id=produto.id).count()
+            slots_disponiveis = max(0, 5 - fotos_existentes)
+            if slots_disponiveis > 0 and (
+                os.environ.get('CLOUDINARY_URL')
+                or current_app.config.get('CLOUDINARY_URL')
+                or (
+                    current_app.config.get('CLOUDINARY_CLOUD_NAME')
+                    and current_app.config.get('CLOUDINARY_API_KEY')
+                )
+            ):
+                fotos = request.files.getlist('fotos')
+                for foto in fotos[:slots_disponiveis]:
+                    if foto and foto.filename:
+                        if not _arquivo_imagem_permitido(foto.filename):
+                            current_app.logger.info(
+                                f"Upload de foto ignorado (extensão inválida): {foto.filename}"
+                            )
+                            continue
+                        try:
+                            upload_result = cloudinary.uploader.upload(
+                                foto,
+                                folder="menino_do_alho/produtos",
+                                timeout=_EXTERNAL_TIMEOUT,
+                            )
+                            url_segura = upload_result.get('secure_url')
+                            public_id_foto = upload_result.get('public_id')
+                            if url_segura:
+                                nova_foto = ProdutoFoto(
+                                    produto_id=produto.id,
+                                    arquivo=url_segura,
+                                    public_id=public_id_foto,
+                                )
+                                db.session.add(nova_foto)
+                        except Exception as e:
+                            current_app.logger.error(
+                                f"Erro ao fazer upload para o Cloudinary (produto {produto.id}): {e}"
+                            )
+
+            ok, err = _safe_db_commit()
+            if not ok:
+                msg = err or 'Erro ao atualizar produto. Tente novamente.'
+                if _ajax():
+                    return jsonify({'ok': False, 'success': False, 'error': msg}), 500
+                flash(msg, 'error')
+                return redirect(url_for('produtos.listar_produtos'))
+
+            limpar_cache_dashboard()
+            registrar_log('EDITAR', 'PRODUTOS', f"Produto #{produto.id} — {nome_produto} editado.")
+            msg_ok = f'Produto {nome_produto} atualizado com sucesso!'
+            if _ajax():
+                return jsonify({
+                    'ok': True,
+                    'success': True,
+                    'message': msg_ok,
+                    'mensagem': msg_ok,
+                    'produto_id': produto.id,
+                })
+            flash(f'✅ {msg_ok}', 'success')
+            return redirect(url_for('produtos.listar_produtos'))
+
+        # GET — XHR: JSON para o modal; navegação: formulário completo
+        if _ajax():
             data_chegada = produto.data_chegada
+            return jsonify({
+                'ok': True,
+                'success': True,
+                'produto': {
+                    'id': produto.id,
+                    'nome_produto': produto.nome_produto or '',
+                    'preco_custo': float(produto.preco_custo or 0),
+                    'estoque_atual': int(produto.estoque_atual or 0),
+                    'quantidade_entrada': 0,
+                    'data_chegada': data_chegada.strftime('%Y-%m-%d') if data_chegada else '',
+                    'tipo': (produto.tipo or '').strip(),
+                    'fornecedor': (produto.fornecedor or '').strip(),
+                    'nacionalidade': (produto.nacionalidade or '').strip(),
+                    'tamanho': (produto.tamanho or '').strip(),
+                    'marca': (produto.marca or '').strip(),
+                    'caminhoneiro': (produto.caminhoneiro or '').strip(),
+                },
+            })
+        return render_template('produtos/formulario.html', produto=produto)
 
-        # EDIÇÃO MANUAL: Sempre regerar nome_produto automaticamente via concatenação
-        if tipo_upper == 'BACALHAU':
-            nome_produto = _montar_nome_produto(tipo_upper, (marca or 'NORGY').strip().upper(), tamanho)
-        else:
-            nome_produto = gerar_nome_produto(tipo_upper, nacionalidade, marca, data_chegada, tamanho)
-
-        # Lock pessimista antes de alterar estoque para evitar race condition.
-        if quantidade_entrada > 0:
-            produto = _produto_com_lock(produto.id)
-            produto.estoque_atual += quantidade_entrada
-
-        produto.tipo = tipo_upper
-        produto.nacionalidade = nacionalidade
-        produto.marca = marca
-        produto.tamanho = tamanho
-        produto.fornecedor = fornecedor
-        produto.caminhoneiro = caminhoneiro
-        produto.preco_custo = Decimal(str(_limpar_valor_moeda(preco_custo)))
-        produto.data_chegada = data_chegada
-        produto.nome_produto = nome_produto
-        # Upload de fotos adicionais para Cloudinary (até 5 no total)
-        fotos_existentes = ProdutoFoto.query.filter_by(produto_id=produto.id).count()
-        slots_disponiveis = max(0, 5 - fotos_existentes)
-        if slots_disponiveis > 0 and (os.environ.get('CLOUDINARY_URL') or current_app.config.get('CLOUDINARY_URL') or (current_app.config.get('CLOUDINARY_CLOUD_NAME') and current_app.config.get('CLOUDINARY_API_KEY'))):
-            fotos = request.files.getlist('fotos')
-            for foto in fotos[:slots_disponiveis]:
-                if foto and foto.filename:
-                    if not _arquivo_imagem_permitido(foto.filename):
-                        current_app.logger.info(f"Upload de foto ignorado (extensão inválida): {foto.filename}")
-                        continue
-                    try:
-                        upload_result = cloudinary.uploader.upload(foto, folder="menino_do_alho/produtos", timeout=_EXTERNAL_TIMEOUT)
-                        url_segura = upload_result.get('secure_url')
-                        public_id_foto = upload_result.get('public_id')
-                        if url_segura:
-                            nova_foto = ProdutoFoto(produto_id=produto.id, arquivo=url_segura, public_id=public_id_foto)
-                            db.session.add(nova_foto)
-                    except Exception as e:
-                        current_app.logger.error(f"Erro ao fazer upload para o Cloudinary (produto {produto.id}): {e}")
-
-        ok, err = _safe_db_commit()
-        if not ok:
-            flash(err or "Erro ao atualizar produto. Tente novamente.", "error")
-            return redirect(url_for("produtos.listar_produtos"))
-        limpar_cache_dashboard()
-        registrar_log('EDITAR', 'PRODUTOS', f"Produto #{produto.id} — {nome_produto} editado.")
-        flash(f'✅ Produto {nome_produto} atualizado com sucesso!', 'success')
+    except Exception as e:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        current_app.logger.exception(
+            'Falha em editar_produto id=%s method=%s: %s', id, request.method, e
+        )
+        msg = 'Ocorreu uma instabilidade ao processar o produto. Tente novamente.'
+        if _ajax():
+            return jsonify({
+                'ok': False,
+                'success': False,
+                'error': f'Falha ao processar operação: {str(e)}',
+            }), 500
+        flash(msg, 'error')
         return redirect(url_for('produtos.listar_produtos'))
-
-    return render_template('produtos/formulario.html', produto=produto)
 
 
 @produtos_bp.route('/produtos/excluir/<int:id>', methods=['POST'])

@@ -4269,8 +4269,29 @@ def handle_exception(e):
         exc_info=False,
     )
 
-    if request.accept_mimetypes.accept_json and not request.accept_mimetypes.accept_html:
-        return jsonify({'erro': 'Erro interno no servidor.'}), 500
+    wants_json = False
+    try:
+        wants_json = (
+            request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+            or getattr(request, 'is_json', False)
+            or (
+                request.accept_mimetypes.accept_json
+                and not request.accept_mimetypes.accept_html
+            )
+        )
+    except Exception:
+        wants_json = False
+
+    if wants_json:
+        return jsonify({
+            'ok': False,
+            'error': 'O servidor encontrou uma instabilidade temporária. Tente novamente.',
+        }), 500
+
+    try:
+        flash('Instabilidade temporária no servidor. Operação cancelada com segurança.', 'error')
+    except Exception:
+        pass
 
     try:
         return render_template('500.html'), 500
@@ -4279,13 +4300,46 @@ def handle_exception(e):
 
 
 @app.errorhandler(500)
-def erro_interno(e):
-    """Handler explícito de 500 — cobre erros levantados diretamente pelo Flask."""
+@app.errorhandler(502)
+def handle_server_error(e):
+    """Handler explícito de 500/502 — cobre erros levantados pelo Flask/proxy."""
     try:
-        app.logger.error(f"Erro 500 explícito: {e}", exc_info=True)
-        return render_template('500.html'), 500
+        app.logger.error(f"Erro servidor ({getattr(e, 'code', 500)}): {e}", exc_info=True)
     except Exception:
-        return "Erro interno no servidor.", 500
+        pass
+
+    wants_json = False
+    try:
+        wants_json = (
+            request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+            or getattr(request, 'is_json', False)
+            or (
+                request.accept_mimetypes.accept_json
+                and not request.accept_mimetypes.accept_html
+            )
+        )
+    except Exception:
+        wants_json = False
+
+    if wants_json:
+        return jsonify({
+            'ok': False,
+            'error': 'O servidor encontrou uma instabilidade temporária. Tente novamente.',
+        }), 500
+
+    try:
+        flash('Instabilidade temporária no servidor. Operação cancelada com segurança.', 'error')
+    except Exception:
+        pass
+
+    try:
+        dest = request.referrer or url_for('dashboard.dashboard')
+        return redirect(dest)
+    except Exception:
+        try:
+            return render_template('500.html'), 500
+        except Exception:
+            return "Erro interno no servidor.", 500
 
 
 

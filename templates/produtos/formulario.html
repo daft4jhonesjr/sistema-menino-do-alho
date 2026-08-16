@@ -2,6 +2,10 @@
 
 {% block title %}{% if produto %}Editar{% else %}Nova Entrada{% endif %} de Produto - Menino do Alho{% endblock %}
 
+{% block head_extras %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+{% endblock %}
+
 {% block content %}
 <div class="mb-6">
     <h2 class="text-3xl font-bold text-verde-floresta mb-2">
@@ -21,7 +25,7 @@
     </div>
     {% endif %}
 
-    <form method="POST" action="{% if produto %}{{ url_for('produtos.editar_produto', id=produto.id) }}{% else %}{{ url_for('produtos.novo_produto') }}{% endif %}" onsubmit="return loadingBotao(this)">
+    <form id="form-produto-pagina" method="POST" action="{% if produto %}{{ url_for('produtos.editar_produto', id=produto.id) }}{% else %}{{ url_for('produtos.novo_produto') }}{% endif %}" {% if produto %}data-produto-id="{{ produto.id }}"{% endif %} onsubmit="return false;">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <!-- 1. Produto (Nome gerado) - Exibido acima se editando -->
@@ -163,8 +167,103 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    var formPagina = document.getElementById('form-produto-pagina');
+    if (formPagina) {
+        formPagina.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var produtoId = formPagina.getAttribute('data-produto-id');
+            // Nova entrada: submit clássico com loadingBotao
+            if (!produtoId) {
+                if (typeof loadingBotao === 'function') loadingBotao(formPagina);
+                formPagina.submit();
+                return;
+            }
+
+            var swalDark = {
+                background: '#1e293b',
+                color: '#f8fafc',
+                confirmButtonColor: '#10b981',
+                cancelButtonColor: '#64748b'
+            };
+
+            function enviarEdicao() {
+                var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+                var timer = controller ? setTimeout(function() { controller.abort(); }, 45000) : null;
+                var headers = Object.assign(
+                    { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+                    window.getCsrfHeaders ? window.getCsrfHeaders() : {}
+                );
+                fetch(formPagina.action, {
+                    method: 'POST',
+                    headers: headers,
+                    body: new FormData(formPagina),
+                    credentials: 'same-origin',
+                    signal: controller ? controller.signal : undefined
+                })
+                .then(function(r) {
+                    return r.json().catch(function() { return {}; }).then(function(data) {
+                        if (!r.ok || !(data.success || data.ok)) {
+                            throw new Error(data.error || data.mensagem || ('Erro HTTP ' + r.status));
+                        }
+                        return data;
+                    });
+                })
+                .then(function(data) {
+                    var msg = data.message || data.mensagem || 'Produto atualizado com sucesso!';
+                    if (typeof Swal !== 'undefined') {
+                        return Swal.fire(Object.assign({
+                            title: 'Sucesso!',
+                            text: msg,
+                            icon: 'success'
+                        }, swalDark)).then(function() {
+                            window.location.href = '{{ url_for("produtos.listar_produtos") }}';
+                        });
+                    }
+                    alert(msg);
+                    window.location.href = '{{ url_for("produtos.listar_produtos") }}';
+                })
+                .catch(function(err) {
+                    console.error('Erro ao salvar produto:', err);
+                    var opts = Object.assign({
+                        title: 'Instabilidade Temporária',
+                        text: 'Não foi possível salvar esta entrada. O servidor pode estar ocupado.',
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonText: 'Tentar Novamente',
+                        cancelButtonText: 'Cancelar'
+                    }, swalDark);
+                    if (typeof Swal !== 'undefined') {
+                        Swal.fire(opts).then(function(res) {
+                            if (res.isConfirmed) enviarEdicao();
+                        });
+                    } else if (window.confirm(opts.text + '\n\nTentar novamente?')) {
+                        enviarEdicao();
+                    }
+                })
+                .finally(function() {
+                    if (timer) clearTimeout(timer);
+                });
+            }
+
+            if (typeof Swal !== 'undefined') {
+                Swal.fire(Object.assign({
+                    title: 'Confirmar alteração?',
+                    text: 'Tem certeza que deseja atualizar este produto?',
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonText: 'Sim, salvar',
+                    cancelButtonText: 'Cancelar'
+                }, swalDark)).then(function(res) {
+                    if (res.isConfirmed) enviarEdicao();
+                });
+            } else if (confirm('Tem certeza que deseja atualizar este produto?')) {
+                enviarEdicao();
+            }
+        });
+    }
+
     const dataChegadaInput = document.getElementById('data_chegada');
-    if (!dataChegadaInput.value) {
+    if (dataChegadaInput && !dataChegadaInput.value) {
         const today = new Date().toISOString().split('T')[0];
         dataChegadaInput.value = today;
     }

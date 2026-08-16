@@ -3,6 +3,7 @@
 {% block title %}Produtos - Menino do Alho{% endblock %}
 
 {% block head_extras %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <style>
     .categoria-chevron {
         transition: transform 0.2s ease-in-out;
@@ -403,7 +404,7 @@
                                         data-marca="{{ (produto.marca or '')|replace('\n', ' ')|e }}"
                                         data-caminhoneiro="{{ (produto.caminhoneiro or '')|replace('\n', ' ')|e }}"
                                         data-estoque-atual="{{ produto.estoque_atual }}"
-                                        onclick="abrirModalEditarProduto(this)"
+                                        onclick="abrirOuSalvarEdicaoProduto({{ produto.id }}, null, this)"
                                         title="Editar produto">
                                     <i data-lucide="pencil" class="w-4 h-4"></i>
                                 </button>
@@ -540,7 +541,7 @@
                                         data-marca="{{ (produto.marca or '')|replace('\n', ' ')|e }}"
                                         data-caminhoneiro="{{ (produto.caminhoneiro or '')|replace('\n', ' ')|e }}"
                                         data-estoque-atual="{{ produto.estoque_atual }}"
-                                        onclick="abrirModalEditarProduto(this)"
+                                        onclick="abrirOuSalvarEdicaoProduto({{ produto.id }}, null, this)"
                                         title="Editar produto">
                                     <i data-lucide="pencil" class="w-5 h-5"></i>
                                 </button>
@@ -1450,7 +1451,7 @@ function editarTipoCadastrado(id, nomeAtual) {
     }
 })();
 
-// Modal Editar Produto: abrir ao clicar no lápis, preencher com data-* e confirmar antes de enviar
+// Modal Editar Produto: abertura e salvamento protegidos contra falha de rede/timeout
 (function() {
     var wrap = document.getElementById('modal-editar-produto-wrap');
     var form = document.getElementById('form-editar-produto');
@@ -1471,6 +1472,13 @@ function editarTipoCadastrado(id, nomeAtual) {
     var editTamAsterisco = document.getElementById('edit-tamanho-asterisco');
     var editMarcaAsterisco = document.getElementById('edit-marca-asterisco');
     var editCamAsterisco = document.getElementById('edit-caminhoneiro-asterisco');
+    var TIMEOUT_MS = 45000;
+    var swalDark = {
+        background: '#1e293b',
+        color: '#f8fafc',
+        confirmButtonColor: '#10b981',
+        cancelButtonColor: '#64748b'
+    };
 
     function aplicarRegrasEdicao(tamanhoAtual, marcaAtual) {
         var cfg = window.getTipoConfigPorSelect(editTipo);
@@ -1502,7 +1510,6 @@ function editarTipoCadastrado(id, nomeAtual) {
                 editTamanho.innerHTML = '<option value="">Selecione...</option>' + tamanhosOpts.map(function(t) {
                     return '<option value="' + t + '"' + (t === val ? ' selected' : '') + '>' + t + '</option>';
                 }).join('');
-                // Se o valor atual não está na lista, adicionar como legado.
                 if (val && tamanhosOpts.indexOf(val) < 0) {
                     var opt = document.createElement('option');
                     opt.value = val; opt.textContent = val + ' (legado)'; opt.selected = true;
@@ -1531,29 +1538,20 @@ function editarTipoCadastrado(id, nomeAtual) {
         }
     }
 
-    function abrirModalEditarProduto(btn) {
-        var id = btn.getAttribute('data-id');
-        var precoCusto = btn.getAttribute('data-preco-custo') || '';
-        var quantidadeEntrada = btn.getAttribute('data-quantidade-entrada') || '0';
-        var dataChegada = btn.getAttribute('data-data-chegada') || '';
-        var tipo = btn.getAttribute('data-tipo') || '';
-        var fornecedor = btn.getAttribute('data-fornecedor') || '';
-        var nacionalidade = (btn.getAttribute('data-nacionalidade') || '').trim();
-        var tamanho = btn.getAttribute('data-tamanho') || '';
-        var marca = btn.getAttribute('data-marca') || '';
-        var caminhoneiro = btn.getAttribute('data-caminhoneiro') || '';
+    function preencherModalComDados(p) {
+        if (!form || !p) return;
+        form.action = actionBase.replace(/\/0$/, '/') + p.id;
+        form.setAttribute('data-produto-id', String(p.id));
 
-        form.action = actionBase.replace(/\/0$/, '/') + id;
+        document.getElementById('edit_preco_custo').value = p.preco_custo != null ? p.preco_custo : '';
+        document.getElementById('edit_quantidade_entrada').value = p.quantidade_entrada != null ? p.quantidade_entrada : 0;
+        document.getElementById('edit_data_chegada').value = p.data_chegada || '';
+        if (editMarca) editMarca.value = p.marca || '';
+        if (editCaminhoneiro) editCaminhoneiro.value = p.caminhoneiro || '';
+        if (editTipo) editTipo.value = p.tipo || '';
+        aplicarRegrasEdicao(p.tamanho || '', p.marca || '');
 
-        document.getElementById('edit_preco_custo').value = precoCusto;
-        document.getElementById('edit_quantidade_entrada').value = quantidadeEntrada;
-        document.getElementById('edit_data_chegada').value = dataChegada;
-        if (editMarca) editMarca.value = marca;
-        if (editCaminhoneiro) editCaminhoneiro.value = caminhoneiro;
-
-        if (editTipo) editTipo.value = tipo;
-        aplicarRegrasEdicao(tamanho, marca);
-
+        var fornecedor = p.fornecedor || '';
         var editFornecedor = document.getElementById('edit_fornecedor');
         if (editFornecedor) {
             var temOpcao = [].some.call(editFornecedor.options, function(o) { return o.value === fornecedor; });
@@ -1566,9 +1564,10 @@ function editarTipoCadastrado(id, nomeAtual) {
             editFornecedor.value = fornecedor;
         }
 
+        var nacionalidade = (p.nacionalidade || '').trim();
         if (editNacionalidade) {
-            var temOpcao = [].some.call(editNacionalidade.options, function(o) { return o.value === nacionalidade; });
-            if (!temOpcao && nacionalidade) {
+            var temNac = [].some.call(editNacionalidade.options, function(o) { return o.value === nacionalidade; });
+            if (!temNac && nacionalidade) {
                 var optN = document.createElement('option');
                 optN.value = nacionalidade;
                 optN.textContent = nacionalidade;
@@ -1579,26 +1578,169 @@ function editarTipoCadastrado(id, nomeAtual) {
         }
 
         wrap.classList.remove('hidden');
-        travarFundo();
+        if (typeof travarFundo === 'function') travarFundo();
         if (typeof lucide !== 'undefined') lucide.createIcons();
     }
-    window.abrirModalEditarProduto = abrirModalEditarProduto;
+
+    function dadosDoBotao(btn) {
+        if (!btn) return null;
+        return {
+            id: parseInt(btn.getAttribute('data-id'), 10),
+            preco_custo: btn.getAttribute('data-preco-custo') || '',
+            quantidade_entrada: btn.getAttribute('data-quantidade-entrada') || '0',
+            data_chegada: btn.getAttribute('data-data-chegada') || '',
+            tipo: btn.getAttribute('data-tipo') || '',
+            fornecedor: btn.getAttribute('data-fornecedor') || '',
+            nacionalidade: (btn.getAttribute('data-nacionalidade') || '').trim(),
+            tamanho: btn.getAttribute('data-tamanho') || '',
+            marca: btn.getAttribute('data-marca') || '',
+            caminhoneiro: btn.getAttribute('data-caminhoneiro') || '',
+            estoque_atual: btn.getAttribute('data-estoque-atual') || '0'
+        };
+    }
+
+    function alertarInstabilidade(id, formData, btnFallback) {
+        var opts = Object.assign({
+            title: 'Instabilidade Temporária',
+            text: 'Não foi possível carregar/salvar os dados desta entrada. O servidor pode estar ocupado.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Tentar Novamente',
+            cancelButtonText: 'Cancelar'
+        }, swalDark);
+        if (typeof Swal === 'undefined') {
+            if (window.confirm(opts.text + '\n\nTentar novamente?')) {
+                abrirOuSalvarEdicaoProduto(id, formData, btnFallback);
+            }
+            return;
+        }
+        Swal.fire(opts).then(function(res) {
+            if (res.isConfirmed) {
+                abrirOuSalvarEdicaoProduto(id, formData, btnFallback);
+            }
+        });
+    }
+
+    async function abrirOuSalvarEdicaoProduto(id, formData, btnFallback) {
+        if (!id) return;
+        var url = actionBase.replace(/\/0$/, '/') + id;
+        var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        var timer = controller ? setTimeout(function() { controller.abort(); }, TIMEOUT_MS) : null;
+        var btnSalvar = document.getElementById('btn-salvar-editar-produto');
+
+        try {
+            if (formData && btnSalvar) {
+                btnSalvar.disabled = true;
+                btnSalvar.classList.add('opacity-60');
+            }
+
+            var headers = { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' };
+            if (formData && window.getCsrfHeaders) {
+                Object.assign(headers, window.getCsrfHeaders());
+            }
+
+            var response = await fetch(url, {
+                method: formData ? 'POST' : 'GET',
+                headers: headers,
+                body: formData || undefined,
+                credentials: 'same-origin',
+                signal: controller ? controller.signal : undefined
+            });
+
+            if (!response.ok) {
+                var errData = await response.json().catch(function() { return {}; });
+                throw new Error(errData.error || errData.mensagem || ('Erro HTTP ' + response.status));
+            }
+
+            var data = await response.json().catch(function() { return null; });
+
+            if (formData) {
+                if (data && (data.success || data.ok)) {
+                    var msgOk = (data.message || data.mensagem || 'Produto atualizado com sucesso!');
+                    if (typeof Swal !== 'undefined') {
+                        await Swal.fire(Object.assign({
+                            title: 'Sucesso!',
+                            text: msgOk,
+                            icon: 'success'
+                        }, swalDark));
+                    } else {
+                        alert(msgOk);
+                    }
+                    window.location.reload();
+                    return;
+                }
+                throw new Error((data && (data.error || data.mensagem)) || 'Resposta inesperada do servidor.');
+            }
+
+            // GET — abre modal com dados do servidor (fallback: data-* do botão)
+            if (data && data.produto) {
+                preencherModalComDados(data.produto);
+            } else if (btnFallback) {
+                preencherModalComDados(dadosDoBotao(btnFallback));
+            } else {
+                throw new Error('Produto sem dados para edição.');
+            }
+        } catch (error) {
+            console.error('Erro na requisição de edição de produto:', error);
+            // GET com data-* local: abre o modal mesmo se o servidor falhar (não quebra a navegação).
+            if (!formData && btnFallback) {
+                try {
+                    preencherModalComDados(dadosDoBotao(btnFallback));
+                    return;
+                } catch (e2) { /* segue para alerta */ }
+            }
+            alertarInstabilidade(id, formData, btnFallback);
+        } finally {
+            if (timer) clearTimeout(timer);
+            if (btnSalvar) {
+                btnSalvar.disabled = false;
+                btnSalvar.classList.remove('opacity-60');
+            }
+        }
+    }
+
+    window.abrirOuSalvarEdicaoProduto = abrirOuSalvarEdicaoProduto;
+    window.abrirModalEditarProduto = function(btn) {
+        var id = btn && btn.getAttribute('data-id');
+        abrirOuSalvarEdicaoProduto(id, null, btn);
+    };
 
     function fecharModalEditarProduto() {
-        wrap.classList.add('hidden');
-        liberarFundo();
+        if (wrap) wrap.classList.add('hidden');
+        if (typeof liberarFundo === 'function') liberarFundo();
     }
 
     if (overlay) overlay.addEventListener('click', fecharModalEditarProduto);
     btnsFechar.forEach(function(b) { b.addEventListener('click', fecharModalEditarProduto); });
-
     if (editTipo) editTipo.addEventListener('change', function() { aplicarRegrasEdicao(); });
 
     if (form) {
         form.addEventListener('submit', function(e) {
             e.preventDefault();
-            if (!confirm('Tem certeza que deseja atualizar este produto?')) return;
-            form.submit();
+            var id = form.getAttribute('data-produto-id')
+                || (form.action.match(/\/(\d+)\/?$/) || [])[1];
+            if (!id) {
+                alert('Produto inválido para salvar.');
+                return;
+            }
+            var confirmar = function() {
+                var fd = new FormData(form);
+                abrirOuSalvarEdicaoProduto(id, fd, null);
+            };
+            if (typeof Swal !== 'undefined') {
+                Swal.fire(Object.assign({
+                    title: 'Confirmar alteração?',
+                    text: 'Tem certeza que deseja atualizar este produto?',
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonText: 'Sim, salvar',
+                    cancelButtonText: 'Cancelar'
+                }, swalDark)).then(function(res) {
+                    if (res.isConfirmed) confirmar();
+                });
+            } else if (confirm('Tem certeza que deseja atualizar este produto?')) {
+                confirmar();
+            }
         });
     }
 })();
