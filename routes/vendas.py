@@ -697,13 +697,22 @@ def listar_vendas():
     if filtro_vencidos:
         pedidos_agrupados = [p for p in pedidos_agrupados if p.get('is_vencido_para_abatimento')]
 
-    # Transferência: grupos de 2-3 pedidos com mesma NF — marca o de menor valor.
+    # Transferência: grupos de 2-3 pedidos com mesma NF na MESMA data — marca o
+    # de menor valor. A chave inclui a data para evitar falso-positivo quando a
+    # numeração de NF se repete em períodos distintos.
     _nf_grupos: dict = {}
     for _p in pedidos_agrupados:
         _p['is_transferencia'] = False
         _nf = (_p.get('nf') or '').strip()
         if _nf and _nf not in ('-', ''):
-            _nf_grupos.setdefault(_nf, []).append(_p)
+            _dv = _p.get('data_venda')
+            _dv_iso = (
+                _dv.date().isoformat() if hasattr(_dv, 'date')
+                else (str(_dv)[:10] if _dv else '')
+            )
+            _nf_grupos.setdefault(f"{_nf}_{_dv_iso}", []).append(_p)
+
+    houve_alteracao_transferencia = False
     for _grupo in _nf_grupos.values():
         if 2 <= len(_grupo) <= 3:
             def _total_pedido(p):
@@ -713,8 +722,35 @@ def listar_vendas():
                     return 0.0
             _menor = min(_grupo, key=_total_pedido)
             _menor['is_transferencia'] = True
+            _maior = max(_grupo, key=_total_pedido)
 
-    # Sem `db.session.commit()` aqui: esta é uma rota GET de listagem
+            # Herança de boleto: se a matriz (maior valor) tem boleto vinculado e
+            # a transferência (menor valor) ainda não tem, copiar automaticamente.
+            _cb_maior = (_maior.get('caminho_boleto') or '').strip()
+            _cb_menor = (_menor.get('caminho_boleto') or '').strip()
+            if _cb_maior and not _cb_menor:
+                _dv_maior = next(
+                    (v.data_vencimento for v in _maior.get('vendas', []) if v.data_vencimento),
+                    None,
+                )
+                for _v_menor in _menor.get('vendas', []):
+                    if not (_v_menor.caminho_boleto or '').strip():
+                        _v_menor.caminho_boleto = _cb_maior
+                        if _dv_maior and not _v_menor.data_vencimento:
+                            _v_menor.data_vencimento = _dv_maior
+                        houve_alteracao_transferencia = True
+                _menor['caminho_boleto'] = _cb_maior  # sincroniza o dict p/ o template
+
+    # Auto-healing: persiste a herança de boleto nas transferências.
+    # É o único write aceito nesta rota GET — acontece só quando detecta
+    # inconsistência real (filial sem boleto enquanto a matriz já tem).
+    if houve_alteracao_transferencia:
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+    # Sem `db.session.commit()` aqui para o restante: esta é uma rota GET de listagem
     # e não deveria alterar estado do banco. O commit antigo era um
     # acidente herdado dos `v.caminho_boleto/nf = None` + `flush()` que
     # foram removidos acima — sem mutações pendentes não há nada para

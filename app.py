@@ -1360,6 +1360,26 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                     # 2) por pedido lógico (cliente + NF), evitando "visão dupla"
                     #    em pedidos com múltiplos itens.
                     vendas_validas = _deduplicar_vendas_por_pedido(vendas_validas)
+
+                    # Blindagem de data: NFs podem se repetir em datas distintas.
+                    # Usa apenas as vendas da data_venda mais recente para não
+                    # vincular um boleto de julho a um pedido de junho homônimo.
+                    if vendas_validas:
+                        _data_max = max(
+                            (v.data_venda.date() if hasattr(v.data_venda, 'date') else v.data_venda)
+                            for v in vendas_validas
+                            if v.data_venda
+                        )
+                        _antes = len(vendas_validas)
+                        vendas_validas = [
+                            v for v in vendas_validas
+                            if (v.data_venda.date() if hasattr(v.data_venda, 'date') else v.data_venda) == _data_max
+                        ]
+                        if len(vendas_validas) < _antes:
+                            _log_detalhado(
+                                f"DEBUG: Blindagem de data — descartadas {_antes - len(vendas_validas)} "
+                                f"venda(s) com data diferente de {_data_max} para NF '{nf_limpa}'"
+                            )
                     
                     # REGRA ÚNICA: Se houver EXATAMENTE UMA venda válida, vincular IMEDIATAMENTE (SOBRESCRITA AUTOMÁTICA)
                     _log_detalhado(f"\n--- Resultado da Filtragem: {len(vendas_validas)} venda(s) válida(s) encontrada(s) ---")
