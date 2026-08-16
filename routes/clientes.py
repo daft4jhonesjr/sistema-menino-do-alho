@@ -36,14 +36,14 @@ from flask import (
     flash, jsonify, current_app,
 )
 from flask_login import current_user
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, desc
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, OperationalError, TimeoutError as SATimeoutError
 import pandas as pd
 from werkzeug.exceptions import HTTPException
 from werkzeug.utils import secure_filename
 
-from models import db, Cliente, Venda, LancamentoCaixa
+from models import db, Cliente, Venda, LancamentoCaixa, Produto
 from services.auth_utils import tenant_required, admin_required, _is_ajax
 from services.db_utils import query_tenant, empresa_id_atual
 from services.cache_utils import limpar_cache_dashboard
@@ -249,6 +249,34 @@ def listar_clientes():
         base = base.order_by(Cliente.nome_cliente.asc())
 
     clientes = base.limit(per_page).offset((page - 1) * per_page).all()
+
+    # Top 10 clientes por lucro total (histórico do tenant).
+    # Mesma fórmula do dashboard: (preço venda − custo) × quantidade.
+    # Sem coluna persistida — só ranking dinâmico para a estrela VIP.
+    top_10_ids = []
+    try:
+        lucro_expr = (Venda.preco_venda - Produto.preco_custo) * Venda.quantidade_venda
+        top_rows = (
+            query_tenant(Venda)
+            .with_entities(
+                Venda.cliente_id,
+                func.sum(lucro_expr).label('total_lucro'),
+            )
+            .join(Produto, Venda.produto_id == Produto.id)
+            .filter(
+                Venda.cliente_id.isnot(None),
+                func.upper(func.coalesce(Venda.tipo_operacao, 'VENDA')) != 'PERDA',
+            )
+            .group_by(Venda.cliente_id)
+            .order_by(desc('total_lucro'))
+            .limit(10)
+            .all()
+        )
+        top_10_ids = [int(row.cliente_id) for row in top_rows if row.cliente_id]
+    except Exception as e_top:
+        current_app.logger.warning(f'[clientes] Falha ao calcular top 10 lucro: {e_top}')
+        top_10_ids = []
+
     return render_template(
         'clientes/listar.html',
         clientes=clientes,
@@ -257,6 +285,7 @@ def listar_clientes():
         page=page,
         per_page=per_page,
         has_next=len(clientes) >= per_page,
+        top_10_ids=top_10_ids,
     )
 
 
