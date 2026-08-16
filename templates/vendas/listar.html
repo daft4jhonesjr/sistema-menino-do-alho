@@ -4516,6 +4516,81 @@ window.desvincularDocumento = function(id, tipo) {
     }
 };
 
+window.buscarDocumentoExistente = async function(id, nf) {
+    if (!id) return;
+    var nfLabel = (nf || '').toString().trim() || 'esta NF';
+    var mensagem = 'Deseja procurar no sistema um arquivo de NF/Boleto já existente para a nota ' + nfLabel + '?';
+
+    function executar() {
+        var headers = Object.assign(
+            { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            window.getCsrfHeaders ? window.getCsrfHeaders() : {}
+        );
+        fetch('/api/vendas/' + encodeURIComponent(id) + '/clonar_documentos', {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({})
+        })
+        .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, status: r.status, body: d }; }); })
+        .then(function(res) {
+            var body = res.body || {};
+            var msg = body.mensagem || body.erro || '';
+            if (res.ok && (body.ok || body.status === 'success')) {
+                if (typeof showToast === 'function') {
+                    showToast(msg || 'Documentos reutilizados com sucesso.', 'success');
+                } else if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'success',
+                        title: msg || 'Documentos reutilizados com sucesso.',
+                        confirmButtonColor: '#059669',
+                        timer: 1600,
+                        showConfirmButton: false
+                    });
+                } else {
+                    alert(msg || 'Documentos reutilizados com sucesso.');
+                }
+                setTimeout(function() { window.location.reload(); }, 400);
+                return;
+            }
+            var aviso = msg || 'Nenhum documento encontrado no sistema para esta NF.';
+            if (typeof showToast === 'function') {
+                showToast(aviso, res.status === 404 ? 'warning' : 'error');
+            } else if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    icon: res.status === 404 ? 'info' : 'error',
+                    title: aviso,
+                    confirmButtonColor: '#059669'
+                });
+            } else {
+                alert(aviso);
+            }
+        })
+        .catch(function() {
+            var msg = 'Erro na comunicação com o servidor.';
+            if (typeof showToast === 'function') showToast(msg, 'error');
+            else alert(msg);
+        });
+    }
+
+    if (typeof window.abrirModalConfirmacaoAcaoVenda === 'function') {
+        window.abrirModalConfirmacaoAcaoVenda(mensagem, executar);
+    } else if (typeof Swal !== 'undefined') {
+        var result = await Swal.fire({
+            icon: 'question',
+            title: 'Buscar documento existente?',
+            text: mensagem,
+            showCancelButton: true,
+            confirmButtonText: 'Sim, procurar',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#2563eb',
+            cancelButtonColor: '#6b7280'
+        });
+        if (result.isConfirmed) executar();
+    } else if (window.confirm(mensagem)) {
+        executar();
+    }
+};
+
 // Filtro dinâmico por Empresa (tabela + cards, sem recarregar)
 // Usa classe CSS dedicada para não conflitar com o toggle hidden do expandir/recolher
 (function() {

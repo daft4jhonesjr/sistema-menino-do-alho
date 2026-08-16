@@ -167,6 +167,13 @@
                 <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
             </button>
         </div>
+        {% elif pedido.nf and pedido.nf != '-' %}
+        <button type="button"
+                class="p-1.5 rounded inline-flex text-gray-400 dark:text-gray-500 cursor-pointer hover:text-blue-400 transition-colors bg-transparent border-none"
+                title="Buscar PDF existente no sistema"
+                onclick="buscarDocumentoExistente({{ pedido.primeira_venda_id }}, {{ pedido.nf|tojson }})">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+        </button>
         {% endif %}
         {% if pedido.caminho_boleto %}
         <div class="relative inline-block">
@@ -180,6 +187,13 @@
                 <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
             </button>
         </div>
+        {% elif pedido.nf and pedido.nf != '-' %}
+        <button type="button"
+                class="p-1.5 rounded inline-flex text-gray-400 dark:text-gray-500 cursor-pointer hover:text-blue-400 transition-colors bg-transparent border-none"
+                title="Buscar PDF existente no sistema"
+                onclick="buscarDocumentoExistente({{ pedido.primeira_venda_id }}, {{ pedido.nf|tojson }})">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+        </button>
         {% endif %}
         <a href="{{ url_for('vendas.recibo_venda', id=pedido.primeira_venda_id) }}" target="_blank" rel="noopener noreferrer" class="p-1.5 rounded text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-transform hover:scale-110" title="Imprimir Recibo"><i data-lucide="printer" class="w-5 h-5"></i></a>
         {% set v0 = pedido.vendas[0] if pedido.vendas else None %}

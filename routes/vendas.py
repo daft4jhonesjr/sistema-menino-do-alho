@@ -19,6 +19,7 @@ Rotas extraídas do legado ``app.py`` (Fase 3 da refatoração):
     * GET  /api/pedidos                             api_pedidos
     * POST /api/vendas/sincronizar_transferencias   sincronizar_transferencias
     * POST /api/vendas/<id>/desvincular/<tipo>      desvincular_documento_rapido
+    * POST /api/vendas/<id>/clonar_documentos       clonar_documentos_por_nf
     * POST /vendas/deletar_massa                    vendas_deletar_massa
     * GET/POST /vendas/importar                     importar_vendas       (admin)
 
@@ -2996,6 +2997,120 @@ def sincronizar_transferencias():
             if atualizados
             else 'Nenhuma transferência pendente de boleto encontrada.'
         ),
+    })
+
+
+def _nf_chave_doc(nf):
+    """Normaliza número de NF para comparação (só dígitos quando houver)."""
+    s = (nf or '').strip()
+    if not s or s == '-':
+        return ''
+    digits = re.sub(r'\D', '', s)
+    return digits if digits else s
+
+
+@vendas_bp.route('/api/vendas/<int:id>/clonar_documentos', methods=['POST'])
+def clonar_documentos_por_nf(id):
+    """Copia ``caminho_nf`` / ``caminho_boleto`` de outra venda com a mesma NF.
+
+    Útil quando o PDF já saiu da fila de Recém-Chegados e um pedido de
+    data diferente (ignorado pelo agrupamento automático) ainda precisa
+    do mesmo arquivo físico.
+    """
+    venda = query_tenant(Venda).filter_by(id=id).first_or_404()
+    if not _usuario_pode_gerenciar_venda(venda):
+        return _resposta_sem_permissao()
+
+    nf_raw = (venda.nf or '').strip()
+    nf_chave = _nf_chave_doc(nf_raw)
+    if not nf_chave:
+        return jsonify({
+            'ok': False,
+            'status': 'error',
+            'mensagem': 'Esta venda não possui numeração de NF para buscar documentos.',
+        }), 400
+
+    candidatas = (
+        query_tenant(Venda)
+        .filter(
+            Venda.id != venda.id,
+            Venda.nf.isnot(None),
+            Venda.nf != '',
+            Venda.nf != '-',
+            or_(
+                and_(Venda.caminho_nf.isnot(None), Venda.caminho_nf != ''),
+                and_(Venda.caminho_boleto.isnot(None), Venda.caminho_boleto != ''),
+            ),
+        )
+        .order_by(desc(Venda.id))
+        .all()
+    )
+
+    fonte = None
+    for candidata in candidatas:
+        if _nf_chave_doc(candidata.nf) == nf_chave:
+            fonte = candidata
+            break
+
+    if not fonte:
+        return jsonify({
+            'ok': False,
+            'status': 'warning',
+            'mensagem': 'Nenhum documento encontrado no sistema para esta NF.',
+        }), 404
+
+    cn_fonte = (fonte.caminho_nf or '').strip() or None
+    cb_fonte = (fonte.caminho_boleto or '').strip() or None
+    if not cn_fonte and not cb_fonte:
+        return jsonify({
+            'ok': False,
+            'status': 'warning',
+            'mensagem': 'Nenhum documento encontrado no sistema para esta NF.',
+        }), 404
+
+    vendas_pedido = _vendas_do_pedido(venda)
+    copiou_nf = False
+    copiou_boleto = False
+    for vv in vendas_pedido:
+        if cn_fonte and not (vv.caminho_nf or '').strip():
+            vv.caminho_nf = cn_fonte
+            copiou_nf = True
+        if cb_fonte and not (vv.caminho_boleto or '').strip():
+            vv.caminho_boleto = cb_fonte
+            copiou_boleto = True
+            if fonte.data_vencimento and not vv.data_vencimento:
+                vv.data_vencimento = fonte.data_vencimento
+
+    if not copiou_nf and not copiou_boleto:
+        return jsonify({
+            'ok': False,
+            'status': 'warning',
+            'mensagem': 'Este pedido já possui os documentos disponíveis para esta NF.',
+        }), 400
+
+    db.session.commit()
+    limpar_cache_dashboard()
+    partes = []
+    if copiou_nf:
+        partes.append('NF')
+    if copiou_boleto:
+        partes.append('Boleto')
+    mensagem = (
+        f'Documento(s) {"/".join(partes)} reutilizado(s) da NF {nf_raw} '
+        f'(origem: venda #{fonte.id}).'
+    )
+    registrar_log(
+        f'Clonagem de documentos por NF {nf_raw}: venda {venda.id} ← {fonte.id} '
+        f'({", ".join(partes)})',
+        categoria='documentos',
+    )
+    return jsonify({
+        'ok': True,
+        'status': 'success',
+        'mensagem': mensagem,
+        'fonte_id': fonte.id,
+        'copiou_nf': copiou_nf,
+        'copiou_boleto': copiou_boleto,
     })
 
 
