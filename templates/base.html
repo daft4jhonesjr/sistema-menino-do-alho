@@ -449,6 +449,11 @@
                 <a href="{{ url_for('caixa.caixa') }}" class="px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors text-sm {% if request.endpoint == 'caixa.caixa' %}bg-white/20 text-white font-medium{% else %}text-emerald-50 hover:bg-white/10 hover:text-white{% endif %}">
                     <i data-lucide="wallet" class="w-4 h-4"></i>Caixa Diário
                 </a>
+                {% if current_user.is_authenticated %}
+                <button type="button" id="btn-abrir-balanco" onclick="abrirModalBalanco()" class="px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors text-sm text-emerald-50 hover:bg-white/10 hover:text-white" title="Balanço Patrimonial Rápido">
+                    <i data-lucide="scale" class="w-4 h-4"></i>Gerar Balanço
+                </button>
+                {% endif %}
                 <a href="{{ url_for('vendas.logistica') }}" class="relative px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors text-sm {% if request.endpoint == 'vendas.logistica' %}bg-white/20 text-white font-medium{% else %}text-emerald-50 hover:bg-white/10 hover:text-white{% endif %}">
                     <i data-lucide="truck" class="w-4 h-4"></i>Logística
                     {% if entregas_pendentes and entregas_pendentes > 0 %}
@@ -564,6 +569,256 @@
 
     <!-- Container de Toasts (Notificações Flutuantes) -->
     <div id="toast-container" class="fixed top-5 right-5 z-[9999] flex flex-col gap-3 max-w-sm w-full"></div>
+
+    {% if current_user.is_authenticated %}
+    <!-- Modal: Balanço Patrimonial Rápido -->
+    <div id="modal-balanco" class="fixed inset-0 z-[60] hidden bg-black/60 flex items-center justify-center p-4"
+         role="dialog" aria-modal="true" aria-labelledby="modal-balanco-titulo"
+         onclick="if(event.target===this) fecharModalBalanco()">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto border border-gray-200 dark:border-gray-700"
+             onclick="event.stopPropagation()">
+            <div class="flex justify-between items-center p-5 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+                <h3 id="modal-balanco-titulo" class="text-lg font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
+                    <i data-lucide="scale" class="w-5 h-5 text-emerald-600 dark:text-emerald-400"></i>
+                    Balanço Patrimonial Rápido
+                </h3>
+                <button type="button" onclick="fecharModalBalanco()" class="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" aria-label="Fechar">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <form id="form-balanco" class="p-5 space-y-5">
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-3">Saldos do sistema</p>
+                    <div id="balanco-loading" class="text-sm text-gray-500 dark:text-gray-400 animate-pulse py-4 text-center">Carregando saldos…</div>
+                    <div id="balanco-saldos" class="hidden grid grid-cols-2 gap-3">
+                        <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 p-3">
+                            <p class="text-[11px] uppercase text-gray-500 dark:text-gray-400">Boletos Pendentes</p>
+                            <p id="balanco-boletos" class="text-base font-bold text-amber-600 dark:text-amber-400 valor-financeiro mt-1">R$ 0,00</p>
+                        </div>
+                        <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 p-3">
+                            <p class="text-[11px] uppercase text-gray-500 dark:text-gray-400">Dinheiro (Gaveta)</p>
+                            <p id="balanco-dinheiro" class="text-base font-bold text-emerald-600 dark:text-emerald-400 valor-financeiro mt-1">R$ 0,00</p>
+                        </div>
+                        <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 p-3">
+                            <p class="text-[11px] uppercase text-gray-500 dark:text-gray-400">Cheques em Caixa</p>
+                            <p id="balanco-cheques" class="text-base font-bold text-blue-600 dark:text-blue-400 valor-financeiro mt-1">R$ 0,00</p>
+                        </div>
+                        <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 p-3">
+                            <p class="text-[11px] uppercase text-gray-500 dark:text-gray-400">Pix (Livro Caixa)</p>
+                            <p id="balanco-pix" class="text-base font-bold text-cyan-600 dark:text-cyan-400 valor-financeiro mt-1">R$ 0,00</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-3 border-t border-gray-200 dark:border-gray-700 pt-4">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Ajustes manuais</p>
+                    <div>
+                        <label for="balanco-divida-paty" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Dívida com a PATY (R$)</label>
+                        <input type="text" id="balanco-divida-paty" name="divida_paty" inputmode="decimal" placeholder="0,00"
+                               class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
+                    </div>
+                    <div>
+                        <label for="balanco-divida-destak" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Dívida com a DESTAK (R$)</label>
+                        <input type="text" id="balanco-divida-destak" name="divida_destak" inputmode="decimal" placeholder="0,00"
+                               class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
+                    </div>
+                    <div>
+                        <label for="balanco-a-receber-fora" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Valores a Receber Fora do Sistema (R$)</label>
+                        <input type="text" id="balanco-a-receber-fora" name="a_receber_fora" inputmode="decimal" placeholder="0,00"
+                               class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
+                    </div>
+                    <div>
+                        <label for="balanco-observacoes" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Observações (opcional)</label>
+                        <textarea id="balanco-observacoes" name="observacoes" rows="2" maxlength="500"
+                                  class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
+                                  placeholder="Notas sobre este balanço…"></textarea>
+                    </div>
+                </div>
+
+                <div class="rounded-lg border border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/50 dark:bg-emerald-900/20 px-4 py-3">
+                    <div class="flex justify-between text-sm text-gray-600 dark:text-gray-300">
+                        <span>Total Ativos</span>
+                        <span id="balanco-preview-ativos" class="font-semibold valor-financeiro">R$ 0,00</span>
+                    </div>
+                    <div class="flex justify-between text-sm text-gray-600 dark:text-gray-300 mt-1">
+                        <span>Total Passivos</span>
+                        <span id="balanco-preview-passivos" class="font-semibold valor-financeiro">R$ 0,00</span>
+                    </div>
+                    <div class="flex justify-between text-base font-bold text-gray-900 dark:text-gray-100 mt-2 pt-2 border-t border-emerald-200/60 dark:border-emerald-800/40">
+                        <span>Saldo Líquido</span>
+                        <span id="balanco-preview-liquido" class="valor-financeiro text-emerald-600 dark:text-emerald-400">R$ 0,00</span>
+                    </div>
+                </div>
+
+                <div class="flex flex-col sm:flex-row gap-2 sm:justify-end pt-1">
+                    <button type="button" onclick="fecharModalBalanco()" class="px-4 py-2.5 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+                        Cancelar
+                    </button>
+                    <button type="submit" id="btn-exportar-balanco" class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm transition-colors disabled:opacity-60">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        Exportar Balanço (.CSV)
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <script>
+    (function() {
+        var ENDPOINT_DADOS = {{ url_for('financeiro.api_balanco_dados_atuais')|tojson }};
+        var ENDPOINT_CSV = {{ url_for('financeiro.api_balanco_exportar_csv')|tojson }};
+        var dadosSistema = {
+            total_boletos_pendentes: 0,
+            total_dinheiro_caixa: 0,
+            total_cheques_caixa: 0,
+            total_pix_caixa: 0
+        };
+
+        function parseMoeda(v) {
+            if (v == null || v === '') return 0;
+            if (typeof v === 'number') return isFinite(v) ? v : 0;
+            var s = String(v).replace(/[R$\s]/gi, '').trim();
+            if (!s) return 0;
+            if (s.indexOf(',') >= 0) {
+                s = s.replace(/\./g, '').replace(',', '.');
+            }
+            var n = parseFloat(s);
+            return isFinite(n) ? n : 0;
+        }
+        function fmtMoeda(v) {
+            var n = Number(v) || 0;
+            return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        }
+        function atualizarPreview() {
+            var ativos = (dadosSistema.total_boletos_pendentes || 0)
+                + (dadosSistema.total_dinheiro_caixa || 0)
+                + (dadosSistema.total_cheques_caixa || 0)
+                + (dadosSistema.total_pix_caixa || 0)
+                + parseMoeda(document.getElementById('balanco-a-receber-fora').value);
+            var passivos = parseMoeda(document.getElementById('balanco-divida-paty').value)
+                + parseMoeda(document.getElementById('balanco-divida-destak').value);
+            var liquido = ativos - passivos;
+            document.getElementById('balanco-preview-ativos').textContent = fmtMoeda(ativos);
+            document.getElementById('balanco-preview-passivos').textContent = fmtMoeda(passivos);
+            var elLiq = document.getElementById('balanco-preview-liquido');
+            elLiq.textContent = fmtMoeda(liquido);
+            elLiq.className = 'valor-financeiro ' + (liquido >= 0
+                ? 'text-emerald-600 dark:text-emerald-400'
+                : 'text-red-600 dark:text-red-400');
+        }
+        function preencherSaldos(data) {
+            dadosSistema = {
+                total_boletos_pendentes: Number(data.total_boletos_pendentes) || 0,
+                total_dinheiro_caixa: Number(data.total_dinheiro_caixa) || 0,
+                total_cheques_caixa: Number(data.total_cheques_caixa) || 0,
+                total_pix_caixa: Number(data.total_pix_caixa) || 0
+            };
+            document.getElementById('balanco-boletos').textContent = fmtMoeda(dadosSistema.total_boletos_pendentes);
+            document.getElementById('balanco-dinheiro').textContent = fmtMoeda(dadosSistema.total_dinheiro_caixa);
+            document.getElementById('balanco-cheques').textContent = fmtMoeda(dadosSistema.total_cheques_caixa);
+            document.getElementById('balanco-pix').textContent = fmtMoeda(dadosSistema.total_pix_caixa);
+            document.getElementById('balanco-loading').classList.add('hidden');
+            document.getElementById('balanco-saldos').classList.remove('hidden');
+            atualizarPreview();
+        }
+
+        window.abrirModalBalanco = function() {
+            var modal = document.getElementById('modal-balanco');
+            if (!modal) return;
+            document.getElementById('balanco-loading').classList.remove('hidden');
+            document.getElementById('balanco-saldos').classList.add('hidden');
+            modal.classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+            fetch(ENDPOINT_DADOS, {
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin'
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data || data.ok === false) {
+                    document.getElementById('balanco-loading').textContent =
+                        (data && data.mensagem) || 'Falha ao carregar saldos.';
+                    return;
+                }
+                preencherSaldos(data);
+            })
+            .catch(function() {
+                document.getElementById('balanco-loading').textContent = 'Erro de conexão ao carregar saldos.';
+            });
+        };
+        window.fecharModalBalanco = function() {
+            var modal = document.getElementById('modal-balanco');
+            if (modal) modal.classList.add('hidden');
+            document.body.style.overflow = '';
+        };
+
+        var form = document.getElementById('form-balanco');
+        if (form) {
+            ['balanco-divida-paty', 'balanco-divida-destak', 'balanco-a-receber-fora'].forEach(function(id) {
+                var el = document.getElementById(id);
+                if (el) {
+                    el.addEventListener('input', atualizarPreview);
+                    el.addEventListener('change', atualizarPreview);
+                }
+            });
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+                var btn = document.getElementById('btn-exportar-balanco');
+                if (btn) { btn.disabled = true; btn.classList.add('opacity-60'); }
+                var body = {
+                    total_boletos_pendentes: dadosSistema.total_boletos_pendentes,
+                    total_dinheiro_caixa: dadosSistema.total_dinheiro_caixa,
+                    total_cheques_caixa: dadosSistema.total_cheques_caixa,
+                    total_pix_caixa: dadosSistema.total_pix_caixa,
+                    divida_paty: parseMoeda(document.getElementById('balanco-divida-paty').value),
+                    divida_destak: parseMoeda(document.getElementById('balanco-divida-destak').value),
+                    a_receber_fora: parseMoeda(document.getElementById('balanco-a-receber-fora').value),
+                    observacoes: (document.getElementById('balanco-observacoes').value || '').trim()
+                };
+                fetch(ENDPOINT_CSV, {
+                    method: 'POST',
+                    headers: Object.assign({
+                        'Content-Type': 'application/json',
+                        'Accept': 'text/csv',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }, (window.getCsrfHeaders ? window.getCsrfHeaders() : {})),
+                    credentials: 'same-origin',
+                    body: JSON.stringify(body)
+                })
+                .then(function(r) {
+                    if (!r.ok) throw new Error('Falha na exportação');
+                    var disp = r.headers.get('Content-Disposition') || '';
+                    var match = /filename[^;=\n]*=(['"]?)([^'"\n;]*)\1/i.exec(disp);
+                    var filename = (match && match[2]) ? match[2] : 'balanco_financeiro.csv';
+                    return r.blob().then(function(blob) { return { blob: blob, filename: filename }; });
+                })
+                .then(function(res) {
+                    var url = URL.createObjectURL(res.blob);
+                    var a = document.createElement('a');
+                    a.href = url;
+                    a.download = res.filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    URL.revokeObjectURL(url);
+                })
+                .catch(function() {
+                    alert('Não foi possível exportar o balanço. Tente novamente.');
+                })
+                .finally(function() {
+                    if (btn) { btn.disabled = false; btn.classList.remove('opacity-60'); }
+                });
+            });
+        }
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                var modal = document.getElementById('modal-balanco');
+                if (modal && !modal.classList.contains('hidden')) fecharModalBalanco();
+            }
+        });
+    })();
+    </script>
+    {% endif %}
 
     <!-- Modal: Vendas por Produto/Cliente -->
     <div id="modal-vendas-overlay" class="fixed inset-0 bg-black/50 z-40 hidden" onclick="fecharModalVendas()"></div>

@@ -4939,7 +4939,7 @@ def backup_excel():
 from routes.caixa import _limpar_valor_moeda  # re-export para vendas/produtos
 from routes import (
     auth_bp, master_bp, clientes_bp, produtos_bp,
-    vendas_bp, documentos_bp, dashboard_bp, caixa_bp, push_bp,
+    vendas_bp, documentos_bp, dashboard_bp, caixa_bp, financeiro_bp, push_bp,
 )
 
 app.register_blueprint(auth_bp)
@@ -4950,6 +4950,7 @@ app.register_blueprint(vendas_bp)
 app.register_blueprint(documentos_bp)
 app.register_blueprint(dashboard_bp)
 app.register_blueprint(caixa_bp)
+app.register_blueprint(financeiro_bp)
 app.register_blueprint(push_bp)
 
 # CSRF exemption CIRÚRGICA — somente endpoints chamados por bots externos

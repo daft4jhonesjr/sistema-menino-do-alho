@@ -51,6 +51,7 @@ Estado atual:
                            /caixa/<id>/toggle_status_cheque,
                            /upload_imagem_cheque, /caixa/gaveta/{salvar,carregar},
                            /caixa/{salvar_gaveta,obter_gaveta}
+    * ``financeiro_bp``  → /api/balanco/dados-atuais, /api/balanco/exportar-csv
     * ``push_bp``        → /api/push/subscribe, /api/push/unsubscribe,
                            /api/push/vapid-public-key, /api/vapid-public-key (legado)
 
@@ -91,6 +92,7 @@ from .vendas import vendas_bp
 from .documentos import documentos_bp
 from .dashboard import dashboard_bp
 from .caixa import caixa_bp
+from .financeiro import financeiro_bp
 from .push import push_bp
 
 __all__ = [
@@ -102,5 +104,6 @@ __all__ = [
     'documentos_bp',
     'dashboard_bp',
     'caixa_bp',
+    'financeiro_bp',
     'push_bp',
 ]
