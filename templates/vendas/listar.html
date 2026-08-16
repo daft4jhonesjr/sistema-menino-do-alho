@@ -3541,12 +3541,15 @@ function ordenarVendasTabela(colIndex, tipo) {
         }
 
         // ─── Lembretes + Radar ──────────────────────────────────────
-        var temRadarDia = listaLembs.some(function(l) { return l && l.tipo === 'recompra'; });
+        var radarLembs = listaLembs.filter(function(l) { return l && l.tipo === 'recompra'; });
+        var manuaisLembs = listaLembs.filter(function(l) { return !(l && l.tipo === 'recompra'); });
+        var radarMinimizado = false;
+        try { radarMinimizado = localStorage.getItem('cal_radar_minimizado') === '1'; } catch (eRad) {}
+
         html += '<div id="painel-lembretes" class="mt-2">' +
             '<div class="flex items-center justify-between mb-2">' +
                 '<p class="text-sm font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400 flex items-center gap-1">' +
                     '<span>📌</span> Lembretes do Dia' +
-                    (temRadarDia ? ' <span class="text-cyan-500 font-semibold normal-case tracking-normal text-[11px]">(+ Radar)</span>' : '') +
                 '</p>' +
                 '<button type="button" onclick="abrirFormLembrete(\'' + esc(iso) + '\')" ' +
                     'class="text-xs text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-200 flex items-center gap-1 transition-colors">' +
@@ -3555,11 +3558,36 @@ function ordenarVendasTabela(colIndex, tipo) {
             '</div>' +
             '<div id="lista-lembretes-' + iso + '" class="space-y-1">';
 
-        if (listaLembs.length) {
-            listaLembs.forEach(function(lem) {
+        if (radarLembs.length) {
+            html +=
+                '<div id="bloco-radar-' + iso + '" class="rounded-lg border border-cyan-200 dark:border-cyan-800/60 overflow-hidden mb-1">' +
+                    '<button type="button" onclick="toggleRadarCalendario(\'' + esc(iso) + '\')" ' +
+                        'class="w-full flex items-center justify-between gap-2 px-3 py-2 bg-cyan-50 dark:bg-cyan-900/30 hover:bg-cyan-100/80 dark:hover:bg-cyan-900/45 transition-colors text-left" ' +
+                        'aria-expanded="' + (radarMinimizado ? 'false' : 'true') + '" ' +
+                        'aria-controls="lista-radar-' + iso + '">' +
+                        '<span class="text-xs font-bold uppercase tracking-wider text-cyan-700 dark:text-cyan-300 flex items-center gap-1.5">' +
+                            '<span aria-hidden="true">📡</span> Radar de Compras' +
+                            '<span class="normal-case tracking-normal font-semibold text-[11px] opacity-80">(' + radarLembs.length + ')</span>' +
+                        '</span>' +
+                        '<span class="inline-flex items-center gap-1 text-[11px] font-semibold text-cyan-600 dark:text-cyan-400">' +
+                            '<span id="radar-toggle-label-' + iso + '">' + (radarMinimizado ? 'Maximizar' : 'Minimizar') + '</span>' +
+                            '<svg id="radar-toggle-icon-' + iso + '" class="w-3.5 h-3.5 transition-transform' + (radarMinimizado ? ' -rotate-90' : '') + '" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">' +
+                                '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"/>' +
+                            '</svg>' +
+                        '</span>' +
+                    '</button>' +
+                    '<div id="lista-radar-' + iso + '" class="space-y-1 p-2 pt-1' + (radarMinimizado ? ' hidden' : '') + '">';
+            radarLembs.forEach(function(lem) {
                 html += _htmlLembrete(iso, lem);
             });
-        } else {
+            html += '</div></div>';
+        }
+
+        if (manuaisLembs.length) {
+            manuaisLembs.forEach(function(lem) {
+                html += _htmlLembrete(iso, lem);
+            });
+        } else if (!radarLembs.length) {
             html += '<p class="text-xs text-gray-400 dark:text-gray-500 italic" id="empty-lembretes-' + iso + '">Nenhum lembrete para este dia.</p>';
         }
 
@@ -3602,6 +3630,22 @@ function ordenarVendasTabela(colIndex, tipo) {
     }
 
     // ── Helpers globais de lembretes ─────────────────────────────
+
+    window.toggleRadarCalendario = function(iso) {
+        var lista = document.getElementById('lista-radar-' + iso);
+        var label = document.getElementById('radar-toggle-label-' + iso);
+        var icon = document.getElementById('radar-toggle-icon-' + iso);
+        var btn = lista && lista.previousElementSibling;
+        if (!lista) return;
+        var minimizado = lista.classList.toggle('hidden');
+        try { localStorage.setItem('cal_radar_minimizado', minimizado ? '1' : '0'); } catch (eToggle) {}
+        if (label) label.textContent = minimizado ? 'Maximizar' : 'Minimizar';
+        if (icon) {
+            if (minimizado) icon.classList.add('-rotate-90');
+            else icon.classList.remove('-rotate-90');
+        }
+        if (btn && btn.getAttribute) btn.setAttribute('aria-expanded', minimizado ? 'false' : 'true');
+    };
 
     function _atualizarBarraEntrega(iso) {
         var temPendente = false;
