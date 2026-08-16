@@ -3009,108 +3009,211 @@ def _nf_chave_doc(nf):
     return digits if digits else s
 
 
+def _caminho_em_branco(caminho):
+    """True se o campo estiver None, vazio ou só espaços."""
+    return not (caminho or '').strip()
+
+
+def _documento_existe_para_caminho(caminho):
+    """True se existir Documento do tenant apontando para este caminho/URL."""
+    c = (caminho or '').strip()
+    if not c:
+        return False
+    return query_documentos_tenant().filter(
+        or_(
+            Documento.caminho_arquivo == c,
+            Documento.url_arquivo == c,
+        )
+    ).limit(1).first() is not None
+
+
+def _precisa_clonar_caminho(caminho):
+    """Precisa clonar se estiver em branco OU for caminho órfão (sem Documento).
+
+    A listagem de vendas só exibe ícone ativo quando há Documento correspondente;
+    caminhos órfãos aparecem como ícone cinza, mas o campo no banco não está None.
+    """
+    if _caminho_em_branco(caminho):
+        return True
+    return not _documento_existe_para_caminho(caminho)
+
+
 @vendas_bp.route('/api/vendas/<int:id>/clonar_documentos', methods=['POST'])
 def clonar_documentos_por_nf(id):
     """Copia ``caminho_nf`` / ``caminho_boleto`` de outra venda com a mesma NF.
 
-    Útil quando o PDF já saiu da fila de Recém-Chegados e um pedido de
-    data diferente (ignorado pelo agrupamento automático) ainda precisa
-    do mesmo arquivo físico.
+    Campos reais no modelo: ``caminho_nf`` e ``caminho_boleto``
+    (não existem ``arquivo_nf`` / ``arquivo_boleto``).
     """
-    venda = query_tenant(Venda).filter_by(id=id).first_or_404()
-    if not _usuario_pode_gerenciar_venda(venda):
+    venda_atual = query_tenant(Venda).filter_by(id=id).first()
+    if not venda_atual:
+        return jsonify({
+            'ok': False,
+            'status': 'error',
+            'mensagem': 'Venda não encontrada ou sem número de NF cadastrado.',
+            'error': 'Venda não encontrada ou sem número de NF cadastrado.',
+        }), 400
+
+    if not _usuario_pode_gerenciar_venda(venda_atual):
         return _resposta_sem_permissao()
 
-    nf_raw = (venda.nf or '').strip()
+    nf_raw = (venda_atual.nf or '').strip()
     nf_chave = _nf_chave_doc(nf_raw)
     if not nf_chave:
         return jsonify({
             'ok': False,
             'status': 'error',
-            'mensagem': 'Esta venda não possui numeração de NF para buscar documentos.',
+            'mensagem': 'Venda não encontrada ou sem número de NF cadastrado.',
+            'error': 'Venda não encontrada ou sem número de NF cadastrado.',
         }), 400
 
+    precisa_nf = _precisa_clonar_caminho(venda_atual.caminho_nf)
+    precisa_boleto = _precisa_clonar_caminho(venda_atual.caminho_boleto)
+    if not precisa_nf and not precisa_boleto:
+        return jsonify({
+            'ok': False,
+            'status': 'warning',
+            'mensagem': 'Este pedido já possui NF e Boleto válidos vinculados.',
+            'error': 'Este pedido já possui NF e Boleto válidos vinculados.',
+        }), 400
+
+    # Busca outras vendas do tenant com NF preenchida e ao menos um caminho.
     candidatas = (
         query_tenant(Venda)
         .filter(
-            Venda.id != venda.id,
+            Venda.id != venda_atual.id,
             Venda.nf.isnot(None),
             Venda.nf != '',
             Venda.nf != '-',
-            or_(
-                and_(Venda.caminho_nf.isnot(None), Venda.caminho_nf != ''),
-                and_(Venda.caminho_boleto.isnot(None), Venda.caminho_boleto != ''),
-            ),
         )
         .order_by(desc(Venda.id))
         .all()
     )
+    outras_vendas = [v for v in candidatas if _nf_chave_doc(v.nf) == nf_chave]
 
-    fonte = None
-    for candidata in candidatas:
-        if _nf_chave_doc(candidata.nf) == nf_chave:
-            fonte = candidata
+    cn_fonte = None
+    cb_fonte = None
+    fonte_id = None
+    venc_fonte = None
+
+    for outra in outras_vendas:
+        outra_cn = (outra.caminho_nf or '').strip()
+        outra_cb = (outra.caminho_boleto or '').strip()
+
+        if precisa_nf and not cn_fonte and outra_cn and _documento_existe_para_caminho(outra_cn):
+            cn_fonte = outra_cn
+            fonte_id = outra.id
+
+        if precisa_boleto and not cb_fonte and outra_cb and _documento_existe_para_caminho(outra_cb):
+            cb_fonte = outra_cb
+            fonte_id = fonte_id or outra.id
+            if outra.data_vencimento:
+                venc_fonte = outra.data_vencimento
+
+        if (not precisa_nf or cn_fonte) and (not precisa_boleto or cb_fonte):
             break
 
-    if not fonte:
-        return jsonify({
-            'ok': False,
-            'status': 'warning',
-            'mensagem': 'Nenhum documento encontrado no sistema para esta NF.',
-        }), 404
+    # Fallback: Documento.numero_nf (PDF já processado, mesmo sem venda fonte).
+    if (precisa_nf and not cn_fonte) or (precisa_boleto and not cb_fonte):
+        docs_candidatos = (
+            query_documentos_tenant()
+            .filter(
+                Documento.numero_nf.isnot(None),
+                Documento.numero_nf != '',
+                or_(
+                    and_(Documento.caminho_arquivo.isnot(None), Documento.caminho_arquivo != ''),
+                    and_(Documento.url_arquivo.isnot(None), Documento.url_arquivo != ''),
+                ),
+            )
+            .order_by(desc(Documento.id))
+            .limit(300)
+            .all()
+        )
+        for doc in docs_candidatos:
+            if _nf_chave_doc(doc.numero_nf) != nf_chave:
+                continue
+            caminho_doc = (doc.url_arquivo or doc.caminho_arquivo or '').strip()
+            if not caminho_doc:
+                continue
+            tipo = (doc.tipo or '').strip().upper()
+            if tipo == 'BOLETO':
+                if precisa_boleto and not cb_fonte:
+                    cb_fonte = caminho_doc
+                    fonte_id = fonte_id or getattr(doc, 'venda_id', None)
+                    if getattr(doc, 'data_vencimento', None):
+                        venc_fonte = doc.data_vencimento
+            elif precisa_nf and not cn_fonte:
+                cn_fonte = caminho_doc
+                fonte_id = fonte_id or getattr(doc, 'venda_id', None)
+            if (not precisa_nf or cn_fonte) and (not precisa_boleto or cb_fonte):
+                break
 
-    cn_fonte = (fonte.caminho_nf or '').strip() or None
-    cb_fonte = (fonte.caminho_boleto or '').strip() or None
     if not cn_fonte and not cb_fonte:
         return jsonify({
             'ok': False,
             'status': 'warning',
-            'mensagem': 'Nenhum documento encontrado no sistema para esta NF.',
+            'mensagem': (
+                f'Não encontramos nenhum arquivo de NF ou Boleto disponível '
+                f'em outros pedidos com a nota {nf_raw}.'
+            ),
+            'error': (
+                f'Não encontramos nenhum arquivo de NF ou Boleto disponível '
+                f'em outros pedidos com a nota {nf_raw}.'
+            ),
         }), 404
 
-    vendas_pedido = _vendas_do_pedido(venda)
+    alvos = list(_vendas_do_pedido(venda_atual) or [])
+    ids_alvos = {getattr(a, 'id', None) for a in alvos}
+    if venda_atual.id not in ids_alvos:
+        alvos.insert(0, venda_atual)
+
+    arquivos_copiados = 0
     copiou_nf = False
     copiou_boleto = False
-    for vv in vendas_pedido:
-        if cn_fonte and not (vv.caminho_nf or '').strip():
-            vv.caminho_nf = cn_fonte
-            copiou_nf = True
-        if cb_fonte and not (vv.caminho_boleto or '').strip():
-            vv.caminho_boleto = cb_fonte
-            copiou_boleto = True
-            if fonte.data_vencimento and not vv.data_vencimento:
-                vv.data_vencimento = fonte.data_vencimento
 
-    if not copiou_nf and not copiou_boleto:
+    for alvo in alvos:
+        if cn_fonte and _precisa_clonar_caminho(alvo.caminho_nf):
+            alvo.caminho_nf = cn_fonte
+            arquivos_copiados += 1
+            copiou_nf = True
+        if cb_fonte and _precisa_clonar_caminho(alvo.caminho_boleto):
+            alvo.caminho_boleto = cb_fonte
+            arquivos_copiados += 1
+            copiou_boleto = True
+            if venc_fonte and not alvo.data_vencimento:
+                alvo.data_vencimento = venc_fonte
+
+    if arquivos_copiados <= 0:
         return jsonify({
             'ok': False,
             'status': 'warning',
-            'mensagem': 'Este pedido já possui os documentos disponíveis para esta NF.',
-        }), 400
+            'mensagem': (
+                f'Não encontramos nenhum arquivo de NF ou Boleto disponível '
+                f'em outros pedidos com a nota {nf_raw}.'
+            ),
+            'error': (
+                f'Não encontramos nenhum arquivo de NF ou Boleto disponível '
+                f'em outros pedidos com a nota {nf_raw}.'
+            ),
+        }), 404
 
     db.session.commit()
     limpar_cache_dashboard()
-    partes = []
-    if copiou_nf:
-        partes.append('NF')
-    if copiou_boleto:
-        partes.append('Boleto')
-    mensagem = (
-        f'Documento(s) {"/".join(partes)} reutilizado(s) da NF {nf_raw} '
-        f'(origem: venda #{fonte.id}).'
-    )
+    mensagem = f'Sucesso! {arquivos_copiados} arquivo(s) copiado(s).'
     registrar_log(
-        f'Clonagem de documentos por NF {nf_raw}: venda {venda.id} ← {fonte.id} '
-        f'({", ".join(partes)})',
+        f'Clonagem de documentos por NF {nf_raw}: venda {venda_atual.id} '
+        f'← fonte={fonte_id} (nf={copiou_nf}, boleto={copiou_boleto})',
         categoria='documentos',
     )
     return jsonify({
         'ok': True,
         'status': 'success',
         'mensagem': mensagem,
-        'fonte_id': fonte.id,
+        'message': mensagem,
+        'fonte_id': fonte_id,
         'copiou_nf': copiou_nf,
         'copiou_boleto': copiou_boleto,
+        'arquivos_copiados': arquivos_copiados,
     })
 
 
