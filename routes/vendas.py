@@ -965,7 +965,7 @@ def listar_vendas():
 
     # Vencimentos de boletos no mesmo calendário: agrupa pedidos com
     # data_vencimento definida e situação ainda pendente/parcial.
-    # Estrutura: {"2026-08-17": [{"titulo": "AMARELÃO", "valor": "R$ 1.900,00", "status": "PENDENTE"}]}
+    # Estrutura: {"2026-08-17": [{"titulo": "...", "valor": "R$ ...", "status": "PENDENTE", "nf": "...", "arquivo_boleto": "/venda/1/ver_boleto"}]}
     vencimentos_por_data = {}
     try:
         _ano_vc = session.get('ano_ativo', datetime.now().year)
@@ -1001,11 +1001,11 @@ def listar_vendas():
             _iso_vc = _dv.isoformat()
             _cnpj_vc = (_vv.cliente.cnpj if _vv.cliente else '') or ''
             _is_cf_vc = _cnpj_vc in ('0', '00000000000000', '')
+            _nf_vc = str(_vv.nf).strip() if _vv.nf else ''
             if _is_cf_vc:
                 _av_vc = str(getattr(_vv, 'cliente_avulso', '') or '').strip().upper()
                 _pk_vc = (_iso_vc, _vv.cliente_id, _av_vc)
             else:
-                _nf_vc = str(_vv.nf).strip() if _vv.nf else ''
                 _pk_vc = (_iso_vc, _vv.cliente_id, _nf_vc)
 
             if _pk_vc not in _pedidos_vc:
@@ -1017,8 +1017,11 @@ def listar_vendas():
                 _pedidos_vc[_pk_vc] = {
                     'iso': _iso_vc,
                     'titulo': _nm_vc,
+                    'nf': _nf_vc,
                     'valor': Decimal('0.00'),
                     'status': str(_vv.situacao or 'PENDENTE').upper(),
+                    'venda_id': _vv.id,
+                    'caminho_boleto': (getattr(_vv, 'caminho_boleto', None) or '').strip() or None,
                 }
 
             try:
@@ -1028,11 +1031,30 @@ def listar_vendas():
             except Exception:
                 pass
 
+            # Prefere NF e boleto da primeira venda do grupo que tiver esses dados.
+            if _nf_vc and not _pedidos_vc[_pk_vc].get('nf'):
+                _pedidos_vc[_pk_vc]['nf'] = _nf_vc
+            _caminho_b = (getattr(_vv, 'caminho_boleto', None) or '').strip()
+            if _caminho_b and not _pedidos_vc[_pk_vc].get('caminho_boleto'):
+                _pedidos_vc[_pk_vc]['caminho_boleto'] = _caminho_b
+                _pedidos_vc[_pk_vc]['venda_id'] = _vv.id
+
         for _pvc in _pedidos_vc.values():
+            _arquivo_boleto = None
+            if _pvc.get('caminho_boleto') and _pvc.get('venda_id'):
+                try:
+                    _arquivo_boleto = url_for(
+                        'documentos.ver_boleto_venda',
+                        id=_pvc['venda_id'],
+                    )
+                except Exception:
+                    _arquivo_boleto = None
             vencimentos_por_data.setdefault(_pvc['iso'], []).append({
                 'titulo': _pvc['titulo'],
                 'valor': _fmt_moeda_cal(_pvc['valor']),
                 'status': _pvc['status'],
+                'nf': _pvc.get('nf') or '',
+                'arquivo_boleto': _arquivo_boleto,
             })
 
         vencimentos_por_data = dict(sorted(vencimentos_por_data.items()))
