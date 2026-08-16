@@ -697,6 +697,23 @@ def listar_vendas():
     if filtro_vencidos:
         pedidos_agrupados = [p for p in pedidos_agrupados if p.get('is_vencido_para_abatimento')]
 
+    # Transferência: grupos de 2-3 pedidos com mesma NF — marca o de menor valor.
+    _nf_grupos: dict = {}
+    for _p in pedidos_agrupados:
+        _p['is_transferencia'] = False
+        _nf = (_p.get('nf') or '').strip()
+        if _nf and _nf not in ('-', ''):
+            _nf_grupos.setdefault(_nf, []).append(_p)
+    for _grupo in _nf_grupos.values():
+        if 2 <= len(_grupo) <= 3:
+            def _total_pedido(p):
+                try:
+                    return sum(float(v.calcular_total() or 0) for v in p.get('vendas', []))
+                except Exception:
+                    return 0.0
+            _menor = min(_grupo, key=_total_pedido)
+            _menor['is_transferencia'] = True
+
     # Sem `db.session.commit()` aqui: esta é uma rota GET de listagem
     # e não deveria alterar estado do banco. O commit antigo era um
     # acidente herdado dos `v.caminho_boleto/nf = None` + `flush()` que

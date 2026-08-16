@@ -1262,6 +1262,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
             # Vínculo 100% automático APENAS por NF (normalizada, sem zeros à esquerda). NF é a única chave.
             venda_id = None
             venda_match = None
+            _vendas_extras = []   # filiais extras na mesma NF (transferência multi-filial)
             nf = dados_extraidos.get('numero_nf')
             # LOG DETALHADO: Início da análise
             _log_detalhado(f"\n{'='*80}")
@@ -1366,9 +1367,9 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                         venda_match = vendas_validas[0]
                         venda_id = vendas_validas[0].id
                         cliente_nome = venda_match.cliente.nome_cliente
-                        
+
                         _log_detalhado(f"✅ VENDA ÚNICA ENCONTRADA: ID={venda_id}, Cliente='{cliente_nome}', NF='{venda_match.nf}'")
-                        
+
                         # Verificar conflito de empresa (se aplicável) - DESABILITADO: vínculo apenas por NF
                         empresa_doc_bool = dados_extraidos.get('empresa_destak', False)
                         empresa_doc_nome = 'DESTAK' if empresa_doc_bool else 'PATY'
@@ -1380,14 +1381,30 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                                 mensagem_conflito = f"Achei a NF {nf_str}, mas ela pertence à empresa {empresa_venda} e o {tipo.lower()} lido é da {empresa_doc_nome}. VINCULANDO MESMO ASSIM (override por NF)."
                                 app.logger.warning(f"DEBUG: ⚠️ CONFLITO DE EMPRESA DETECTADO MAS IGNORADO: {mensagem_conflito}")
                                 resultado['mensagens'].append(f"⚠️ {mensagem_conflito}")
-                                # Mesmo com conflito, permite vínculo (override) - REGRA: NF é soberana
                                 app.logger.warning("DEBUG: ⚠️ SOBRESCREVENDO apesar do conflito de empresa (NF é a única chave)")
-                        
+
                         app.logger.debug(f"DEBUG: ✅ VÍNCULO AUTOMÁTICO FORÇADO (SOBRESCRITA): NF '{nf_limpa}' → Venda {venda_id} (Cliente: {cliente_nome})")
-                        # FORÇAR vínculo: não há retorno prematuro, vai direto para o commit
-                    elif len(vendas_validas) > 1:
-                        # Regra de negócio (1-para-1): com múltiplas vendas para a mesma NF
-                        # nunca vincula automaticamente. Exige decisão manual no Dashboard.
+                    elif 2 <= len(vendas_validas) <= 3:
+                        # TRANSFERÊNCIA: mesma NF dividida entre filiais (máx. 3 pedidos).
+                        # Vincula o boleto/NF a todos os pedidos do grupo automaticamente.
+                        venda_match = vendas_validas[0]
+                        venda_id = vendas_validas[0].id
+                        _vendas_extras = vendas_validas[1:]
+                        clientes_lista = [v.cliente.nome_cliente for v in vendas_validas]
+                        _log_detalhado(
+                            f"🔀 TRANSFERÊNCIA DETECTADA: {len(vendas_validas)} vendas com NF '{nf_limpa}'. "
+                            f"Vinculando a todos. Clientes: {', '.join(clientes_lista)}"
+                        )
+                        resultado['mensagens'].append(
+                            f"🔀 NF {nf_str}: transferência entre {len(vendas_validas)} filiais. "
+                            f"Documento vinculado a: {', '.join(clientes_lista)}."
+                        )
+                        app.logger.debug(
+                            f"DEBUG: 🔀 TRANSFERÊNCIA NF '{nf_limpa}': "
+                            f"primária={venda_id}, extras={[v.id for v in _vendas_extras]}"
+                        )
+                    elif len(vendas_validas) > 3:
+                        # Mais de 3 — ambiguidade real, exige seleção manual.
                         _log_detalhado(
                             f"⚠️ MÚLTIPLAS VENDAS ENCONTRADAS ({len(vendas_validas)}) para a NF '{nf_limpa}': requer seleção manual."
                         )
@@ -1398,7 +1415,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                         )
                         _log_detalhado(f"DEBUG: ⚠️ AMBIGUIDADE: {mensagem_diag}")
                         resultado['mensagens'].append(
-                            f"⚠️ {mensagem_diag} Clientes: {', '.join(clientes_lista)}{'...' if len(vendas_validas) > 3 else ''}"
+                            f"⚠️ {mensagem_diag} Clientes: {', '.join(clientes_lista)}..."
                         )
                         venda_match = None
                         venda_id = None
@@ -1506,6 +1523,20 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                             _log_detalhado(f"DEBUG: Vinculando NF à venda {vv.id}")
                             if caminho_antigo and caminho_antigo != path_rel:
                                 _log_detalhado(f"DEBUG: Sobrescrevendo NF antiga: {caminho_antigo} → {path_rel}")
+
+                    # TRANSFERÊNCIA: aplicar o mesmo documento às filiais extras (2ª e 3ª venda da mesma NF).
+                    for _venda_extra in _vendas_extras:
+                        for _vv_extra in _vendas_do_pedido(_venda_extra):
+                            if tipo == 'BOLETO':
+                                _vv_extra.caminho_boleto = path_rel
+                                if dv is not None:
+                                    _vv_extra.data_vencimento = dv
+                            else:
+                                _vv_extra.caminho_nf = path_rel
+                        _log_detalhado(
+                            f"DEBUG: 🔀 TRANSFERÊNCIA — boleto aplicado à filial extra "
+                            f"ID={_venda_extra.id} ({(_venda_extra.cliente.nome_cliente if _venda_extra.cliente else '?')})"
+                        )
                     
                     # COMMIT IMEDIATO após vínculo (FORÇAR VÍNCULO ÚNICO)
                     _log_detalhado(f"\n--- Tentativa de Vínculo: Venda ID {venda_id} com Documento ID {documento.id} ---")
