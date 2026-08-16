@@ -6,9 +6,11 @@
 //     no Safari ("Servidor cortou a conexão"), mesmo com o INSERT já
 //     comitado no servidor. Versão v4 força clientes em campo a limpar
 //     o SW antigo via evento 'activate'.
-const CACHE_NAME = 'menino-alho-v4';
+const CACHE_NAME = 'menino-alho-v5';
 const ASSETS_TO_CACHE = [
     '/static/images/logo_menino_do_alho_amarelo1.jpeg',
+    '/static/images/icon-192x192.png',
+    '/static/images/icon-512x512.png',
     '/static/manifest.json',
     'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js',
     'https://cdnjs.cloudflare.com/ajax/libs/pulltorefreshjs/0.1.22/index.umd.min.js'

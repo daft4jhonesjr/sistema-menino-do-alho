@@ -68,8 +68,8 @@
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     
     <!-- Meta tags para iOS (iPhone/iPad) - evita 404 nos ícones PWA -->
-    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/logo_menino_do_alho_amarelo1.jpeg') }}">
-    <link rel="apple-touch-icon-precomposed" href="{{ url_for('static', filename='images/logo_menino_do_alho_amarelo1.jpeg') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/icon-192x192.png') }}">
+    <link rel="apple-touch-icon-precomposed" href="{{ url_for('static', filename='images/icon-192x192.png') }}">
     <meta name="apple-mobile-web-app-title" content="Menino do Alho">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
@@ -1113,25 +1113,73 @@
     <script>(function(){ if (typeof lucide !== 'undefined') lucide.createIcons(); })();</script>
     <script src="{{ url_for('static', filename='js/push-notifications.js') }}"></script>
     
-    <!-- Service Worker Registration -->
+    <!-- Service Worker Registration + App Badging API -->
     <script>
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', function() {
-            navigator.serviceWorker.register('{{ url_for("service_worker") }}', { updateViaCache: 'none' })
-                .then(function(registration) {
-                    console.log('[SW] Service Worker registrado com sucesso:', registration.scope);
-
-                    registration.update().catch(function() {});
-
-                    setInterval(function() {
+    (function() {
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('{{ url_for("service_worker") }}', { updateViaCache: 'none' })
+                    .then(function(registration) {
+                        console.log('[SW] Service Worker registrado com sucesso:', registration.scope);
                         registration.update().catch(function() {});
-                    }, 300000);
-                })
-                .catch(function(error) {
-                    console.log('[SW] Erro ao registrar Service Worker:', error);
+                        setInterval(function() {
+                            registration.update().catch(function() {});
+                        }, 300000);
+                    })
+                    .catch(function(error) {
+                        console.log('[SW] Erro ao registrar Service Worker:', error);
+                    });
+            });
+        }
+
+        window.atualizarBadgeApp = async function atualizarBadgeApp() {
+            try {
+                var response = await fetch('/api/pendencias/contador', {
+                    headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                    credentials: 'same-origin',
+                    cache: 'no-store'
                 });
+                if (!response.ok) return;
+                var data = await response.json();
+                var total = parseInt(data.total_pendencias, 10);
+                if (isNaN(total) || total < 0) total = 0;
+
+                if ('setAppBadge' in navigator) {
+                    try {
+                        if (total > 0) {
+                            await navigator.setAppBadge(total);
+                        } else if ('clearAppBadge' in navigator) {
+                            await navigator.clearAppBadge();
+                        } else {
+                            await navigator.setAppBadge(0);
+                        }
+                    } catch (error) {
+                        console.error('Erro ao atualizar o badge:', error);
+                    }
+                }
+            } catch (error) {
+                console.error('Erro ao buscar contador de pendências:', error);
+            }
+        };
+
+        function agendarBadge() {
+            if (typeof window.atualizarBadgeApp === 'function') {
+                window.atualizarBadgeApp();
+            }
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', agendarBadge);
+        } else {
+            agendarBadge();
+        }
+        window.addEventListener('load', agendarBadge);
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden) agendarBadge();
         });
-    }
+        // Atualiza periodicamente enquanto o app PWA estiver aberto
+        setInterval(agendarBadge, 120000);
+    })();
     </script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -1290,6 +1338,11 @@
         // risco financeiro e complexidade desnecessária.
         function showToast(message, type) {
             type = type || 'success';
+            // Após ações críticas com sucesso (liquidar, entregar, vincular…),
+            // atualiza a bolinha vermelha do ícone PWA.
+            if (type === 'success' && typeof window.atualizarBadgeApp === 'function') {
+                try { window.atualizarBadgeApp(); } catch (_) {}
+            }
             var container = document.getElementById('toast-container');
             if (!container) return;
 

@@ -7,6 +7,7 @@ Rotas extraídas do legado ``app.py``:
 * ``GET  /api/vendas_por_filtro``                    — drill-down (modal de vendas)
 * ``GET  /api/dashboard/detalhes/<filtro>``          — vendas pendentes/pagas/avulsa/fornecedor
 * ``GET  /api/dashboard/documentos_pendentes/resumo``— polling da fila de docs
+* ``GET  /api/pendencias/contador``                  — badge PWA (App Badging API)
 * ``GET  /api/cliente/ultimo_pagamento``             — autocomplete de forma de pagto
 * ``GET  /api/empresa-frequente/<cliente>``           — autocomplete de empresa faturadora
 * ``GET  /api/cobrancas_pendentes``                  — push notification preflight
@@ -55,6 +56,7 @@ from services.db_utils import (
 from services.cache_utils import _dashboard_cache_key
 from services.error_utils import erro_json
 from services.query_utils import filtro_ano_data_venda
+from services.config_helpers import get_hoje_brasil
 
 
 dashboard_bp = Blueprint('dashboard', __name__)
@@ -875,6 +877,73 @@ def api_dashboard_documentos_pendentes_resumo():
     except Exception as e:
         current_app.logger.error(f'Erro ao consultar resumo de documentos pendentes: {e}')
         return jsonify({'ok': False, 'mensagem': 'Falha ao consultar documentos pendentes.'}), 500
+
+
+@dashboard_bp.route('/api/pendencias/contador', methods=['GET'])
+def api_pendencias_contador():
+    """Contador rápido de pendências para o badge do ícone PWA (App Badging API).
+
+    Soma prioridades do tenant:
+      * documentos na fila (sem venda vinculada);
+      * boletos/vendas vencidas (PENDENTE/PARCIAL com data_vencimento < hoje);
+      * entregas ainda pendentes (status_entrega != ENTREGUE).
+    """
+    try:
+        hoje = get_hoje_brasil()
+        eid_atual = empresa_id_atual()
+
+        docs_q = Documento.query.filter(Documento.venda_id.is_(None))
+        if eid_atual is not None:
+            docs_q = docs_q.filter(
+                or_(Documento.empresa_id == eid_atual, Documento.empresa_id.is_(None))
+            )
+        docs_pendentes = int(docs_q.count() or 0)
+
+        vencidos = int(
+            query_tenant(Venda)
+            .filter(
+                Venda.situacao.in_(['PENDENTE', 'PARCIAL']),
+                Venda.data_vencimento.isnot(None),
+                Venda.data_vencimento < hoje,
+            )
+            .count()
+            or 0
+        )
+
+        entregas_pendentes = int(
+            query_tenant(Venda)
+            .filter(
+                or_(
+                    Venda.status_entrega.is_(None),
+                    Venda.status_entrega == '',
+                    Venda.status_entrega == 'PENDENTE',
+                )
+            )
+            .count()
+            or 0
+        )
+
+        total = docs_pendentes + vencidos + entregas_pendentes
+        response = jsonify({
+            'ok': True,
+            'total_pendencias': total,
+            'detalhes': {
+                'documentos': docs_pendentes,
+                'vencidos': vencidos,
+                'entregas': entregas_pendentes,
+            },
+        })
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
+    except Exception as e:
+        current_app.logger.error(f'Erro ao consultar contador de pendências: {e}')
+        return jsonify({
+            'ok': False,
+            'total_pendencias': 0,
+            'mensagem': 'Falha ao consultar pendências.',
+        }), 500
 
 
 @dashboard_bp.route('/api/cliente/ultimo_pagamento', methods=['GET'])
