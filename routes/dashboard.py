@@ -35,6 +35,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 import csv
 import io
+import re
 import zipfile
 
 from flask import (
@@ -145,7 +146,7 @@ def get_radar_recompra():
        Isso evita que uma compra grande e recente infle a taxa.
     5. Duração = qtd_ultima_compra / consumo_diario.
     """
-    hoje = datetime.now().date()
+    hoje = get_hoje_brasil()
     alertas = []
 
     # Janela de 365 dias — captura sazonalidade sem histórico excessivamente velho.
@@ -176,8 +177,12 @@ def get_radar_recompra():
             continue
         key = (v.cliente_id, cat)
         if key not in grupos:
+            cli = v.cliente
             grupos[key] = {
-                'cliente_nome': v.cliente.nome_cliente,
+                'cliente_id': v.cliente_id,
+                'cliente_nome': cli.nome_cliente if cli else '',
+                'telefone': (cli.telefone or '') if cli else '',
+                'telefone_secundario': (cli.telefone_secundario or '') if cli else '',
                 'categoria': cat,
                 'por_dia': {},
             }
@@ -233,9 +238,13 @@ def get_radar_recompra():
             cor = 'text-yellow-600 dark:text-yellow-400 bg-yellow-100 dark:bg-yellow-900/30'
 
         alertas.append({
+            'cliente_id': grupo.get('cliente_id'),
             'cliente_nome': cliente_nome,
+            'telefone': grupo.get('telefone') or '',
+            'telefone_secundario': grupo.get('telefone_secundario') or '',
             'produto': cat,
             'ultima_venda': data_ultima.strftime('%d/%m/%Y'),
+            'data_prevista': data_prevista.isoformat(),
             'duracao_dias': round(duracao_estimada),
             'consumo_dia': round(consumo_diario, 2),
             'qtd_ultima': qtd_ultima,
@@ -247,6 +256,68 @@ def get_radar_recompra():
 
     alertas.sort(key=lambda x: x['dias_restantes'])
     return alertas
+
+
+def _telefone_whatsapp_limpo(telefone):
+    """Normaliza telefone para wa.me (somente dígitos, com DDI 55)."""
+    digits = re.sub(r'\D', '', telefone or '')
+    if not digits:
+        return ''
+    if digits.startswith('55'):
+        return digits
+    if len(digits) >= 10:
+        return '55' + digits
+    return digits
+
+
+def radar_alertas_para_agenda(alertas=None, hoje=None):
+    """Converte alertas do Radar (É Hoje! / Atrasado) em itens de agenda.
+
+    Não persiste no banco — eventos dinâmicos injetados no calendário.
+    """
+    if hoje is None:
+        hoje = get_hoje_brasil()
+    if alertas is None:
+        alertas = get_radar_recompra()
+
+    por_data = {}
+    hoje_iso = hoje.isoformat() if hasattr(hoje, 'isoformat') else str(hoje)[:10]
+
+    for a in alertas or []:
+        try:
+            dias = int(a.get('dias_restantes', 999))
+        except (TypeError, ValueError):
+            continue
+        # Apenas "É Hoje!" (0) ou "Atrasado" (< 0)
+        if dias > 0:
+            continue
+
+        produto = a.get('produto') or 'Produto'
+        cliente = a.get('cliente_nome') or 'Cliente'
+        status = a.get('status') or ('Atrasado' if dias < 0 else 'É Hoje!')
+        telefone = _telefone_whatsapp_limpo(a.get('telefone') or a.get('telefone_secundario') or '')
+        data_prevista = (a.get('data_prevista') or '').strip()[:10]
+        item = {
+            'id': f"radar-{a.get('cliente_id') or 'x'}-{produto}",
+            'tipo': 'recompra',
+            'descricao': f'Radar: Reabastecer {produto} - {cliente}',
+            'concluido': False,
+            'cliente_nome': cliente,
+            'produto': produto,
+            'status': status,
+            'dias_restantes': dias,
+            'telefone': telefone,
+            'data_prevista': data_prevista,
+            'ultima_venda': a.get('ultima_venda') or '',
+        }
+
+        # Sempre na data de hoje (atrasados ficam visíveis na agenda atual)
+        por_data.setdefault(hoje_iso, []).append(item)
+        # E na data prevista original (se diferente), para quem abrir aquele dia
+        if data_prevista and data_prevista != hoje_iso:
+            por_data.setdefault(data_prevista, []).append(dict(item))
+
+    return por_data
 
 
 def dividir_radar_recompra(alertas):

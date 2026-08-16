@@ -1177,10 +1177,27 @@ def listar_vendas():
                 'id': _l.id,
                 'descricao': _l.descricao,
                 'concluido': bool(getattr(_l, 'concluido', False)),
+                'tipo': 'manual',
             })
     except Exception:
         db.session.rollback()
         lembretes_por_data = {}
+
+    # Alertas dinâmicos do Radar de Recompra (É Hoje! / Atrasado) — sem persistir no banco.
+    try:
+        from routes.dashboard import get_radar_recompra, radar_alertas_para_agenda
+        _hoje_radar = get_hoje_brasil()
+        _radar_por_data = radar_alertas_para_agenda(
+            alertas=get_radar_recompra(),
+            hoje=_hoje_radar,
+        )
+        for _iso_r, _itens_r in (_radar_por_data or {}).items():
+            lembretes_por_data.setdefault(_iso_r, [])
+            # Radar primeiro (prioridade visual), depois lembretes manuais
+            lembretes_por_data[_iso_r] = list(_itens_r) + list(lembretes_por_data[_iso_r])
+    except Exception:
+        current_app.logger.exception('Falha ao injetar radar de recompra na agenda')
+        db.session.rollback()
 
     return render_template(
         'vendas/listar.html',
