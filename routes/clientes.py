@@ -2,6 +2,7 @@
 
 Rotas extraídas do legado ``app.py`` (Fase 2 da refatoração):
     * GET  /clientes                              listar_clientes
+    * POST /api/clientes/padronizar_maiusculas    padronizar_clientes_maiusculas
     * GET/POST /clientes/novo                     novo_cliente
     * GET/POST /clientes/editar/<id>              editar_cliente
     * POST /clientes/excluir/<id>                 excluir_cliente
@@ -207,6 +208,86 @@ def listar_clientes():
         per_page=per_page,
         has_next=len(clientes) >= per_page,
     )
+
+
+@clientes_bp.route('/api/clientes/padronizar_maiusculas', methods=['POST'])
+def padronizar_clientes_maiusculas():
+    """Converte campos textuais dos clientes do tenant atual para MAIÚSCULAS.
+
+    Operação isolada: só altera textos livres (nome, razão, cidade, endereço,
+    contatos, UF). Não toca em id, CNPJ, telefone ou e-mail. Em qualquer
+    falha faz ``rollback`` para preservar a integridade.
+    """
+    def _upper_se_texto(valor):
+        if valor is None:
+            return None, False
+        original = str(valor)
+        if not original.strip():
+            return valor, False
+        novo = original.upper()
+        return novo, novo != original
+
+    try:
+        clientes = query_tenant(Cliente).all()
+        alterados = 0
+        campos_tocados = 0
+
+        for cliente in clientes:
+            cliente_mudou = False
+
+            for attr, max_len in (
+                ('nome_cliente', 200),
+                ('razao_social', 200),
+                ('cidade', 100),
+                ('endereco', 255),
+                ('nome_contato', 100),
+                ('nome_contato_secundario', 100),
+                ('estado', 2),
+            ):
+                atual = getattr(cliente, attr, None)
+                novo, mudou = _upper_se_texto(atual)
+                if not mudou:
+                    continue
+                if max_len is not None and novo is not None:
+                    novo = novo[:max_len]
+                setattr(cliente, attr, novo)
+                cliente_mudou = True
+                campos_tocados += 1
+
+            if cliente_mudou:
+                alterados += 1
+
+        if alterados:
+            db.session.commit()
+            registrar_log(
+                'EDITAR',
+                'CLIENTES',
+                f'Padronização maiúsculas: {alterados} cliente(s), {campos_tocados} campo(s).',
+            )
+        else:
+            db.session.rollback()
+
+        return jsonify({
+            'ok': True,
+            'alterados': alterados,
+            'campos': campos_tocados,
+            'mensagem': (
+                f'{alterados} cliente(s) atualizado(s) ({campos_tocados} campo(s)).'
+                if alterados
+                else 'Todos os clientes já estavam em maiúsculas.'
+            ),
+        })
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(
+            f'[padronizar_clientes_maiusculas] falha: {e}',
+            exc_info=True,
+        )
+        return jsonify({
+            'ok': False,
+            'alterados': 0,
+            'mensagem': 'Falha ao padronizar clientes. Nenhuma alteração foi salva.',
+        }), 500
 
 
 @clientes_bp.route('/clientes/novo', methods=['GET', 'POST'])

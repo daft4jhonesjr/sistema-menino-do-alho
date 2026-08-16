@@ -25,6 +25,13 @@
         <button type="button" id="bulk-delete-btn" class="hidden bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-xl transition duration-200 ease-in-out flex items-center" data-endpoint="{{ url_for('clientes.bulk_delete_clientes') }}" data-redirect="{{ url_for('clientes.listar_clientes') }}">
             <i data-lucide="trash-2" class="w-4 h-4 mr-2"></i>Excluir Selecionados
         </button>
+        <button type="button" onclick="padronizarClientesMaiusculo()" title="Converter nomes, endereços e contatos antigos para maiúsculas"
+                class="text-xs bg-yellow-500/10 text-yellow-600 border border-yellow-500/20 hover:bg-yellow-500/20 px-3 py-1.5 rounded-md flex items-center gap-1 transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+            </svg>
+            Padronizar Maiúsculas
+        </button>
         <div id="dropdown-novo-cliente-wrap" class="flex w-full sm:w-auto sm:inline-flex rounded-md shadow-sm">
             <button type="button" id="btn-abrir-modal-novo-cliente" class="flex-1 justify-center inline-flex items-center px-6 py-3 rounded-l-md border border-transparent bg-emerald-700 text-lg font-medium text-white hover:bg-emerald-800 transition-colors">
                 👤 Novo Cliente
@@ -647,6 +654,46 @@ function toggleDropdownNovoCliente(event) {
         });
     }
 })();
+
+window.padronizarClientesMaiusculo = function() {
+    if (!confirm('Deseja converter os dados dos clientes antigos para maiúsculas?')) {
+        return;
+    }
+    var btn = document.querySelector('button[onclick="padronizarClientesMaiusculo()"]');
+    if (btn) {
+        btn.disabled = true;
+        btn.classList.add('opacity-60', 'cursor-wait');
+    }
+    fetch('{{ url_for("clientes.padronizar_clientes_maiusculas") }}', {
+        method: 'POST',
+        headers: Object.assign(
+            { 'X-Requested-With': 'XMLHttpRequest' },
+            window.getCsrfHeaders ? window.getCsrfHeaders() : {}
+        )
+    })
+    .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+    .then(function(res) {
+        var msg = (res.data && res.data.mensagem) || (res.ok ? 'Padronização concluída.' : 'Falha na padronização.');
+        if (typeof showToast === 'function') {
+            showToast(msg, res.ok ? 'success' : 'error');
+        } else {
+            alert(msg);
+        }
+        if (res.ok) {
+            location.reload();
+        } else if (btn) {
+            btn.disabled = false;
+            btn.classList.remove('opacity-60', 'cursor-wait');
+        }
+    })
+    .catch(function() {
+        alert('Erro de conexão ao padronizar clientes.');
+        if (btn) {
+            btn.disabled = false;
+            btn.classList.remove('opacity-60', 'cursor-wait');
+        }
+    });
+};
 
 (function() {
     var wrap = document.getElementById('modal-novo-cliente-wrap');
