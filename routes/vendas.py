@@ -191,6 +191,28 @@ def adiar_lembrete(id):
         return jsonify({'ok': False, 'erro': 'Erro ao adiar lembrete.'}), 500
 
 
+@vendas_bp.route('/lembretes/<int:id>/voltar', methods=['POST'])
+def voltar_lembrete(id):
+    """Retrocede o lembrete em 1 dia (desfazer adiamento / antecipar)."""
+    lembrete = query_tenant(Lembrete).filter_by(id=id).first_or_404()
+    try:
+        if not lembrete.data:
+            return jsonify({'ok': False, 'erro': 'Lembrete sem data.'}), 400
+        lembrete.data = lembrete.data - timedelta(days=1)
+        db.session.commit()
+        return jsonify({
+            'ok': True,
+            'status': 'success',
+            'id': lembrete.id,
+            'nova_data': lembrete.data.strftime('%Y-%m-%d'),
+            'descricao': lembrete.descricao,
+            'concluido': bool(lembrete.concluido),
+        })
+    except Exception:
+        db.session.rollback()
+        return jsonify({'ok': False, 'erro': 'Erro ao voltar lembrete.'}), 500
+
+
 # ============================================================
 # Helpers exclusivos de vendas (importação CSV/TSV)
 # ============================================================
