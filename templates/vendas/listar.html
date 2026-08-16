@@ -3654,6 +3654,14 @@ function ordenarVendasTabela(colIndex, tipo) {
                     '</svg>' +
                     '<span class="hidden sm:inline">' + btnLabel + '</span>' +
                 '</button>' +
+                '<button type="button" onclick="adiarLembrete(' + lem.id + ',\'' + esc(iso) + '\', this)" ' +
+                    'title="Adiar para amanhã" ' +
+                    'class="inline-flex items-center gap-1 text-[11px] font-medium text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-500/10 rounded-md px-1.5 py-0.5 transition-colors">' +
+                    '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">' +
+                        '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 5l7 7-7 7M5 5l7 7-7 7"/>' +
+                    '</svg>' +
+                    '<span class="hidden sm:inline">Adiar</span>' +
+                '</button>' +
                 '<button type="button" onclick="excluirLembrete(' + lem.id + ',\'' + esc(iso) + '\', this)" ' +
                     'title="Excluir lembrete" ' +
                     'class="text-gray-500 hover:text-red-400 transition-colors px-1 leading-none text-sm">' +
@@ -3816,6 +3824,80 @@ function ordenarVendasTabela(colIndex, tipo) {
                     return;
                 }
                 _removerLembreteDoPainel(id, iso);
+            })
+            .catch(function() {
+                if (btn) btn.disabled = false;
+            });
+    };
+
+    window.adiarLembrete = function(id, iso, btn) {
+        if (btn) btn.disabled = true;
+        var fd = new FormData();
+        fd.append('csrf_token', CSRF_TOKEN);
+
+        fetch('/lembretes/' + id + '/adiar', { method: 'POST', body: fd })
+            .then(function(r) { return r.json(); })
+            .then(function(res) {
+                if (!res.ok) {
+                    if (btn) btn.disabled = false;
+                    return;
+                }
+                var novaData = res.nova_data;
+                var lemMovido = null;
+                if (lembretes[iso]) {
+                    for (var i = 0; i < lembretes[iso].length; i++) {
+                        if (lembretes[iso][i].id === id) {
+                            lemMovido = lembretes[iso][i];
+                            break;
+                        }
+                    }
+                }
+                if (!lemMovido) {
+                    lemMovido = {
+                        id: id,
+                        descricao: res.descricao || '',
+                        concluido: !!res.concluido,
+                    };
+                }
+
+                // Remove do dia atual e recoloca no dia seguinte (estado em memória).
+                if (lembretes[iso]) {
+                    lembretes[iso] = lembretes[iso].filter(function(l) { return l.id !== id; });
+                    if (!lembretes[iso].length) delete lembretes[iso];
+                }
+                if (novaData) {
+                    if (!lembretes[novaData]) lembretes[novaData] = [];
+                    lembretes[novaData].push(lemMovido);
+                    setLembretes[novaData] = true;
+                }
+                if (!lembretes[iso] || !lembretes[iso].length) {
+                    delete setLembretes[iso];
+                }
+
+                var card = document.getElementById('lem-' + id);
+                function finalizarAdiar() {
+                    if (card) card.remove();
+                    var lista = document.getElementById('lista-lembretes-' + iso);
+                    if (lista && !lista.querySelector('[id^="lem-"]')) {
+                        var p = document.createElement('p');
+                        p.className = 'text-xs text-gray-400 dark:text-gray-500 italic';
+                        p.id = 'empty-lembretes-' + iso;
+                        p.textContent = 'Nenhum lembrete para este dia.';
+                        lista.appendChild(p);
+                    }
+                    _atualizarBarraLembrete(iso);
+                    if (novaData) _atualizarBarraLembrete(novaData);
+                }
+
+                if (card) {
+                    card.classList.add('opacity-50');
+                    card.style.transition = 'opacity 180ms ease, transform 180ms ease';
+                    card.style.opacity = '0';
+                    card.style.transform = 'translateX(6px)';
+                    setTimeout(finalizarAdiar, 180);
+                } else {
+                    finalizarAdiar();
+                }
             })
             .catch(function() {
                 if (btn) btn.disabled = false;

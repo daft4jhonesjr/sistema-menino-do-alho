@@ -32,7 +32,7 @@ Helpers compartilhados (``_vendas_do_pedido``, ``_apagar_lancamentos_caixa_por_v
 permanecem em ``app.py`` e são importados via late import porque são usados
 por documentos e pelo módulo de processamento automático de PDFs.
 """
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from math import ceil
 import csv
@@ -167,6 +167,28 @@ def excluir_lembrete(id):
     except Exception:
         db.session.rollback()
         return jsonify({'ok': False, 'erro': 'Erro ao excluir lembrete.'}), 500
+
+
+@vendas_bp.route('/lembretes/<int:id>/adiar', methods=['POST'])
+def adiar_lembrete(id):
+    """Adia o lembrete em 1 dia (mantém descrição e status concluído)."""
+    lembrete = query_tenant(Lembrete).filter_by(id=id).first_or_404()
+    try:
+        if not lembrete.data:
+            return jsonify({'ok': False, 'erro': 'Lembrete sem data.'}), 400
+        lembrete.data = lembrete.data + timedelta(days=1)
+        db.session.commit()
+        return jsonify({
+            'ok': True,
+            'status': 'success',
+            'id': lembrete.id,
+            'nova_data': lembrete.data.strftime('%Y-%m-%d'),
+            'descricao': lembrete.descricao,
+            'concluido': bool(lembrete.concluido),
+        })
+    except Exception:
+        db.session.rollback()
+        return jsonify({'ok': False, 'erro': 'Erro ao adiar lembrete.'}), 500
 
 
 # ============================================================
