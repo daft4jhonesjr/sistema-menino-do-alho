@@ -229,7 +229,7 @@ def novo_cliente():
                     flash(msg, 'error')
                     return render_template('clientes/formulario.html', cliente=None)
 
-            nome_cliente = (request.form.get('nome_cliente') or '').strip()
+            nome_cliente = (request.form.get('nome_cliente') or '').strip().upper()
             if not nome_cliente:
                 msg = 'Nome do cliente é obrigatório.'
                 if _is_ajax():
@@ -239,14 +239,14 @@ def novo_cliente():
             cliente = Cliente(
                 nome_cliente=nome_cliente,
                 telefone=(request.form.get('telefone', '') or '').strip() or None,
-                nome_contato=(request.form.get('nome_contato', '') or '').strip()[:100] or None,
+                nome_contato=(request.form.get('nome_contato', '') or '').strip().upper()[:100] or None,
                 telefone_secundario=(request.form.get('telefone_secundario', '') or '').strip()[:20] or None,
-                nome_contato_secundario=(request.form.get('nome_contato_secundario', '') or '').strip()[:100] or None,
-                razao_social=request.form.get('razao_social', ''),
+                nome_contato_secundario=(request.form.get('nome_contato_secundario', '') or '').strip().upper()[:100] or None,
+                razao_social=(request.form.get('razao_social', '') or '').strip().upper(),
                 cnpj=cnpj,
-                cidade=request.form.get('cidade', ''),
+                cidade=(request.form.get('cidade', '') or '').strip().upper(),
                 estado=(request.form.get('estado') or '').strip().upper()[:2] or None,
-                endereco=request.form.get('endereco', '') or None,
+                endereco=(request.form.get('endereco', '') or '').strip().upper() or None,
                 empresa_id=empresa_id_atual(),
             )
             db.session.add(cliente)
@@ -289,15 +289,15 @@ def editar_cliente(id):
                     flash(f'CNPJ já está cadastrado para o cliente {cliente_existente.nome_cliente}', 'error')
                     return render_template('clientes/formulario.html', cliente=cliente)
 
-            nome_raw = (request.form.get('nome_cliente') or '').strip() or (cliente.nome_cliente or '')
-            razao_raw = (request.form.get('razao_social') or '').strip()
-            cidade_raw = (request.form.get('cidade') or '').strip()
+            nome_raw = ((request.form.get('nome_cliente') or '').strip() or (cliente.nome_cliente or '')).upper()
+            razao_raw = (request.form.get('razao_social') or '').strip().upper()
+            cidade_raw = (request.form.get('cidade') or '').strip().upper()
             estado_raw = (request.form.get('estado') or '').strip().upper()[:2] or None
-            endereco_raw = (request.form.get('endereco') or '').strip() or None
+            endereco_raw = (request.form.get('endereco') or '').strip().upper() or None
             telefone_raw = (request.form.get('telefone', '') or '').strip() or None
-            nome_contato_raw = (request.form.get('nome_contato', '') or '').strip() or None
+            nome_contato_raw = (request.form.get('nome_contato', '') or '').strip().upper() or None
             telefone_secundario_raw = (request.form.get('telefone_secundario', '') or '').strip() or None
-            nome_contato_secundario_raw = (request.form.get('nome_contato_secundario', '') or '').strip() or None
+            nome_contato_secundario_raw = (request.form.get('nome_contato_secundario', '') or '').strip().upper() or None
 
             cliente.nome_cliente = nome_raw[:200]
             cliente.telefone = telefone_raw[:20] if telefone_raw else None
