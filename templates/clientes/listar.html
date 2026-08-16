@@ -367,7 +367,8 @@
                     <div class="flex gap-3">
                         <div class="flex-1 min-w-0">
                             <label for="modal-cidade" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Cidade</label>
-                            <input type="text" id="modal-cidade" name="cidade" autocapitalize="characters" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100 uppercase">
+                            <input type="text" id="modal-cidade" name="cidade" list="lista-cidades" autocapitalize="characters" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100 uppercase" placeholder="Digite a cidade…">
+                            <datalist id="lista-cidades"></datalist>
                         </div>
                         <div style="width:110px;flex-shrink:0">
                             <label for="modal-estado" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">UF</label>
@@ -520,7 +521,7 @@
                     <div class="flex gap-3">
                         <div class="flex-1 min-w-0">
                             <label for="edit_cidade" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Cidade</label>
-                            <input type="text" id="edit_cidade" name="cidade" maxlength="100" autocapitalize="characters" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100 uppercase">
+                            <input type="text" id="edit_cidade" name="cidade" list="lista-cidades" maxlength="100" autocapitalize="characters" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100 uppercase" placeholder="Digite a cidade…">
                         </div>
                         <div style="width:110px;flex-shrink:0">
                             <label for="edit_estado" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">UF</label>
@@ -1291,45 +1292,96 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 })();
 
-/* ── Autocompletar UF pela cidade digitada ─────────────────────────── */
+/* ── Autocomplete de cidades (API IBGE) + preenchimento automático da UF ── */
 (function() {
-    var CIDADE_ESTADO = {
-        'petrolina': 'PE', 'juazeiro': 'BA',
-        'paulo afonso': 'BA', 'salgueiro': 'PE', 'caruaru': 'PE',
-        'recife': 'PE', 'fortaleza': 'CE', 'salvador': 'BA',
-        'sao paulo': 'SP', 'rio de janeiro': 'RJ', 'belo horizonte': 'MG',
-        'brasilia': 'DF', 'manaus': 'AM', 'curitiba': 'PR',
-        'porto alegre': 'RS', 'goiania': 'GO', 'belem': 'PA',
-        'teresina': 'PI', 'natal': 'RN', 'campo grande': 'MS',
-        'maceio': 'AL', 'joao pessoa': 'PB', 'aracaju': 'SE',
-        'porto velho': 'RO', 'macapa': 'AP', 'boa vista': 'RR',
-        'palmas': 'TO', 'cuiaba': 'MT', 'vitoria': 'ES', 'florianopolis': 'SC',
-        'sao luis': 'MA',
-    };
+    var IBGE_URL = 'https://servicodados.ibge.gov.br/api/v1/localidades/municipios';
+    var datalist = document.getElementById('lista-cidades');
+    var pares = []; // [{ nome, uf }]
 
-    function _normalizar(str) {
-        return str.trim().toLowerCase()
-            .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    function extrairUf(c) {
+        try {
+            var uf1 = c && c.microrregiao && c.microrregiao.mesorregiao && c.microrregiao.mesorregiao.UF;
+            if (uf1 && uf1.sigla) return String(uf1.sigla).toUpperCase();
+        } catch (e) {}
+        try {
+            var ri = c && c['regiao-imediata'];
+            var rinter = ri && ri['regiao-intermediaria'];
+            var uf2 = rinter && rinter.UF;
+            if (uf2 && uf2.sigla) return String(uf2.sigla).toUpperCase();
+        } catch (e2) {}
+        return '';
     }
 
-    function _autoUF(cidadeInput, estadoSelect) {
+    function popularDatalist(cidades) {
+        if (!datalist) return;
+        datalist.innerHTML = '';
+        var frag = document.createDocumentFragment();
+        for (var i = 0; i < cidades.length; i++) {
+            var c = cidades[i];
+            var opt = document.createElement('option');
+            opt.value = c.nome + ' - ' + c.uf;
+            frag.appendChild(opt);
+        }
+        datalist.appendChild(frag);
+    }
+
+    async function carregarMunicipiosIbge() {
+        try {
+            var resp = await fetch(IBGE_URL);
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            var data = await resp.json();
+            pares = (data || []).map(function(c) {
+                return {
+                    nome: String(c.nome || '').toUpperCase(),
+                    uf: extrairUf(c)
+                };
+            }).filter(function(c) {
+                return c.nome && c.uf;
+            });
+            popularDatalist(pares);
+        } catch (err) {
+            console.warn('[IBGE] Falha ao carregar municípios:', err);
+        }
+    }
+
+    function ligarCidadeUf(cidadeInput, estadoSelect) {
         if (!cidadeInput || !estadoSelect) return;
-        cidadeInput.addEventListener('input', function() {
-            var normalizado = _normalizar(cidadeInput.value);
-            if (CIDADE_ESTADO[normalizado]) {
-                estadoSelect.value = CIDADE_ESTADO[normalizado];
+        cidadeInput.addEventListener('input', function(e) {
+            var valor = (e.target.value || '');
+
+            // Seleção do datalist: "CIDADE - UF"
+            if (valor.indexOf(' - ') !== -1) {
+                var idx = valor.lastIndexOf(' - ');
+                var nomeCidade = valor.slice(0, idx).trim().toUpperCase();
+                var siglaUf = valor.slice(idx + 3).trim().toUpperCase();
+                e.target.value = nomeCidade;
+                if (siglaUf) estadoSelect.value = siglaUf;
+                return;
+            }
+
+            // Digitação livre: força maiúsculas no valor
+            var upper = valor.toUpperCase();
+            if (upper !== valor) {
+                var start = e.target.selectionStart;
+                var end = e.target.selectionEnd;
+                e.target.value = upper;
+                if (typeof start === 'number' && typeof end === 'number') {
+                    try { e.target.setSelectionRange(start, end); } catch (err) {}
+                }
             }
         });
     }
 
-    _autoUF(
+    ligarCidadeUf(
         document.getElementById('modal-cidade'),
         document.getElementById('modal-estado')
     );
-    _autoUF(
+    ligarCidadeUf(
         document.getElementById('edit_cidade'),
         document.getElementById('edit_estado')
     );
+
+    carregarMunicipiosIbge();
 })();
 </script>
 {% endblock %}

@@ -101,10 +101,12 @@
                     <label for="cidade" class="block text-sm font-medium text-gray-700 mb-2">
                         Cidade
                     </label>
-                    <input type="text" id="cidade" name="cidade"
+                    <input type="text" id="cidade" name="cidade" list="lista-cidades"
                            value="{{ cliente.cidade if cliente else '' }}"
                            autocapitalize="characters" autocomplete="off" spellcheck="false"
-                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent uppercase">
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent uppercase"
+                           placeholder="Digite a cidade…">
+                    <datalist id="lista-cidades"></datalist>
                 </div>
                 <div style="width:110px;flex-shrink:0">
                     <label for="estado" class="block text-sm font-medium text-gray-700 mb-2">UF</label>
@@ -220,29 +222,82 @@
     ativarMascaraTelefone(document.getElementById('telefone_secundario'));
 })();
 
-/* Autocompletar UF ao digitar a cidade */
+/* Autocomplete de cidades (API IBGE) + preenchimento automático da UF */
 (function() {
-    var CIDADE_ESTADO = {
-        'petrolina': 'PE', 'juazeiro': 'BA',
-        'paulo afonso': 'BA', 'salgueiro': 'PE', 'caruaru': 'PE',
-        'recife': 'PE', 'fortaleza': 'CE', 'salvador': 'BA',
-        'sao paulo': 'SP', 'rio de janeiro': 'RJ', 'belo horizonte': 'MG',
-        'brasilia': 'DF', 'manaus': 'AM', 'curitiba': 'PR',
-        'porto alegre': 'RS', 'goiania': 'GO', 'belem': 'PA',
-        'teresina': 'PI', 'natal': 'RN', 'campo grande': 'MS',
-        'maceio': 'AL', 'joao pessoa': 'PB', 'aracaju': 'SE',
-        'porto velho': 'RO', 'macapa': 'AP', 'boa vista': 'RR',
-        'palmas': 'TO', 'cuiaba': 'MT', 'vitoria': 'ES', 'florianopolis': 'SC',
-        'sao luis': 'MA',
-    };
+    var IBGE_URL = 'https://servicodados.ibge.gov.br/api/v1/localidades/municipios';
+    var datalist = document.getElementById('lista-cidades');
     var cidadeEl = document.getElementById('cidade');
     var estadoEl = document.getElementById('estado');
     if (!cidadeEl || !estadoEl) return;
-    cidadeEl.addEventListener('input', function() {
-        var n = cidadeEl.value.trim().toLowerCase()
-            .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-        if (CIDADE_ESTADO[n]) estadoEl.value = CIDADE_ESTADO[n];
+
+    function extrairUf(c) {
+        try {
+            var uf1 = c && c.microrregiao && c.microrregiao.mesorregiao && c.microrregiao.mesorregiao.UF;
+            if (uf1 && uf1.sigla) return String(uf1.sigla).toUpperCase();
+        } catch (e) {}
+        try {
+            var ri = c && c['regiao-imediata'];
+            var rinter = ri && ri['regiao-intermediaria'];
+            var uf2 = rinter && rinter.UF;
+            if (uf2 && uf2.sigla) return String(uf2.sigla).toUpperCase();
+        } catch (e2) {}
+        return '';
+    }
+
+    function popularDatalist(cidades) {
+        if (!datalist) return;
+        datalist.innerHTML = '';
+        var frag = document.createDocumentFragment();
+        for (var i = 0; i < cidades.length; i++) {
+            var c = cidades[i];
+            var opt = document.createElement('option');
+            opt.value = c.nome + ' - ' + c.uf;
+            frag.appendChild(opt);
+        }
+        datalist.appendChild(frag);
+    }
+
+    async function carregarMunicipiosIbge() {
+        try {
+            var resp = await fetch(IBGE_URL);
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            var data = await resp.json();
+            var cidades = (data || []).map(function(c) {
+                return {
+                    nome: String(c.nome || '').toUpperCase(),
+                    uf: extrairUf(c)
+                };
+            }).filter(function(c) {
+                return c.nome && c.uf;
+            });
+            popularDatalist(cidades);
+        } catch (err) {
+            console.warn('[IBGE] Falha ao carregar municípios:', err);
+        }
+    }
+
+    cidadeEl.addEventListener('input', function(e) {
+        var valor = (e.target.value || '');
+        if (valor.indexOf(' - ') !== -1) {
+            var idx = valor.lastIndexOf(' - ');
+            var nomeCidade = valor.slice(0, idx).trim().toUpperCase();
+            var siglaUf = valor.slice(idx + 3).trim().toUpperCase();
+            e.target.value = nomeCidade;
+            if (siglaUf) estadoEl.value = siglaUf;
+            return;
+        }
+        var upper = valor.toUpperCase();
+        if (upper !== valor) {
+            var start = e.target.selectionStart;
+            var end = e.target.selectionEnd;
+            e.target.value = upper;
+            if (typeof start === 'number' && typeof end === 'number') {
+                try { e.target.setSelectionRange(start, end); } catch (err) {}
+            }
+        }
     });
+
+    carregarMunicipiosIbge();
 })();
 </script>
 {% endblock %}
