@@ -79,6 +79,10 @@
         {% else %}
         <p class="font-bold text-emerald-600 dark:text-emerald-400 text-lg mt-1 valor-financeiro">{{ pedido.total_valor|formato_moeda }}</p>
         {% endif %}
+        {% if pedido.total_valor and pedido.total_valor > 0 %}
+        {% set margem_card = (pedido.total_lucro / pedido.total_valor) * 100 %}
+        <p class="text-xs text-blue-600 dark:text-blue-400 font-medium mt-0.5">Margem: {{ '%.1f'|format(margem_card) }}%</p>
+        {% endif %}
         <p class="text-xs mt-1 inline-flex items-center gap-1 group">
             📅 Venc.:
             {% if pedido.data_vencimento or pedido.caminho_boleto %}

@@ -857,6 +857,12 @@
                             </span>
                         </th>
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">Lucro Total</th>
+                        <th onclick="ordenarVendasTabela(10, 'numero')" data-sort-col="10" class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors select-none" title="Ordenar por Margem Real (Lucro ÷ Valor)">
+                            <span class="inline-flex items-center justify-end gap-1">
+                                Margem
+                                <span class="sort-indicator opacity-50" aria-hidden="true">↕</span>
+                            </span>
+                        </th>
                         {% set url_venc_proximo = request.args.to_dict(flat=True) %}
                         {% if url_venc_proximo.get('ordenar_por') %}{% set _ = url_venc_proximo.pop('ordenar_por') %}{% endif %}
                         {% set _ = url_venc_proximo.update({'ordem_data': 'vencimento_crescente'}) %}
@@ -921,7 +927,7 @@
                                 </div>
                             </details>
                         </th>
-                        <th onclick="ordenarVendasTabela(12, 'texto')" data-sort-col="12" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors select-none" title="Ordenar por Situação">
+                        <th onclick="ordenarVendasTabela(13, 'texto')" data-sort-col="13" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors select-none" title="Ordenar por Situação">
                             <span class="inline-flex items-center gap-1">
                                 Situação
                                 <span class="sort-indicator opacity-50" aria-hidden="true">↕</span>
@@ -938,9 +944,9 @@
                         {% set _ = url_forma_pix.update({'forma_pagto': 'PIX'}) %}
                         {% set url_forma_dinheiro = request.args.to_dict(flat=True) %}
                         {% set _ = url_forma_dinheiro.update({'forma_pagto': 'DINHEIRO'}) %}
-                        <th data-sort-col="13" class="relative px-6 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap {{ 'text-emerald-600 dark:text-emerald-400 font-bold' if forma_pagto_ativo else 'text-gray-500 dark:text-gray-400' }}">
+                        <th data-sort-col="14" class="relative px-6 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap {{ 'text-emerald-600 dark:text-emerald-400 font-bold' if forma_pagto_ativo else 'text-gray-500 dark:text-gray-400' }}">
                             <div class="inline-flex items-center gap-1.5">
-                                <span onclick="ordenarVendasTabela(13, 'texto')" class="inline-flex items-center gap-1 cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200 transition-colors" title="Ordenar por Forma Pagto">
+                                <span onclick="ordenarVendasTabela(14, 'texto')" class="inline-flex items-center gap-1 cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200 transition-colors" title="Ordenar por Forma Pagto">
                                     Forma Pagto
                                     <span class="sort-indicator opacity-50" aria-hidden="true">↕</span>
                                 </span>
@@ -979,7 +985,7 @@
                         {% include '_linhas_venda.html' %}
                     {% else %}
                     <tr id="vendas-empty-row">
-                        <td colspan="14" class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                        <td colspan="16" class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
                             {% if filtro_vencidos %}Nenhuma venda com pagamento pendente e data de vencimento ultrapassada foi encontrada.{% else %}Nenhuma venda registrada ainda.{% endif %}
                         </td>
                     </tr>

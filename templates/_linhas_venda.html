@@ -94,6 +94,14 @@
         {% endif %}
     </td>
     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-right valor-financeiro {% if pedido.total_lucro >= 0 %}text-emerald-600 dark:text-emerald-400{% else %}text-red-600 dark:text-red-400{% endif %}">{{ pedido.total_lucro|formato_moeda }}</td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm text-right font-medium" data-sort-valor="{% if pedido.total_valor and pedido.total_valor > 0 %}{{ '%.4f'|format((pedido.total_lucro / pedido.total_valor) * 100) }}{% else %}{% endif %}">
+        {% if pedido.total_valor and pedido.total_valor > 0 %}
+            {% set margem_real = (pedido.total_lucro / pedido.total_valor) * 100 %}
+            <span class="text-blue-600 dark:text-blue-400" title="Margem real = Lucro ÷ Valor Total">{{ '%.1f'|format(margem_real) }}%</span>
+        {% else %}
+            <span class="text-gray-400 dark:text-gray-500">-</span>
+        {% endif %}
+    </td>
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
         {% if pedido.data_vencimento or pedido.caminho_boleto %}
         <div class="group inline-flex items-center gap-1" onclick="event.stopPropagation();">
@@ -266,7 +274,7 @@
 </tr>
 <!-- Linha de Detalhes (Oculta por padrão) -->
 <tr class="pedido-detalhes hidden {{ zebra_class }}" data-pedido-id="{{ pedido_unique_id }}">
-    <td colspan="15" class="p-0 w-[1px]">
+    <td colspan="16" class="p-0 w-[1px]">
         <div class="max-w-0 min-w-full overflow-x-auto">
             <div class="{{ zebra_bg_class }} border-l-4 border-emerald-300 dark:border-emerald-600 px-6 py-4 whitespace-normal min-w-max">
                 <div class="w-full overflow-x-auto">
@@ -278,6 +286,7 @@
                         <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Preço Unit.</th>
                         <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Total</th>
                         <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Lucro</th>
+                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Margem</th>
                         <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap w-24">Ações</th>
                     </tr>
                 </thead>
@@ -289,6 +298,16 @@
                         <td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 text-right whitespace-nowrap valor-financeiro">{{ venda.preco_venda|formato_moeda }}</td>
                         <td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100 text-right whitespace-nowrap valor-financeiro">{{ venda.calcular_total()|formato_moeda }}</td>
                         <td class="px-4 py-3 text-sm font-medium text-right whitespace-nowrap valor-financeiro {% if venda.calcular_lucro() >= 0 %}text-emerald-600 dark:text-emerald-400{% else %}text-red-600 dark:text-red-400{% endif %}">{{ venda.calcular_lucro()|formato_moeda }}</td>
+                        <td class="px-4 py-3 text-sm font-medium text-right whitespace-nowrap">
+                            {% set _total_item = venda.calcular_total() %}
+                            {% set _lucro_item = venda.calcular_lucro() %}
+                            {% if _total_item and _total_item > 0 %}
+                                {% set _margem_item = (_lucro_item / _total_item) * 100 %}
+                                <span class="text-blue-600 dark:text-blue-400">{{ '%.1f'|format(_margem_item) }}%</span>
+                            {% else %}
+                                <span class="text-gray-400 dark:text-gray-500">-</span>
+                            {% endif %}
+                        </td>
                         <td class="px-4 py-3 text-sm font-medium">
                             <div class="flex items-center gap-1.5">
                                 {% if venda.tipo_operacao == 'PERDA' %}
