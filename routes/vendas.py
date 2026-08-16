@@ -2747,7 +2747,7 @@ def logistica_remanejo():
 @vendas_bp.route('/api/pedidos')
 def api_pedidos():
     """Lista pedidos recentes para o modal Vincular à Venda.
-    Retorna {id, label} por pedido."""
+    Retorna id, label e campos para o autocomplete."""
     vendas = query_tenant(Venda).order_by(Venda.id.desc()).limit(200).all()
     seen = set()
     pedidos = []
@@ -2759,8 +2759,23 @@ def api_pedidos():
         if key in seen:
             continue
         seen.add(key)
-        label = f"{v.cliente.nome_cliente} | NF {v.nf or '-'} | {d.strftime('%d/%m/%Y')}"
-        pedidos.append({'id': v.id, 'label': label})
+        cliente_nome = v.cliente.nome_cliente or ''
+        nf = (v.nf or '').strip() or 'S/N'
+        data_formatada = d.strftime('%d/%m/%Y') if d else ''
+        try:
+            valor_num = float(v.calcular_total())
+        except Exception:
+            valor_num = 0.0
+        valor = f"{valor_num:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+        label = f"{cliente_nome} | NF: {nf} | {data_formatada} | R$ {valor}"
+        pedidos.append({
+            'id': v.id,
+            'label': label,
+            'cliente_nome': cliente_nome,
+            'nf': nf,
+            'data_formatada': data_formatada,
+            'valor': valor,
+        })
     return jsonify(pedidos=pedidos)
 
 

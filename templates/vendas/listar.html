@@ -707,14 +707,14 @@
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <input type="hidden" name="doc_id" id="input-vincular-doc-id" />
                 <div class="p-6 flex-1 overflow-y-auto">
-                    <div class="mb-3">
-                        <label for="filtro_vendas_modal" class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Filtrar Pedido</label>
-                        <input type="text" id="filtro_vendas_modal" placeholder="Digite para buscar..." class="w-full rounded-md border border-slate-300 dark:border-gray-700 dark:bg-gray-700 dark:text-gray-100 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+                    <div class="relative">
+                        <label for="input-busca-pedido" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Buscar Pedido (Cliente, NF ou Data):</label>
+                        <input type="text" id="input-busca-pedido" list="lista-pedidos" autocomplete="off" class="w-full rounded-lg border border-gray-300 dark:border-gray-700 dark:bg-gray-700 dark:text-gray-100 px-4 py-2 shadow-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 uppercase" placeholder="Digite para filtrar...">
+                        <datalist id="lista-pedidos">
+                            <!-- As options serão injetadas via JS -->
+                        </datalist>
+                        <input type="hidden" id="venda-id-selecionada" name="venda_id">
                     </div>
-                    <label for="select-vincular-pedido" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Pedido</label>
-                    <select id="select-vincular-pedido" name="venda_id" required class="w-full rounded-lg border border-gray-300 dark:border-gray-700 dark:bg-gray-700 dark:text-gray-100 px-4 py-2 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
-                        <option value="">Selecione um pedido…</option>
-                    </select>
                     <div class="mt-3 flex items-start gap-2 bg-blue-500/10 p-2.5 rounded-md border border-blue-500/20">
                         <span class="text-blue-400 text-lg leading-none">ℹ️</span>
                         <p class="text-xs text-blue-300/80 leading-relaxed"><strong>Dica de Transferência:</strong> O sistema vinculará este boleto automaticamente a até <strong class="text-blue-300">3 pedidos</strong> que compartilhem a mesma NF e Data de Venda.</p>
@@ -5353,8 +5353,9 @@ function enviarPedidoWhatsApp(elemento) {
     var modal = document.getElementById('modal-vincular-doc');
     var form = document.getElementById('form-vincular-doc');
     var inputDocId = document.getElementById('input-vincular-doc-id');
-    var selectPedido = document.getElementById('select-vincular-pedido');
-    var inputFiltro = document.getElementById('filtro_vendas_modal');
+    var inputBusca = document.getElementById('input-busca-pedido');
+    var listaPedidos = document.getElementById('lista-pedidos');
+    var hiddenVendaId = document.getElementById('venda-id-selecionada');
     var docNomeEl = document.getElementById('modal-vincular-doc-nome');
     var tokenMeta = document.querySelector('meta[name="csrf-token"]');
     var pendingFilterTerm = '';
@@ -5376,31 +5377,6 @@ function enviarPedidoWhatsApp(elemento) {
     function showModal() { modal.classList.remove('hidden'); travarFundo(); }
     function hideModal() { modal.classList.add('hidden'); liberarFundo(); }
 
-    function filtrarSelect(termo, selectElement) {
-        if (!selectElement) return;
-        var query = (termo || '').toLowerCase().trim();
-        var options = selectElement.querySelectorAll('option');
-        var encontrouMatch = false;
-
-        options.forEach(function(option) {
-            if (option.value === '') {
-                option.style.display = '';
-                return;
-            }
-            var texto = (option.textContent || '').toLowerCase();
-            var visivel = !query || texto.indexOf(query) !== -1;
-            option.style.display = visivel ? '' : 'none';
-            if (visivel && !encontrouMatch) {
-                option.selected = true;
-                encontrouMatch = true;
-            }
-        });
-
-        if (!encontrouMatch) {
-            selectElement.value = '';
-        }
-    }
-
     function extrairTermoPagador(pagadorCompleto) {
         var palavras = (pagadorCompleto || '')
             .split(/\s+/)
@@ -5408,32 +5384,64 @@ function enviarPedidoWhatsApp(elemento) {
         return palavras.length > 0 ? palavras[0] : '';
     }
 
+    function sincronizarVendaIdSelecionada() {
+        if (!inputBusca || !listaPedidos || !hiddenVendaId) return;
+        hiddenVendaId.value = '';
+        var valor = inputBusca.value || '';
+        for (var i = 0; i < listaPedidos.options.length; i++) {
+            var option = listaPedidos.options[i];
+            if (option.value === valor) {
+                hiddenVendaId.value = option.getAttribute('data-id') || '';
+                break;
+            }
+        }
+    }
+
     function aplicarFiltroInicial(btn) {
-        if (!inputFiltro || !selectPedido) return;
+        if (!inputBusca || !hiddenVendaId) return;
         var pagadorCompleto = btn.getAttribute('data-pagador') || '';
         var termoBusca = extrairTermoPagador(pagadorCompleto);
         pendingFilterTerm = termoBusca;
-        inputFiltro.value = termoBusca;
-        filtrarSelect(termoBusca, selectPedido);
+        inputBusca.value = termoBusca;
+        hiddenVendaId.value = '';
     }
 
     function loadPedidos() {
-        selectPedido.innerHTML = '<option value="">Carregando…</option>';
+        if (!listaPedidos) return;
+        listaPedidos.innerHTML = '';
+        if (inputBusca) {
+            inputBusca.placeholder = 'Carregando pedidos…';
+        }
         fetch('/api/pedidos', { headers: { 'Accept': 'application/json' } })
             .then(function(r) { return r.json(); })
             .then(function(data) {
-                selectPedido.innerHTML = '<option value="">Selecione um pedido…</option>';
+                listaPedidos.innerHTML = '';
                 (data.pedidos || []).forEach(function(p) {
+                    var label = p.label || (
+                        (p.cliente_nome || '') +
+                        ' | NF: ' + (p.nf || 'S/N') +
+                        ' | ' + (p.data_formatada || '') +
+                        ' | R$ ' + (p.valor || '0,00')
+                    );
                     var opt = document.createElement('option');
-                    opt.value = p.id;
-                    opt.textContent = p.label;
-                    selectPedido.appendChild(opt);
+                    opt.value = label;
+                    opt.setAttribute('data-id', String(p.id));
+                    listaPedidos.appendChild(opt);
                 });
-                filtrarSelect(pendingFilterTerm, selectPedido);
+                if (inputBusca) {
+                    inputBusca.placeholder = 'Digite para filtrar...';
+                    if (pendingFilterTerm) {
+                        inputBusca.value = pendingFilterTerm;
+                    }
+                }
+                sincronizarVendaIdSelecionada();
                 if (typeof lucide !== 'undefined') lucide.createIcons();
             })
             .catch(function() {
-                selectPedido.innerHTML = '<option value="">Erro ao carregar pedidos.</option>';
+                listaPedidos.innerHTML = '';
+                if (inputBusca) {
+                    inputBusca.placeholder = 'Erro ao carregar pedidos.';
+                }
             });
     }
 
@@ -5445,6 +5453,9 @@ function enviarPedidoWhatsApp(elemento) {
         aplicarFiltroInicial(btn);
         loadPedidos();
         showModal();
+        if (inputBusca) {
+            setTimeout(function() { inputBusca.focus(); }, 50);
+        }
     }
 
     window.abrirModalVincular = abrirModalVincular;
@@ -5455,9 +5466,12 @@ function enviarPedidoWhatsApp(elemento) {
         });
     });
 
-    if (inputFiltro) {
-        inputFiltro.addEventListener('input', function(e) {
-            filtrarSelect(e.target.value, selectPedido);
+    if (inputBusca) {
+        inputBusca.addEventListener('input', function() {
+            sincronizarVendaIdSelecionada();
+        });
+        inputBusca.addEventListener('change', function() {
+            sincronizarVendaIdSelecionada();
         });
     }
 
@@ -5467,8 +5481,17 @@ function enviarPedidoWhatsApp(elemento) {
 
     form.addEventListener('submit', function(e) {
         e.preventDefault();
-        var vendaId = selectPedido.value;
-        if (!vendaId) return;
+        sincronizarVendaIdSelecionada();
+        var vendaId = hiddenVendaId ? hiddenVendaId.value : '';
+        if (!vendaId) {
+            if (typeof showToast === 'function') {
+                showToast('Selecione um pedido da lista para vincular.', 'error');
+            } else {
+                alert('Selecione um pedido da lista para vincular.');
+            }
+            if (inputBusca) inputBusca.focus();
+            return;
+        }
         garantirCsrfNoForm(form);
         var docId = inputDocId.value || '';
         var csrfInput = form.querySelector('input[name="csrf_token"]');
