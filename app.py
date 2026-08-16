@@ -1525,8 +1525,11 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                     
                     # Prioridade: preenchemos apenas o campo do tipo atual (caminho_boleto ou caminho_nf).
                     # NF sozinha ou boleto sozinho já vincula; se boleto chegar depois, ADICIONA sem alterar caminho_nf.
+                    # Coluna física do PDF na Venda: ``caminho_boleto`` / ``caminho_nf``.
                     field_set = 'caminho_boleto' if tipo == 'BOLETO' else 'caminho_nf'
                     dv = dados_extraidos.get('data_vencimento')
+                    # Preferir caminho relativo; fallback para URL Cloudinary se o path local estiver vazio.
+                    path_rel = (caminho_relativo or '').strip() or (getattr(documento, 'url_arquivo', None) or '').strip() or (getattr(documento, 'caminho_arquivo', None) or '').strip()
                     for vv in vendas_pedido:
                         caminho_antigo = None
                         if tipo == 'BOLETO':
@@ -1534,7 +1537,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                             vv.caminho_boleto = path_rel
                             if dv is not None:
                                 vv.data_vencimento = dv
-                            _log_detalhado(f"DEBUG: Vinculando boleto à venda {vv.id}")
+                            _log_detalhado(f"DEBUG: Vinculando boleto à venda {vv.id} (caminho_boleto={path_rel})")
                             if caminho_antigo and caminho_antigo != path_rel:
                                 _log_detalhado(f"DEBUG: Sobrescrevendo boleto antigo: {caminho_antigo} → {path_rel}")
                         else:
@@ -1554,8 +1557,9 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                             else:
                                 _vv_extra.caminho_nf = path_rel
                         _log_detalhado(
-                            f"DEBUG: 🔀 TRANSFERÊNCIA — boleto aplicado à filial extra "
-                            f"ID={_venda_extra.id} ({(_venda_extra.cliente.nome_cliente if _venda_extra.cliente else '?')})"
+                            f"DEBUG: 🔀 TRANSFERÊNCIA — documento aplicado à filial extra "
+                            f"ID={_venda_extra.id} ({(_venda_extra.cliente.nome_cliente if _venda_extra.cliente else '?')}) "
+                            f"via coluna {'caminho_boleto' if tipo == 'BOLETO' else 'caminho_nf'}={path_rel}"
                         )
                     
                     # COMMIT IMEDIATO após vínculo (FORÇAR VÍNCULO ÚNICO)

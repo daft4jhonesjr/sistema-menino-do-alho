@@ -525,10 +525,20 @@ def listar_vendas():
     _todos_caminhos = _todos_caminhos_boleto | _todos_caminhos_nf
     _docs_por_caminho: dict = {}
     if _todos_caminhos:
+        _lista_caminhos = list(_todos_caminhos)
         _docs_pre = query_documentos_tenant().filter(
-            Documento.caminho_arquivo.in_(list(_todos_caminhos))
+            or_(
+                Documento.caminho_arquivo.in_(_lista_caminhos),
+                Documento.url_arquivo.in_(_lista_caminhos),
+            )
         ).all()
-        _docs_por_caminho = {(d.caminho_arquivo or '').strip(): d for d in _docs_pre}
+        for _d in _docs_pre:
+            _ca = (_d.caminho_arquivo or '').strip()
+            _ua = (_d.url_arquivo or '').strip()
+            if _ca:
+                _docs_por_caminho[_ca] = _d
+            if _ua:
+                _docs_por_caminho[_ua] = _d
 
     for pedido in pedidos_agrupados:
         cb, cn = None, None
@@ -706,12 +716,13 @@ def listar_vendas():
         _p['is_transferencia'] = False
         _nf = (_p.get('nf') or '').strip()
         if _nf and _nf not in ('-', ''):
+            _nf_key = re.sub(r'\D', '', _nf) or _nf
             _dv = _p.get('data_venda')
             _dv_iso = (
                 _dv.date().isoformat() if hasattr(_dv, 'date')
                 else (str(_dv)[:10] if _dv else '')
             )
-            _nf_grupos.setdefault(f"{_nf}_{_dv_iso}", []).append(_p)
+            _nf_grupos.setdefault(f"{_nf_key}_{_dv_iso}", []).append(_p)
 
     houve_alteracao_transferencia = False
     for _grupo in _nf_grupos.values():
@@ -723,24 +734,55 @@ def listar_vendas():
                     return 0.0
             _menor = min(_grupo, key=_total_pedido)
             _menor['is_transferencia'] = True
-            _maior = max(_grupo, key=_total_pedido)
 
-            # Herança de boleto: se a matriz (maior valor) tem boleto vinculado e
-            # a transferência (menor valor) ainda não tem, copiar automaticamente.
-            _cb_maior = (_maior.get('caminho_boleto') or '').strip()
-            _cb_menor = (_menor.get('caminho_boleto') or '').strip()
-            if _cb_maior and not _cb_menor:
-                _dv_maior = next(
-                    (v.data_vencimento for v in _maior.get('vendas', []) if v.data_vencimento),
-                    None,
-                )
-                for _v_menor in _menor.get('vendas', []):
-                    if not (_v_menor.caminho_boleto or '').strip():
-                        _v_menor.caminho_boleto = _cb_maior
-                        if _dv_maior and not _v_menor.data_vencimento:
-                            _v_menor.data_vencimento = _dv_maior
+            # Herança de boleto: coluna real no banco é ``caminho_boleto``.
+            # Lê o caminho bruto das vendas (não só o dict de exibição) e
+            # propaga para TODOS os pedidos do grupo que ainda não têm arquivo.
+            def _caminho_bruto(p):
+                for v in p.get('vendas', []):
+                    cb = (getattr(v, 'caminho_boleto', None) or '').strip()
+                    if cb:
+                        return cb
+                return (p.get('caminho_boleto') or '').strip()
+
+            _fonte = max(
+                (_p for _p in _grupo if _caminho_bruto(_p)),
+                key=_total_pedido,
+                default=None,
+            )
+            if not _fonte:
+                continue
+            _cb_fonte = _caminho_bruto(_fonte)
+            _dv_fonte = next(
+                (v.data_vencimento for v in _fonte.get('vendas', []) if v.data_vencimento),
+                None,
+            )
+            _fp_fonte = next(
+                (
+                    (getattr(v, 'forma_pagamento', None) or '').strip()
+                    for v in _fonte.get('vendas', [])
+                    if (getattr(v, 'forma_pagamento', None) or '').strip()
+                ),
+                None,
+            )
+            for _alvo in _grupo:
+                if _alvo is _fonte:
+                    continue
+                if _caminho_bruto(_alvo):
+                    continue
+                for _v_alvo in _alvo.get('vendas', []):
+                    if not (_v_alvo.caminho_boleto or '').strip():
+                        _v_alvo.caminho_boleto = _cb_fonte
+                        if _dv_fonte and not _v_alvo.data_vencimento:
+                            _v_alvo.data_vencimento = _dv_fonte
+                        if _fp_fonte and not (getattr(_v_alvo, 'forma_pagamento', None) or '').strip():
+                            _v_alvo.forma_pagamento = _fp_fonte
                         houve_alteracao_transferencia = True
-                _menor['caminho_boleto'] = _cb_maior  # sincroniza o dict p/ o template
+                _alvo['caminho_boleto'] = _cb_fonte
+                if _fonte.get('doc_boleto') and not _alvo.get('doc_boleto'):
+                    _alvo['doc_boleto'] = _fonte.get('doc_boleto')
+                if _dv_fonte and not _alvo.get('data_vencimento'):
+                    _alvo['data_vencimento'] = _dv_fonte
 
     # Auto-healing: persiste a herança de boleto nas transferências.
     # É o único write aceito nesta rota GET — acontece só quando detecta
@@ -2725,9 +2767,29 @@ def api_pedidos():
 def sincronizar_transferencias():
     """Copia boleto da matriz para transferências (mesma NF + mesma data).
 
-    Agrupa pedidos lógicos por NF+data; em grupos de 2–3, se algum tem
-    ``caminho_boleto`` e outros não, herda arquivo, vencimento e situação.
+    Coluna física do arquivo: ``Venda.caminho_boleto`` (não existe
+    ``arquivo_boleto``). Também considera Documentos ligados por
+    ``venda_id`` / ``caminho_arquivo`` / ``url_arquivo`` como fonte.
     """
+    def _nf_chave(nf):
+        s = (nf or '').strip()
+        if not s or s == '-':
+            return ''
+        digits = re.sub(r'\D', '', s)
+        return digits if digits else s
+
+    def _data_iso(dv):
+        if not dv:
+            return ''
+        if hasattr(dv, 'date'):
+            try:
+                return dv.date().isoformat()
+            except Exception:
+                pass
+        if hasattr(dv, 'isoformat'):
+            return dv.isoformat()
+        return str(dv)[:10]
+
     vendas = (
         query_tenant(Venda)
         .options(joinedload(Venda.cliente))
@@ -2738,26 +2800,78 @@ def sincronizar_transferencias():
         )
         .all()
     )
+    if not vendas:
+        return jsonify({
+            'ok': True,
+            'atualizados': 0,
+            'grupos': 0,
+            'mensagem': 'Nenhuma venda com NF encontrada.',
+        })
+
+    venda_ids = [v.id for v in vendas]
+    caminhos_existentes = [
+        (v.caminho_boleto or '').strip()
+        for v in vendas
+        if (v.caminho_boleto or '').strip()
+    ]
+
+    docs_boleto = []
+    if venda_ids or caminhos_existentes:
+        filtros_doc = [Documento.tipo == 'BOLETO']
+        or_parts = []
+        if venda_ids:
+            or_parts.append(Documento.venda_id.in_(venda_ids))
+        if caminhos_existentes:
+            or_parts.append(Documento.caminho_arquivo.in_(caminhos_existentes))
+            or_parts.append(Documento.url_arquivo.in_(caminhos_existentes))
+        if or_parts:
+            filtros_doc.append(or_(*or_parts))
+            docs_boleto = query_documentos_tenant().filter(*filtros_doc).all()
+
+    docs_por_venda_id: dict = {}
+    path_para_doc: dict = {}
+    for doc in docs_boleto:
+        if doc.venda_id:
+            docs_por_venda_id.setdefault(doc.venda_id, []).append(doc)
+        for p in ((doc.caminho_arquivo or '').strip(), (doc.url_arquivo or '').strip()):
+            if p:
+                path_para_doc[p] = doc
+
+    def _path_efetivo_venda(v):
+        """Retorna o caminho/URL do boleto na coluna correta ou via Documento."""
+        cb = (v.caminho_boleto or '').strip()
+        if cb:
+            return cb
+        for doc in docs_por_venda_id.get(v.id, []):
+            path = (doc.caminho_arquivo or '').strip() or (doc.url_arquivo or '').strip()
+            if path:
+                return path
+        return ''
 
     # 1) Agrega itens em pedidos lógicos (cliente + NF + data).
     pedidos: dict = {}
     for v in vendas:
-        nf = (v.nf or '').strip()
-        if not nf or nf == '-':
+        nf_key = _nf_chave(v.nf)
+        if not nf_key:
             continue
-        dv = v.data_venda.date() if hasattr(v.data_venda, 'date') else v.data_venda
-        if not dv:
+        dv_iso = _data_iso(v.data_venda)
+        if not dv_iso:
             continue
         cnpj = ((v.cliente.cnpj if v.cliente else None) or '').strip()
         is_cf = cnpj in ('0', '00000000000000', '')
         if is_cf:
             avulso = str(getattr(v, 'cliente_avulso', '') or '').strip().upper()
-            pkey = (v.cliente_id, nf, dv, avulso)
+            pkey = (v.cliente_id, nf_key, dv_iso, avulso)
         else:
-            pkey = (v.cliente_id, nf, dv)
+            pkey = (v.cliente_id, nf_key, dv_iso)
 
         if pkey not in pedidos:
-            pedidos[pkey] = {'nf': nf, 'data': dv, 'vendas': [], 'total': 0.0}
+            pedidos[pkey] = {
+                'nf_key': nf_key,
+                'data': dv_iso,
+                'vendas': [],
+                'total': 0.0,
+            }
         pedidos[pkey]['vendas'].append(v)
         try:
             pedidos[pkey]['total'] += float(v.calcular_total() or 0)
@@ -2767,7 +2881,7 @@ def sincronizar_transferencias():
     # 2) Agrupa pedidos pela chave composta NF + data.
     grupos: dict = {}
     for p in pedidos.values():
-        grupos.setdefault(f"{p['nf']}_{p['data']}", []).append(p)
+        grupos.setdefault(f"{p['nf_key']}_{p['data']}", []).append(p)
 
     atualizados = 0
     grupos_sincronizados = 0
@@ -2779,7 +2893,7 @@ def sincronizar_transferencias():
         com_boleto = []
         sem_boleto = []
         for p in grupo:
-            tem = any((vv.caminho_boleto or '').strip() for vv in p['vendas'])
+            tem = any(_path_efetivo_venda(vv) for vv in p['vendas'])
             (com_boleto if tem else sem_boleto).append(p)
 
         if not com_boleto or not sem_boleto:
@@ -2788,26 +2902,58 @@ def sincronizar_transferencias():
         # Matriz = pedido com boleto de maior valor.
         matriz = max(com_boleto, key=lambda p: p['total'])
         fonte = next(
-            (vv for vv in matriz['vendas'] if (vv.caminho_boleto or '').strip()),
+            (vv for vv in matriz['vendas'] if _path_efetivo_venda(vv)),
             None,
         )
         if not fonte:
             continue
 
-        cb = (fonte.caminho_boleto or '').strip()
+        cb = _path_efetivo_venda(fonte)
+        if not cb:
+            continue
+
+        # Preferir caminho_arquivo do Documento (estável) quando disponível.
+        doc_fonte = path_para_doc.get(cb)
+        if not doc_fonte:
+            for vv in matriz['vendas']:
+                docs = docs_por_venda_id.get(vv.id) or []
+                if docs:
+                    doc_fonte = docs[0]
+                    break
+        if doc_fonte:
+            cb = (
+                (doc_fonte.caminho_arquivo or '').strip()
+                or (doc_fonte.url_arquivo or '').strip()
+                or cb
+            )
+
         dvenc = fonte.data_vencimento
+        if not dvenc and doc_fonte is not None:
+            dvenc = getattr(doc_fonte, 'data_vencimento', None)
         situ = (fonte.situacao or '').strip() or None
+        forma = (getattr(fonte, 'forma_pagamento', None) or '').strip() or None
         grupo_teve_copia = False
+
+        # Auto-heal na própria matriz: garante caminho_boleto preenchido.
+        for vv in matriz['vendas']:
+            if not (vv.caminho_boleto or '').strip():
+                vv.caminho_boleto = cb
+                if dvenc and not vv.data_vencimento:
+                    vv.data_vencimento = dvenc
+                atualizados += 1
+                grupo_teve_copia = True
 
         for p in sem_boleto:
             for vv in p['vendas']:
-                if (vv.caminho_boleto or '').strip():
+                if (vv.caminho_boleto or '').strip() == cb:
                     continue
                 vv.caminho_boleto = cb
                 if dvenc and not vv.data_vencimento:
                     vv.data_vencimento = dvenc
-                if situ:
+                if situ and not (vv.situacao or '').strip():
                     vv.situacao = situ
+                if forma and not (getattr(vv, 'forma_pagamento', None) or '').strip():
+                    vv.forma_pagamento = forma
                 atualizados += 1
                 grupo_teve_copia = True
 

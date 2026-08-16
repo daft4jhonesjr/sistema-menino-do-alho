@@ -980,7 +980,9 @@ def vincular_documento_venda(id):
         return _resposta_sem_permissao()
     try:
         documento.venda_id = venda_id
-        path = documento.caminho_arquivo
+        path = (documento.caminho_arquivo or '').strip() or (documento.url_arquivo or '').strip()
+        if not path:
+            raise ValueError('Documento sem caminho_arquivo/url_arquivo para vincular.')
         vendas_pedido = _vendas_do_pedido(venda)
         is_boleto = (documento.tipo or '').upper() == 'BOLETO'
 
@@ -1002,6 +1004,53 @@ def vincular_documento_venda(id):
                     vv.data_vencimento = data_venc_boleto
             else:
                 vv.caminho_nf = path
+
+        # TRANSFERÊNCIA: mesma NF + mesma data → replica o arquivo em até 3 pedidos.
+        # Coluna física do PDF: ``caminho_boleto`` / ``caminho_nf``.
+        nf_venda = (venda.nf or '').strip()
+        dv_venda = venda.data_venda.date() if hasattr(venda.data_venda, 'date') else venda.data_venda
+        if nf_venda and nf_venda != '-' and dv_venda is not None:
+            nf_digits = re.sub(r'\D', '', nf_venda) or nf_venda
+            candidatas = (
+                query_tenant(Venda)
+                .options(joinedload(Venda.cliente))
+                .filter(
+                    Venda.nf.isnot(None),
+                    Venda.nf != '',
+                    Venda.nf != '-',
+                    Venda.data_venda.isnot(None),
+                )
+                .all()
+            )
+            # Agrupa em pedidos lógicos e filtra mesma NF+data.
+            pedidos_grupo: dict = {}
+            for cv in candidatas:
+                nf_c = (cv.nf or '').strip()
+                nf_c_key = re.sub(r'\D', '', nf_c) or nf_c
+                if nf_c_key != nf_digits:
+                    continue
+                dv_c = cv.data_venda.date() if hasattr(cv.data_venda, 'date') else cv.data_venda
+                if dv_c != dv_venda:
+                    continue
+                cnpj_c = ((cv.cliente.cnpj if cv.cliente else None) or '').strip()
+                is_cf_c = cnpj_c in ('0', '00000000000000', '')
+                if is_cf_c:
+                    avulso_c = str(getattr(cv, 'cliente_avulso', '') or '').strip().upper()
+                    pk = (cv.cliente_id, nf_c_key, dv_c, avulso_c)
+                else:
+                    pk = (cv.cliente_id, nf_c_key, dv_c)
+                pedidos_grupo.setdefault(pk, []).append(cv)
+
+            if 1 < len(pedidos_grupo) <= 3:
+                for _itens in pedidos_grupo.values():
+                    for _vv in _itens:
+                        if is_boleto:
+                            _vv.caminho_boleto = path
+                            if data_venc_boleto:
+                                _vv.data_vencimento = data_venc_boleto
+                        else:
+                            _vv.caminho_nf = path
+
         db.session.commit()
         limpar_cache_dashboard()
     except Exception as e:
