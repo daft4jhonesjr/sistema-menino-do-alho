@@ -39,6 +39,8 @@ Estado atual:
     * ``dashboard_bp``   → /, /dashboard, /api/vendas_por_filtro,
                            /api/dashboard/detalhes/<filtro>,
                            /api/dashboard/documentos_pendentes/resumo,
+                           /api/pendencias/contador,
+                           /api/relatorios/rentabilidade-praca,
                            /api/cliente/ultimo_pagamento,
                            /api/empresa-frequente/<cliente>,
                            /api/cobrancas_pendentes,

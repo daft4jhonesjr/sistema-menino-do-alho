@@ -10,6 +10,8 @@ Rotas extraídas do legado ``app.py``:
 * ``GET  /api/pendencias/contador``                  — badge PWA (App Badging API)
 * ``GET  /api/cliente/ultimo_pagamento``             — autocomplete de forma de pagto
 * ``GET  /api/empresa-frequente/<cliente>``           — autocomplete de empresa faturadora
+* ``GET  /api/dashboard/radar_recompra``             — radar lazy
+* ``GET  /api/relatorios/rentabilidade-praca``       — auditoria por cidade/praça
 * ``GET  /api/cobrancas_pendentes``                  — push notification preflight
 * ``GET  /api/dashboard/detalhes_mes/<ano>/<mes>``   — drill-down do gráfico mensal
 * ``POST /api/frases/votar``                         — like/dislike da Frase do Dia
@@ -125,6 +127,112 @@ def _categoria_produto(nome_produto_bruto):
         return 'CAFÉ'
     palavras = nome.split()
     return palavras[0] if palavras else 'OUTROS'
+
+
+def _filtros_periodo_rentabilidade(periodo: str):
+    """Retorna lista de expressões SQLAlchemy para filtrar ``Venda.data_venda``."""
+    periodo = (periodo or 'ano').strip().lower()
+    hoje = get_hoje_brasil()
+    if periodo in ('mes', 'mes_atual'):
+        ini = hoje.replace(day=1)
+        return [Venda.data_venda >= ini, Venda.data_venda <= hoje], 'mes'
+    if periodo in ('3meses', 'ultimos_3_meses', '3m'):
+        ini = hoje - timedelta(days=90)
+        return [Venda.data_venda >= ini, Venda.data_venda <= hoje], '3meses'
+    if periodo in ('tudo', 'historico', 'all'):
+        return [], 'tudo'
+    # Padrão: ano ativo da sessão (mesmo critério do dashboard)
+    ano_ativo = session.get('ano_ativo', datetime.now().year)
+    return list(filtro_ano_data_venda(ano_ativo, Venda.data_venda)), 'ano'
+
+
+def calcular_rentabilidade_por_praca(periodo: str = 'ano') -> dict:
+    """Agrega vendas por cidade do cliente (praça) com preço médio e margem.
+
+    Usa agregação SQL (sem carregar vendas em Python). Clientes sem cidade
+    vão para ``NÃO INFORMADA``. Exclui operações ``PERDA``.
+    """
+    filtros_periodo, periodo_norm = _filtros_periodo_rentabilidade(periodo)
+    filtro_tenant = Venda.empresa_id == empresa_id_atual()
+    filtro_sem_perda = func.upper(func.coalesce(Venda.tipo_operacao, 'VENDA')) != 'PERDA'
+
+    cidade_norm = func.nullif(func.upper(func.trim(func.coalesce(Cliente.cidade, ''))), '')
+    cidade_grupo = func.coalesce(cidade_norm, 'NÃO INFORMADA')
+
+    faturamento_expr = Venda.preco_venda * Venda.quantidade_venda
+    lucro_expr = (Venda.preco_venda - Produto.preco_custo) * Venda.quantidade_venda
+    pedido_chave = func.concat(
+        Venda.cliente_id, '-',
+        func.coalesce(Venda.nf, ''), '-',
+        func.date(Venda.data_venda),
+    )
+
+    rows = (
+        db.session.query(
+            cidade_grupo.label('praca'),
+            func.count(func.distinct(pedido_chave)).label('total_pedidos'),
+            func.coalesce(func.sum(Venda.quantidade_venda), 0).label('volume_total'),
+            func.coalesce(func.sum(faturamento_expr), 0).label('faturamento_total'),
+            func.coalesce(func.sum(lucro_expr), 0).label('lucro_total'),
+        )
+        .select_from(Venda)
+        .join(Cliente, Venda.cliente_id == Cliente.id)
+        .join(Produto, Venda.produto_id == Produto.id)
+        .filter(filtro_tenant, filtro_sem_perda, *filtros_periodo)
+        .group_by(cidade_grupo)
+        .order_by(desc('lucro_total'))
+        .all()
+    )
+
+    pracas = []
+    tot_pedidos = 0
+    tot_volume = 0
+    tot_fat = 0.0
+    tot_lucro = 0.0
+
+    for row in rows:
+        volume = int(row.volume_total or 0)
+        faturamento = float(row.faturamento_total or 0)
+        lucro = float(row.lucro_total or 0)
+        pedidos = int(row.total_pedidos or 0)
+        preco_medio = (faturamento / volume) if volume > 0 else 0.0
+        margem = ((lucro / faturamento) * 100.0) if faturamento > 0 else 0.0
+
+        if margem >= 12:
+            margem_cls = 'text-emerald-400'
+        elif margem >= 8:
+            margem_cls = 'text-yellow-400'
+        else:
+            margem_cls = 'text-red-400'
+
+        pracas.append({
+            'praca': row.praca or 'NÃO INFORMADA',
+            'total_pedidos': pedidos,
+            'volume_total': volume,
+            'faturamento_total': faturamento,
+            'lucro_total': lucro,
+            'preco_medio': preco_medio,
+            'margem_real_media': margem,
+            'margem_cls': margem_cls,
+        })
+        tot_pedidos += pedidos
+        tot_volume += volume
+        tot_fat += faturamento
+        tot_lucro += lucro
+
+    return {
+        'ok': True,
+        'periodo': periodo_norm,
+        'pracas': pracas,
+        'totais': {
+            'total_pedidos': tot_pedidos,
+            'volume_total': tot_volume,
+            'faturamento_total': tot_fat,
+            'lucro_total': tot_lucro,
+            'preco_medio': (tot_fat / tot_volume) if tot_volume > 0 else 0.0,
+            'margem_real_media': ((tot_lucro / tot_fat) * 100.0) if tot_fat > 0 else 0.0,
+        },
+    }
 
 
 LIMITE_DIAS_RADAR_INATIVO = 60
@@ -1135,6 +1243,24 @@ def api_radar_recompra():
             'radar_inativos': [],
             'limite_dias_inativo': LIMITE_DIAS_RADAR_INATIVO,
         }), 200
+
+
+@dashboard_bp.route('/api/relatorios/rentabilidade-praca')
+def api_rentabilidade_praca():
+    """Auditoria de preço médio e margem real por praça/cidade."""
+    periodo = (request.args.get('periodo') or 'ano').strip().lower()
+    try:
+        payload = calcular_rentabilidade_por_praca(periodo)
+        return jsonify(payload)
+    except Exception:
+        current_app.logger.exception('Falha ao calcular rentabilidade por praça')
+        return jsonify({
+            'ok': False,
+            'mensagem': 'Não foi possível calcular a rentabilidade por praça.',
+            'pracas': [],
+            'totais': {},
+            'periodo': periodo,
+        }), 500
 
 
 @dashboard_bp.route('/api/cobrancas_pendentes')
