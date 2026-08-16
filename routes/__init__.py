@@ -14,7 +14,8 @@ Estado atual:
                            /produtos/editar, /produtos/excluir, /produtos/importar,
                            /produto/<id>/devolver, /produtos/atualizar_tipo_batch,
                            /bulk_delete_produtos, /fornecedores/*, /tipos/*,
-                           /api/produtos/<id>/fotos, /api/produto/<id>
+                           /api/produtos/<id>/fotos, /api/produto/<id>,
+                           /api/estoque/fifo
     * ``vendas_bp``      → /vendas, /vendas/novo, /vendas/editar, /vendas/excluir,
                            /vendas/importar, /vendas/exportar_relatorio,
                            /vendas/<id>/atualizar_situacao_rapida,

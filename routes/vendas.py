@@ -75,6 +75,7 @@ from services.vendas_services import (
     _produto_com_lock,
     _resincronizar_pagamento_venda,
 )
+from services.estoque_fifo import alocar_baixa_fifo
 from services.csv_utils import (
     _msg_linha, _strip_quotes,
     _normalizar_nome_busca, _parse_preco, _parse_quantidade,
@@ -1697,18 +1698,13 @@ def nova_venda():
             flash(msg, 'error')
             return _render_form()
 
-        produto = _produto_com_lock(produto_id)
+        produto = query_tenant(Produto).filter_by(id=produto_id).first()
         if not produto:
             msg = 'Produto não encontrado.'
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 404
             flash(msg, 'error')
             return redirect(url_for('vendas.listar_vendas'))
-        if produto.estoque_atual < quantidade_venda:
-            msg = f'Estoque insuficiente! Disponível: {produto.estoque_atual}'
-            if _is_ajax():
-                return jsonify(ok=False, mensagem=msg), 400
-            return _render_form()
 
         cliente_id_raw = request.form.get('cliente_id')
         data_venda_raw = request.form.get('data_venda')
@@ -1762,35 +1758,40 @@ def nova_venda():
             '1', 'true', 'sim', 'yes', 'on',
         )
         status_entrega = 'ENTREGUE' if ja_entregue else 'PENDENTE'
-        venda = Venda(
-            cliente_id=cliente_id,
-            cliente_avulso=cliente_avulso,
-            produto_id=produto_id,
-            nf=request.form.get('nf', ''),
-            preco_venda=preco_venda,
-            quantidade_venda=quantidade_venda,
-            data_venda=date.fromisoformat(data_venda_raw) if data_venda_raw else date.today(),
-            empresa_faturadora=empresa_faturadora,
-            situacao=situacao,
-            forma_pagamento=forma_pagamento,
-            tipo_operacao=tipo_operacao,
-            lucro_percentual=lucro_percentual,
-            status_entrega=status_entrega,
-            empresa_id=empresa_id_atual(),
-        )
-        db.session.add(venda)
-        novo_estoque = int(produto.estoque_atual) - int(quantidade_venda)
-        if novo_estoque < 0:
-            db.session.rollback()
-            msg = f'Estoque insuficiente! Disponível: {produto.estoque_atual}'
+        data_venda = date.fromisoformat(data_venda_raw) if data_venda_raw else date.today()
+        nf_val = request.form.get('nf', '')
+
+        try:
+            alocacoes = alocar_baixa_fifo(produto, quantidade_venda)
+        except ValueError as e_fifo:
+            msg = str(e_fifo)
             if _is_ajax():
                 return jsonify(ok=False, mensagem=msg), 400
             flash(msg, 'error')
-            return redirect(url_for('vendas.listar_vendas'))
-        produto.estoque_atual = novo_estoque
+            return _render_form()
+
+        venda = None
+        for lote, qtd_lote in alocacoes:
+            venda = Venda(
+                cliente_id=cliente_id,
+                cliente_avulso=cliente_avulso,
+                produto_id=lote.id,
+                nf=nf_val,
+                preco_venda=preco_venda,
+                quantidade_venda=qtd_lote,
+                data_venda=data_venda,
+                empresa_faturadora=empresa_faturadora,
+                situacao=situacao,
+                forma_pagamento=forma_pagamento,
+                tipo_operacao=tipo_operacao,
+                lucro_percentual=lucro_percentual,
+                status_entrega=status_entrega,
+                empresa_id=empresa_id_atual(),
+            )
+            db.session.add(venda)
         db.session.flush()
         # --- INTEGRAÇÃO COM CAIXA (PILOTO AUTOMÁTICO V4) ---
-        if tipo_operacao != 'PERDA' and str(venda.situacao or '').strip().upper() in ('PAGO', 'CONCLUÍDO'):
+        if venda and tipo_operacao != 'PERDA' and str(venda.situacao or '').strip().upper() in ('PAGO', 'CONCLUÍDO'):
             lancamentos_existentes = query_tenant(LancamentoCaixa).filter(
                 LancamentoCaixa.descricao.like(f"Venda #{venda.id} -%")
             ).all()
@@ -1915,14 +1916,9 @@ def processar_carrinho():
             if not empresa_faturadora or empresa_faturadora not in ('DESTAK', 'PATY', 'NENHUM', 'ARMAZEM LACERDA'):
                 return jsonify(ok=False, mensagem='Empresa faturadora inválida.'), 400
 
-            produto = _produto_com_lock(produto_id)
+            produto = query_tenant(Produto).filter_by(id=produto_id).first()
             if not produto:
                 return jsonify(ok=False, mensagem=f'Produto ID {produto_id} não encontrado.'), 400
-            if produto.estoque_atual < quantidade_venda:
-                return jsonify(
-                    ok=False,
-                    mensagem=f'Estoque insuficiente para "{produto.nome_produto}". Disponível: {produto.estoque_atual}.',
-                ), 400
 
             cliente = query_tenant(Cliente).filter_by(id=cliente_id).first()
             if not cliente:
@@ -1945,28 +1941,31 @@ def processar_carrinho():
             )
             status_entrega = 'ENTREGUE' if ja_entregue else 'PENDENTE'
 
-            venda = Venda(
-                cliente_id=cliente_id,
-                cliente_avulso=cliente_avulso,
-                produto_id=produto_id,
-                nf=nf,
-                preco_venda=preco_venda,
-                quantidade_venda=quantidade_venda,
-                data_venda=data_venda,
-                empresa_faturadora=empresa_faturadora,
-                situacao=situacao,
-                forma_pagamento=forma_pagamento,
-                tipo_operacao=tipo_operacao,
-                lucro_percentual=lucro_percentual,
-                status_entrega=status_entrega,
-                empresa_id=empresa_id_atual(),
-            )
-            db.session.add(venda)
-            novo_estoque = int(produto.estoque_atual) - int(quantidade_venda)
-            if novo_estoque < 0:
-                raise ValueError(f'Estoque insuficiente para "{produto.nome_produto}".')
-            produto.estoque_atual = novo_estoque
-            processados += 1
+            # Baixa FIFO: consome lotes mais antigos do mesmo SKU.
+            try:
+                alocacoes = alocar_baixa_fifo(produto, quantidade_venda)
+            except ValueError as e_fifo:
+                return jsonify(ok=False, mensagem=str(e_fifo)), 400
+
+            for lote, qtd_lote in alocacoes:
+                venda = Venda(
+                    cliente_id=cliente_id,
+                    cliente_avulso=cliente_avulso,
+                    produto_id=lote.id,
+                    nf=nf,
+                    preco_venda=preco_venda,
+                    quantidade_venda=qtd_lote,
+                    data_venda=data_venda,
+                    empresa_faturadora=empresa_faturadora,
+                    situacao=situacao,
+                    forma_pagamento=forma_pagamento,
+                    tipo_operacao=tipo_operacao,
+                    lucro_percentual=lucro_percentual,
+                    status_entrega=status_entrega,
+                    empresa_id=empresa_id_atual(),
+                )
+                db.session.add(venda)
+                processados += 1
 
         db.session.commit()
         limpar_cache_dashboard()
@@ -2010,7 +2009,7 @@ def venda_adicionar_item():
     if not _usuario_pode_gerenciar_venda(venda_existente):
         return _resposta_sem_permissao()
     _assumir_ownership_venda_orfa(venda_existente)
-    produto = _produto_com_lock(produto_id)
+    produto = query_tenant(Produto).filter_by(id=produto_id).first()
     if not produto:
         flash('Produto não encontrado.', 'error')
         return redirect(url_for('vendas.listar_vendas'))
@@ -2025,31 +2024,28 @@ def venda_adicionar_item():
     if tipo_operacao == 'PERDA':
         preco_venda = 0
 
-    if produto.estoque_atual < quantidade_venda:
-        flash(f'Estoque insuficiente! Disponível: {produto.estoque_atual}', 'error')
+    try:
+        alocacoes = alocar_baixa_fifo(produto, quantidade_venda)
+    except ValueError as e_fifo:
+        flash(str(e_fifo), 'error')
         return redirect(url_for('vendas.listar_vendas'))
 
-    novo_estoque = int(produto.estoque_atual) - int(quantidade_venda)
-    if novo_estoque < 0:
-        flash(f'Estoque insuficiente! Disponível: {produto.estoque_atual}', 'error')
-        return redirect(url_for('vendas.listar_vendas'))
-    produto.estoque_atual = novo_estoque
-
-    nova_venda_obj = Venda(
-        cliente_id=venda_existente.cliente_id,
-        cliente_avulso=venda_existente.cliente_avulso,
-        produto_id=produto_id,
-        nf=venda_existente.nf or '',
-        preco_venda=Decimal(str(preco_venda)),
-        quantidade_venda=quantidade_venda,
-        data_venda=venda_existente.data_venda,
-        empresa_faturadora=venda_existente.empresa_faturadora,
-        situacao='PERDA' if tipo_operacao == 'PERDA' else venda_existente.situacao,
-        forma_pagamento=None if tipo_operacao == 'PERDA' else venda_existente.forma_pagamento,
-        tipo_operacao=tipo_operacao,
-        empresa_id=empresa_id_atual(),
-    )
-    db.session.add(nova_venda_obj)
+    for lote, qtd_lote in alocacoes:
+        nova_venda_obj = Venda(
+            cliente_id=venda_existente.cliente_id,
+            cliente_avulso=venda_existente.cliente_avulso,
+            produto_id=lote.id,
+            nf=venda_existente.nf or '',
+            preco_venda=Decimal(str(preco_venda)),
+            quantidade_venda=qtd_lote,
+            data_venda=venda_existente.data_venda,
+            empresa_faturadora=venda_existente.empresa_faturadora,
+            situacao='PERDA' if tipo_operacao == 'PERDA' else venda_existente.situacao,
+            forma_pagamento=None if tipo_operacao == 'PERDA' else venda_existente.forma_pagamento,
+            tipo_operacao=tipo_operacao,
+            empresa_id=empresa_id_atual(),
+        )
+        db.session.add(nova_venda_obj)
     db.session.commit()
     limpar_cache_dashboard()
     flash('Produto adicionado ao pedido com sucesso!', 'success')

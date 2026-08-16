@@ -29,6 +29,7 @@ Produtos (CRUD)
 API
     * GET  /api/produtos/<id>/fotos               get_fotos_produto
     * GET  /api/produto/<id>                      api_produto
+    * GET  /api/estoque/fifo                      api_estoque_fifo
 
 Endpoints novos: prefixo ``produtos.`` (ex.: ``produtos.listar_produtos``).
 
@@ -73,6 +74,7 @@ from services.files_utils import (
     _cloudinary_thumb_url,
 )
 from services.vendas_services import _produto_com_lock
+from services.estoque_fifo import listar_lotes_fifo
 from services.csv_utils import (
     _msg_linha, _strip_quotes, _normalizar_nome_coluna,
     _normalizar_nome_busca, _parse_preco, _parse_quantidade,
@@ -566,6 +568,13 @@ def listar_produtos():
     # Mapeia id -> config_atributos normalizado para o JS do formulário dinâmico.
     tipos_config_map = {str(t.id): t.get_config() for t in tipos_produto}
 
+    # Radar FIFO: lotes com saldo, do mais antigo ao mais novo.
+    try:
+        lotes_fifo = listar_lotes_fifo()
+    except Exception as e_fifo:
+        current_app.logger.warning(f'[produtos] Falha ao montar radar FIFO: {e_fifo}')
+        lotes_fifo = []
+
     return render_template(
         'produtos/listar.html',
         produtos_agrupados=produtos_agrupados,
@@ -584,7 +593,19 @@ def listar_produtos():
         lucro_realizado_por_produto=lucro_realizado_por_produto,
         lucro_medio_por_produto=lucro_medio_por_produto,
         margem_percentual_por_produto=margem_percentual_por_produto,
+        lotes_fifo=lotes_fifo,
     )
+
+
+@produtos_bp.route('/api/estoque/fifo')
+def api_estoque_fifo():
+    """JSON do radar FIFO: lotes com saldo > 0 ordenados do mais antigo ao mais novo."""
+    try:
+        lotes = listar_lotes_fifo()
+    except Exception as e:
+        current_app.logger.error(f'[api_estoque_fifo] {e}', exc_info=True)
+        return jsonify(ok=False, mensagem='Falha ao calcular idade do estoque.', lotes=[]), 500
+    return jsonify(ok=True, lotes=lotes, total=len(lotes))
 
 
 @produtos_bp.route('/produtos/exportar_relatorio', methods=['POST'])

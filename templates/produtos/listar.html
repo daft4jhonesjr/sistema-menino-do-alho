@@ -75,6 +75,105 @@
     </div>
 </div>
 
+{# ── Radar FIFO: idade dos lotes com saldo ───────────────────────────── #}
+{% set lotes_fifo = lotes_fifo or [] %}
+<section class="mb-6" id="radar-fifo-estoque">
+    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+        <button type="button"
+                id="btn-toggle-radar-fifo"
+                class="w-full flex items-center justify-between gap-3 px-4 sm:px-6 py-4 text-left hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors"
+                aria-expanded="true"
+                aria-controls="painel-radar-fifo">
+            <div class="min-w-0">
+                <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <span aria-hidden="true">📡</span>
+                    Idade do Estoque (Radar FIFO)
+                    {% if lotes_fifo %}
+                    <span class="text-xs font-semibold normal-case tracking-normal px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-600 dark:text-cyan-300 border border-cyan-500/20">{{ lotes_fifo|length }} lote(s)</span>
+                    {% endif %}
+                </h3>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    Priorize a saída dos lotes mais antigos. Fresco ≤20d · Atenção 21–40d · Crítico &gt;40d.
+                </p>
+            </div>
+            <svg id="icone-toggle-radar-fifo" class="w-5 h-5 text-gray-400 flex-shrink-0 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+        </button>
+        <div id="painel-radar-fifo" class="border-t border-gray-200 dark:border-gray-700">
+            {% if lotes_fifo %}
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm text-left">
+                    <thead class="bg-gray-50 dark:bg-gray-900/60 text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                        <tr>
+                            <th class="px-4 py-3 whitespace-nowrap">Lote / Data de Entrada</th>
+                            <th class="px-4 py-3 whitespace-nowrap">Produto</th>
+                            <th class="px-4 py-3 text-right whitespace-nowrap">Dias no Galpão</th>
+                            <th class="px-4 py-3 text-right whitespace-nowrap">Saldo Atual</th>
+                            <th class="px-4 py-3 whitespace-nowrap">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                        {% for lote in lotes_fifo %}
+                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+                            <td class="px-4 py-3 whitespace-nowrap text-gray-700 dark:text-gray-200 font-mono text-xs">
+                                #{{ lote.id }} · {{ lote.data_chegada_fmt }}
+                            </td>
+                            <td class="px-4 py-3 text-gray-900 dark:text-gray-100 font-medium">
+                                {{ lote.nome_produto }}
+                                {% if lote.fornecedor %}
+                                <span class="block text-[11px] text-gray-400 font-normal">{{ lote.fornecedor }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-4 py-3 text-right whitespace-nowrap font-semibold {{ lote.status_cls }}">
+                                {{ lote.dias_no_galpao }}d
+                            </td>
+                            <td class="px-4 py-3 text-right whitespace-nowrap text-gray-900 dark:text-gray-100 font-bold">
+                                {{ lote.estoque_atual }}
+                            </td>
+                            <td class="px-4 py-3 whitespace-nowrap">
+                                <span class="{{ lote.status_cls }}">{{ lote.status }}</span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="px-6 py-8 text-center text-sm text-gray-500 dark:text-gray-400 italic">
+                Nenhum lote com saldo positivo no momento.
+            </p>
+            {% endif %}
+        </div>
+    </div>
+</section>
+<script>
+(function() {
+    var btn = document.getElementById('btn-toggle-radar-fifo');
+    var painel = document.getElementById('painel-radar-fifo');
+    var icone = document.getElementById('icone-toggle-radar-fifo');
+    if (!btn || !painel) return;
+    var key = 'radar_fifo_minimizado';
+    function aplicar(minimizado) {
+        if (minimizado) {
+            painel.classList.add('hidden');
+            btn.setAttribute('aria-expanded', 'false');
+            if (icone) icone.classList.add('-rotate-90');
+        } else {
+            painel.classList.remove('hidden');
+            btn.setAttribute('aria-expanded', 'true');
+            if (icone) icone.classList.remove('-rotate-90');
+        }
+    }
+    try { aplicar(localStorage.getItem(key) === '1'); } catch (e) {}
+    btn.addEventListener('click', function() {
+        var minimizado = !painel.classList.contains('hidden');
+        aplicar(minimizado);
+        try { localStorage.setItem(key, minimizado ? '1' : '0'); } catch (e2) {}
+    });
+})();
+</script>
+
 <div id="modal-relatorio-produtos-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
     <div class="fixed inset-0 bg-black/50" id="modal-relatorio-produtos-overlay"></div>
     <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 z-50" onclick="event.stopPropagation()">
