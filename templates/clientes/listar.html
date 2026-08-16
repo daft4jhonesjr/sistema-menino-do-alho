@@ -138,12 +138,13 @@
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ cliente.cidade or '-' }}{% if cliente.cidade and cliente.estado %} — {{ cliente.estado }}{% elif cliente.estado %}{{ cliente.estado }}{% endif %}</td>
                     <td class="px-6 py-4">
                         {% if cliente.endereco %}
-                        <a href="https://www.google.com/maps/search/?api=1&query={{ cliente.endereco | urlencode }}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 font-medium transition-colors">
-                            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-                            Ver no Mapa
+                        <a href="https://www.google.com/maps/search/?api=1&query={{ cliente.endereco | urlencode }}" target="_blank" rel="noopener noreferrer" title="Ver no Mapa" class="inline-flex items-center justify-center p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5" aria-hidden="true">
+                                <path fill-rule="evenodd" d="M11.54 22.351l.07.04.028.016a.76.76 0 00.723 0l.028-.015.071-.041a16.975 16.975 0 001.144-.742 19.58 19.58 0 002.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 00-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 002.682 2.282 16.975 16.975 0 001.145.742zM12 13.5a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" />
+                            </svg>
                         </a>
                         {% else %}
-                        <span class="text-gray-400 dark:text-gray-500 text-sm">Sem endereço</span>
+                        <span class="text-gray-400 dark:text-gray-500 text-sm">-</span>
                         {% endif %}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -250,13 +251,14 @@
                 {% endif %}
 
                 {% if cliente.endereco %}
-                <a href="https://www.google.com/maps/search/?api=1&query={{ cliente.endereco | urlencode }}" target="_blank" rel="noopener noreferrer"
-                   class="inline-flex items-center gap-1 text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 font-medium transition-colors mt-1">
-                    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-                    Ver no Mapa
+                <a href="https://www.google.com/maps/search/?api=1&query={{ cliente.endereco | urlencode }}" target="_blank" rel="noopener noreferrer" title="Ver no Mapa"
+                   class="inline-flex items-center justify-center p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors mt-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5" aria-hidden="true">
+                        <path fill-rule="evenodd" d="M11.54 22.351l.07.04.028.016a.76.76 0 00.723 0l.028-.015.071-.041a16.975 16.975 0 001.144-.742 19.58 19.58 0 002.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 00-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 002.682 2.282 16.975 16.975 0 001.145.742zM12 13.5a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" />
+                    </svg>
                 </a>
                 {% else %}
-                <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">Sem endereço</p>
+                <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">-</p>
                 {% endif %}
             </div>
 
@@ -361,7 +363,8 @@
                 </div>
                 <div class="mb-5">
                     <label for="modal-cnpj" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">CNPJ</label>
-                    <input type="text" id="modal-cnpj" name="cnpj" placeholder="00.000.000/0000-00" maxlength="18" class="input-cnpj w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
+                    <input type="text" id="modal-cnpj" name="cnpj" placeholder="00.000.000/0000-00" maxlength="18" class="input-cnpj w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100" data-cnpj-autofill="novo">
+                    <p id="modal-cnpj-status" class="mt-1 text-xs text-gray-400 dark:text-gray-500 hidden" aria-live="polite"></p>
                 </div>
                 <div class="mb-5">
                     <div class="flex gap-3">
@@ -515,7 +518,8 @@
                 </div>
                 <div class="mb-5">
                     <label for="edit_cnpj" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">CNPJ</label>
-                    <input type="text" id="edit_cnpj" name="cnpj" placeholder="00.000.000/0000-00" maxlength="18" class="input-cnpj w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
+                    <input type="text" id="edit_cnpj" name="cnpj" placeholder="00.000.000/0000-00" maxlength="18" class="input-cnpj w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100" data-cnpj-autofill="edit">
+                    <p id="edit_cnpj-status" class="mt-1 text-xs text-gray-400 dark:text-gray-500 hidden" aria-live="polite"></p>
                 </div>
                 <div class="mb-5">
                     <div class="flex gap-3">
@@ -820,6 +824,9 @@ window.padronizarClientesMaiusculo = function() {
         document.getElementById('edit_cidade').value = cidade;
         document.getElementById('edit_estado').value = estado;
         document.getElementById('edit_endereco').value = endereco;
+        if (typeof window.marcarCnpjClienteJaConsultado === 'function') {
+            window.marcarCnpjClienteJaConsultado('edit', cnpj);
+        }
         wrap.classList.remove('hidden');
         travarFundo();
         if (typeof lucide !== 'undefined') lucide.createIcons();
@@ -1186,6 +1193,152 @@ document.addEventListener('DOMContentLoaded', function() {
             e.target.value = v;
         }
     });
+})();
+</script>
+
+<script>
+/* ── Autofill de cliente via Brasil API (CNPJ) ─────────────────────── */
+(function() {
+    var FORM_MAP = {
+        novo: {
+            cnpj: 'modal-cnpj',
+            status: 'modal-cnpj-status',
+            nome: 'modal-nome_cliente',
+            razao: 'modal-razao_social',
+            endereco: 'modal-endereco',
+            cidade: 'modal-cidade',
+            estado: 'modal-estado'
+        },
+        edit: {
+            cnpj: 'edit_cnpj',
+            status: 'edit_cnpj-status',
+            nome: 'edit_nome',
+            razao: 'edit_razao',
+            endereco: 'edit_endereco',
+            cidade: 'edit_cidade',
+            estado: 'edit_estado'
+        }
+    };
+    var ultimoCnpjBuscado = {};
+    var buscando = {};
+
+    function el(id) { return id ? document.getElementById(id) : null; }
+
+    function setStatus(statusEl, msg, tipo) {
+        if (!statusEl) return;
+        if (!msg) {
+            statusEl.textContent = '';
+            statusEl.classList.add('hidden');
+            statusEl.classList.remove('text-emerald-600', 'text-red-500', 'text-amber-600', 'dark:text-emerald-400', 'dark:text-red-400', 'dark:text-amber-400');
+            return;
+        }
+        statusEl.textContent = msg;
+        statusEl.classList.remove('hidden', 'text-emerald-600', 'text-red-500', 'text-amber-600', 'dark:text-emerald-400', 'dark:text-red-400', 'dark:text-amber-400');
+        if (tipo === 'ok') statusEl.classList.add('text-emerald-600', 'dark:text-emerald-400');
+        else if (tipo === 'erro') statusEl.classList.add('text-red-500', 'dark:text-red-400');
+        else statusEl.classList.add('text-amber-600', 'dark:text-amber-400');
+    }
+
+    function setBuscandoVisual(cnpjInput, on) {
+        if (!cnpjInput) return;
+        if (on) {
+            cnpjInput.classList.add('border-amber-400', 'ring-1', 'ring-amber-300');
+            cnpjInput.classList.remove('border-emerald-500', 'border-red-400');
+        } else {
+            cnpjInput.classList.remove('border-amber-400', 'ring-1', 'ring-amber-300', 'border-emerald-500', 'border-red-400');
+        }
+    }
+
+    function preencherCampo(input, valor) {
+        if (!input) return;
+        var txt = (valor == null ? '' : String(valor)).trim();
+        if (!txt) return;
+        input.value = txt.toUpperCase();
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    function montarEndereco(data) {
+        var partes = [];
+        if (data.logradouro) partes.push(String(data.logradouro).trim());
+        if (data.numero) partes.push(String(data.numero).trim());
+        if (data.bairro) partes.push(String(data.bairro).trim());
+        if (data.cep) partes.push(String(data.cep).trim());
+        return partes.filter(Boolean).join(', ');
+    }
+
+    async function buscarCnpj(formKey) {
+        var ids = FORM_MAP[formKey];
+        if (!ids) return;
+        var cnpjInput = el(ids.cnpj);
+        var statusEl = el(ids.status);
+        if (!cnpjInput) return;
+
+        var cnpjLimpo = (cnpjInput.value || '').replace(/\D/g, '');
+        if (cnpjLimpo.length !== 14) return;
+        if (buscando[formKey]) return;
+        if (ultimoCnpjBuscado[formKey] === cnpjLimpo) return;
+
+        buscando[formKey] = true;
+        setBuscandoVisual(cnpjInput, true);
+        setStatus(statusEl, 'Buscando dados do CNPJ…', 'info');
+
+        try {
+            var resp = await fetch('https://brasilapi.com.br/api/cnpj/v1/' + cnpjLimpo);
+            if (!resp.ok) {
+                throw new Error(resp.status === 404 ? 'CNPJ não encontrado.' : 'Falha na consulta (HTTP ' + resp.status + ').');
+            }
+            var data = await resp.json();
+            var razao = (data.razao_social || '').trim();
+            var fantasia = (data.nome_fantasia || '').trim();
+            var nome = fantasia || razao;
+
+            preencherCampo(el(ids.razao), razao);
+            preencherCampo(el(ids.nome), nome);
+            preencherCampo(el(ids.endereco), montarEndereco(data));
+            preencherCampo(el(ids.cidade), data.municipio);
+            preencherCampo(el(ids.estado), data.uf);
+
+            ultimoCnpjBuscado[formKey] = cnpjLimpo;
+            cnpjInput.classList.add('border-emerald-500');
+            setStatus(statusEl, 'Dados preenchidos automaticamente.', 'ok');
+            setTimeout(function() { setStatus(statusEl, '', null); }, 2500);
+        } catch (err) {
+            cnpjInput.classList.add('border-red-400');
+            setStatus(statusEl, (err && err.message) || 'Não foi possível consultar o CNPJ.', 'erro');
+            setTimeout(function() { setStatus(statusEl, '', null); }, 3500);
+        } finally {
+            buscando[formKey] = false;
+            setBuscandoVisual(cnpjInput, false);
+        }
+    }
+
+    function ligarCampo(formKey) {
+        var ids = FORM_MAP[formKey];
+        var cnpjInput = el(ids && ids.cnpj);
+        if (!cnpjInput) return;
+
+        cnpjInput.addEventListener('blur', function() {
+            buscarCnpj(formKey);
+        });
+        cnpjInput.addEventListener('input', function() {
+            var limpo = (cnpjInput.value || '').replace(/\D/g, '');
+            if (limpo.length === 14) {
+                buscarCnpj(formKey);
+            } else if (ultimoCnpjBuscado[formKey] && limpo !== ultimoCnpjBuscado[formKey]) {
+                ultimoCnpjBuscado[formKey] = null;
+            }
+        });
+    }
+
+    ligarCampo('novo');
+    ligarCampo('edit');
+
+    // Evita refetch automático ao abrir o modal de edição com CNPJ já cadastrado.
+    window.marcarCnpjClienteJaConsultado = function(formKey, cnpjRaw) {
+        var limpo = String(cnpjRaw || '').replace(/\D/g, '');
+        if (limpo.length === 14) ultimoCnpjBuscado[formKey] = limpo;
+    };
 })();
 </script>
 

@@ -92,7 +92,9 @@
             <input type="text" id="cnpj" name="cnpj" 
                    value="{{ cliente.cnpj if cliente else '' }}"
                    placeholder="00.000.000/0000-00"
-                   class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
+                   maxlength="18"
+                   class="input-cnpj w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
+            <p id="cnpj-status" class="mt-1 text-xs text-gray-400 hidden" aria-live="polite"></p>
         </div>
 
         <div class="mb-4">
@@ -298,6 +300,104 @@
     });
 
     carregarMunicipiosIbge();
+})();
+
+/* Máscara de CNPJ + autofill via Brasil API */
+(function() {
+    var cnpjInput = document.getElementById('cnpj');
+    var statusEl = document.getElementById('cnpj-status');
+    if (!cnpjInput) return;
+
+    var ultimoCnpj = null;
+    var buscando = false;
+
+    function mascaraCnpj(valor) {
+        var v = (valor || '').replace(/\D/g, '').substring(0, 14);
+        v = v.replace(/^(\d{2})(\d)/, '$1.$2');
+        v = v.replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3');
+        v = v.replace(/\.(\d{3})(\d)/, '.$1/$2');
+        v = v.replace(/(\d{4})(\d)/, '$1-$2');
+        return v;
+    }
+
+    function setStatus(msg, tipo) {
+        if (!statusEl) return;
+        if (!msg) {
+            statusEl.textContent = '';
+            statusEl.classList.add('hidden');
+            return;
+        }
+        statusEl.textContent = msg;
+        statusEl.classList.remove('hidden');
+        statusEl.className = 'mt-1 text-xs ' + (
+            tipo === 'ok' ? 'text-emerald-600' :
+            tipo === 'erro' ? 'text-red-500' : 'text-amber-600'
+        );
+    }
+
+    function preencher(id, valor) {
+        var input = document.getElementById(id);
+        if (!input) return;
+        var txt = (valor == null ? '' : String(valor)).trim();
+        if (!txt) return;
+        input.value = txt.toUpperCase();
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    function montarEndereco(data) {
+        var partes = [];
+        if (data.logradouro) partes.push(String(data.logradouro).trim());
+        if (data.numero) partes.push(String(data.numero).trim());
+        if (data.bairro) partes.push(String(data.bairro).trim());
+        if (data.cep) partes.push(String(data.cep).trim());
+        return partes.filter(Boolean).join(', ');
+    }
+
+    async function buscarCnpj() {
+        var limpo = (cnpjInput.value || '').replace(/\D/g, '');
+        if (limpo.length !== 14 || buscando || ultimoCnpj === limpo) return;
+        buscando = true;
+        cnpjInput.classList.add('border-amber-400');
+        setStatus('Buscando dados do CNPJ…', 'info');
+        try {
+            var resp = await fetch('https://brasilapi.com.br/api/cnpj/v1/' + limpo);
+            if (!resp.ok) {
+                throw new Error(resp.status === 404 ? 'CNPJ não encontrado.' : 'Falha na consulta (HTTP ' + resp.status + ').');
+            }
+            var data = await resp.json();
+            var razao = (data.razao_social || '').trim();
+            var fantasia = (data.nome_fantasia || '').trim();
+            preencher('razao_social', razao);
+            preencher('nome_cliente', fantasia || razao);
+            preencher('endereco', montarEndereco(data));
+            preencher('cidade', data.municipio);
+            preencher('estado', data.uf);
+            ultimoCnpj = limpo;
+            setStatus('Dados preenchidos automaticamente.', 'ok');
+            setTimeout(function() { setStatus('', null); }, 2500);
+        } catch (err) {
+            setStatus((err && err.message) || 'Não foi possível consultar o CNPJ.', 'erro');
+            setTimeout(function() { setStatus('', null); }, 3500);
+        } finally {
+            buscando = false;
+            cnpjInput.classList.remove('border-amber-400');
+        }
+    }
+
+    cnpjInput.addEventListener('input', function() {
+        cnpjInput.value = mascaraCnpj(cnpjInput.value);
+        var limpo = cnpjInput.value.replace(/\D/g, '');
+        if (limpo.length === 14) buscarCnpj();
+        else if (ultimoCnpj && limpo !== ultimoCnpj) ultimoCnpj = null;
+    });
+    cnpjInput.addEventListener('blur', buscarCnpj);
+
+    if (cnpjInput.value) {
+        cnpjInput.value = mascaraCnpj(cnpjInput.value);
+        var limpoInicial = cnpjInput.value.replace(/\D/g, '');
+        if (limpoInicial.length === 14) ultimoCnpj = limpoInicial;
+    }
 })();
 </script>
 {% endblock %}
