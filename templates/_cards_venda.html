@@ -112,6 +112,9 @@
         {% set cnpj_nf = (cli_nf.cnpj if cli_nf and cli_nf.cnpj else none) or pedido.cliente_cnpj or '' %}
         {% set cidade_nf = (cli_nf.cidade if cli_nf and cli_nf.cidade else none) or '' %}
         {% set telefone_wa = (cli_nf.telefone if cli_nf and cli_nf.telefone else none) or '' %}
+        {% set telefone2_wa = (cli_nf.telefone_secundario if cli_nf and cli_nf.telefone_secundario else none) or '' %}
+        {% set nome_contato_wa = (cli_nf.nome_contato if cli_nf and cli_nf.nome_contato else none) or '' %}
+        {% set nome_contato2_wa = (cli_nf.nome_contato_secundario if cli_nf and cli_nf.nome_contato_secundario else none) or '' %}
         {% set itens_nf = [] %}
         {% for v in pedido.vendas %}
             {% set preco_nf = ('%.2f'|format((v.preco_venda or 0)|float)).replace('.', ',') %}
@@ -127,6 +130,9 @@
             class="btn-enviar-pedido-whatsapp p-1.5 rounded text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/30 transition-transform hover:scale-110 bg-transparent border-none cursor-pointer"
             title="Opções de envio no WhatsApp"
             data-telefone="{{ telefone_wa }}"
+            data-nome-contato="{{ nome_contato_wa }}"
+            data-telefone2="{{ telefone2_wa }}"
+            data-nome-contato2="{{ nome_contato2_wa }}"
             data-cliente="{{ pedido.cliente_nome }}"
             data-total="{{ pedido.total_valor|formato_moeda }}"
             data-itens='{{ itens_nf|tojson }}'

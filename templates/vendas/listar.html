@@ -4857,6 +4857,10 @@ window.marcarComoEntregueRapido = function(id, elementoBadge) {
                 </button>
             </div>
             <p class="px-4 pt-3 text-xs text-gray-400">O que deseja enviar?</p>
+            <div id="container-selecao-contato-wa" class="mb-1 px-4 hidden">
+                <p class="text-xs text-gray-400 mb-2">Selecione o contato:</p>
+                <div id="lista-contatos-wa" class="flex flex-col gap-2"></div>
+            </div>
             <div class="p-3 flex flex-col gap-2">
                 <button type="button" id="wa-opt-resumo"
                         class="w-full text-left px-4 py-3 rounded-lg border border-gray-700 bg-gray-800/80 text-gray-100 text-sm font-medium hover:bg-emerald-600/20 hover:border-emerald-500/50 hover:text-emerald-300 transition-colors">
@@ -4894,6 +4898,60 @@ function _waNormalizarTelefone(telefoneRaw) {
     if (!telefoneLimpo) return '';
     if (telefoneLimpo.indexOf('55') !== 0) telefoneLimpo = '55' + telefoneLimpo;
     return telefoneLimpo;
+}
+
+function _waFormatarTelefoneExibicao(telefoneRaw) {
+    var d = String(telefoneRaw || '').replace(/\D/g, '');
+    if (d.length >= 12 && d.indexOf('55') === 0) d = d.slice(2);
+    if (d.length === 11) {
+        return d.slice(0, 2) + ' ' + d.slice(2, 3) + ' ' + d.slice(3, 7) + '-' + d.slice(7);
+    }
+    if (d.length === 10) {
+        return d.slice(0, 2) + ' ' + d.slice(2, 6) + '-' + d.slice(6);
+    }
+    return String(telefoneRaw || '').trim() || d;
+}
+
+function _waEscaparHtml(str) {
+    return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function _waObterTelefoneSelecionado(fallback) {
+    var selecionado = document.querySelector('input[name="contato_wa_selecionado"]:checked');
+    if (selecionado && selecionado.value) {
+        return _waNormalizarTelefone(selecionado.value);
+    }
+    return fallback || '';
+}
+
+function _waRenderizarSelecaoContatos(contatos) {
+    var container = document.getElementById('container-selecao-contato-wa');
+    var lista = document.getElementById('lista-contatos-wa');
+    if (!container || !lista) return;
+
+    lista.innerHTML = '';
+    if (!contatos || contatos.length < 2) {
+        container.classList.add('hidden');
+        return;
+    }
+
+    contatos.forEach(function(c, idx) {
+        var label = document.createElement('label');
+        label.className = 'flex items-center gap-2 text-sm text-gray-300 cursor-pointer p-2 border border-slate-700 rounded hover:bg-slate-800 transition-colors';
+        var nome = c.nome || ('Contato ' + (idx + 1));
+        var exibicao = _waFormatarTelefoneExibicao(c.raw || c.limpo);
+        label.innerHTML =
+            '<input type="radio" name="contato_wa_selecionado" value="' + _waEscaparHtml(c.limpo) + '" ' +
+            (idx === 0 ? 'checked ' : '') +
+            'class="accent-green-500">' +
+            '<span>' + _waEscaparHtml(nome) + ' (' + _waEscaparHtml(exibicao) + ')</span>';
+        lista.appendChild(label);
+    });
+    container.classList.remove('hidden');
 }
 
 function _waAbrirLink(telefoneLimpo, mensagem) {
@@ -4956,14 +5014,29 @@ function fecharModalWhatsApp() {
     wrap.classList.add('hidden');
     wrap.setAttribute('aria-hidden', 'true');
     _waEnvioCtx = null;
+    var container = document.getElementById('container-selecao-contato-wa');
+    var lista = document.getElementById('lista-contatos-wa');
+    if (container) container.classList.add('hidden');
+    if (lista) lista.innerHTML = '';
 }
 
 function abrirModalWhatsApp(elemento) {
     if (!elemento) return;
 
-    var telefoneRaw = (elemento.getAttribute('data-telefone') || '').trim();
-    var telefoneLimpo = _waNormalizarTelefone(telefoneRaw);
-    if (!telefoneLimpo) {
+    var tel1Raw = (elemento.getAttribute('data-telefone') || '').trim();
+    var tel2Raw = (elemento.getAttribute('data-telefone2') || '').trim();
+    var nome1 = (elemento.getAttribute('data-nome-contato') || '').trim() || 'Contato principal';
+    var nome2 = (elemento.getAttribute('data-nome-contato2') || '').trim() || 'Contato secundário';
+
+    var contatos = [];
+    var tel1Limpo = _waNormalizarTelefone(tel1Raw);
+    var tel2Limpo = _waNormalizarTelefone(tel2Raw);
+    if (tel1Limpo) contatos.push({ limpo: tel1Limpo, raw: tel1Raw, nome: nome1 });
+    if (tel2Limpo && tel2Limpo !== tel1Limpo) {
+        contatos.push({ limpo: tel2Limpo, raw: tel2Raw, nome: nome2 });
+    }
+
+    if (!contatos.length) {
         _waToast('Este cliente não possui telefone cadastrado.', 'error');
         return;
     }
@@ -4975,7 +5048,8 @@ function abrirModalWhatsApp(elemento) {
     } catch (_) {}
 
     _waEnvioCtx = {
-        telefone: telefoneLimpo,
+        telefone: contatos[0].limpo,
+        contatos: contatos,
         cliente: (elemento.getAttribute('data-cliente') || '').trim() || 'cliente',
         total: (elemento.getAttribute('data-total') || '').trim() || '—',
         itens: itens,
@@ -4985,6 +5059,8 @@ function abrirModalWhatsApp(elemento) {
         temBoleto: elemento.getAttribute('data-tem-boleto') === '1',
         urlBoleto: (elemento.getAttribute('data-url-boleto') || '').trim()
     };
+
+    _waRenderizarSelecaoContatos(contatos);
 
     var btnNf = document.getElementById('wa-opt-nf');
     var btnBoleto = document.getElementById('wa-opt-boleto');
@@ -5000,6 +5076,12 @@ function abrirModalWhatsApp(elemento) {
 function enviarWhatsAppOpcao(tipo) {
     if (!_waEnvioCtx) return;
     var ctx = _waEnvioCtx;
+    var telefone = _waObterTelefoneSelecionado(ctx.telefone);
+    if (!telefone) {
+        _waToast('Selecione um contato para enviar.', 'error');
+        return;
+    }
+
     var mensagem = '';
     if (tipo === 'resumo') {
         mensagem = _waMontarResumo(ctx);
@@ -5019,7 +5101,7 @@ function enviarWhatsAppOpcao(tipo) {
         return;
     }
     fecharModalWhatsApp();
-    _waAbrirLink(ctx.telefone, mensagem);
+    _waAbrirLink(telefone, mensagem);
 }
 
 /* Compat: chamadas antigas abrem o modal */
