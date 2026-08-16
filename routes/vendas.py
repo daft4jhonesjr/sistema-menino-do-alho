@@ -17,6 +17,7 @@ Rotas extraídas do legado ``app.py`` (Fase 3 da refatoração):
     * POST /vendas/<id>/atualizar_situacao_rapida   atualizar_situacao_rapida
     * GET  /venda/recibo/<id>                       recibo_venda
     * GET  /api/pedidos                             api_pedidos
+    * POST /api/vendas/sincronizar_transferencias   sincronizar_transferencias
     * POST /vendas/deletar_massa                    vendas_deletar_massa
     * GET/POST /vendas/importar                     importar_vendas       (admin)
 
@@ -2718,6 +2719,122 @@ def api_pedidos():
         label = f"{v.cliente.nome_cliente} | NF {v.nf or '-'} | {d.strftime('%d/%m/%Y')}"
         pedidos.append({'id': v.id, 'label': label})
     return jsonify(pedidos=pedidos)
+
+
+@vendas_bp.route('/api/vendas/sincronizar_transferencias', methods=['POST'])
+def sincronizar_transferencias():
+    """Copia boleto da matriz para transferências (mesma NF + mesma data).
+
+    Agrupa pedidos lógicos por NF+data; em grupos de 2–3, se algum tem
+    ``caminho_boleto`` e outros não, herda arquivo, vencimento e situação.
+    """
+    vendas = (
+        query_tenant(Venda)
+        .options(joinedload(Venda.cliente))
+        .filter(
+            Venda.nf.isnot(None),
+            Venda.nf != '',
+            Venda.nf != '-',
+        )
+        .all()
+    )
+
+    # 1) Agrega itens em pedidos lógicos (cliente + NF + data).
+    pedidos: dict = {}
+    for v in vendas:
+        nf = (v.nf or '').strip()
+        if not nf or nf == '-':
+            continue
+        dv = v.data_venda.date() if hasattr(v.data_venda, 'date') else v.data_venda
+        if not dv:
+            continue
+        cnpj = ((v.cliente.cnpj if v.cliente else None) or '').strip()
+        is_cf = cnpj in ('0', '00000000000000', '')
+        if is_cf:
+            avulso = str(getattr(v, 'cliente_avulso', '') or '').strip().upper()
+            pkey = (v.cliente_id, nf, dv, avulso)
+        else:
+            pkey = (v.cliente_id, nf, dv)
+
+        if pkey not in pedidos:
+            pedidos[pkey] = {'nf': nf, 'data': dv, 'vendas': [], 'total': 0.0}
+        pedidos[pkey]['vendas'].append(v)
+        try:
+            pedidos[pkey]['total'] += float(v.calcular_total() or 0)
+        except Exception:
+            pass
+
+    # 2) Agrupa pedidos pela chave composta NF + data.
+    grupos: dict = {}
+    for p in pedidos.values():
+        grupos.setdefault(f"{p['nf']}_{p['data']}", []).append(p)
+
+    atualizados = 0
+    grupos_sincronizados = 0
+
+    for grupo in grupos.values():
+        if not (1 < len(grupo) <= 3):
+            continue
+
+        com_boleto = []
+        sem_boleto = []
+        for p in grupo:
+            tem = any((vv.caminho_boleto or '').strip() for vv in p['vendas'])
+            (com_boleto if tem else sem_boleto).append(p)
+
+        if not com_boleto or not sem_boleto:
+            continue
+
+        # Matriz = pedido com boleto de maior valor.
+        matriz = max(com_boleto, key=lambda p: p['total'])
+        fonte = next(
+            (vv for vv in matriz['vendas'] if (vv.caminho_boleto or '').strip()),
+            None,
+        )
+        if not fonte:
+            continue
+
+        cb = (fonte.caminho_boleto or '').strip()
+        dvenc = fonte.data_vencimento
+        situ = (fonte.situacao or '').strip() or None
+        grupo_teve_copia = False
+
+        for p in sem_boleto:
+            for vv in p['vendas']:
+                if (vv.caminho_boleto or '').strip():
+                    continue
+                vv.caminho_boleto = cb
+                if dvenc and not vv.data_vencimento:
+                    vv.data_vencimento = dvenc
+                if situ:
+                    vv.situacao = situ
+                atualizados += 1
+                grupo_teve_copia = True
+
+        if grupo_teve_copia:
+            grupos_sincronizados += 1
+
+    if atualizados:
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            return jsonify({
+                'ok': False,
+                'mensagem': 'Falha ao persistir a sincronização.',
+                'atualizados': 0,
+            }), 500
+
+    return jsonify({
+        'ok': True,
+        'atualizados': atualizados,
+        'grupos': grupos_sincronizados,
+        'mensagem': (
+            f'{atualizados} item(ns) atualizado(s) em {grupos_sincronizados} grupo(s).'
+            if atualizados
+            else 'Nenhuma transferência pendente de boleto encontrada.'
+        ),
+    })
 
 
 @vendas_bp.route('/vendas/deletar_massa', methods=['POST'])

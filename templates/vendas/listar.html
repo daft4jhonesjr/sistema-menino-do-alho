@@ -155,7 +155,14 @@
         <h2 class="text-3xl font-bold text-emerald-700 dark:text-emerald-400 mb-2">Vendas</h2>
         <p class="text-gray-600 dark:text-gray-400">Gerenciar vendas realizadas</p>
     </div>
-    <div class="w-full sm:w-auto">
+    <div class="w-full sm:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+        <button type="button" onclick="sincronizarBoletos()" title="Copiar boletos da matriz para transferências (mesma NF e data)"
+                class="text-xs bg-purple-500/10 text-purple-400 border border-purple-500/20 hover:bg-purple-500/20 px-3 py-1.5 rounded-md flex items-center justify-center gap-1 transition-colors self-start sm:self-center">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+            </svg>
+            Sincronizar Transferências
+        </button>
         <div class="flex w-full sm:w-auto sm:inline-flex rounded-md shadow-sm">
             <button type="button" id="btn-toggle-nova-venda" class="flex-1 justify-center inline-flex items-center px-6 py-3 rounded-l-md border border-transparent bg-emerald-700 text-lg font-medium text-white hover:bg-emerald-800 transition-colors">
                 💰 Nova Venda
@@ -708,6 +715,10 @@
                     <select id="select-vincular-pedido" name="venda_id" required class="w-full rounded-lg border border-gray-300 dark:border-gray-700 dark:bg-gray-700 dark:text-gray-100 px-4 py-2 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
                         <option value="">Selecione um pedido…</option>
                     </select>
+                    <div class="mt-3 flex items-start gap-2 bg-blue-500/10 p-2.5 rounded-md border border-blue-500/20">
+                        <span class="text-blue-400 text-lg leading-none">ℹ️</span>
+                        <p class="text-xs text-blue-300/80 leading-relaxed"><strong>Dica de Transferência:</strong> O sistema vinculará este boleto automaticamente a até <strong class="text-blue-300">3 pedidos</strong> que compartilhem a mesma NF e Data de Venda.</p>
+                    </div>
                 </div>
                 <div class="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
                     <button type="button" class="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700" data-dismiss="modal-vincular-doc">Cancelar</button>
@@ -1224,6 +1235,63 @@
 (function() {
     // Bulk delete desabilitado na estrutura de pedidos agrupados
     // (Cada pedido tem seu próprio botão de exclusão)
+
+    window.sincronizarBoletos = function() {
+        var btn = document.querySelector('button[onclick="sincronizarBoletos()"]');
+        if (btn) {
+            btn.disabled = true;
+            btn.classList.add('opacity-60', 'cursor-wait');
+        }
+        fetch('{{ url_for("vendas.sincronizar_transferencias") }}', {
+            method: 'POST',
+            headers: Object.assign(
+                { 'X-Requested-With': 'XMLHttpRequest' },
+                window.getCsrfHeaders ? window.getCsrfHeaders() : {}
+            )
+        })
+        .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+        .then(function(res) {
+            var msg = (res.data && res.data.mensagem) || (res.ok ? 'Sincronização concluída.' : 'Falha na sincronização.');
+            var qtd = (res.data && res.data.atualizados) || 0;
+            if (typeof showToast === 'function') {
+                showToast(msg, res.ok ? 'success' : 'error');
+            } else if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    icon: res.ok ? 'success' : 'error',
+                    title: res.ok ? 'Transferências sincronizadas' : 'Erro',
+                    text: msg,
+                    confirmButtonColor: '#059669'
+                }).then(function() {
+                    if (res.ok) location.reload();
+                });
+                if (btn) {
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-60', 'cursor-wait');
+                }
+                return;
+            } else {
+                alert(msg);
+            }
+            if (res.ok) {
+                location.reload();
+            } else if (btn) {
+                btn.disabled = false;
+                btn.classList.remove('opacity-60', 'cursor-wait');
+            }
+            return qtd;
+        })
+        .catch(function() {
+            if (typeof showToast === 'function') {
+                showToast('Erro de conexão ao sincronizar transferências.', 'error');
+            } else {
+                alert('Erro de conexão ao sincronizar transferências.');
+            }
+            if (btn) {
+                btn.disabled = false;
+                btn.classList.remove('opacity-60', 'cursor-wait');
+            }
+        });
+    };
     
     // Interceptar exclusão de pedidos completos → modal Tailwind (padrão Dashboard)
     document.addEventListener('submit', function(e) {

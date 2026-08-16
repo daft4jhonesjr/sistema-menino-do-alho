@@ -22,6 +22,10 @@
         </div>
     </form>
 </div>
+<div class="mb-4 flex items-start gap-2 bg-blue-500/10 p-2.5 rounded-md border border-blue-500/20 max-w-3xl">
+    <span class="text-blue-400 text-lg leading-none">ℹ️</span>
+    <p class="text-xs text-blue-300/80 leading-relaxed"><strong>Dica de Transferência:</strong> O sistema vinculará este boleto automaticamente a até <strong class="text-blue-300">3 pedidos</strong> que compartilhem a mesma NF e Data de Venda.</p>
+</div>
 
 <form action="{{ url_for('documentos.admin_arquivos_deletar_massa') }}" method="POST" id="form-deletar-massa">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
