@@ -3900,6 +3900,10 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             _adicionar_coluna_se_ausente('clientes', 'numero', 'VARCHAR(20)')
         except (OperationalError, Exception):
             db.session.rollback()
+        try:
+            _adicionar_coluna_se_ausente('clientes', 'inscricao_estadual', 'VARCHAR(50)')
+        except (OperationalError, Exception):
+            db.session.rollback()
         # Backfill heurístico: ViaCEP grava "LOGRADOURO, NUMERO, BAIRRO, CEP"
         try:
             clientes_sem_bairro = (

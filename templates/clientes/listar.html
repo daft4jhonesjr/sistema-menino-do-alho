@@ -178,6 +178,7 @@
                                 data-nome-contato-secundario="{{ cliente.nome_contato_secundario or '' }}"
                                 data-razao="{{ cliente.razao_social or '' }}"
                                 data-cnpj="{{ cliente.cnpj or '' }}"
+                                data-inscricao-estadual="{{ cliente.inscricao_estadual or '' }}"
                                 data-cidade="{{ cliente.cidade or '' }}"
                                 data-estado="{{ cliente.estado or '' }}"
                                 data-cep="{{ cliente.cep or '' }}"
@@ -319,6 +320,7 @@
                             data-nome-contato-secundario="{{ cliente.nome_contato_secundario or '' }}"
                             data-razao="{{ cliente.razao_social or '' }}"
                             data-cnpj="{{ cliente.cnpj or '' }}"
+                            data-inscricao-estadual="{{ cliente.inscricao_estadual or '' }}"
                             data-cidade="{{ cliente.cidade or '' }}"
                             data-estado="{{ cliente.estado or '' }}"
                             data-cep="{{ cliente.cep or '' }}"
@@ -402,9 +404,17 @@
                     <input type="text" id="modal-razao_social" name="razao_social" autocapitalize="characters" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100 uppercase">
                 </div>
                 <div class="mb-5">
-                    <label for="modal-cnpj" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">CNPJ</label>
-                    <input type="text" id="modal-cnpj" name="cnpj" placeholder="00.000.000/0000-00" maxlength="18" class="input-cnpj w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100" data-cnpj-autofill="novo">
-                    <p id="modal-cnpj-status" class="mt-1 text-xs text-gray-400 dark:text-gray-500 hidden" aria-live="polite"></p>
+                    <div class="grid grid-cols-12 gap-4">
+                        <div class="col-span-6">
+                            <label for="modal-cnpj" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">CNPJ</label>
+                            <input type="text" id="modal-cnpj" name="cnpj" placeholder="00.000.000/0000-00" maxlength="18" class="input-cnpj w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100" data-cnpj-autofill="novo">
+                            <p id="modal-cnpj-status" class="mt-1 text-xs text-gray-400 dark:text-gray-500 hidden" aria-live="polite"></p>
+                        </div>
+                        <div class="col-span-6">
+                            <label for="modal-inscricao_estadual" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Inscrição Estadual</label>
+                            <input type="text" id="modal-inscricao_estadual" name="inscricao_estadual" maxlength="50" placeholder="IE ou ISENTO" autocapitalize="characters" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100 uppercase">
+                        </div>
+                    </div>
                 </div>
                 <div class="mb-5">
                     <div class="grid grid-cols-12 gap-4">
@@ -574,9 +584,17 @@
                     <input type="text" id="edit_razao" name="razao_social" maxlength="200" autocapitalize="characters" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100 uppercase">
                 </div>
                 <div class="mb-5">
-                    <label for="edit_cnpj" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">CNPJ</label>
-                    <input type="text" id="edit_cnpj" name="cnpj" placeholder="00.000.000/0000-00" maxlength="18" class="input-cnpj w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100" data-cnpj-autofill="edit">
-                    <p id="edit_cnpj-status" class="mt-1 text-xs text-gray-400 dark:text-gray-500 hidden" aria-live="polite"></p>
+                    <div class="grid grid-cols-12 gap-4">
+                        <div class="col-span-6">
+                            <label for="edit_cnpj" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">CNPJ</label>
+                            <input type="text" id="edit_cnpj" name="cnpj" placeholder="00.000.000/0000-00" maxlength="18" class="input-cnpj w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100" data-cnpj-autofill="edit">
+                            <p id="edit_cnpj-status" class="mt-1 text-xs text-gray-400 dark:text-gray-500 hidden" aria-live="polite"></p>
+                        </div>
+                        <div class="col-span-6">
+                            <label for="edit_inscricao_estadual" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Inscrição Estadual</label>
+                            <input type="text" id="edit_inscricao_estadual" name="inscricao_estadual" maxlength="50" placeholder="IE ou ISENTO" autocapitalize="characters" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100 uppercase">
+                        </div>
+                    </div>
                 </div>
                 <div class="mb-5">
                     <div class="grid grid-cols-12 gap-4">
@@ -884,6 +902,7 @@ window.padronizarClientesMaiusculo = function() {
         var nomeContatoSecundario = btn.getAttribute('data-nome-contato-secundario') || '';
         var razao = btn.getAttribute('data-razao') || '';
         var cnpj = btn.getAttribute('data-cnpj') || '';
+        var inscricaoEstadual = btn.getAttribute('data-inscricao-estadual') || '';
         var cidade = btn.getAttribute('data-cidade') || '';
         var estado = btn.getAttribute('data-estado') || '';
         var cep = btn.getAttribute('data-cep') || '';
@@ -898,6 +917,8 @@ window.padronizarClientesMaiusculo = function() {
         document.getElementById('edit_nome_contato_secundario').value = nomeContatoSecundario;
         document.getElementById('edit_razao').value = razao;
         document.getElementById('edit_cnpj').value = mascaraCNPJ(cnpj);
+        var editIe = document.getElementById('edit_inscricao_estadual');
+        if (editIe) editIe.value = inscricaoEstadual;
         document.getElementById('edit_cidade').value = cidade;
         document.getElementById('edit_estado').value = estado;
         var editCep = document.getElementById('edit_cep');
@@ -1292,6 +1313,7 @@ document.addEventListener('DOMContentLoaded', function() {
             status: 'modal-cnpj-status',
             nome: 'modal-nome_cliente',
             razao: 'modal-razao_social',
+            ie: 'modal-inscricao_estadual',
             cep: 'modal-cep',
             rua: 'modal-rua',
             numero: 'modal-numero',
@@ -1304,6 +1326,7 @@ document.addEventListener('DOMContentLoaded', function() {
             status: 'edit_cnpj-status',
             nome: 'edit_nome',
             razao: 'edit_razao',
+            ie: 'edit_inscricao_estadual',
             cep: 'edit_cep',
             rua: 'edit_rua',
             numero: 'edit_numero',
@@ -1357,6 +1380,41 @@ document.addEventListener('DOMContentLoaded', function() {
         return d.slice(0, 5) + '-' + d.slice(5);
     }
 
+    function extrairInscricaoEstadual(data) {
+        if (!data || typeof data !== 'object') return '';
+        var diretos = [data.inscricao_estadual, data.inscricaoEstadual, data.ie];
+        for (var i = 0; i < diretos.length; i++) {
+            if (diretos[i]) return String(diretos[i]).trim();
+        }
+        var listas = data.inscricoes_estaduais || data.inscricoesEstaduais || null;
+        if (!listas && data.estabelecimento) {
+            listas = data.estabelecimento.inscricoes_estaduais || data.estabelecimento.inscricoesEstaduais;
+        }
+        if (!Array.isArray(listas) || !listas.length) return '';
+        var escolhida = '';
+        for (var j = 0; j < listas.length; j++) {
+            var item = listas[j];
+            var num = typeof item === 'string'
+                ? item
+                : (item && (item.inscricao_estadual || item.inscricao || item.numero || ''));
+            if (!num) continue;
+            num = String(num).trim();
+            if (item && (item.ativo === true || item.ativa === true)) return num;
+            if (!escolhida) escolhida = num;
+        }
+        return escolhida;
+    }
+
+    async function buscarIeComplementar(cnpjLimpo) {
+        try {
+            var resp = await fetch('https://publica.cnpj.ws/cnpj/' + cnpjLimpo);
+            if (!resp.ok) return '';
+            return extrairInscricaoEstadual(await resp.json());
+        } catch (e) {
+            return '';
+        }
+    }
+
     async function buscarCnpj(formKey) {
         var ids = FORM_MAP[formKey];
         if (!ids) return;
@@ -1385,6 +1443,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
             preencherCampo(el(ids.razao), razao);
             preencherCampo(el(ids.nome), nome);
+            var ie = extrairInscricaoEstadual(data);
+            if (ie) {
+                preencherCampo(el(ids.ie), ie);
+            } else {
+                buscarIeComplementar(cnpjLimpo).then(function(ieExtra) {
+                    preencherCampo(el(ids.ie), ieExtra);
+                });
+            }
             preencherCampo(el(ids.rua), data.logradouro);
             preencherCampo(el(ids.numero), data.numero);
             preencherCampo(el(ids.bairro), data.bairro);

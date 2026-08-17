@@ -164,6 +164,7 @@ class Cliente(db.Model):
     razao_social = db.Column(db.String(200), index=True)  # Índice para buscas por razão social
     # TODO Fase 2: remover unique=True e trocar por UniqueConstraint(empresa_id, cnpj).
     cnpj = db.Column(db.String(18), unique=True, index=True)
+    inscricao_estadual = db.Column(db.String(50), nullable=True)
     cidade = db.Column(db.String(100))
     bairro = db.Column(db.String(100), nullable=True)
     estado = db.Column(db.String(2), nullable=True)  # UF, ex: "PE", "BA"

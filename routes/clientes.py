@@ -612,6 +612,7 @@ def padronizar_clientes_maiusculas():
                 ('rua', 150),
                 ('numero', 20),
                 ('cep', 20),
+                ('inscricao_estadual', 50),
                 ('endereco', 255),
                 ('nome_contato', 100),
                 ('nome_contato_secundario', 100),
@@ -698,6 +699,7 @@ def novo_cliente():
                 nome_contato_secundario=(request.form.get('nome_contato_secundario', '') or '').strip().upper()[:100] or None,
                 razao_social=(request.form.get('razao_social', '') or '').strip().upper(),
                 cnpj=cnpj,
+                inscricao_estadual=(request.form.get('inscricao_estadual') or '').strip().upper()[:50] or None,
                 cidade=(request.form.get('cidade', '') or '').strip().upper(),
                 estado=(request.form.get('estado') or '').strip().upper()[:2] or None,
                 empresa_id=empresa_id_atual(),
@@ -745,6 +747,7 @@ def editar_cliente(id):
 
             nome_raw = ((request.form.get('nome_cliente') or '').strip() or (cliente.nome_cliente or '')).upper()
             razao_raw = (request.form.get('razao_social') or '').strip().upper()
+            ie_raw = (request.form.get('inscricao_estadual') or '').strip().upper() or None
             cidade_raw = (request.form.get('cidade') or '').strip().upper()
             estado_raw = (request.form.get('estado') or '').strip().upper()[:2] or None
             telefone_raw = (request.form.get('telefone', '') or '').strip() or None
@@ -759,6 +762,7 @@ def editar_cliente(id):
             cliente.nome_contato_secundario = nome_contato_secundario_raw[:100] if nome_contato_secundario_raw else None
             cliente.razao_social = razao_raw[:200] if razao_raw else ''
             cliente.cnpj = cnpj
+            cliente.inscricao_estadual = ie_raw[:50] if ie_raw else None
             cliente.cidade = cidade_raw[:100] if cidade_raw else ''
             cliente.estado = estado_raw
             _aplicar_endereco_formulario(cliente, request.form)

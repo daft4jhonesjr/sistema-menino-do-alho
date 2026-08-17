@@ -86,15 +86,30 @@
         </div>
 
         <div class="mb-4">
-            <label for="cnpj" class="block text-sm font-medium text-gray-700 mb-2">
-                CNPJ
-            </label>
-            <input type="text" id="cnpj" name="cnpj" 
-                   value="{{ cliente.cnpj if cliente else '' }}"
-                   placeholder="00.000.000/0000-00"
-                   maxlength="18"
-                   class="input-cnpj w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
-            <p id="cnpj-status" class="mt-1 text-xs text-gray-400 hidden" aria-live="polite"></p>
+            <div class="grid grid-cols-12 gap-4">
+                <div class="col-span-6">
+                    <label for="cnpj" class="block text-sm font-medium text-gray-700 mb-2">
+                        CNPJ
+                    </label>
+                    <input type="text" id="cnpj" name="cnpj"
+                           value="{{ cliente.cnpj if cliente else '' }}"
+                           placeholder="00.000.000/0000-00"
+                           maxlength="18"
+                           class="input-cnpj w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
+                    <p id="cnpj-status" class="mt-1 text-xs text-gray-400 hidden" aria-live="polite"></p>
+                </div>
+                <div class="col-span-6">
+                    <label for="inscricao_estadual" class="block text-sm font-medium text-gray-700 mb-2">
+                        Inscrição Estadual
+                    </label>
+                    <input type="text" id="inscricao_estadual" name="inscricao_estadual"
+                           value="{{ cliente.inscricao_estadual if cliente else '' }}"
+                           maxlength="50"
+                           placeholder="IE ou ISENTO"
+                           autocapitalize="characters" autocomplete="off" spellcheck="false"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent uppercase">
+                </div>
+            </div>
         </div>
 
         <div class="mb-4">
@@ -377,6 +392,41 @@
         return d.slice(0, 5) + '-' + d.slice(5);
     }
 
+    function extrairInscricaoEstadual(data) {
+        if (!data || typeof data !== 'object') return '';
+        var diretos = [data.inscricao_estadual, data.inscricaoEstadual, data.ie];
+        for (var i = 0; i < diretos.length; i++) {
+            if (diretos[i]) return String(diretos[i]).trim();
+        }
+        var listas = data.inscricoes_estaduais || data.inscricoesEstaduais || null;
+        if (!listas && data.estabelecimento) {
+            listas = data.estabelecimento.inscricoes_estaduais || data.estabelecimento.inscricoesEstaduais;
+        }
+        if (!Array.isArray(listas) || !listas.length) return '';
+        var escolhida = '';
+        for (var j = 0; j < listas.length; j++) {
+            var item = listas[j];
+            var num = typeof item === 'string'
+                ? item
+                : (item && (item.inscricao_estadual || item.inscricao || item.numero || ''));
+            if (!num) continue;
+            num = String(num).trim();
+            if (item && (item.ativo === true || item.ativa === true)) return num;
+            if (!escolhida) escolhida = num;
+        }
+        return escolhida;
+    }
+
+    async function buscarIeComplementar(cnpjLimpo) {
+        try {
+            var resp = await fetch('https://publica.cnpj.ws/cnpj/' + cnpjLimpo);
+            if (!resp.ok) return '';
+            return extrairInscricaoEstadual(await resp.json());
+        } catch (e) {
+            return '';
+        }
+    }
+
     async function buscarCnpj() {
         var limpo = (cnpjInput.value || '').replace(/\D/g, '');
         if (limpo.length !== 14 || buscando || ultimoCnpj === limpo) return;
@@ -393,6 +443,14 @@
             var fantasia = (data.nome_fantasia || '').trim();
             preencher('razao_social', razao);
             preencher('nome_cliente', fantasia || razao);
+            var ie = extrairInscricaoEstadual(data);
+            if (ie) {
+                preencher('inscricao_estadual', ie);
+            } else {
+                buscarIeComplementar(limpo).then(function(ieExtra) {
+                    preencher('inscricao_estadual', ieExtra);
+                });
+            }
             preencher('rua', data.logradouro);
             preencher('numero', data.numero);
             preencher('bairro', data.bairro);
