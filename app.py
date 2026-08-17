@@ -3840,6 +3840,40 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             _adicionar_coluna_se_ausente('clientes', 'estado', 'VARCHAR(2)')
         except (OperationalError, Exception):
             db.session.rollback()
+        # Migração: bairro em clientes (rentabilidade por bairro no dashboard)
+        try:
+            _adicionar_coluna_se_ausente('clientes', 'bairro', 'VARCHAR(100)')
+        except (OperationalError, Exception):
+            db.session.rollback()
+        # Backfill heurístico: ViaCEP grava "LOGRADOURO, NUMERO, BAIRRO, CEP"
+        try:
+            clientes_sem_bairro = (
+                db.session.query(Cliente)
+                .filter(
+                    or_(Cliente.bairro.is_(None), Cliente.bairro == ''),
+                    Cliente.endereco.isnot(None),
+                    Cliente.endereco != '',
+                )
+                .limit(2000)
+                .all()
+            )
+            houve_bairro = False
+            for _cli in clientes_sem_bairro:
+                partes = [p.strip() for p in str(_cli.endereco or '').split(',') if p.strip()]
+                candidato = ''
+                if len(partes) >= 4:
+                    # penúltimo antes do CEP
+                    candidato = partes[-2]
+                elif len(partes) == 3:
+                    candidato = partes[2]
+                # Ignora se parece CEP ou só número
+                if candidato and not re.fullmatch(r'[\d.\-\s]+', candidato) and len(candidato) <= 100:
+                    _cli.bairro = candidato.upper()[:100]
+                    houve_bairro = True
+            if houve_bairro:
+                db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
         # Migração: status_entrega em vendas (status logístico independente do financeiro)
         try:
             _adicionar_coluna_se_ausente('vendas', 'status_entrega', "VARCHAR(50) DEFAULT 'PENDENTE'")

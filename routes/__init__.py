@@ -41,6 +41,7 @@ Estado atual:
                            /api/dashboard/documentos_pendentes/resumo,
                            /api/pendencias/contador,
                            /api/relatorios/rentabilidade-praca,
+                           /api/relatorios/rentabilidade-bairro,
                            /api/cliente/ultimo_pagamento,
                            /api/empresa-frequente/<cliente>,
                            /api/cobrancas_pendentes,

@@ -609,6 +609,187 @@
 })();
 </script>
 
+<!-- Auditoria: Rentabilidade por Bairro -->
+<section class="mb-8" id="rentabilidade-bairro-section"
+         data-endpoint="{{ url_for('dashboard.api_rentabilidade_bairro') }}">
+    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-hidden">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <div class="min-w-0">
+                <h3 class="text-xl font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-2">
+                    <i data-lucide="map" class="w-5 h-5"></i>
+                    Rentabilidade por Bairro
+                </h3>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    Preço médio por caixa e margem real por bairro da cidade selecionada.
+                </p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+                <label for="filtro-cidade-bairro" class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Cidade</label>
+                <select id="filtro-cidade-bairro"
+                        class="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm px-3 py-2 focus:ring-2 focus:ring-emerald-500 min-w-[10rem]">
+                    <option value="">Carregando…</option>
+                </select>
+                <label for="filtro-periodo-bairro" class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Período</label>
+                <select id="filtro-periodo-bairro"
+                        class="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm px-3 py-2 focus:ring-2 focus:ring-emerald-500">
+                    <option value="mes">Mês Atual</option>
+                    <option value="3meses">Últimos 3 Meses</option>
+                    <option value="ano" selected>Ano Ativo</option>
+                    <option value="tudo">Todo o Histórico</option>
+                </select>
+            </div>
+        </div>
+        <div id="rentabilidade-bairro-loading" class="px-6 py-10 text-center text-gray-500 dark:text-gray-400">
+            <span class="inline-block animate-pulse">Calculando rentabilidade por bairro…</span>
+        </div>
+        <div id="rentabilidade-bairro-conteudo" class="hidden"></div>
+    </div>
+</section>
+<script>
+(function() {
+    var sec = document.getElementById('rentabilidade-bairro-section');
+    if (!sec) return;
+    var endpoint = sec.getAttribute('data-endpoint');
+    var selCidade = document.getElementById('filtro-cidade-bairro');
+    var selPeriodo = document.getElementById('filtro-periodo-bairro');
+    var loading = document.getElementById('rentabilidade-bairro-loading');
+    var conteudo = document.getElementById('rentabilidade-bairro-conteudo');
+    var cidadesCarregadas = false;
+
+    function fmtMoeda(v) {
+        var n = Number(v) || 0;
+        return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    }
+    function fmtNum(v, digitos) {
+        var n = Number(v) || 0;
+        return n.toLocaleString('pt-BR', { minimumFractionDigits: digitos, maximumFractionDigits: digitos });
+    }
+    function esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function atualizarDropdownCidades(cidades, cidadeAtual) {
+        if (!selCidade) return;
+        var prev = selCidade.value || cidadeAtual || '';
+        selCidade.innerHTML = '';
+        if (!cidades || !cidades.length) {
+            var optVazio = document.createElement('option');
+            optVazio.value = '';
+            optVazio.textContent = 'Sem cidades no período';
+            selCidade.appendChild(optVazio);
+            cidadesCarregadas = true;
+            return;
+        }
+        cidades.forEach(function(c) {
+            var opt = document.createElement('option');
+            opt.value = c;
+            opt.textContent = c;
+            if (c === prev || c === cidadeAtual) opt.selected = true;
+            selCidade.appendChild(opt);
+        });
+        if (!selCidade.value && cidades[0]) selCidade.value = cidades[0];
+        cidadesCarregadas = true;
+    }
+
+    function render(data) {
+        var bairros = (data && data.bairros) || [];
+        var totais = (data && data.totais) || {};
+        if (!bairros.length) {
+            conteudo.innerHTML = '<p class="px-6 py-10 text-center text-gray-500 dark:text-gray-400 italic">Nenhuma venda encontrada para esta cidade/período.</p>';
+            return;
+        }
+        var rows = bairros.map(function(p) {
+            return '<tr class="hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition">' +
+                '<td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">' + esc(p.bairro) + '</td>' +
+                '<td class="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-700 dark:text-gray-300">' + fmtNum(p.total_pedidos, 0) + '</td>' +
+                '<td class="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-700 dark:text-gray-300">' + fmtNum(p.volume_total, 0) + '</td>' +
+                '<td class="px-4 py-3 whitespace-nowrap text-sm text-right font-semibold text-cyan-600 dark:text-cyan-300 valor-financeiro">' + fmtMoeda(p.preco_medio) + '</td>' +
+                '<td class="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-100 valor-financeiro">' + fmtMoeda(p.faturamento_total) + '</td>' +
+                '<td class="px-4 py-3 whitespace-nowrap text-sm text-right font-bold text-emerald-600 dark:text-emerald-400 valor-financeiro">' + fmtMoeda(p.lucro_total) + '</td>' +
+                '<td class="px-4 py-3 whitespace-nowrap text-sm text-right font-bold ' + esc(p.margem_cls || 'text-gray-400') + '">' + fmtNum(p.margem_real_media, 1) + '%</td>' +
+            '</tr>';
+        }).join('');
+
+        var margemTot = Number(totais.margem_real_media) || 0;
+        var margemTotCls = margemTot >= 12 ? 'text-emerald-400' : (margemTot >= 8 ? 'text-yellow-400' : 'text-red-400');
+
+        conteudo.innerHTML =
+            '<div class="overflow-x-auto">' +
+                '<table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">' +
+                    '<thead class="bg-gray-50 dark:bg-gray-900/60">' +
+                        '<tr>' +
+                            '<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Bairro</th>' +
+                            '<th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Qtd Pedidos</th>' +
+                            '<th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Volume (cx)</th>' +
+                            '<th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Preço Médio/cx</th>' +
+                            '<th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Faturamento</th>' +
+                            '<th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Lucro Total</th>' +
+                            '<th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Margem Real</th>' +
+                        '</tr>' +
+                    '</thead>' +
+                    '<tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">' + rows + '</tbody>' +
+                    '<tfoot class="bg-gray-50 dark:bg-gray-900/40">' +
+                        '<tr class="font-bold">' +
+                            '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">TOTAL</td>' +
+                            '<td class="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">' + fmtNum(totais.total_pedidos, 0) + '</td>' +
+                            '<td class="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">' + fmtNum(totais.volume_total, 0) + '</td>' +
+                            '<td class="px-4 py-3 text-sm text-right text-cyan-600 dark:text-cyan-300 valor-financeiro">' + fmtMoeda(totais.preco_medio) + '</td>' +
+                            '<td class="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100 valor-financeiro">' + fmtMoeda(totais.faturamento_total) + '</td>' +
+                            '<td class="px-4 py-3 text-sm text-right text-emerald-600 dark:text-emerald-400 valor-financeiro">' + fmtMoeda(totais.lucro_total) + '</td>' +
+                            '<td class="px-4 py-3 text-sm text-right ' + margemTotCls + '">' + fmtNum(margemTot, 1) + '%</td>' +
+                        '</tr>' +
+                    '</tfoot>' +
+                '</table>' +
+            '</div>';
+    }
+
+    function carregar() {
+        var periodo = selPeriodo ? selPeriodo.value : 'ano';
+        var cidade = selCidade ? selCidade.value : '';
+        loading.classList.remove('hidden');
+        conteudo.classList.add('hidden');
+        var qs = '?periodo=' + encodeURIComponent(periodo);
+        if (cidade) qs += '&cidade=' + encodeURIComponent(cidade);
+        fetch(endpoint + qs, {
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            loading.classList.add('hidden');
+            conteudo.classList.remove('hidden');
+            if (!data || data.ok === false) {
+                conteudo.innerHTML = '<p class="px-6 py-10 text-center text-red-400">' +
+                    esc((data && data.mensagem) || 'Falha ao carregar o relatório.') + '</p>';
+                return;
+            }
+            atualizarDropdownCidades(data.cidades || [], data.cidade || '');
+            render(data);
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        })
+        .catch(function() {
+            loading.classList.add('hidden');
+            conteudo.classList.remove('hidden');
+            conteudo.innerHTML = '<p class="px-6 py-10 text-center text-red-400">Erro de conexão ao carregar rentabilidade por bairro.</p>';
+        });
+    }
+
+    if (selCidade) selCidade.addEventListener('change', carregar);
+    if (selPeriodo) selPeriodo.addEventListener('change', function() {
+        // Troca de período: limpa cidade para o backend escolher a de maior faturamento
+        if (selCidade) selCidade.value = '';
+        cidadesCarregadas = false;
+        carregar();
+    });
+    if (window.requestIdleCallback) {
+        requestIdleCallback(carregar, { timeout: 2500 });
+    } else {
+        setTimeout(carregar, 600);
+    }
+})();
+</script>
+
 <!-- Modal: Detalhes Mensais -->
 <div id="modal-detalhes-mes-overlay" class="fixed inset-0 bg-black/50 z-50 hidden" onclick="fecharModalDetalhesMes()"></div>
 <div id="modal-detalhes-mes" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden pointer-events-none">

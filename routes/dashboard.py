@@ -12,6 +12,7 @@ Rotas extraídas do legado ``app.py``:
 * ``GET  /api/empresa-frequente/<cliente>``           — autocomplete de empresa faturadora
 * ``GET  /api/dashboard/radar_recompra``             — radar lazy
 * ``GET  /api/relatorios/rentabilidade-praca``       — auditoria por cidade/praça
+* ``GET  /api/relatorios/rentabilidade-bairro``      — auditoria por bairro (filtro cidade)
 * ``GET  /api/cobrancas_pendentes``                  — push notification preflight
 * ``GET  /api/dashboard/detalhes_mes/<ano>/<mes>``   — drill-down do gráfico mensal
 * ``POST /api/frases/votar``                         — like/dislike da Frase do Dia
@@ -224,6 +225,125 @@ def calcular_rentabilidade_por_praca(periodo: str = 'ano') -> dict:
         'ok': True,
         'periodo': periodo_norm,
         'pracas': pracas,
+        'totais': {
+            'total_pedidos': tot_pedidos,
+            'volume_total': tot_volume,
+            'faturamento_total': tot_fat,
+            'lucro_total': tot_lucro,
+            'preco_medio': (tot_fat / tot_volume) if tot_volume > 0 else 0.0,
+            'margem_real_media': ((tot_lucro / tot_fat) * 100.0) if tot_fat > 0 else 0.0,
+        },
+    }
+
+
+def _margem_cls(margem: float) -> str:
+    if margem >= 12:
+        return 'text-emerald-400'
+    if margem >= 8:
+        return 'text-yellow-400'
+    return 'text-red-400'
+
+
+def calcular_rentabilidade_por_bairro(periodo: str = 'ano', cidade=None) -> dict:
+    """Agrega vendas por bairro do cliente, filtradas por cidade.
+
+    Clientes sem bairro vão para ``NÃO INFORMADO``. Ordena por faturamento
+    decrescente. Retorna também a lista de cidades disponíveis no período.
+    """
+    filtros_periodo, periodo_norm = _filtros_periodo_rentabilidade(periodo)
+    filtro_tenant = Venda.empresa_id == empresa_id_atual()
+    filtro_sem_perda = func.upper(func.coalesce(Venda.tipo_operacao, 'VENDA')) != 'PERDA'
+
+    cidade_norm = func.nullif(func.upper(func.trim(func.coalesce(Cliente.cidade, ''))), '')
+    cidade_grupo = func.coalesce(cidade_norm, 'NÃO INFORMADA')
+    bairro_norm = func.nullif(func.upper(func.trim(func.coalesce(Cliente.bairro, ''))), '')
+    bairro_grupo = func.coalesce(bairro_norm, 'NÃO INFORMADO')
+
+    faturamento_expr = Venda.preco_venda * Venda.quantidade_venda
+    lucro_expr = (Venda.preco_venda - Produto.preco_custo) * Venda.quantidade_venda
+    pedido_chave = func.concat(
+        Venda.cliente_id, '-',
+        func.coalesce(Venda.nf, ''), '-',
+        func.date(Venda.data_venda),
+    )
+
+    # Cidades com vendas no período (para o dropdown), ordenadas por faturamento.
+    cidades_rows = (
+        db.session.query(
+            cidade_grupo.label('cidade'),
+            func.coalesce(func.sum(faturamento_expr), 0).label('faturamento_total'),
+        )
+        .select_from(Venda)
+        .join(Cliente, Venda.cliente_id == Cliente.id)
+        .join(Produto, Venda.produto_id == Produto.id)
+        .filter(filtro_tenant, filtro_sem_perda, *filtros_periodo)
+        .group_by(cidade_grupo)
+        .order_by(desc('faturamento_total'))
+        .all()
+    )
+    cidades = [r.cidade or 'NÃO INFORMADA' for r in cidades_rows]
+
+    cidade_sel = (cidade or '').strip().upper()
+    if not cidade_sel or cidade_sel == 'TODAS':
+        cidade_sel = cidades[0] if cidades else 'NÃO INFORMADA'
+
+    rows = (
+        db.session.query(
+            bairro_grupo.label('bairro'),
+            func.count(func.distinct(pedido_chave)).label('total_pedidos'),
+            func.coalesce(func.sum(Venda.quantidade_venda), 0).label('volume_total'),
+            func.coalesce(func.sum(faturamento_expr), 0).label('faturamento_total'),
+            func.coalesce(func.sum(lucro_expr), 0).label('lucro_total'),
+        )
+        .select_from(Venda)
+        .join(Cliente, Venda.cliente_id == Cliente.id)
+        .join(Produto, Venda.produto_id == Produto.id)
+        .filter(
+            filtro_tenant,
+            filtro_sem_perda,
+            cidade_grupo == cidade_sel,
+            *filtros_periodo,
+        )
+        .group_by(bairro_grupo)
+        .order_by(desc('faturamento_total'))
+        .all()
+    )
+
+    bairros = []
+    tot_pedidos = 0
+    tot_volume = 0
+    tot_fat = 0.0
+    tot_lucro = 0.0
+
+    for row in rows:
+        volume = int(row.volume_total or 0)
+        faturamento = float(row.faturamento_total or 0)
+        lucro = float(row.lucro_total or 0)
+        pedidos = int(row.total_pedidos or 0)
+        preco_medio = (faturamento / volume) if volume > 0 else 0.0
+        margem = ((lucro / faturamento) * 100.0) if faturamento > 0 else 0.0
+
+        bairros.append({
+            'bairro': row.bairro or 'NÃO INFORMADO',
+            'total_pedidos': pedidos,
+            'volume_total': volume,
+            'faturamento_total': faturamento,
+            'lucro_total': lucro,
+            'preco_medio': preco_medio,
+            'margem_real_media': margem,
+            'margem_cls': _margem_cls(margem),
+        })
+        tot_pedidos += pedidos
+        tot_volume += volume
+        tot_fat += faturamento
+        tot_lucro += lucro
+
+    return {
+        'ok': True,
+        'periodo': periodo_norm,
+        'cidade': cidade_sel,
+        'cidades': cidades,
+        'bairros': bairros,
         'totais': {
             'total_pedidos': tot_pedidos,
             'volume_total': tot_volume,
@@ -1258,6 +1378,27 @@ def api_rentabilidade_praca():
             'ok': False,
             'mensagem': 'Não foi possível calcular a rentabilidade por praça.',
             'pracas': [],
+            'totais': {},
+            'periodo': periodo,
+        }), 500
+
+
+@dashboard_bp.route('/api/relatorios/rentabilidade-bairro')
+def api_rentabilidade_bairro():
+    """Auditoria de preço médio e margem real por bairro (filtrado por cidade)."""
+    periodo = (request.args.get('periodo') or 'ano').strip().lower()
+    cidade = (request.args.get('cidade') or '').strip()
+    try:
+        payload = calcular_rentabilidade_por_bairro(periodo, cidade)
+        return jsonify(payload)
+    except Exception:
+        current_app.logger.exception('Falha ao calcular rentabilidade por bairro')
+        return jsonify({
+            'ok': False,
+            'mensagem': 'Não foi possível calcular a rentabilidade por bairro.',
+            'bairros': [],
+            'cidades': [],
+            'cidade': cidade,
             'totais': {},
             'periodo': periodo,
         }), 500

@@ -165,6 +165,7 @@ class Cliente(db.Model):
     # TODO Fase 2: remover unique=True e trocar por UniqueConstraint(empresa_id, cnpj).
     cnpj = db.Column(db.String(18), unique=True, index=True)
     cidade = db.Column(db.String(100))
+    bairro = db.Column(db.String(100), nullable=True)
     estado = db.Column(db.String(2), nullable=True)  # UF, ex: "PE", "BA"
     telefone = db.Column(db.String(20), nullable=True)
     nome_contato = db.Column(db.String(100), nullable=True)  # Ex.: "João (Financeiro)" — pessoa do telefone principal

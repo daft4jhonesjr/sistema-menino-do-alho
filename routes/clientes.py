@@ -318,6 +318,7 @@ def padronizar_clientes_maiusculas():
                 ('nome_cliente', 200),
                 ('razao_social', 200),
                 ('cidade', 100),
+                ('bairro', 100),
                 ('endereco', 255),
                 ('nome_contato', 100),
                 ('nome_contato_secundario', 100),
@@ -406,6 +407,7 @@ def novo_cliente():
                 cnpj=cnpj,
                 cidade=(request.form.get('cidade', '') or '').strip().upper(),
                 estado=(request.form.get('estado') or '').strip().upper()[:2] or None,
+                bairro=(request.form.get('bairro', '') or '').strip().upper()[:100] or None,
                 endereco=(request.form.get('endereco', '') or '').strip().upper() or None,
                 empresa_id=empresa_id_atual(),
             )
@@ -453,6 +455,7 @@ def editar_cliente(id):
             razao_raw = (request.form.get('razao_social') or '').strip().upper()
             cidade_raw = (request.form.get('cidade') or '').strip().upper()
             estado_raw = (request.form.get('estado') or '').strip().upper()[:2] or None
+            bairro_raw = (request.form.get('bairro') or '').strip().upper() or None
             endereco_raw = (request.form.get('endereco') or '').strip().upper() or None
             telefone_raw = (request.form.get('telefone', '') or '').strip() or None
             nome_contato_raw = (request.form.get('nome_contato', '') or '').strip().upper() or None
@@ -468,6 +471,7 @@ def editar_cliente(id):
             cliente.cnpj = cnpj
             cliente.cidade = cidade_raw[:100] if cidade_raw else ''
             cliente.estado = estado_raw
+            cliente.bairro = bairro_raw[:100] if bairro_raw else None
             cliente.endereco = endereco_raw[:255] if endereco_raw else None
             try:
                 db.session.commit()
