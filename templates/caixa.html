@@ -29,7 +29,7 @@
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
             💵 Dinheiro
         </button>
-        <button type="button" onclick="abrirGavetaOrcamento()" class="w-full md:w-auto bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 px-5 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center justify-center gap-2 transition-colors border border-slate-200 dark:border-slate-600">
+        <button type="button" id="btn-abrir-orcamento" class="w-full md:w-auto bg-violet-100 text-violet-800 hover:bg-violet-200 dark:bg-violet-900/40 dark:text-violet-200 dark:hover:bg-violet-800/50 px-5 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center justify-center gap-2 transition-colors border border-violet-200 dark:border-violet-700">
             <i data-lucide="wallet" class="w-5 h-5"></i>
             Meu Orçamento
         </button>
@@ -363,7 +363,7 @@
 
 <!-- Overlay + Gaveta de Orçamento Pessoal -->
 <div id="gaveta-orcamento-overlay" class="fixed inset-0 z-40 hidden bg-black/50 transition-opacity" onclick="fecharGavetaOrcamento()" aria-hidden="true"></div>
-<div id="gaveta-orcamento" class="fixed inset-y-0 right-0 z-50 w-full max-w-md transform translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col" role="dialog" aria-modal="true" aria-labelledby="gaveta-orcamento-titulo">
+<div id="gaveta-orcamento" class="fixed inset-y-0 right-0 z-50 w-full max-w-md transform translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="gaveta-orcamento-titulo">
     <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80">
         <div>
             <h3 id="gaveta-orcamento-titulo" class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
@@ -372,7 +372,7 @@
             </h3>
             <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Despesas fixas e variáveis do mês</p>
         </div>
-        <button type="button" onclick="fecharGavetaOrcamento()" class="p-2 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-200 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-700 transition-colors" title="Fechar" aria-label="Fechar">
+        <button type="button" id="btn-fechar-orcamento" class="p-2 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-200 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-700 transition-colors" title="Fechar" aria-label="Fechar">
             <i data-lucide="x" class="w-5 h-5"></i>
         </button>
     </div>
@@ -381,7 +381,7 @@
         <input type="text" id="orcamento-descricao" name="descricao" maxlength="150" required placeholder="Ex: Aluguel, academia, mercado…"
                class="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm">
         <div class="grid grid-cols-2 gap-2">
-            <input type="text" id="orcamento-valor" name="valor" required inputmode="decimal" placeholder="R$ 0,00"
+            <input type="text" id="orcamento-valor" name="valor" required inputmode="decimal" autocomplete="off" placeholder="R$ 0,00"
                    class="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm font-semibold tabular-nums">
             <select id="orcamento-categoria" name="categoria"
                     class="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm">
@@ -2390,9 +2390,26 @@ document.addEventListener('keydown', function(e) {
     }
 
     function formatarBRL(valor) {
-        var n = Number(valor);
+        var n = typeof valor === 'number' ? valor : parseValorBRL(valor);
+        if (!isFinite(n)) n = Number(valor);
         if (!isFinite(n)) n = 0;
         return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    }
+
+    function mascaraValorBRL(campo) {
+        var digitos = String(campo.value || '').replace(/\D/g, '');
+        if (!digitos) {
+            campo.value = '';
+            return;
+        }
+        var centavos = (parseInt(digitos, 10) / 100).toFixed(2);
+        campo.value = Number(centavos).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    }
+
+    function parseValorBRL(texto) {
+        var limpo = String(texto || '').replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
+        var n = parseFloat(limpo);
+        return isFinite(n) ? n : NaN;
     }
 
     function setErro(msg) {
@@ -2413,6 +2430,8 @@ document.addEventListener('keydown', function(e) {
     window.abrirGavetaOrcamento = function() {
         overlay && overlay.classList.remove('hidden');
         gaveta.classList.remove('translate-x-full');
+        gaveta.classList.add('translate-x-0');
+        gaveta.setAttribute('aria-hidden', 'false');
         if (typeof travarFundo === 'function') travarFundo();
         refreshIcons();
         carregarOrcamento();
@@ -2421,11 +2440,34 @@ document.addEventListener('keydown', function(e) {
     };
 
     window.fecharGavetaOrcamento = function() {
+        gaveta.classList.remove('translate-x-0');
         gaveta.classList.add('translate-x-full');
+        gaveta.setAttribute('aria-hidden', 'true');
         overlay && overlay.classList.add('hidden');
         if (typeof liberarFundo === 'function') liberarFundo();
         setErro('');
     };
+
+    var btnAbrir = document.getElementById('btn-abrir-orcamento');
+    if (btnAbrir) btnAbrir.addEventListener('click', function(e) {
+        e.preventDefault();
+        abrirGavetaOrcamento();
+    });
+    var btnFechar = document.getElementById('btn-fechar-orcamento');
+    if (btnFechar) btnFechar.addEventListener('click', function(e) {
+        e.preventDefault();
+        fecharGavetaOrcamento();
+    });
+
+    var inputValor = document.getElementById('orcamento-valor');
+    if (inputValor) {
+        inputValor.addEventListener('input', function() {
+            mascaraValorBRL(inputValor);
+        });
+        inputValor.addEventListener('blur', function() {
+            if (inputValor.value) mascaraValorBRL(inputValor);
+        });
+    }
 
     function renderizarOrcamento(data) {
         var itens = (data && data.itens) || [];
@@ -2494,9 +2536,14 @@ document.addEventListener('keydown', function(e) {
         e.preventDefault();
         setErro('');
         var btn = document.getElementById('orcamento-btn-adicionar');
+        var valorFloat = parseValorBRL(document.getElementById('orcamento-valor').value);
+        if (!isFinite(valorFloat) || valorFloat <= 0) {
+            setErro('Informe um valor maior que zero (ex: R$ 1.200,50).');
+            return;
+        }
         var payload = {
             descricao: (document.getElementById('orcamento-descricao').value || '').trim(),
-            valor: (document.getElementById('orcamento-valor').value || '').trim(),
+            valor: valorFloat,
             categoria: document.getElementById('orcamento-categoria').value
         };
         if (!payload.descricao) {
