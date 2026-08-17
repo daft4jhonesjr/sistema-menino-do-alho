@@ -20,7 +20,7 @@ from flask import (
     Blueprint, current_app, jsonify, request, send_file, session,
 )
 from flask_login import current_user
-from sqlalchemy import case, func, or_
+from sqlalchemy import and_, case, func, or_
 
 from models import db, ContagemGaveta, LancamentoCaixa, Venda
 from routes.caixa import _limpar_valor_moeda
@@ -68,25 +68,30 @@ def _fmt_brl(valor: float) -> str:
     return f'-R$ {s}' if negativo else f'R$ {s}'
 
 
-def _soma_recebiveis_forma(forma_needle: str, so_pendente: bool = False) -> float:
-    """Soma face/saldo de vendas a receber filtradas por forma de pagamento."""
+def _soma_vendas_pendentes() -> float:
+    """Soma integral a receber: todas as vendas PENDENTE/PARCIAL (qualquer forma).
+
+    Usa ``situacao`` (campo real do modelo). Exclui ``PERDA``. Em PARCIAL
+    considera só o saldo remanescente (face − valor_pago).
+    """
     eid = empresa_id_atual()
     face = Venda.preco_venda * Venda.quantidade_venda
     saldo = face - func.coalesce(Venda.valor_pago, 0)
     filtro_sem_perda = func.upper(func.coalesce(Venda.tipo_operacao, 'VENDA')) != 'PERDA'
-    if so_pendente:
-        situacoes = ['PENDENTE']
-        valor_expr = face
-    else:
-        situacoes = ['PENDENTE', 'PARCIAL']
-        valor_expr = case((saldo > 0, saldo), else_=0)
-
-    q = db.session.query(
-        func.coalesce(func.sum(valor_expr), 0)
-    ).filter(
+    valor_expr = case(
+        (func.upper(func.coalesce(Venda.situacao, '')) == 'PENDENTE', face),
+        (
+            and_(
+                func.upper(func.coalesce(Venda.situacao, '')) == 'PARCIAL',
+                saldo > 0,
+            ),
+            saldo,
+        ),
+        else_=0,
+    )
+    q = db.session.query(func.coalesce(func.sum(valor_expr), 0)).filter(
         filtro_sem_perda,
-        Venda.situacao.in_(situacoes),
-        func.upper(func.coalesce(Venda.forma_pagamento, '')).like(f'%{forma_needle}%'),
+        func.upper(func.coalesce(Venda.situacao, '')).in_(['PENDENTE', 'PARCIAL']),
     )
     if eid is not None:
         q = q.filter(Venda.empresa_id == eid)
@@ -170,16 +175,17 @@ def _saldo_pix_livro_caixa() -> float:
 
 
 def _calcular_dados_balanco() -> dict:
-    """Consolida os quatro totais automáticos do sistema."""
+    """Consolida os totais automáticos do sistema para o balanço rápido."""
     estado = _carregar_estado_gaveta()
-    # Spec: PENDENTE + BOLETO (valor face). PARCIAL fica de fora do pedido.
-    total_boletos = round(_soma_recebiveis_forma('BOLETO', so_pendente=True), 2)
+    total_pendentes = round(_soma_vendas_pendentes(), 2)
     total_dinheiro = _total_dinheiro_gaveta(estado)
     total_cheques = _total_cheques_pendentes_gaveta(estado)
     total_pix = _saldo_pix_livro_caixa()
     return {
         'ok': True,
-        'total_boletos_pendentes': total_boletos,
+        'total_vendas_pendentes': total_pendentes,
+        # Alias retroativo (modal/CSV antigos ainda podem enviar esta chave)
+        'total_boletos_pendentes': total_pendentes,
         'total_dinheiro_caixa': total_dinheiro,
         'total_cheques_caixa': total_cheques,
         'total_pix_caixa': total_pix,
@@ -197,6 +203,7 @@ def api_balanco_dados_atuais():
         return jsonify({
             'ok': False,
             'mensagem': 'Não foi possível carregar os saldos atuais.',
+            'total_vendas_pendentes': 0.0,
             'total_boletos_pendentes': 0.0,
             'total_dinheiro_caixa': 0.0,
             'total_cheques_caixa': 0.0,
@@ -213,7 +220,10 @@ def api_balanco_exportar_csv():
 
     # Preferir valores enviados pelo formulário; se ausentes, recalcula do sistema.
     sistema = _calcular_dados_balanco()
-    boletos = _float_seguro(payload.get('total_boletos_pendentes'), sistema['total_boletos_pendentes'])
+    pendentes = _float_seguro(
+        payload.get('total_vendas_pendentes', payload.get('total_boletos_pendentes')),
+        sistema['total_vendas_pendentes'],
+    )
     dinheiro = _float_seguro(payload.get('total_dinheiro_caixa'), sistema['total_dinheiro_caixa'])
     cheques = _float_seguro(payload.get('total_cheques_caixa'), sistema['total_cheques_caixa'])
     pix = _float_seguro(payload.get('total_pix_caixa'), sistema['total_pix_caixa'])
@@ -222,7 +232,7 @@ def api_balanco_exportar_csv():
     a_receber_fora = _float_seguro(payload.get('a_receber_fora'))
     observacoes = str(payload.get('observacoes') or '').strip()
 
-    total_ativos = boletos + dinheiro + cheques + pix + a_receber_fora
+    total_ativos = pendentes + dinheiro + cheques + pix + a_receber_fora
     total_passivos = divida_paty + divida_destak
     saldo_liquido = total_ativos - total_passivos
 
@@ -236,7 +246,11 @@ def api_balanco_exportar_csv():
     writer.writerow(['CONTA', 'TIPO', 'VALOR (R$)'])
 
     # Ativos
-    writer.writerow(['Boletos Pendentes', 'ATIVO', _fmt_brl(boletos)])
+    writer.writerow([
+        'Total a Receber - Vendas/Notas Pendentes (Sistema)',
+        'ATIVO',
+        _fmt_brl(pendentes),
+    ])
     writer.writerow(['Dinheiro em Caixa (Gaveta)', 'ATIVO', _fmt_brl(dinheiro)])
     writer.writerow(['Cheques em Caixa (não enviados)', 'ATIVO', _fmt_brl(cheques)])
     writer.writerow(['Pix / Transferência (saldo livro)', 'ATIVO', _fmt_brl(pix)])

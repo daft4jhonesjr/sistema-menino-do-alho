@@ -591,9 +591,9 @@
                     <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-3">Saldos do sistema</p>
                     <div id="balanco-loading" class="text-sm text-gray-500 dark:text-gray-400 animate-pulse py-4 text-center">Carregando saldos…</div>
                     <div id="balanco-saldos" class="hidden grid grid-cols-2 gap-3">
-                        <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 p-3">
-                            <p class="text-[11px] uppercase text-gray-500 dark:text-gray-400">Boletos Pendentes</p>
-                            <p id="balanco-boletos" class="text-base font-bold text-amber-600 dark:text-amber-400 valor-financeiro mt-1">R$ 0,00</p>
+                        <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 p-3 col-span-2">
+                            <p class="text-[11px] uppercase text-gray-500 dark:text-gray-400 leading-snug">Total a Receber (Notas/Vendas Pendentes)</p>
+                            <p id="balanco-vendas-pendentes" class="text-base font-bold text-amber-600 dark:text-amber-400 valor-financeiro mt-1">R$ 0,00</p>
                         </div>
                         <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 p-3">
                             <p class="text-[11px] uppercase text-gray-500 dark:text-gray-400">Dinheiro (Gaveta)</p>
@@ -667,7 +667,7 @@
         var ENDPOINT_DADOS = {{ url_for('financeiro.api_balanco_dados_atuais')|tojson }};
         var ENDPOINT_CSV = {{ url_for('financeiro.api_balanco_exportar_csv')|tojson }};
         var dadosSistema = {
-            total_boletos_pendentes: 0,
+            total_vendas_pendentes: 0,
             total_dinheiro_caixa: 0,
             total_cheques_caixa: 0,
             total_pix_caixa: 0
@@ -689,7 +689,7 @@
             return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
         }
         function atualizarPreview() {
-            var ativos = (dadosSistema.total_boletos_pendentes || 0)
+            var ativos = (dadosSistema.total_vendas_pendentes || 0)
                 + (dadosSistema.total_dinheiro_caixa || 0)
                 + (dadosSistema.total_cheques_caixa || 0)
                 + (dadosSistema.total_pix_caixa || 0)
@@ -707,12 +707,14 @@
         }
         function preencherSaldos(data) {
             dadosSistema = {
-                total_boletos_pendentes: Number(data.total_boletos_pendentes) || 0,
+                total_vendas_pendentes: Number(data.total_vendas_pendentes != null
+                    ? data.total_vendas_pendentes
+                    : data.total_boletos_pendentes) || 0,
                 total_dinheiro_caixa: Number(data.total_dinheiro_caixa) || 0,
                 total_cheques_caixa: Number(data.total_cheques_caixa) || 0,
                 total_pix_caixa: Number(data.total_pix_caixa) || 0
             };
-            document.getElementById('balanco-boletos').textContent = fmtMoeda(dadosSistema.total_boletos_pendentes);
+            document.getElementById('balanco-vendas-pendentes').textContent = fmtMoeda(dadosSistema.total_vendas_pendentes);
             document.getElementById('balanco-dinheiro').textContent = fmtMoeda(dadosSistema.total_dinheiro_caixa);
             document.getElementById('balanco-cheques').textContent = fmtMoeda(dadosSistema.total_cheques_caixa);
             document.getElementById('balanco-pix').textContent = fmtMoeda(dadosSistema.total_pix_caixa);
@@ -766,7 +768,8 @@
                 var btn = document.getElementById('btn-exportar-balanco');
                 if (btn) { btn.disabled = true; btn.classList.add('opacity-60'); }
                 var body = {
-                    total_boletos_pendentes: dadosSistema.total_boletos_pendentes,
+                    total_vendas_pendentes: dadosSistema.total_vendas_pendentes,
+                    total_boletos_pendentes: dadosSistema.total_vendas_pendentes,
                     total_dinheiro_caixa: dadosSistema.total_dinheiro_caixa,
                     total_cheques_caixa: dadosSistema.total_cheques_caixa,
                     total_pix_caixa: dadosSistema.total_pix_caixa,
