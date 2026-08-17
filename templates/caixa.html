@@ -255,7 +255,7 @@
                             <td class="px-6 py-3 whitespace-nowrap" data-label="Selecionar">
                                 <input type="checkbox" name="lancamento_ids" value="{{ l.id }}" onchange="atualizarBarraMassa()" class="check-item-caixa item-grupo-{{ grupo.id_html }} w-4 h-4 text-emerald-600 bg-gray-100 border-gray-300 rounded focus:ring-emerald-500 dark:bg-gray-700 dark:border-gray-600">
                             </td>
-                            <td class="px-6 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap" data-label="Data">{{ l.data.strftime('%d/%m/%Y') }}</td>
+                            <td class="px-6 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap" data-label="Data">{{ l.data|data_com_dia_semana }}</td>
                             <td class="px-6 py-3 font-medium text-gray-900 dark:text-gray-100 whitespace-normal break-words" data-label="Descrição">
                                 {% set _desc_split = l.descricao|extrair_lote_caixa %}
                                 <div>{{ _desc_split.principal or l.descricao }}</div>
@@ -305,7 +305,7 @@
                      data-lanc-forma="{{ l.forma_pagamento|e }}"
                      data-lanc-valor="{{ l.valor }}">
                     <div class="flex justify-between items-start mb-2 gap-2">
-                        <span class="text-xs text-slate-500 dark:text-slate-400 font-medium">{{ l.data.strftime('%d/%m/%Y') }}</span>
+                        <span class="text-xs text-slate-500 dark:text-slate-400 font-medium">{{ l.data|data_com_dia_semana }}</span>
                         <span class="text-[10px] font-bold px-2 py-1 rounded bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300 uppercase tracking-wider">
                             {{ l.forma_pagamento }}
                         </span>

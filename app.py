@@ -2791,6 +2791,28 @@ def formato_moeda(value):
         return 'R$ 0,00'
 
 
+_DIAS_SEMANA_CAIXA = (
+    'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado', 'domingo',
+)
+
+
+@app.template_filter('data_com_dia_semana')
+def data_com_dia_semana(value):
+    """Formata data como ``DD/MM/YYYY (segunda)``."""
+    if value is None:
+        return ''
+    data = value.date() if hasattr(value, 'date') and callable(value.date) else value
+    try:
+        weekday = data.weekday()
+        dia = _DIAS_SEMANA_CAIXA[weekday]
+        return f"{data.strftime('%d/%m/%Y')} ({dia})"
+    except Exception:
+        try:
+            return data.strftime('%d/%m/%Y')
+        except Exception:
+            return str(value or '')
+
+
 @app.template_filter('extrair_lote_caixa')
 def extrair_lote_caixa(descricao):
     """Separa descrição de ``LancamentoCaixa`` em (principal, lote).
