@@ -13,6 +13,7 @@ Rotas extraídas do legado ``app.py`` (Fase 2 da refatoração):
     * GET/POST /clientes/importar                 importar_clientes  (admin)
     * POST /cliente/<id>/receber_lote             receber_lote_cliente
     * GET  /api/clientes/<id>/prazo-padrao        prazo_padrao_cliente
+    * GET  /api/migrar-enderecos                  migrar_enderecos (admin, temporária)
 
 Endpoints novos: prefixo ``clientes.`` (ex.: ``clientes.listar_clientes``).
 
@@ -132,6 +133,166 @@ def _exigir_tenant_em_todas_rotas():
 # ============================================================
 # Helpers exclusivos de clientes
 # ============================================================
+
+_RE_CEP = re.compile(r'\b(\d{5})-?(\d{3})\b')
+_RE_NUMERO_TOKEN = re.compile(
+    r'^(?:n[ºo°\.]?\s*)?(\d+[A-Za-z]?(?:\s*/\s*\d+)?)$',
+    re.I,
+)
+
+
+def _normalizar_cep(raw):
+    digitos = re.sub(r'\D', '', raw or '')
+    if len(digitos) == 8:
+        return f'{digitos[:5]}-{digitos[5:]}'
+    texto = (raw or '').strip()
+    return texto[:20] or None
+
+
+def _limpar_parte_endereco(valor, max_len):
+    if not valor:
+        return None
+    texto = re.sub(r'\s+', ' ', str(valor)).strip(' ,;-/')
+    texto = texto.upper()
+    return texto[:max_len] if texto else None
+
+
+def _parece_cep_avulso(valor):
+    return len(re.sub(r'\D', '', valor or '')) == 8
+
+
+def _parece_uf(valor):
+    return bool(re.fullmatch(r'[A-Z]{2}', (valor or '').strip().upper()))
+
+
+def _extrair_endereco_estruturado(texto):
+    """Heurística para desmembrar o campo legado ``endereco``.
+
+    Exemplos aceitos:
+        ``Rua X, 123 - Bairro Y``
+        ``RUA DO COMERCIO, 100, CENTRO, 56300-000``
+        ``AV SETE DE SETEMBRO 1234 - VILA NOVA``
+    """
+    original = (texto or '').strip()
+    if not original:
+        return {'cep': None, 'rua': None, 'numero': None, 'bairro': None}
+
+    cep = None
+    mcep = _RE_CEP.search(original)
+    resto = original
+    if mcep:
+        cep = f'{mcep.group(1)}-{mcep.group(2)}'
+        resto = (original[:mcep.start()] + ' ' + original[mcep.end():]).strip()
+        resto = re.sub(r'\s+', ' ', resto).strip(' ,;-/')
+
+    partes = [p.strip() for p in resto.split(',') if p.strip()]
+    while partes and (_parece_uf(partes[-1]) or _parece_cep_avulso(partes[-1])):
+        partes.pop()
+
+    rua = numero = bairro = None
+
+    def _split_hifen(s):
+        return [p.strip() for p in re.split(r'\s*[-–]\s*', s) if p.strip()]
+
+    if not partes:
+        return {'cep': cep, 'rua': None, 'numero': None, 'bairro': None}
+
+    if len(partes) == 1:
+        hifs = _split_hifen(partes[0])
+        if len(hifs) >= 2:
+            primeiro = hifs[0]
+            mnum = re.search(
+                r'^(.*?)\s+(?:n[ºo°\.]?\s*)?(\d+[A-Za-z]?(?:\s*/\s*\d+)?)$',
+                primeiro,
+                re.I,
+            )
+            if mnum:
+                rua, numero = mnum.group(1), mnum.group(2)
+            else:
+                mn = _RE_NUMERO_TOKEN.match(primeiro)
+                if mn:
+                    numero = mn.group(1)
+                else:
+                    rua = primeiro
+            for h in hifs[1:]:
+                mn = _RE_NUMERO_TOKEN.match(h)
+                if mn and not numero:
+                    numero = mn.group(1)
+                elif not bairro:
+                    bairro = h
+        else:
+            m = re.match(
+                r'^(.+?)\s+(?:n[ºo°\.]?\s*)?(\d+[A-Za-z]?(?:\s*/\s*\d+)?)$',
+                partes[0],
+                re.I,
+            )
+            if m:
+                rua, numero = m.group(1), m.group(2)
+            else:
+                rua = partes[0]
+    else:
+        rua = partes[0]
+        resto_p = partes[1:]
+        primeiro_resto = resto_p[0]
+        hifs = _split_hifen(primeiro_resto)
+        if hifs:
+            mn = _RE_NUMERO_TOKEN.match(hifs[0])
+            if mn:
+                numero = mn.group(1)
+                if len(hifs) >= 2:
+                    bairro = ' - '.join(hifs[1:])
+            elif not bairro:
+                bairro = primeiro_resto
+        if not bairro and len(resto_p) >= 2:
+            cand = resto_p[1]
+            if not _parece_uf(cand) and not _parece_cep_avulso(cand) and not _RE_NUMERO_TOKEN.match(cand):
+                bairro = cand
+            elif _RE_NUMERO_TOKEN.match(cand) and not numero:
+                numero = _RE_NUMERO_TOKEN.match(cand).group(1)
+
+    return {
+        'cep': cep,
+        'rua': _limpar_parte_endereco(rua, 150),
+        'numero': _limpar_parte_endereco(numero, 20),
+        'bairro': _limpar_parte_endereco(bairro, 100),
+    }
+
+
+def _montar_endereco_completo(cep=None, rua=None, numero=None, bairro=None,
+                              cidade=None, estado=None):
+    partes = []
+    if rua:
+        partes.append(f'{rua}, {numero}' if numero else rua)
+    elif numero:
+        partes.append(numero)
+    if bairro:
+        partes.append(bairro)
+    if cidade:
+        partes.append(cidade)
+    if estado:
+        partes.append(estado)
+    if cep:
+        partes.append(cep)
+    composto = ', '.join(p for p in partes if p)
+    return composto.upper()[:255] if composto else None
+
+
+def _aplicar_endereco_formulario(cliente, form):
+    """Grava CEP/rua/número/bairro e recompõe ``endereco`` (backup/Maps)."""
+    cep = _normalizar_cep(form.get('cep'))
+    rua = (form.get('rua') or '').strip().upper()[:150] or None
+    numero = (form.get('numero') or '').strip().upper()[:20] or None
+    bairro = (form.get('bairro') or '').strip().upper()[:100] or None
+    cliente.cep = cep
+    cliente.rua = rua
+    cliente.numero = numero
+    cliente.bairro = bairro
+    composto = _montar_endereco_completo(
+        cep=cep, rua=rua, numero=numero, bairro=bairro,
+        cidade=cliente.cidade, estado=cliente.estado,
+    )
+    if composto:
+        cliente.endereco = composto
 
 def _processar_linhas_clientes_upsert(linhas, erros_detalhados, sucesso_ref, erros_ref, linha_offset=0):
     """Processa lista de dicts (nome_cliente, razao_social, cnpj, cidade,
@@ -361,6 +522,63 @@ def prazo_padrao_cliente(cliente_id):
     return jsonify({'prazo_dias': int(escolhido)})
 
 
+@clientes_bp.route('/api/migrar-enderecos', methods=['GET', 'POST'])
+@admin_required
+def migrar_enderecos():
+    """Rota temporária (admin): desmembra ``endereco`` legado em CEP/rua/número/bairro.
+
+    Só processa clientes do tenant com ``endereco`` preenchido e ``rua`` vazia.
+    Não apaga o campo ``endereco`` (fica como backup).
+    """
+    clientes = (
+        query_tenant(Cliente)
+        .filter(
+            Cliente.endereco.isnot(None),
+            Cliente.endereco != '',
+            or_(Cliente.rua.is_(None), Cliente.rua == ''),
+        )
+        .all()
+    )
+    atualizados = 0
+    ignorados = 0
+    try:
+        for cliente in clientes:
+            extraido = _extrair_endereco_estruturado(cliente.endereco)
+            if not any(extraido.get(k) for k in ('cep', 'rua', 'numero', 'bairro')):
+                ignorados += 1
+                continue
+            if extraido.get('cep'):
+                cliente.cep = extraido['cep']
+            if extraido.get('rua'):
+                cliente.rua = extraido['rua']
+            if extraido.get('numero'):
+                cliente.numero = extraido['numero']
+            if extraido.get('bairro') and not (cliente.bairro or '').strip():
+                cliente.bairro = extraido['bairro']
+            atualizados += 1
+        db.session.commit()
+        registrar_log(
+            'EDITAR',
+            'CLIENTES',
+            f'Migração de endereços: {atualizados} cliente(s) atualizado(s).',
+        )
+        return jsonify({
+            'ok': True,
+            'atualizados': atualizados,
+            'ignorados': ignorados,
+            'total_candidatos': len(clientes),
+            'mensagem': f'{atualizados} cliente(s) atualizado(s).',
+        })
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f'[migrar_enderecos] falha: {e}', exc_info=True)
+        return jsonify({
+            'ok': False,
+            'atualizados': 0,
+            'mensagem': 'Falha ao migrar endereços. Nenhuma alteração foi salva.',
+        }), 500
+
+
 @clientes_bp.route('/api/clientes/padronizar_maiusculas', methods=['POST'])
 def padronizar_clientes_maiusculas():
     """Converte campos textuais dos clientes do tenant atual para MAIÚSCULAS.
@@ -391,6 +609,9 @@ def padronizar_clientes_maiusculas():
                 ('razao_social', 200),
                 ('cidade', 100),
                 ('bairro', 100),
+                ('rua', 150),
+                ('numero', 20),
+                ('cep', 20),
                 ('endereco', 255),
                 ('nome_contato', 100),
                 ('nome_contato_secundario', 100),
@@ -479,10 +700,9 @@ def novo_cliente():
                 cnpj=cnpj,
                 cidade=(request.form.get('cidade', '') or '').strip().upper(),
                 estado=(request.form.get('estado') or '').strip().upper()[:2] or None,
-                bairro=(request.form.get('bairro', '') or '').strip().upper()[:100] or None,
-                endereco=(request.form.get('endereco', '') or '').strip().upper() or None,
                 empresa_id=empresa_id_atual(),
             )
+            _aplicar_endereco_formulario(cliente, request.form)
             db.session.add(cliente)
             db.session.commit()
             registrar_log('CRIAR', 'CLIENTES', f"Cliente #{cliente.id} — {cliente.nome_cliente} criado.")
@@ -527,8 +747,6 @@ def editar_cliente(id):
             razao_raw = (request.form.get('razao_social') or '').strip().upper()
             cidade_raw = (request.form.get('cidade') or '').strip().upper()
             estado_raw = (request.form.get('estado') or '').strip().upper()[:2] or None
-            bairro_raw = (request.form.get('bairro') or '').strip().upper() or None
-            endereco_raw = (request.form.get('endereco') or '').strip().upper() or None
             telefone_raw = (request.form.get('telefone', '') or '').strip() or None
             nome_contato_raw = (request.form.get('nome_contato', '') or '').strip().upper() or None
             telefone_secundario_raw = (request.form.get('telefone_secundario', '') or '').strip() or None
@@ -543,8 +761,7 @@ def editar_cliente(id):
             cliente.cnpj = cnpj
             cliente.cidade = cidade_raw[:100] if cidade_raw else ''
             cliente.estado = estado_raw
-            cliente.bairro = bairro_raw[:100] if bairro_raw else None
-            cliente.endereco = endereco_raw[:255] if endereco_raw else None
+            _aplicar_endereco_formulario(cliente, request.form)
             try:
                 db.session.commit()
             except IntegrityError:

@@ -171,7 +171,10 @@ class Cliente(db.Model):
     nome_contato = db.Column(db.String(100), nullable=True)  # Ex.: "João (Financeiro)" — pessoa do telefone principal
     telefone_secundario = db.Column(db.String(20), nullable=True)
     nome_contato_secundario = db.Column(db.String(100), nullable=True)
-    endereco = db.Column(db.String(255))
+    endereco = db.Column(db.String(255))  # backup legado; recomposto a partir dos campos abaixo
+    cep = db.Column(db.String(20), nullable=True)
+    rua = db.Column(db.String(150), nullable=True)
+    numero = db.Column(db.String(20), nullable=True)
     ativo = db.Column(db.Boolean, default=True, nullable=False, server_default='1', index=True)
 
     empresa = db.relationship('Empresa', backref=db.backref('clientes', lazy='dynamic'))
@@ -179,7 +182,29 @@ class Cliente(db.Model):
     # Relacionamento com vendas — sem cascade intencional: excluir um cliente
     # deve falhar via FK constraint se houver vendas vinculadas, preservando o histórico financeiro.
     vendas = db.relationship('Venda', backref='cliente', lazy=True)
-    
+
+    @property
+    def endereco_para_mapa(self):
+        """Endereço estruturado para o Google Maps, com fallback no campo legado."""
+        partes = []
+        if self.rua:
+            trecho = self.rua
+            if self.numero:
+                trecho = f'{trecho}, {self.numero}'
+            partes.append(trecho)
+        elif self.numero:
+            partes.append(self.numero)
+        if self.bairro:
+            partes.append(self.bairro)
+        if self.cidade:
+            partes.append(self.cidade)
+        if self.estado:
+            partes.append(self.estado)
+        if self.cep:
+            partes.append(self.cep)
+        composto = ', '.join(partes)
+        return composto or (self.endereco or '')
+
     def __repr__(self):
         return f'<Cliente {self.nome_cliente}>'
 

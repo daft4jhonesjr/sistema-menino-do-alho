@@ -10,7 +10,7 @@ Estado atual:
                            /clientes/<id>/extrato/whatsapp,
                            /clientes/importar, /bulk_delete_clientes,
                            /cliente/<id>/receber_lote,
-                           /api/clientes/<id>/prazo-padrao
+                           /api/clientes/<id>/prazo-padrao, /api/migrar-enderecos
     * ``produtos_bp``    → /produtos, /produtos/exportar_relatorio, /produtos/novo,
                            /produtos/editar, /produtos/excluir, /produtos/importar,
                            /produto/<id>/devolver, /produtos/atualizar_tipo_batch,

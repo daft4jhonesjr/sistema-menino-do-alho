@@ -156,8 +156,8 @@
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ cliente.cidade or '-' }}{% if cliente.cidade and cliente.estado %} — {{ cliente.estado }}{% elif cliente.estado %}{{ cliente.estado }}{% endif %}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div class="inline-flex items-center justify-end gap-2 flex-nowrap">
-                        {% if cliente.endereco %}
-                        <a href="https://www.google.com/maps/search/?api=1&query={{ cliente.endereco | urlencode }}" target="_blank" rel="noopener noreferrer" title="Ver no Mapa" class="inline-flex items-center justify-center p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors">
+                        {% if cliente.endereco_para_mapa %}
+                        <a href="https://www.google.com/maps/search/?api=1&query={{ cliente.endereco_para_mapa | urlencode }}" target="_blank" rel="noopener noreferrer" title="Ver no Mapa" class="inline-flex items-center justify-center p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5" aria-hidden="true">
                                 <path fill-rule="evenodd" d="M11.54 22.351l.07.04.028.016a.76.76 0 00.723 0l.028-.015.071-.041a16.975 16.975 0 001.144-.742 19.58 19.58 0 002.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 00-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 002.682 2.282 16.975 16.975 0 001.145.742zM12 13.5a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" />
                             </svg>
@@ -180,8 +180,10 @@
                                 data-cnpj="{{ cliente.cnpj or '' }}"
                                 data-cidade="{{ cliente.cidade or '' }}"
                                 data-estado="{{ cliente.estado or '' }}"
+                                data-cep="{{ cliente.cep or '' }}"
+                                data-rua="{{ cliente.rua or '' }}"
+                                data-numero="{{ cliente.numero or '' }}"
                                 data-bairro="{{ cliente.bairro or '' }}"
-                                data-endereco="{{ cliente.endereco or '' }}"
                                 title="Editar cliente">
                             <i data-lucide="pencil" class="w-4 h-4"></i>
                         </button>
@@ -285,8 +287,8 @@
                 </div>
                 {% endif %}
 
-                {% if cliente.endereco %}
-                <a href="https://www.google.com/maps/search/?api=1&query={{ cliente.endereco | urlencode }}" target="_blank" rel="noopener noreferrer" title="Ver no Mapa"
+                {% if cliente.endereco_para_mapa %}
+                <a href="https://www.google.com/maps/search/?api=1&query={{ cliente.endereco_para_mapa | urlencode }}" target="_blank" rel="noopener noreferrer" title="Ver no Mapa"
                    class="inline-flex items-center justify-center p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors mt-1">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5" aria-hidden="true">
                         <path fill-rule="evenodd" d="M11.54 22.351l.07.04.028.016a.76.76 0 00.723 0l.028-.015.071-.041a16.975 16.975 0 001.144-.742 19.58 19.58 0 002.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 00-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 002.682 2.282 16.975 16.975 0 001.145.742zM12 13.5a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" />
@@ -319,8 +321,10 @@
                             data-cnpj="{{ cliente.cnpj or '' }}"
                             data-cidade="{{ cliente.cidade or '' }}"
                             data-estado="{{ cliente.estado or '' }}"
+                            data-cep="{{ cliente.cep or '' }}"
+                            data-rua="{{ cliente.rua or '' }}"
+                            data-numero="{{ cliente.numero or '' }}"
                             data-bairro="{{ cliente.bairro or '' }}"
-                            data-endereco="{{ cliente.endereco or '' }}"
                             title="Editar cliente">
                         <i data-lucide="pencil" class="w-5 h-5"></i>
                     </button>
@@ -403,6 +407,27 @@
                     <p id="modal-cnpj-status" class="mt-1 text-xs text-gray-400 dark:text-gray-500 hidden" aria-live="polite"></p>
                 </div>
                 <div class="mb-5">
+                    <div class="grid grid-cols-12 gap-4">
+                        <div class="col-span-4">
+                            <label for="modal-cep" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">CEP</label>
+                            <input type="text" id="modal-cep" name="cep" maxlength="9" inputmode="numeric" autocomplete="postal-code" placeholder="00000-000" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
+                            <p id="modal-cep-status" class="mt-1 text-xs text-gray-400 dark:text-gray-500 hidden" aria-live="polite"></p>
+                        </div>
+                        <div class="col-span-8">
+                            <label for="modal-rua" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Rua</label>
+                            <input type="text" id="modal-rua" name="rua" maxlength="150" placeholder="Logradouro" autocapitalize="characters" autocomplete="street-address" spellcheck="false" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100 uppercase">
+                        </div>
+                        <div class="col-span-4">
+                            <label for="modal-numero" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Número</label>
+                            <input type="text" id="modal-numero" name="numero" maxlength="20" placeholder="Nº" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100 uppercase">
+                        </div>
+                        <div class="col-span-8">
+                            <label for="modal-bairro" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Bairro</label>
+                            <input type="text" id="modal-bairro" name="bairro" maxlength="100" placeholder="Bairro" autocapitalize="characters" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100 uppercase">
+                        </div>
+                    </div>
+                </div>
+                <div class="mb-5">
                     <div class="flex gap-3">
                         <div class="flex-1 min-w-0">
                             <label for="modal-cidade" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Cidade</label>
@@ -423,11 +448,6 @@
                             </select>
                         </div>
                     </div>
-                </div>
-                <div class="mb-6">
-                    <label for="modal-endereco" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Endereço Completo</label>
-                    <input type="hidden" id="modal-bairro" name="bairro" value="">
-                    <input type="text" id="modal-endereco" name="endereco" placeholder="Rua, número, bairro, cidade - para abrir no Google Maps" autocapitalize="characters" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100 uppercase">
                 </div>
                 <div class="flex gap-4">
                     <button type="submit" class="bg-emerald-700 text-white px-6 py-2.5 rounded-xl hover:bg-emerald-600 transition flex items-center font-medium" id="modal-novo-cliente-salvar">
@@ -559,6 +579,27 @@
                     <p id="edit_cnpj-status" class="mt-1 text-xs text-gray-400 dark:text-gray-500 hidden" aria-live="polite"></p>
                 </div>
                 <div class="mb-5">
+                    <div class="grid grid-cols-12 gap-4">
+                        <div class="col-span-4">
+                            <label for="edit_cep" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">CEP</label>
+                            <input type="text" id="edit_cep" name="cep" maxlength="9" inputmode="numeric" autocomplete="postal-code" placeholder="00000-000" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
+                            <p id="edit_cep-status" class="mt-1 text-xs text-gray-400 dark:text-gray-500 hidden" aria-live="polite"></p>
+                        </div>
+                        <div class="col-span-8">
+                            <label for="edit_rua" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Rua</label>
+                            <input type="text" id="edit_rua" name="rua" maxlength="150" placeholder="Logradouro" autocapitalize="characters" autocomplete="street-address" spellcheck="false" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100 uppercase">
+                        </div>
+                        <div class="col-span-4">
+                            <label for="edit_numero" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Número</label>
+                            <input type="text" id="edit_numero" name="numero" maxlength="20" placeholder="Nº" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100 uppercase">
+                        </div>
+                        <div class="col-span-8">
+                            <label for="edit_bairro" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Bairro</label>
+                            <input type="text" id="edit_bairro" name="bairro" maxlength="100" placeholder="Bairro" autocapitalize="characters" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100 uppercase">
+                        </div>
+                    </div>
+                </div>
+                <div class="mb-5">
                     <div class="flex gap-3">
                         <div class="flex-1 min-w-0">
                             <label for="edit_cidade" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Cidade</label>
@@ -578,11 +619,6 @@
                             </select>
                         </div>
                     </div>
-                </div>
-                <div class="mb-6">
-                    <label for="edit_endereco" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Endereço Completo</label>
-                    <input type="hidden" id="edit_bairro" name="bairro" value="">
-                    <input type="text" id="edit_endereco" name="endereco" maxlength="255" placeholder="Rua, número, bairro, cidade - para abrir no Google Maps" autocapitalize="characters" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100 uppercase">
                 </div>
                 <div class="flex gap-4">
                     <button type="submit" class="bg-emerald-700 text-white px-6 py-2.5 rounded-xl hover:bg-emerald-600 transition flex items-center font-medium" id="btn-salvar-editar-cliente">
@@ -850,8 +886,10 @@ window.padronizarClientesMaiusculo = function() {
         var cnpj = btn.getAttribute('data-cnpj') || '';
         var cidade = btn.getAttribute('data-cidade') || '';
         var estado = btn.getAttribute('data-estado') || '';
+        var cep = btn.getAttribute('data-cep') || '';
+        var rua = btn.getAttribute('data-rua') || '';
+        var numero = btn.getAttribute('data-numero') || '';
         var bairro = btn.getAttribute('data-bairro') || '';
-        var endereco = btn.getAttribute('data-endereco') || '';
         form.action = actionBase.replace(/\/0$/, '/') + id;
         document.getElementById('edit_nome').value = nome;
         document.getElementById('edit_telefone').value = telefone;
@@ -862,9 +900,17 @@ window.padronizarClientesMaiusculo = function() {
         document.getElementById('edit_cnpj').value = mascaraCNPJ(cnpj);
         document.getElementById('edit_cidade').value = cidade;
         document.getElementById('edit_estado').value = estado;
+        var editCep = document.getElementById('edit_cep');
+        if (editCep) {
+            var dCep = (cep || '').replace(/\D/g, '');
+            editCep.value = dCep.length === 8 ? dCep.slice(0, 5) + '-' + dCep.slice(5) : cep;
+        }
+        var editRua = document.getElementById('edit_rua');
+        if (editRua) editRua.value = rua;
+        var editNumero = document.getElementById('edit_numero');
+        if (editNumero) editNumero.value = numero;
         var editBairro = document.getElementById('edit_bairro');
         if (editBairro) editBairro.value = bairro;
-        document.getElementById('edit_endereco').value = endereco;
         if (typeof window.marcarCnpjClienteJaConsultado === 'function') {
             window.marcarCnpjClienteJaConsultado('edit', cnpj);
         }
@@ -1246,7 +1292,9 @@ document.addEventListener('DOMContentLoaded', function() {
             status: 'modal-cnpj-status',
             nome: 'modal-nome_cliente',
             razao: 'modal-razao_social',
-            endereco: 'modal-endereco',
+            cep: 'modal-cep',
+            rua: 'modal-rua',
+            numero: 'modal-numero',
             bairro: 'modal-bairro',
             cidade: 'modal-cidade',
             estado: 'modal-estado'
@@ -1256,7 +1304,9 @@ document.addEventListener('DOMContentLoaded', function() {
             status: 'edit_cnpj-status',
             nome: 'edit_nome',
             razao: 'edit_razao',
-            endereco: 'edit_endereco',
+            cep: 'edit_cep',
+            rua: 'edit_rua',
+            numero: 'edit_numero',
             bairro: 'edit_bairro',
             cidade: 'edit_cidade',
             estado: 'edit_estado'
@@ -1301,13 +1351,10 @@ document.addEventListener('DOMContentLoaded', function() {
         input.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
-    function montarEndereco(data) {
-        var partes = [];
-        if (data.logradouro) partes.push(String(data.logradouro).trim());
-        if (data.numero) partes.push(String(data.numero).trim());
-        if (data.bairro) partes.push(String(data.bairro).trim());
-        if (data.cep) partes.push(String(data.cep).trim());
-        return partes.filter(Boolean).join(', ');
+    function montarCep(valor) {
+        var d = String(valor || '').replace(/\D/g, '').slice(0, 8);
+        if (d.length !== 8) return String(valor || '').trim();
+        return d.slice(0, 5) + '-' + d.slice(5);
     }
 
     async function buscarCnpj(formKey) {
@@ -1338,8 +1385,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
             preencherCampo(el(ids.razao), razao);
             preencherCampo(el(ids.nome), nome);
-            preencherCampo(el(ids.endereco), montarEndereco(data));
+            preencherCampo(el(ids.rua), data.logradouro);
+            preencherCampo(el(ids.numero), data.numero);
             preencherCampo(el(ids.bairro), data.bairro);
+            preencherCampo(el(ids.cep), montarCep(data.cep));
             preencherCampo(el(ids.cidade), data.municipio);
             preencherCampo(el(ids.estado), data.uf);
 
@@ -1579,6 +1628,102 @@ document.addEventListener('DOMContentLoaded', function() {
     );
 
     carregarMunicipiosIbge();
+})();
+</script>
+
+<script>
+/* ── Autofill de endereço via ViaCEP ──────────────────────────────── */
+(function() {
+    function mascaraCep(v) {
+        var d = String(v || '').replace(/\D/g, '').slice(0, 8);
+        if (d.length <= 5) return d;
+        return d.slice(0, 5) + '-' + d.slice(5);
+    }
+
+    function setStatus(statusEl, msg, tipo) {
+        if (!statusEl) return;
+        if (!msg) {
+            statusEl.textContent = '';
+            statusEl.classList.add('hidden');
+            statusEl.classList.remove('text-emerald-600', 'text-red-500', 'text-amber-600', 'dark:text-emerald-400', 'dark:text-red-400', 'dark:text-amber-400');
+            return;
+        }
+        statusEl.textContent = msg;
+        statusEl.classList.remove('hidden', 'text-emerald-600', 'text-red-500', 'text-amber-600', 'dark:text-emerald-400', 'dark:text-red-400', 'dark:text-amber-400');
+        if (tipo === 'ok') statusEl.classList.add('text-emerald-600', 'dark:text-emerald-400');
+        else if (tipo === 'erro') statusEl.classList.add('text-red-500', 'dark:text-red-400');
+        else statusEl.classList.add('text-amber-600', 'dark:text-amber-400');
+    }
+
+    function preencher(input, valor) {
+        if (!input) return;
+        var txt = (valor == null ? '' : String(valor)).trim();
+        if (!txt) return;
+        input.value = txt.toUpperCase();
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    function ligarViaCep(ids) {
+        var cepEl = document.getElementById(ids.cep);
+        if (!cepEl) return;
+        var statusEl = ids.status ? document.getElementById(ids.status) : null;
+        var ultimo = '';
+        var buscando = false;
+
+        async function buscar() {
+            var dig = (cepEl.value || '').replace(/\D/g, '');
+            if (dig.length !== 8) return;
+            if (buscando || ultimo === dig) return;
+            buscando = true;
+            setStatus(statusEl, 'Buscando CEP…', 'info');
+            try {
+                var resp = await fetch('https://viacep.com.br/ws/' + dig + '/json/');
+                if (!resp.ok) throw new Error('Falha ao consultar o CEP.');
+                var data = await resp.json();
+                if (data.erro) throw new Error('CEP não encontrado.');
+                preencher(document.getElementById(ids.rua), data.logradouro);
+                preencher(document.getElementById(ids.bairro), data.bairro);
+                preencher(document.getElementById(ids.cidade), data.localidade);
+                preencher(document.getElementById(ids.estado), data.uf);
+                ultimo = dig;
+                setStatus(statusEl, '', null);
+                var num = document.getElementById(ids.numero);
+                if (num) num.focus();
+            } catch (err) {
+                ultimo = '';
+                setStatus(statusEl, (err && err.message) || 'CEP não encontrado.', 'erro');
+            } finally {
+                buscando = false;
+            }
+        }
+
+        cepEl.addEventListener('input', function() {
+            cepEl.value = mascaraCep(cepEl.value);
+            var dig = cepEl.value.replace(/\D/g, '');
+            if (dig.length === 8) buscar();
+            else {
+                ultimo = '';
+                setStatus(statusEl, '', null);
+            }
+        });
+        cepEl.addEventListener('focus', function() {
+            var dig = (cepEl.value || '').replace(/\D/g, '');
+            if (dig.length === 8) ultimo = dig;
+        });
+        cepEl.addEventListener('blur', buscar);
+    }
+
+    ligarViaCep({
+        cep: 'modal-cep', status: 'modal-cep-status',
+        rua: 'modal-rua', numero: 'modal-numero', bairro: 'modal-bairro',
+        cidade: 'modal-cidade', estado: 'modal-estado'
+    });
+    ligarViaCep({
+        cep: 'edit_cep', status: 'edit_cep-status',
+        rua: 'edit_rua', numero: 'edit_numero', bairro: 'edit_bairro',
+        cidade: 'edit_cidade', estado: 'edit_estado'
+    });
 })();
 </script>
 {% endblock %}
