@@ -626,6 +626,32 @@ class ContagemGaveta(db.Model):
         return f'<ContagemGaveta {self.id} - {self.data}>'
 
 
+CATEGORIAS_ORCAMENTO = ('Custo básico', 'Saúde', 'Lazer', 'Investimento')
+
+
+class ItemOrcamento(db.Model):
+    """Item do orçamento pessoal mensal (despesas fixas/variáveis) por tenant."""
+
+    __tablename__ = 'itens_orcamento'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    empresa_id = db.Column(
+        db.Integer,
+        db.ForeignKey('empresas.id', ondelete='CASCADE'),
+        nullable=True,
+        index=True,
+    )
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True, index=True)
+    descricao = db.Column(db.String(150), nullable=False)
+    valor = db.Column(db.Numeric(10, 2), nullable=False)
+    categoria = db.Column(db.String(50), nullable=True)
+
+    empresa = db.relationship('Empresa', backref=db.backref('itens_orcamento', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<ItemOrcamento {self.id} {self.descricao}>'
+
+
 class PushSubscription(db.Model):
     """Armazena inscrições de Web Push de cada browser/dispositivo.
 

@@ -14,6 +14,9 @@ Rotas extraídas do legado ``app.py``:
 * ``POST /caixa/deletar_massa``                    — deletar múltiplos (admin)
 * ``POST /caixa/importar``                         — importação CSV/TSV/TXT
 * ``POST /api/caixa/fechar_mes``                   — zera/transporta fundo mensal
+* ``GET  /api/orcamento``                          — lista itens + total do orçamento
+* ``POST /api/orcamento``                          — cria item do orçamento
+* ``DELETE /api/orcamento/<id>``                   — remove item do orçamento
 
 Helpers exclusivos do módulo (usados também por scripts utilitários e
 por outros blueprints via ``from routes.caixa import _limpar_valor_moeda``):
@@ -51,7 +54,7 @@ from sqlalchemy import event, func, case
 import cloudinary
 import cloudinary.uploader
 
-from models import db, Venda, LancamentoCaixa, ContagemGaveta
+from models import db, Venda, LancamentoCaixa, ContagemGaveta, ItemOrcamento, CATEGORIAS_ORCAMENTO
 from services.auth_utils import tenant_required, admin_required
 from services.db_utils import (
     query_tenant, empresa_id_atual, _safe_db_commit,
@@ -782,6 +785,92 @@ def api_fechar_mes_caixa():
     if resultado.get('ja_fechado'):
         status = 200
     return jsonify(resultado), status
+
+
+def _item_orcamento_dict(item):
+    return {
+        'id': item.id,
+        'descricao': item.descricao,
+        'valor': float(item.valor or 0),
+        'categoria': item.categoria or '',
+    }
+
+
+def _query_orcamento_atual():
+    q = query_tenant(ItemOrcamento)
+    uid = getattr(current_user, 'id', None)
+    if uid:
+        q = q.filter(ItemOrcamento.usuario_id == uid)
+    return q
+
+
+def _payload_orcamento():
+    itens = (
+        _query_orcamento_atual()
+        .order_by(ItemOrcamento.categoria.asc(), ItemOrcamento.descricao.asc(), ItemOrcamento.id.asc())
+        .all()
+    )
+    total = sum((Decimal(str(i.valor or 0)) for i in itens), Decimal('0.00'))
+    return {
+        'ok': True,
+        'itens': [_item_orcamento_dict(i) for i in itens],
+        'total': float(total),
+        'categorias': list(CATEGORIAS_ORCAMENTO),
+    }
+
+
+@caixa_bp.route('/api/orcamento', methods=['GET'])
+def listar_orcamento():
+    """Retorna os itens do orçamento pessoal do usuário, agrupáveis por categoria."""
+    return jsonify(_payload_orcamento())
+
+
+@caixa_bp.route('/api/orcamento', methods=['POST'])
+def criar_item_orcamento():
+    """Cria um item de orçamento (descrição, valor, categoria)."""
+    data = request.get_json(silent=True) or {}
+    descricao = (data.get('descricao') or '').strip()[:150]
+    if not descricao:
+        return jsonify({'ok': False, 'mensagem': 'Informe a descrição do item.'}), 400
+
+    categoria = (data.get('categoria') or '').strip() or 'Custo básico'
+    if categoria not in CATEGORIAS_ORCAMENTO:
+        return jsonify({'ok': False, 'mensagem': 'Categoria inválida.'}), 400
+
+    valor = _limpar_valor_moeda(data.get('valor'))
+    if valor <= 0:
+        return jsonify({'ok': False, 'mensagem': 'Informe um valor maior que zero.'}), 400
+
+    item = ItemOrcamento(
+        empresa_id=empresa_id_atual(),
+        usuario_id=getattr(current_user, 'id', None),
+        descricao=descricao,
+        valor=valor.quantize(Decimal('0.01')),
+        categoria=categoria,
+    )
+    db.session.add(item)
+    ok, msg = _safe_db_commit()
+    if not ok:
+        return jsonify({'ok': False, 'mensagem': 'Não foi possível salvar o item.'}), 500
+    payload = _payload_orcamento()
+    payload['item'] = _item_orcamento_dict(item)
+    payload['mensagem'] = 'Item adicionado.'
+    return jsonify(payload), 201
+
+
+@caixa_bp.route('/api/orcamento/<int:item_id>', methods=['DELETE'])
+def deletar_item_orcamento(item_id):
+    """Remove um item do orçamento pessoal do usuário atual."""
+    item = _query_orcamento_atual().filter_by(id=item_id).first()
+    if not item:
+        return jsonify({'ok': False, 'mensagem': 'Item não encontrado.'}), 404
+    db.session.delete(item)
+    ok, msg = _safe_db_commit()
+    if not ok:
+        return jsonify({'ok': False, 'mensagem': 'Não foi possível excluir o item.'}), 500
+    payload = _payload_orcamento()
+    payload['mensagem'] = 'Item excluído.'
+    return jsonify(payload)
 
 
 @caixa_bp.route('/upload_imagem_cheque', methods=['POST'])

@@ -29,6 +29,10 @@
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
             💵 Dinheiro
         </button>
+        <button type="button" onclick="abrirGavetaOrcamento()" class="w-full md:w-auto bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 px-5 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center justify-center gap-2 transition-colors border border-slate-200 dark:border-slate-600">
+            <i data-lucide="wallet" class="w-5 h-5"></i>
+            Meu Orçamento
+        </button>
         <div id="split-btn-caixa" class="relative flex w-full sm:w-auto sm:inline-flex rounded-md shadow-sm">
             <button type="button" id="btn-novo-lancamento" onclick="abrirModalNovo()" class="flex-1 justify-center inline-flex items-center px-6 py-3 rounded-l-md border border-transparent bg-emerald-700 text-lg font-medium text-white hover:bg-emerald-800 focus:z-10 focus:outline-none transition-colors">
                 🧾 Novo Lançamento
@@ -356,6 +360,55 @@
     {% endfor %}
     </div>
 </form>
+
+<!-- Overlay + Gaveta de Orçamento Pessoal -->
+<div id="gaveta-orcamento-overlay" class="fixed inset-0 z-40 hidden bg-black/50 transition-opacity" onclick="fecharGavetaOrcamento()" aria-hidden="true"></div>
+<div id="gaveta-orcamento" class="fixed inset-y-0 right-0 z-50 w-full max-w-md transform translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col" role="dialog" aria-modal="true" aria-labelledby="gaveta-orcamento-titulo">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80">
+        <div>
+            <h3 id="gaveta-orcamento-titulo" class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <i data-lucide="wallet" class="w-5 h-5 text-emerald-600 dark:text-emerald-400"></i>
+                Orçamento Pessoal Mensal
+            </h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Despesas fixas e variáveis do mês</p>
+        </div>
+        <button type="button" onclick="fecharGavetaOrcamento()" class="p-2 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-200 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-700 transition-colors" title="Fechar" aria-label="Fechar">
+            <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+    </div>
+
+    <form id="form-orcamento" class="px-5 py-4 border-b border-slate-200 dark:border-slate-700 space-y-3 bg-white dark:bg-slate-900">
+        <input type="text" id="orcamento-descricao" name="descricao" maxlength="150" required placeholder="Ex: Aluguel, academia, mercado…"
+               class="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm">
+        <div class="grid grid-cols-2 gap-2">
+            <input type="text" id="orcamento-valor" name="valor" required inputmode="decimal" placeholder="R$ 0,00"
+                   class="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm font-semibold tabular-nums">
+            <select id="orcamento-categoria" name="categoria"
+                    class="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm">
+                <option value="Custo básico">Custo básico</option>
+                <option value="Saúde">Saúde</option>
+                <option value="Lazer">Lazer</option>
+                <option value="Investimento">Investimento</option>
+            </select>
+        </div>
+        <button type="submit" id="orcamento-btn-adicionar" class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold transition-colors">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            Adicionar
+        </button>
+        <p id="orcamento-form-erro" class="hidden text-xs text-red-500 dark:text-red-400"></p>
+    </form>
+
+    <div id="lista-orcamento" class="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+        <p class="text-sm text-slate-400 dark:text-slate-500 text-center py-8">Carregando…</p>
+    </div>
+
+    <div class="px-5 py-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80">
+        <div class="flex items-baseline justify-between gap-3">
+            <span class="text-sm font-medium text-slate-500 dark:text-slate-400">Total Projetado</span>
+            <span id="orcamento-total" class="text-xl font-bold tabular-nums text-slate-900 dark:text-white">R$ 0,00</span>
+        </div>
+    </div>
+</div>
 
 <!-- Modal Novo/Editar Lançamento -->
 <div id="modalNovoLancamento" class="fixed inset-0 z-50 hidden bg-black/60 flex items-center justify-center p-4" onclick="if(event.target===this){this.classList.add('hidden');liberarFundo();}">
@@ -2301,6 +2354,217 @@ document.addEventListener('keydown', function(e) {
     if (e.key !== 'Escape') return;
     var dropdown = document.getElementById('dropdown-importar-caixa');
     if (dropdown) dropdown.classList.add('hidden');
+    if (typeof fecharGavetaOrcamento === 'function') fecharGavetaOrcamento();
 });
+</script>
+
+<script>
+(function() {
+    var gaveta = document.getElementById('gaveta-orcamento');
+    var overlay = document.getElementById('gaveta-orcamento-overlay');
+    var listaEl = document.getElementById('lista-orcamento');
+    var totalEl = document.getElementById('orcamento-total');
+    var form = document.getElementById('form-orcamento');
+    var erroEl = document.getElementById('orcamento-form-erro');
+    if (!gaveta || !form) return;
+
+    var CAT_STYLE = {
+        'Custo básico': 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
+        'Saúde': 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
+        'Lazer': 'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300',
+        'Investimento': 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300'
+    };
+
+    function csrfHeaders() {
+        var headers = { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
+        if (typeof window.getCsrfHeaders === 'function') {
+            Object.assign(headers, window.getCsrfHeaders());
+        }
+        return headers;
+    }
+
+    function escapeHtml(s) {
+        return String(s || '').replace(/[&<>"']/g, function(c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    function formatarBRL(valor) {
+        var n = Number(valor);
+        if (!isFinite(n)) n = 0;
+        return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    }
+
+    function setErro(msg) {
+        if (!erroEl) return;
+        if (!msg) {
+            erroEl.textContent = '';
+            erroEl.classList.add('hidden');
+            return;
+        }
+        erroEl.textContent = msg;
+        erroEl.classList.remove('hidden');
+    }
+
+    function refreshIcons() {
+        if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+    }
+
+    window.abrirGavetaOrcamento = function() {
+        overlay && overlay.classList.remove('hidden');
+        gaveta.classList.remove('translate-x-full');
+        if (typeof travarFundo === 'function') travarFundo();
+        refreshIcons();
+        carregarOrcamento();
+        var desc = document.getElementById('orcamento-descricao');
+        if (desc) setTimeout(function() { desc.focus(); }, 280);
+    };
+
+    window.fecharGavetaOrcamento = function() {
+        gaveta.classList.add('translate-x-full');
+        overlay && overlay.classList.add('hidden');
+        if (typeof liberarFundo === 'function') liberarFundo();
+        setErro('');
+    };
+
+    function renderizarOrcamento(data) {
+        var itens = (data && data.itens) || [];
+        var total = data && data.total != null ? data.total : 0;
+        if (totalEl) totalEl.textContent = formatarBRL(total);
+
+        if (!itens.length) {
+            listaEl.innerHTML = '<p class="text-sm text-slate-400 dark:text-slate-500 text-center py-10">Nenhum item ainda. Adicione suas despesas mensais.</p>';
+            return;
+        }
+
+        var grupos = {};
+        var ordem = [];
+        itens.forEach(function(item) {
+            var cat = item.categoria || 'Outros';
+            if (!grupos[cat]) {
+                grupos[cat] = [];
+                ordem.push(cat);
+            }
+            grupos[cat].push(item);
+        });
+
+        var html = '';
+        ordem.forEach(function(cat) {
+            var badge = CAT_STYLE[cat] || 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
+            var subtotal = grupos[cat].reduce(function(acc, it) { return acc + (Number(it.valor) || 0); }, 0);
+            html += '<div>';
+            html += '<div class="flex items-center justify-between mb-2">';
+            html += '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wide ' + badge + '">' + escapeHtml(cat) + '</span>';
+            html += '<span class="text-xs font-semibold tabular-nums text-slate-500 dark:text-slate-400">' + formatarBRL(subtotal) + '</span>';
+            html += '</div>';
+            html += '<ul class="space-y-2">';
+            grupos[cat].forEach(function(item) {
+                html += '<li class="flex items-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-3 py-2.5">';
+                html += '<div class="min-w-0 flex-1">';
+                html += '<p class="text-sm font-medium text-slate-800 dark:text-slate-100 truncate">' + escapeHtml(item.descricao) + '</p>';
+                html += '</div>';
+                html += '<span class="text-sm font-bold tabular-nums text-slate-900 dark:text-white whitespace-nowrap">' + formatarBRL(item.valor) + '</span>';
+                html += '<button type="button" class="btn-excluir-orcamento shrink-0 p-1.5 rounded-lg text-red-500 hover:text-white hover:bg-red-600 dark:text-red-400 dark:hover:text-white dark:hover:bg-red-600 transition-colors" data-id="' + item.id + '" data-descricao="' + escapeHtml(item.descricao) + '" title="Excluir">';
+                html += '<i data-lucide="trash-2" class="w-4 h-4 pointer-events-none"></i>';
+                html += '</button>';
+                html += '</li>';
+            });
+            html += '</ul></div>';
+        });
+        listaEl.innerHTML = html;
+        refreshIcons();
+    }
+
+    window.carregarOrcamento = async function() {
+        if (!listaEl) return;
+        try {
+            var resp = await fetch('/api/orcamento', { headers: csrfHeaders() });
+            var data = await resp.json();
+            if (!resp.ok || !data.ok) {
+                listaEl.innerHTML = '<p class="text-sm text-red-500 text-center py-8">' + escapeHtml((data && data.mensagem) || 'Não foi possível carregar o orçamento.') + '</p>';
+                return;
+            }
+            renderizarOrcamento(data);
+        } catch (err) {
+            listaEl.innerHTML = '<p class="text-sm text-red-500 text-center py-8">Erro de conexão ao carregar o orçamento.</p>';
+        }
+    };
+
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        setErro('');
+        var btn = document.getElementById('orcamento-btn-adicionar');
+        var payload = {
+            descricao: (document.getElementById('orcamento-descricao').value || '').trim(),
+            valor: (document.getElementById('orcamento-valor').value || '').trim(),
+            categoria: document.getElementById('orcamento-categoria').value
+        };
+        if (!payload.descricao) {
+            setErro('Informe a descrição.');
+            return;
+        }
+        if (btn) btn.disabled = true;
+        try {
+            var resp = await fetch('/api/orcamento', {
+                method: 'POST',
+                headers: csrfHeaders(),
+                body: JSON.stringify(payload)
+            });
+            var data = await resp.json();
+            if (!resp.ok || !data.ok) {
+                setErro((data && data.mensagem) || 'Não foi possível adicionar o item.');
+                return;
+            }
+            form.reset();
+            document.getElementById('orcamento-categoria').value = 'Custo básico';
+            renderizarOrcamento(data);
+            document.getElementById('orcamento-descricao').focus();
+        } catch (err) {
+            setErro('Erro de conexão. Tente novamente.');
+        } finally {
+            if (btn) btn.disabled = false;
+        }
+    });
+
+    listaEl.addEventListener('click', async function(e) {
+        var btn = e.target.closest('.btn-excluir-orcamento');
+        if (!btn) return;
+        var id = btn.getAttribute('data-id');
+        var desc = btn.getAttribute('data-descricao') || 'este item';
+        var confirmar = true;
+        if (window.Swal) {
+            var result = await Swal.fire({
+                title: 'Excluir item?',
+                text: desc,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#dc2626',
+                confirmButtonText: 'Excluir',
+                cancelButtonText: 'Cancelar'
+            });
+            confirmar = result.isConfirmed;
+        } else {
+            confirmar = window.confirm('Excluir "' + desc + '"?');
+        }
+        if (!confirmar) return;
+        btn.disabled = true;
+        try {
+            var resp = await fetch('/api/orcamento/' + encodeURIComponent(id), {
+                method: 'DELETE',
+                headers: csrfHeaders()
+            });
+            var data = await resp.json();
+            if (!resp.ok || !data.ok) {
+                setErro((data && data.mensagem) || 'Não foi possível excluir.');
+                btn.disabled = false;
+                return;
+            }
+            renderizarOrcamento(data);
+        } catch (err) {
+            setErro('Erro de conexão. Tente novamente.');
+            btn.disabled = false;
+        }
+    });
+})();
 </script>
 {% endblock %}

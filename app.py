@@ -24,6 +24,7 @@ from models import (
     Documento,
     LancamentoCaixa,
     ContagemGaveta,
+    ItemOrcamento,
     Fornecedor,
     TipoProduto,
     PushSubscription,
