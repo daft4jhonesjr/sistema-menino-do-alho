@@ -136,17 +136,37 @@ def _total_dinheiro_gaveta(estado: dict) -> float:
     return round(total, 2)
 
 
-def _total_cheques_pendentes_gaveta(estado: dict) -> float:
-    """Soma cheques da gaveta com status diferente de ENVIADO."""
-    total = 0.0
-    for item in estado.get('cheques') or []:
-        if not isinstance(item, dict):
-            continue
-        status = str(item.get('status') or '').strip().upper()
-        if status == 'ENVIADO':
-            continue
-        total += _float_seguro(item.get('valor'))
-    return round(total, 2)
+def _total_cheques_em_caixa() -> float:
+    """Soma cheques ainda retidos no caixa (não enviados / não compensados).
+
+    Fonte: ``LancamentoCaixa`` com forma Cheque, tipo ENTRADA e
+    ``status_envio`` diferente de Enviado/Compensado. Não usa o histórico
+    bruto da gaveta (que pode acumular títulos já baixados).
+    """
+    eid = empresa_id_atual()
+    forma_cheque = func.lower(func.coalesce(LancamentoCaixa.forma_pagamento, '')).like('%cheque%')
+    status_norm = func.upper(func.trim(func.coalesce(LancamentoCaixa.status_envio, '')))
+    # Aceitos como "ainda no caixa": vazio, Não Enviado, Pendente, Em Caixa, A Compensar
+    status_em_caixa = or_(
+        LancamentoCaixa.status_envio.is_(None),
+        status_norm == '',
+        status_norm == 'NÃO ENVIADO',
+        status_norm == 'NAO ENVIADO',
+        status_norm == 'PENDENTE',
+        status_norm == 'EM CAIXA',
+        status_norm == 'A COMPENSAR',
+    )
+    status_baixado = status_norm.in_(['ENVIADO', 'COMPENSADO', 'COMPENSADA', 'DEPOSITADO'])
+
+    q = db.session.query(func.coalesce(func.sum(LancamentoCaixa.valor), 0)).filter(
+        forma_cheque,
+        LancamentoCaixa.tipo == 'ENTRADA',
+        status_em_caixa,
+        ~status_baixado,
+    )
+    if eid is not None:
+        q = q.filter(LancamentoCaixa.empresa_id == eid)
+    return round(float(q.scalar() or 0), 2)
 
 
 def _saldo_pix_livro_caixa() -> float:
@@ -190,8 +210,10 @@ def _calcular_dados_balanco() -> dict:
     """Consolida os totais automáticos do sistema para o balanço rápido."""
     estado = _carregar_estado_gaveta()
     total_pendentes = round(_soma_vendas_pendentes(), 2)
+    # Dinheiro: contagem física atual da gaveta (snapshot), não soma histórica.
     total_dinheiro = _total_dinheiro_gaveta(estado)
-    total_cheques = _total_cheques_pendentes_gaveta(estado)
+    # Cheques: só títulos ENTRADA ainda não enviados/compensados no livro.
+    total_cheques = _total_cheques_em_caixa()
     total_pix = _saldo_pix_livro_caixa()
     total_estoque = _total_valor_estoque()
     return {
@@ -269,7 +291,7 @@ def api_balanco_exportar_csv():
         _fmt_brl(pendentes),
     ])
     writer.writerow(['Ativo', 'Dinheiro em Caixa (Gaveta)', 'Automático', _fmt_brl(dinheiro)])
-    writer.writerow(['Ativo', 'Cheques em Caixa (não enviados)', 'Automático', _fmt_brl(cheques)])
+    writer.writerow(['Ativo', 'Cheques em Caixa (não enviados/compensados)', 'Automático', _fmt_brl(cheques)])
     writer.writerow(['Ativo', 'Pix / Transferência (saldo livro)', 'Automático', _fmt_brl(pix)])
     writer.writerow([
         'Ativo',
