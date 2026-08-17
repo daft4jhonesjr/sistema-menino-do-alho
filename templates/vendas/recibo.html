@@ -103,7 +103,7 @@
             padding: 0;
         }
         
-        .container {
+        .container.recibo-a4-sheet {
             width: 100%;
             max-width: none;
             margin: 0;
@@ -272,57 +272,147 @@
         @media print {
             @page {
                 size: A4 portrait;
-                margin: 15mm;
+                margin: 0mm;
             }
 
-            body, html {
+            html, body {
+                height: 100vh;
                 width: 100% !important;
                 margin: 0 !important;
                 padding: 0 !important;
+                overflow: hidden;
+                font-size: 9pt;
+                line-height: 1.25;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
                 background: white !important;
             }
 
-            /* Esconde o botão de imprimir e outros elementos desnecessários para ganhar espaço */
+            .recibo-a4-sheet *,
+            .recibo-a4-sheet *::before,
+            .recibo-a4-sheet *::after {
+                page-break-inside: avoid !important;
+                page-break-after: avoid !important;
+                page-break-before: avoid !important;
+            }
+
             button, .no-print, .print-hidden {
                 display: none !important;
             }
 
-            .container {
+            .recibo-a4-sheet.container {
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
                 width: 100% !important;
                 max-width: none !important;
-                max-height: none !important;
+                height: 297mm;
+                max-height: 297mm;
                 margin: 0 !important;
-                padding: 0 !important;
-                overflow: visible !important;
+                padding: 8mm !important;
+                box-sizing: border-box;
+                overflow: hidden;
             }
 
-            /* Tira os espaços sobressalentes das vias e evita quebra */
             .via-recibo {
+                flex: 1 1 0;
+                min-height: 0;
                 width: 100% !important;
-                page-break-inside: avoid !important;
-                break-inside: avoid !important;
+                display: flex;
+                flex-direction: column;
+                justify-content: flex-start;
+                margin-bottom: 0 !important;
                 padding: 0 !important;
-                margin-bottom: 8px !important;
+                overflow: hidden;
             }
 
-            .via-header { margin-bottom: 10px !important; }
-            .logo-recibo { height: 60px !important; }
-            .cliente-section { margin: 12px 0 !important; padding: 8px !important; }
-            .tabela-produtos { margin: 12px 0 !important; }
-            .tabela-produtos th, .tabela-produtos td { padding: 5px !important; font-size: 9pt !important; }
-            .total-section { margin-top: 12px !important; padding: 10px !important; }
-            .rodape { margin-top: 15px !important; padding-top: 12px !important; }
-            .rodape .assinatura .linha { margin-top: 30px !important; }
+            .via-header {
+                margin-bottom: 4px !important;
+            }
 
-            /* Ajuste fino na linha pontilhada para não empurrar a página */
-            .linha-corte, .linha-de-corte {
-                margin-top: 15px !important;
-                margin-bottom: 15px !important;
+            .logo-recibo {
+                height: 40px !important;
+                margin-bottom: 2px !important;
+            }
+
+            .titulo-via {
+                font-size: 7pt !important;
+                padding: 2px 8px !important;
+            }
+
+            .empresa-info {
+                font-size: 8pt !important;
+                margin-bottom: 4px !important;
+            }
+
+            .empresa-info p {
+                margin: 1px 0 !important;
+            }
+
+            .cliente-section {
+                margin: 4px 0 !important;
+                padding: 4px 6px !important;
+            }
+
+            .cliente-section h2 {
+                font-size: 9pt !important;
+                margin-bottom: 2px !important;
+            }
+
+            .cliente-section p {
+                font-size: 8pt !important;
+                margin: 1px 0 !important;
+            }
+
+            .tabela-produtos {
+                margin: 4px 0 !important;
+            }
+
+            .tabela-produtos th,
+            .tabela-produtos td {
+                padding: 2px 4px !important;
+                font-size: 8pt !important;
+            }
+
+            .total-section {
+                margin-top: 4px !important;
+                padding: 4px 8px !important;
+            }
+
+            .total-section .label {
+                font-size: 9pt !important;
+                margin-right: 8px !important;
+            }
+
+            .total-section .valor {
+                font-size: 11pt !important;
+            }
+
+            .rodape {
+                margin-top: 4px !important;
+                padding-top: 4px !important;
+            }
+
+            .rodape .data,
+            .rodape .assinatura {
+                font-size: 8pt !important;
+            }
+
+            .rodape .assinatura .linha {
+                margin-top: 10px !important;
+                padding-top: 2px !important;
+            }
+
+            .linha-corte,
+            .linha-de-corte {
+                flex-shrink: 0;
+                margin: 2mm 0 !important;
                 padding: 0 !important;
-                page-break-before: avoid !important;
-                page-break-after: avoid !important;
+            }
+
+            .linha-corte .texto {
+                font-size: 7pt !important;
+                margin: 0 8px !important;
             }
         }
         
@@ -359,7 +449,7 @@
         </button>
     </div>
     
-    <div class="container">
+    <div class="container recibo-a4-sheet">
         {{ render_via('1ª Via - Cliente') }}
 
         <div class="linha-corte linha-de-corte">
