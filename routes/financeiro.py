@@ -22,7 +22,7 @@ from flask import (
 from flask_login import current_user
 from sqlalchemy import and_, case, func, or_
 
-from models import db, ContagemGaveta, LancamentoCaixa, Produto, Venda
+from models import db, ContagemGaveta, Fornecedor, LancamentoCaixa, Produto, Venda
 from routes.caixa import _limpar_valor_moeda
 from services.auth_utils import tenant_required
 from services.config_helpers import get_hoje_brasil
@@ -206,6 +206,16 @@ def _total_valor_estoque() -> float:
     return round(float(q.scalar() or 0), 2)
 
 
+def _listar_fornecedores_balanco() -> list:
+    """Fornecedores do tenant, ordenados por nome, para os passivos manuais."""
+    rows = query_tenant(Fornecedor).order_by(Fornecedor.nome.asc()).all()
+    return [
+        {'id': int(f.id), 'nome': (f.nome or '').strip() or f'Fornecedor #{f.id}'}
+        for f in rows
+        if f.id is not None
+    ]
+
+
 def _calcular_dados_balanco() -> dict:
     """Consolida os totais automáticos do sistema para o balanço rápido."""
     estado = _carregar_estado_gaveta()
@@ -225,6 +235,7 @@ def _calcular_dados_balanco() -> dict:
         'total_cheques_caixa': total_cheques,
         'total_pix_caixa': total_pix,
         'total_valor_estoque': total_estoque,
+        'fornecedores': _listar_fornecedores_balanco(),
         'gerado_em': get_hoje_brasil().isoformat(),
     }
 
@@ -245,6 +256,7 @@ def api_balanco_dados_atuais():
             'total_cheques_caixa': 0.0,
             'total_pix_caixa': 0.0,
             'total_valor_estoque': 0.0,
+            'fornecedores': [],
         }), 500
 
 
@@ -265,13 +277,37 @@ def api_balanco_exportar_csv():
     cheques = _float_seguro(payload.get('total_cheques_caixa'), sistema['total_cheques_caixa'])
     pix = _float_seguro(payload.get('total_pix_caixa'), sistema['total_pix_caixa'])
     valor_estoque = float(sistema.get('total_valor_estoque') or 0)
-    divida_paty = _float_seguro(payload.get('divida_paty'))
-    divida_destak = _float_seguro(payload.get('divida_destak'))
     a_receber_fora = _float_seguro(payload.get('a_receber_fora'))
     observacoes = str(payload.get('observacoes') or '').strip()
 
+    nomes_conhecidos = {
+        str(f.get('nome') or '').strip().upper(): f
+        for f in (sistema.get('fornecedores') or [])
+        if str(f.get('nome') or '').strip()
+    }
+    dividas = []
+    bruto = payload.get('dividas_fornecedores')
+    if isinstance(bruto, list):
+        for item in bruto:
+            if not isinstance(item, dict):
+                continue
+            nome = str(item.get('nome') or '').strip()
+            if not nome:
+                continue
+            dividas.append({
+                'id': item.get('id'),
+                'nome': nome,
+                'valor': _float_seguro(item.get('valor')),
+            })
+    # Compatibilidade com o payload antigo (campos fixos PATY/DESTAK).
+    if not dividas:
+        for chave, rotulo in (('divida_paty', 'PATY'), ('divida_destak', 'DESTAK')):
+            valor = _float_seguro(payload.get(chave))
+            if valor or rotulo in nomes_conhecidos:
+                dividas.append({'id': None, 'nome': rotulo, 'valor': valor})
+
     total_ativos = pendentes + dinheiro + cheques + pix + a_receber_fora + valor_estoque
-    total_passivos = divida_paty + divida_destak
+    total_passivos = sum(float(d.get('valor') or 0) for d in dividas)
     saldo_liquido = total_ativos - total_passivos
 
     agora = datetime.now()
@@ -303,9 +339,17 @@ def api_balanco_exportar_csv():
     writer.writerow(['', 'SUBTOTAL ATIVOS', '', _fmt_brl(total_ativos)])
     writer.writerow([])
 
-    # Passivos
-    writer.writerow(['Passivo', 'Dívida com a PATY', 'Manual', _fmt_brl(divida_paty)])
-    writer.writerow(['Passivo', 'Dívida com a DESTAK', 'Manual', _fmt_brl(divida_destak)])
+    # Passivos (um lançamento por fornecedor cadastrado)
+    if dividas:
+        for d in dividas:
+            writer.writerow([
+                'Passivo',
+                f"Dívida com {d['nome']}",
+                'Manual',
+                _fmt_brl(d.get('valor') or 0),
+            ])
+    else:
+        writer.writerow(['Passivo', 'Dívidas com fornecedores', 'Manual', _fmt_brl(0)])
     writer.writerow(['', 'SUBTOTAL PASSIVOS', '', _fmt_brl(total_passivos)])
     writer.writerow([])
 

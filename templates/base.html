@@ -618,14 +618,10 @@
                 <div class="space-y-3 border-t border-gray-200 dark:border-gray-700 pt-4">
                     <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Ajustes manuais</p>
                     <div>
-                        <label for="balanco-divida-paty" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Dívida com a PATY (R$)</label>
-                        <input type="text" id="balanco-divida-paty" name="divida_paty" inputmode="decimal" placeholder="0,00"
-                               class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
-                    </div>
-                    <div>
-                        <label for="balanco-divida-destak" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Dívida com a DESTAK (R$)</label>
-                        <input type="text" id="balanco-divida-destak" name="divida_destak" inputmode="decimal" placeholder="0,00"
-                               class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
+                        <p class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Dívidas com fornecedores (R$)</p>
+                        <div id="balanco-dividas-fornecedores" class="space-y-3">
+                            <p class="text-sm text-gray-400 dark:text-gray-500">Carregando fornecedores…</p>
+                        </div>
                     </div>
                     <div>
                         <label for="balanco-a-receber-fora" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Valores a Receber Fora do Sistema (R$)</label>
@@ -678,6 +674,7 @@
             total_pix_caixa: 0,
             total_valor_estoque: 0
         };
+        var valoresDividasFornecedor = {};
 
         function parseMoeda(v) {
             if (v == null || v === '') return 0;
@@ -694,15 +691,80 @@
             var n = Number(v) || 0;
             return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
         }
+        function escHtml(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+        function inputsDividaFornecedor() {
+            return Array.prototype.slice.call(
+                document.querySelectorAll('.js-balanco-divida-fornecedor')
+            );
+        }
+        function coletarValoresDividas() {
+            inputsDividaFornecedor().forEach(function(inp) {
+                var id = inp.getAttribute('data-fornecedor-id');
+                if (id) valoresDividasFornecedor[id] = inp.value;
+            });
+        }
+        function somarPassivosFornecedores() {
+            return inputsDividaFornecedor().reduce(function(acc, inp) {
+                return acc + parseMoeda(inp.value);
+            }, 0);
+        }
+        function listarDividasFornecedores() {
+            return inputsDividaFornecedor().map(function(inp) {
+                return {
+                    id: parseInt(inp.getAttribute('data-fornecedor-id'), 10) || null,
+                    nome: inp.getAttribute('data-fornecedor-nome') || '',
+                    valor: parseMoeda(inp.value)
+                };
+            });
+        }
+        function ligarInputPreview(el) {
+            if (!el || el.getAttribute('data-balanco-bound') === '1') return;
+            el.setAttribute('data-balanco-bound', '1');
+            el.addEventListener('input', atualizarPreview);
+            el.addEventListener('change', atualizarPreview);
+        }
+        function renderizarDividasFornecedores(lista) {
+            var wrap = document.getElementById('balanco-dividas-fornecedores');
+            if (!wrap) return;
+            coletarValoresDividas();
+            var fornecedores = Array.isArray(lista) ? lista : [];
+            if (!fornecedores.length) {
+                wrap.innerHTML = '<p class="text-sm text-gray-400 dark:text-gray-500">Nenhum fornecedor cadastrado. Cadastre em Entrada de Produtos para lançar dívidas aqui.</p>';
+                atualizarPreview();
+                return;
+            }
+            wrap.innerHTML = fornecedores.map(function(f) {
+                var id = String(f.id);
+                var nome = (f.nome || '').trim() || ('Fornecedor #' + id);
+                var valorSalvo = valoresDividasFornecedor[id] || '';
+                return '<div>'
+                    + '<label for="balanco-divida-fornecedor-' + escHtml(id) + '" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">'
+                    + 'Dívida com ' + escHtml(nome) + ' (R$)</label>'
+                    + '<input type="text" id="balanco-divida-fornecedor-' + escHtml(id) + '" '
+                    + 'class="js-balanco-divida-fornecedor w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500" '
+                    + 'data-fornecedor-id="' + escHtml(id) + '" '
+                    + 'data-fornecedor-nome="' + escHtml(nome) + '" '
+                    + 'inputmode="decimal" placeholder="0,00" value="' + escHtml(valorSalvo) + '">'
+                    + '</div>';
+            }).join('');
+            inputsDividaFornecedor().forEach(ligarInputPreview);
+            atualizarPreview();
+        }
         function atualizarPreview() {
+            var aReceberFora = document.getElementById('balanco-a-receber-fora');
             var ativos = (dadosSistema.total_vendas_pendentes || 0)
                 + (dadosSistema.total_dinheiro_caixa || 0)
                 + (dadosSistema.total_cheques_caixa || 0)
                 + (dadosSistema.total_pix_caixa || 0)
                 + (dadosSistema.total_valor_estoque || 0)
-                + parseMoeda(document.getElementById('balanco-a-receber-fora').value);
-            var passivos = parseMoeda(document.getElementById('balanco-divida-paty').value)
-                + parseMoeda(document.getElementById('balanco-divida-destak').value);
+                + parseMoeda(aReceberFora ? aReceberFora.value : 0);
+            var passivos = somarPassivosFornecedores();
             var liquido = ativos - passivos;
             document.getElementById('balanco-preview-ativos').textContent = fmtMoeda(ativos);
             document.getElementById('balanco-preview-passivos').textContent = fmtMoeda(passivos);
@@ -729,7 +791,7 @@
             document.getElementById('balanco-estoque').textContent = fmtMoeda(dadosSistema.total_valor_estoque);
             document.getElementById('balanco-loading').classList.add('hidden');
             document.getElementById('balanco-saldos').classList.remove('hidden');
-            atualizarPreview();
+            renderizarDividasFornecedores(data.fornecedores || []);
         }
 
         window.abrirModalBalanco = function() {
@@ -765,13 +827,11 @@
 
         var form = document.getElementById('form-balanco');
         if (form) {
-            ['balanco-divida-paty', 'balanco-divida-destak', 'balanco-a-receber-fora'].forEach(function(id) {
-                var el = document.getElementById(id);
-                if (el) {
-                    el.addEventListener('input', atualizarPreview);
-                    el.addEventListener('change', atualizarPreview);
-                }
-            });
+            var aReceberForaEl = document.getElementById('balanco-a-receber-fora');
+            if (aReceberForaEl) {
+                aReceberForaEl.addEventListener('input', atualizarPreview);
+                aReceberForaEl.addEventListener('change', atualizarPreview);
+            }
             form.addEventListener('submit', function(e) {
                 e.preventDefault();
                 var btn = document.getElementById('btn-exportar-balanco');
@@ -783,8 +843,7 @@
                     total_cheques_caixa: dadosSistema.total_cheques_caixa,
                     total_pix_caixa: dadosSistema.total_pix_caixa,
                     total_valor_estoque: dadosSistema.total_valor_estoque,
-                    divida_paty: parseMoeda(document.getElementById('balanco-divida-paty').value),
-                    divida_destak: parseMoeda(document.getElementById('balanco-divida-destak').value),
+                    dividas_fornecedores: listarDividasFornecedores(),
                     a_receber_fora: parseMoeda(document.getElementById('balanco-a-receber-fora').value),
                     observacoes: (document.getElementById('balanco-observacoes').value || '').trim()
                 };

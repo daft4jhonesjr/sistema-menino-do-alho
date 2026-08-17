@@ -494,6 +494,7 @@ def listar_vendas():
                 'empresa_faturadora': venda.empresa_faturadora,
                 'situacao': venda.situacao,
                 'forma_pagamento': getattr(venda, 'forma_pagamento', None),
+                'prazo_dias': getattr(venda, 'prazo_dias', None),
                 'is_consumidor_final': is_consumidor_final,
                 'vendas': [],
                 'total_quantidade': 0,
@@ -507,6 +508,10 @@ def listar_vendas():
         pedidos_dict[pedido_key]['total_valor'] += float(venda.calcular_total())
         pedidos_dict[pedido_key]['total_lucro'] += float(venda.calcular_lucro())
         pedidos_dict[pedido_key]['total_valor_pago'] = pedidos_dict[pedido_key].get('total_valor_pago', 0) + float(getattr(venda, 'valor_pago', None) or 0)
+        if pedidos_dict[pedido_key].get('prazo_dias') is None:
+            _prazo_item = getattr(venda, 'prazo_dias', None)
+            if _prazo_item is not None:
+                pedidos_dict[pedido_key]['prazo_dias'] = _prazo_item
 
     # Loop 2 removido: dict do Python (3.7+) preserva ordem de inserção,
     # então `pedidos_dict.values()` já devolve os pedidos na mesma ordem

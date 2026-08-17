@@ -5031,6 +5031,8 @@ document.addEventListener('click', function(ev) {
         var cnpj   = formatarCnpjNF(btn.getAttribute('data-cnpj') || '');
         var loc    = separarCidadeUf(btn.getAttribute('data-cidade'), btn.getAttribute('data-uf'));
         var itens  = parseItensNF(btn.getAttribute('data-itens'));
+        var formaPagto = (btn.getAttribute('data-forma-pagamento') || '').trim().toUpperCase();
+        var prazoDias = (btn.getAttribute('data-prazo') || '').trim();
 
         var linhasItens = itens.map(function(item) {
             var qtd   = String(item.q  != null ? item.q  : (item.qtd  != null ? item.qtd  : '')).trim();
@@ -5049,6 +5051,9 @@ document.addEventListener('click', function(ev) {
         if (razao) cabecalho.push('🏢 *' + razao + '*');
         if (cnpj)  cabecalho.push('📄 CNPJ: ' + cnpj);
         if (cidadeLinha) cabecalho.push('📍 ' + cidadeLinha);
+        if (formaPagto === 'BOLETO' && prazoDias && prazoDias !== '0') {
+            cabecalho.push('⏳ ' + prazoDias + ' dias');
+        }
         if (cabecalho.length) blocos.push(cabecalho.join('\n'));
 
         // Detalhes do pedido

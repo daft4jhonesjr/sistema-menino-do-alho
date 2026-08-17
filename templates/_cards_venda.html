@@ -156,6 +156,8 @@
             data-cnpj="{{ cnpj_nf }}"
             data-cidade="{{ cidade_nf }}"
             data-uf=""
+            data-forma-pagamento="{{ pedido.forma_pagamento or '' }}"
+            data-prazo="{{ pedido.prazo_dias if pedido.prazo_dias is not none else '' }}"
             data-itens='{{ itens_nf|tojson }}'>
             <i data-lucide="clipboard-copy" class="w-5 h-5" aria-hidden="true"></i>
         </button>
