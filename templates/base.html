@@ -628,6 +628,11 @@
                                class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
                     </div>
                     <div>
+                        <label for="balanco-valor-estoque" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Valor em Estoque de Mercadorias (R$)</label>
+                        <input type="text" id="balanco-valor-estoque" name="valor_estoque" inputmode="decimal" placeholder="0,00" value=""
+                               class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
+                    </div>
+                    <div>
                         <label for="balanco-observacoes" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Observações (opcional)</label>
                         <textarea id="balanco-observacoes" name="observacoes" rows="2" maxlength="500"
                                   class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
@@ -672,6 +677,7 @@
             total_cheques_caixa: 0,
             total_pix_caixa: 0
         };
+        var valorEstoque = 0;
 
         function parseMoeda(v) {
             if (v == null || v === '') return 0;
@@ -689,11 +695,14 @@
             return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
         }
         function atualizarPreview() {
+            var elEstoque = document.getElementById('balanco-valor-estoque');
+            valorEstoque = parseMoeda(elEstoque ? elEstoque.value : 0);
             var ativos = (dadosSistema.total_vendas_pendentes || 0)
                 + (dadosSistema.total_dinheiro_caixa || 0)
                 + (dadosSistema.total_cheques_caixa || 0)
                 + (dadosSistema.total_pix_caixa || 0)
-                + parseMoeda(document.getElementById('balanco-a-receber-fora').value);
+                + parseMoeda(document.getElementById('balanco-a-receber-fora').value)
+                + valorEstoque;
             var passivos = parseMoeda(document.getElementById('balanco-divida-paty').value)
                 + parseMoeda(document.getElementById('balanco-divida-destak').value);
             var liquido = ativos - passivos;
@@ -756,7 +765,7 @@
 
         var form = document.getElementById('form-balanco');
         if (form) {
-            ['balanco-divida-paty', 'balanco-divida-destak', 'balanco-a-receber-fora'].forEach(function(id) {
+            ['balanco-divida-paty', 'balanco-divida-destak', 'balanco-a-receber-fora', 'balanco-valor-estoque'].forEach(function(id) {
                 var el = document.getElementById(id);
                 if (el) {
                     el.addEventListener('input', atualizarPreview);
@@ -767,6 +776,7 @@
                 e.preventDefault();
                 var btn = document.getElementById('btn-exportar-balanco');
                 if (btn) { btn.disabled = true; btn.classList.add('opacity-60'); }
+                valorEstoque = parseMoeda(document.getElementById('balanco-valor-estoque').value);
                 var body = {
                     total_vendas_pendentes: dadosSistema.total_vendas_pendentes,
                     total_boletos_pendentes: dadosSistema.total_vendas_pendentes,
@@ -776,6 +786,7 @@
                     divida_paty: parseMoeda(document.getElementById('balanco-divida-paty').value),
                     divida_destak: parseMoeda(document.getElementById('balanco-divida-destak').value),
                     a_receber_fora: parseMoeda(document.getElementById('balanco-a-receber-fora').value),
+                    valor_estoque: valorEstoque,
                     observacoes: (document.getElementById('balanco-observacoes').value || '').trim()
                 };
                 fetch(ENDPOINT_CSV, {

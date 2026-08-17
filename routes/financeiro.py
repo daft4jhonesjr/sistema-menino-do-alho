@@ -230,9 +230,12 @@ def api_balanco_exportar_csv():
     divida_paty = _float_seguro(payload.get('divida_paty'))
     divida_destak = _float_seguro(payload.get('divida_destak'))
     a_receber_fora = _float_seguro(payload.get('a_receber_fora'))
+    valor_estoque = _float_seguro(
+        payload.get('valor_estoque', payload.get('valorEstoque'))
+    )
     observacoes = str(payload.get('observacoes') or '').strip()
 
-    total_ativos = pendentes + dinheiro + cheques + pix + a_receber_fora
+    total_ativos = pendentes + dinheiro + cheques + pix + a_receber_fora + valor_estoque
     total_passivos = divida_paty + divida_destak
     saldo_liquido = total_ativos - total_passivos
 
@@ -255,6 +258,7 @@ def api_balanco_exportar_csv():
     writer.writerow(['Cheques em Caixa (não enviados)', 'ATIVO', _fmt_brl(cheques)])
     writer.writerow(['Pix / Transferência (saldo livro)', 'ATIVO', _fmt_brl(pix)])
     writer.writerow(['A Receber Fora do Sistema', 'ATIVO', _fmt_brl(a_receber_fora)])
+    writer.writerow(['Valor em Estoque de Mercadorias', 'ATIVO', _fmt_brl(valor_estoque)])
     writer.writerow(['SUBTOTAL ATIVOS', '', _fmt_brl(total_ativos)])
     writer.writerow([])
 
