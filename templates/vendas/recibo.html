@@ -23,9 +23,20 @@
             {% if cliente.cnpj %}
             <p><strong>CNPJ:</strong> {{ cliente.cnpj }}</p>
             {% endif %}
-            {% if cliente.cidade %}
-            <p><strong>Cidade:</strong> {{ cliente.cidade }}</p>
-            {% endif %}
+            <p><strong>Endereço:</strong>
+                {% if cliente.rua %}
+                    {{ cliente.rua }}{% if cliente.numero %}, {{ cliente.numero }}{% endif %}
+                    {% if cliente.bairro %} - {{ cliente.bairro }}{% endif %}
+                    {% if cliente.cidade %} - {{ cliente.cidade }}{% endif %}{% if cliente.estado %}/{{ cliente.estado }}{% endif %}
+                    {% if cliente.cep %} - CEP: {{ cliente.cep }}{% endif %}
+                {% elif cliente.endereco %}
+                    {{ cliente.endereco }}
+                {% elif cliente.cidade %}
+                    {{ cliente.cidade }}{% if cliente.estado %} — {{ cliente.estado }}{% endif %}
+                {% else %}
+                    —
+                {% endif %}
+            </p>
         </div>
 
         <table class="tabela-produtos">
@@ -87,16 +98,20 @@
             line-height: 1.4;
             color: #000;
             background: #fff;
+            width: 100%;
+            margin: 0;
+            padding: 0;
         }
         
         .container {
             width: 100%;
-            max-width: 21cm;
-            margin: 0 auto;
+            max-width: none;
+            margin: 0;
             padding: 1cm;
         }
         
         .via-recibo {
+            width: 100%;
             break-inside: avoid;
             page-break-inside: avoid;
             margin-bottom: 20px;
@@ -255,36 +270,37 @@
         }
         
         @media print {
-            /* 1. Força o tamanho A4 e margem mínima na folha física */
             @page {
                 size: A4 portrait;
-                margin: 0.5cm !important;
+                margin: 15mm;
             }
 
-            /* 2. Zera margens do navegador e força as cores da tabela */
             body, html {
+                width: 100% !important;
                 margin: 0 !important;
                 padding: 0 !important;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
                 background: white !important;
-                /* O Pulo do Gato para o Safari: Reduz levemente a escala para garantir o encaixe */
-                zoom: 0.85 !important;
             }
 
-            /* 3. Esconde o botão de imprimir e outros elementos desnecessários para ganhar espaço */
+            /* Esconde o botão de imprimir e outros elementos desnecessários para ganhar espaço */
             button, .no-print, .print-hidden {
                 display: none !important;
             }
 
             .container {
+                width: 100% !important;
+                max-width: none !important;
                 max-height: none !important;
+                margin: 0 !important;
+                padding: 0 !important;
                 overflow: visible !important;
-                padding: 0.3cm !important;
             }
 
-            /* 4. Tira os espaços sobressalentes das vias e evita quebra */
+            /* Tira os espaços sobressalentes das vias e evita quebra */
             .via-recibo {
+                width: 100% !important;
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
                 padding: 0 !important;
