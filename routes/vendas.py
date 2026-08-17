@@ -250,6 +250,24 @@ def _parse_nf_vendas(raw):
     return '0'
 
 
+def _parse_prazo_dias(raw):
+    """Converte prazo em dias. Vazio → None. Aceita 0 (à vista)."""
+    if raw is None:
+        return None
+    txt = str(raw).strip()
+    if txt == '' or txt.lower() in ('none', 'null', 'undefined'):
+        return None
+    try:
+        n = int(float(txt.replace(',', '.')))
+    except (TypeError, ValueError):
+        return None
+    if n < 0:
+        return None
+    if n > 3650:
+        n = 3650
+    return n
+
+
 def _normalizar_situacao_vendas(s):
     """Correção automática: PENDETE -> PENDENTE."""
     if not s or (isinstance(s, float) and pd.isna(s)):
@@ -797,7 +815,7 @@ def listar_vendas():
                 if not (_v_alvo.caminho_boleto or '').strip():
                     _v_alvo.caminho_boleto = _cb_fonte
                     if _dv_fonte and not _v_alvo.data_vencimento:
-                        _v_alvo.data_vencimento = _dv_fonte
+                        _v_alvo.aplicar_vencimento_e_prazo(_dv_fonte)
                     if _fp_fonte and not (getattr(_v_alvo, 'forma_pagamento', None) or '').strip():
                         _v_alvo.forma_pagamento = _fp_fonte
                     houve_alteracao_transferencia = True
@@ -1760,6 +1778,7 @@ def nova_venda():
             return _render_form()
         cliente_avulso = cliente_avulso_raw if 'DESCONHECIDO' in str(cliente_obj.nome_cliente or '').upper() else None
         forma_pagamento = (request.form.get('forma_pagamento') or '').strip() or None
+        prazo_dias = _parse_prazo_dias(request.form.get('prazo_dias'))
         tipo_operacao = (request.form.get('tipo_operacao') or 'VENDA').strip().upper()
         if tipo_operacao not in ('VENDA', 'PERDA'):
             tipo_operacao = 'VENDA'
@@ -1784,6 +1803,7 @@ def nova_venda():
             situacao = 'PERDA'
             forma_pagamento = None
             lucro_percentual = None
+            prazo_dias = None
         # "Já entregue?" → status_entrega=ENTREGUE (fora da fila PENDENTE da Logística).
         ja_entregue = str(request.form.get('ja_entregue') or '').strip().lower() in (
             '1', 'true', 'sim', 'yes', 'on',
@@ -1816,6 +1836,7 @@ def nova_venda():
                 forma_pagamento=forma_pagamento,
                 tipo_operacao=tipo_operacao,
                 lucro_percentual=lucro_percentual,
+                prazo_dias=prazo_dias,
                 status_entrega=status_entrega,
                 empresa_id=empresa_id_atual(),
             )
@@ -1921,6 +1942,7 @@ def processar_carrinho():
                 empresa_faturadora = (obj.get('empresa_faturadora') or '').strip() or None
                 situacao = (obj.get('situacao') or 'PENDENTE').strip()
                 forma_pagamento = (obj.get('forma_pagamento') or '').strip() or None
+                prazo_dias = _parse_prazo_dias(obj.get('prazo_dias'))
                 tipo_operacao = (obj.get('tipo_operacao') or 'VENDA').strip().upper()
                 lucro_percentual = None
                 lucro_percentual_raw = obj.get('lucro_percentual')
@@ -1961,6 +1983,7 @@ def processar_carrinho():
                 situacao = 'PERDA'
                 forma_pagamento = None
                 lucro_percentual = None
+                prazo_dias = None
 
             # Logística lista apenas status_entrega=PENDENTE. Se o usuário
             # marcou "Já entregue?", grava ENTREGUE e a venda não entra na
@@ -1992,6 +2015,7 @@ def processar_carrinho():
                     forma_pagamento=forma_pagamento,
                     tipo_operacao=tipo_operacao,
                     lucro_percentual=lucro_percentual,
+                    prazo_dias=prazo_dias,
                     status_entrega=status_entrega,
                     empresa_id=empresa_id_atual(),
                 )
@@ -2073,6 +2097,7 @@ def venda_adicionar_item():
             empresa_faturadora=venda_existente.empresa_faturadora,
             situacao='PERDA' if tipo_operacao == 'PERDA' else venda_existente.situacao,
             forma_pagamento=None if tipo_operacao == 'PERDA' else venda_existente.forma_pagamento,
+            prazo_dias=None if tipo_operacao == 'PERDA' else getattr(venda_existente, 'prazo_dias', None),
             tipo_operacao=tipo_operacao,
             empresa_id=empresa_id_atual(),
         )
@@ -2197,6 +2222,8 @@ def editar_venda(id):
             situacao_nova = _clean_nullable_text(request.form.get('situacao')) or (venda.situacao or 'PENDENTE')
             fp = _clean_nullable_text(request.form.get('forma_pagamento'))
             forma_pagamento_nova = fp
+            prazo_enviado = 'prazo_dias' in request.form
+            prazo_novo = _parse_prazo_dias(request.form.get('prazo_dias')) if prazo_enviado else None
             data_venda_nova = None
             if data_venda_raw:
                 try:
@@ -2215,9 +2242,12 @@ def editar_venda(id):
                 if str(getattr(v_pedido, 'tipo_operacao', 'VENDA') or 'VENDA').upper() == 'PERDA':
                     v_pedido.situacao = 'PERDA'
                     v_pedido.forma_pagamento = None
+                    v_pedido.prazo_dias = None
                 else:
                     v_pedido.situacao = situacao_nova
                     v_pedido.forma_pagamento = forma_pagamento_nova
+                    if prazo_enviado:
+                        v_pedido.prazo_dias = prazo_novo
 
             venda.produto_id = produto_id
             preco_venda = safe_float(
@@ -3013,7 +3043,7 @@ def clonar_documentos_por_nf(id):
             arquivos_copiados += 1
             copiou_boleto = True
             if venc_fonte and not alvo.data_vencimento:
-                alvo.data_vencimento = venc_fonte
+                alvo.aplicar_vencimento_e_prazo(venc_fonte)
 
     if arquivos_copiados <= 0:
         return jsonify({

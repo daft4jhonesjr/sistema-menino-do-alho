@@ -459,6 +459,7 @@ class Venda(db.Model):
     caminho_boleto = db.Column(db.String(500), nullable=True, index=True)
     caminho_nf = db.Column(db.String(500), nullable=True)
     data_vencimento = db.Column(db.Date, nullable=True, index=True)  # vencimento do boleto vinculado (extraído do PDF)
+    prazo_dias = db.Column(db.Integer, nullable=True)  # prazo combinado (dias); no boleto é recalculado no vínculo
 
     empresa = db.relationship('Empresa', backref=db.backref('vendas', lazy='dynamic'))
     # Relacionamento com documentos
@@ -487,6 +488,25 @@ class Venda(db.Model):
         venda = Decimal(str(self.preco_venda or 0))
         quantidade = Decimal(str(self.quantidade_venda or 0))
         return (venda - custo) * quantidade
+
+    def aplicar_vencimento_e_prazo(self, data_vencimento):
+        """Define o vencimento do boleto e recalcula ``prazo_dias``.
+
+        ``prazo_dias`` = (data_vencimento - data_venda).days, apenas quando
+        o delta é não-negativo. Não faz commit — o chamador agrupa a transação.
+        """
+        if data_vencimento is None:
+            return
+        self.data_vencimento = data_vencimento
+        data_base = getattr(self, 'data_venda', None)
+        if not data_base:
+            return
+        try:
+            delta = (data_vencimento - data_base).days
+        except Exception:
+            return
+        if delta >= 0:
+            self.prazo_dias = int(delta)
     
     def __repr__(self):
         return f'<Venda {self.id} - Cliente: {self.cliente_id}>'

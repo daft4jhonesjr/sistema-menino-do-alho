@@ -1543,7 +1543,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                             caminho_antigo = (vv.caminho_boleto or '').strip()
                             vv.caminho_boleto = path_rel
                             if dv is not None:
-                                vv.data_vencimento = dv
+                                vv.aplicar_vencimento_e_prazo(dv)
                             _log_detalhado(f"DEBUG: Vinculando boleto à venda {vv.id} (caminho_boleto={path_rel})")
                             if caminho_antigo and caminho_antigo != path_rel:
                                 _log_detalhado(f"DEBUG: Sobrescrevendo boleto antigo: {caminho_antigo} → {path_rel}")
@@ -1560,7 +1560,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                             if tipo == 'BOLETO':
                                 _vv_extra.caminho_boleto = path_rel
                                 if dv is not None:
-                                    _vv_extra.data_vencimento = dv
+                                    _vv_extra.aplicar_vencimento_e_prazo(dv)
                             else:
                                 _vv_extra.caminho_nf = path_rel
                         _log_detalhado(
@@ -1708,7 +1708,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                         if (doc_pendente.tipo or '').upper() == 'BOLETO':
                             vv.caminho_boleto = path_rel
                             if doc_pendente.data_vencimento:
-                                vv.data_vencimento = doc_pendente.data_vencimento
+                                vv.aplicar_vencimento_e_prazo(doc_pendente.data_vencimento)
                         else:
                             vv.caminho_nf = path_rel
                 db.session.commit()
@@ -1805,7 +1805,7 @@ def _reprocessar_vencimentos_vendas():
             
             dv = dados.get('data_vencimento')
             if dv:
-                venda.data_vencimento = dv
+                venda.aplicar_vencimento_e_prazo(dv)
                 db.session.commit()
                 resultado['atualizados'] += 1
                 resultado['detalhes'].append(f"Venda {venda.id}: Vencimento atualizado para {dv.strftime('%d/%m/%Y')}")
@@ -1827,7 +1827,7 @@ def _reprocessar_vencimentos_vendas():
         # Tentar obter do Documento se existir
         doc = Documento.query.filter_by(caminho_arquivo=venda.caminho_boleto).first()
         if doc and doc.data_vencimento:
-            venda.data_vencimento = doc.data_vencimento
+            venda.aplicar_vencimento_e_prazo(doc.data_vencimento)
             try:
                 db.session.commit()
                 resultado['atualizados'] += 1
@@ -1989,7 +1989,7 @@ def _listar_documentos_recem_chegados():
                             if (doc.tipo or '').upper() == 'BOLETO':
                                 vv.caminho_boleto = path_rel
                                 if doc.data_vencimento:
-                                    vv.data_vencimento = doc.data_vencimento
+                                    vv.aplicar_vencimento_e_prazo(doc.data_vencimento)
                             else:
                                 vv.caminho_nf = path_rel
                     db.session.commit()
@@ -2080,7 +2080,7 @@ def _auto_vincular_documentos_pendentes_por_nf(user_id=None):
                     if is_boleto:
                         vv.caminho_boleto = path
                         if doc.data_vencimento:
-                            vv.data_vencimento = doc.data_vencimento
+                            vv.aplicar_vencimento_e_prazo(doc.data_vencimento)
                     else:
                         vv.caminho_nf = path
 
@@ -3787,12 +3787,32 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             _adicionar_coluna_se_ausente('vendas', 'data_vencimento', 'DATE')
         except (OperationalError, Exception):
             db.session.rollback()
+        # Migração: prazo_dias em vendas (prazo combinado; boleto recalcula no vínculo)
+        try:
+            criou_prazo = _adicionar_coluna_se_ausente('vendas', 'prazo_dias', 'INTEGER')
+            if criou_prazo:
+                uri_prazo = app.config.get('SQLALCHEMY_DATABASE_URI', '') or ''
+                if uri_prazo.startswith('sqlite'):
+                    db.session.execute(text(
+                        "UPDATE vendas SET prazo_dias = CAST(julianday(data_vencimento) - julianday(data_venda) AS INTEGER) "
+                        "WHERE prazo_dias IS NULL AND data_vencimento IS NOT NULL AND data_venda IS NOT NULL "
+                        "AND julianday(data_vencimento) >= julianday(data_venda)"
+                    ))
+                else:
+                    db.session.execute(text(
+                        "UPDATE vendas SET prazo_dias = (data_vencimento - data_venda) "
+                        "WHERE prazo_dias IS NULL AND data_vencimento IS NOT NULL AND data_venda IS NOT NULL "
+                        "AND data_vencimento >= data_venda"
+                    ))
+                db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
         # Backfill data_vencimento em vendas a partir dos Documentos (boletos) vinculados
         try:
             for v in Venda.query.filter(Venda.caminho_boleto.isnot(None)).filter(Venda.data_vencimento.is_(None)):
                 doc = Documento.query.filter_by(caminho_arquivo=v.caminho_boleto).first()
                 if doc and doc.data_vencimento:
-                    v.data_vencimento = doc.data_vencimento
+                    v.aplicar_vencimento_e_prazo(doc.data_vencimento)
             db.session.commit()
         except Exception:
             db.session.rollback()

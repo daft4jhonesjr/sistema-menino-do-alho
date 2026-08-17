@@ -120,6 +120,17 @@
                 </select>
             </div>
 
+            <div class="mb-4">
+                <label for="prazo_dias" class="block text-sm font-medium text-gray-700 mb-2">
+                    Prazo (Dias)
+                </label>
+                <input type="number" id="prazo_dias" name="prazo_dias" min="0" max="3650" step="1" inputmode="numeric"
+                       value="{{ venda.prazo_dias if venda and venda.prazo_dias is not none else '' }}"
+                       placeholder="Ex: 30"
+                       title="Sugestão pelo histórico do cliente. No boleto, o prazo é atualizado ao vincular o arquivo."
+                       class="w-full min-w-0 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+            </div>
+
             {% if not venda %}
             <div class="mb-4 flex items-end">
                 <label for="ja_entregue" class="inline-flex items-center gap-2 cursor-pointer select-none text-sm text-gray-700">
@@ -203,6 +214,17 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 })
                 .catch(function(err) { console.error('Erro ao buscar empresa frequente:', err); });
+
+            fetch('/api/clientes/' + encodeURIComponent(cid) + '/prazo-padrao', { credentials: 'same-origin' })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var prazoEl = document.getElementById('prazo_dias');
+                    if (!prazoEl || !data || data.prazo_dias === null || data.prazo_dias === undefined) return;
+                    var n = parseInt(data.prazo_dias, 10);
+                    if (isNaN(n) || n < 0) return;
+                    prazoEl.value = String(n);
+                })
+                .catch(function(err) { console.error('Erro ao buscar prazo padrão:', err); });
         });
         {% endif %}
     }

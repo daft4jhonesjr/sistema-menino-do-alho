@@ -481,7 +481,7 @@
                     <input type="number" name="lucro_percentual" id="lucro_percentual" step="0.01" min="0" placeholder="Ex: 5" class="w-full max-w-full box-border rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none font-bold text-slate-700 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
                 </div>
             </div>
-            <div class="grid grid-cols-1 md:grid-cols-6 gap-5 items-end">
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-8 gap-5 items-end">
                 <div class="w-full min-w-0">
                     <label for="inline-data_venda" class="block text-xs font-medium text-gray-600 dark:text-gray-200 mb-1">Data</label>
                     <input type="date" id="inline-data_venda" name="data_venda" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block w-full max-w-full box-border p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:focus:ring-emerald-500 dark:focus:border-emerald-500 shadow-sm">
@@ -521,6 +521,10 @@
                         <option value="CHEQUE">✍️ Cheque</option>
                         <option value="TRANSFERENCIA">🏦 Transferência</option>
                     </select>
+                </div>
+                <div>
+                    <label for="inline-prazo_dias" class="block text-xs font-medium text-gray-600 dark:text-gray-200 mb-1">Prazo (Dias)</label>
+                    <input type="number" id="inline-prazo_dias" name="prazo_dias" min="0" max="3650" step="1" inputmode="numeric" placeholder="Ex: 30" title="Sugestão pelo histórico do cliente. No boleto, o prazo é atualizado ao vincular o arquivo." class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-emerald-500 dark:focus:border-emerald-500 shadow-sm">
                 </div>
                 <div class="flex flex-col justify-end">
                     <label for="inline-ja-entregue" class="inline-flex items-center gap-2 h-[42px] px-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-sm text-gray-700 dark:text-gray-200 cursor-pointer select-none">
@@ -1895,6 +1899,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var operacaoSelect = document.getElementById('tipo_operacao');
     var situacaoSelect = document.getElementById('inline-situacao');
     var formaPagamentoSelect = document.getElementById('inline-forma_pagamento');
+    var prazoDiasInput = document.getElementById('inline-prazo_dias');
     var lucroPercentualInput = document.getElementById('lucro_percentual');
     var quantidadeInput = document.getElementById('inline-quantidade_venda');
     var estoqueInfo = document.getElementById('inline-estoque-info');
@@ -1981,6 +1986,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 formaPagamentoSelect.removeAttribute('required');
                 formaPagamentoSelect.classList.add('opacity-50', 'cursor-not-allowed');
             }
+            if (prazoDiasInput) {
+                prazoDiasInput.value = '';
+                prazoDiasInput.disabled = true;
+                prazoDiasInput.classList.add('opacity-50', 'cursor-not-allowed');
+            }
         } else {
             precoInput.readOnly = false;
             precoInput.setAttribute('required', 'required');
@@ -1989,6 +1999,10 @@ document.addEventListener('DOMContentLoaded', function() {
             if (formaPagamentoSelect) {
                 formaPagamentoSelect.disabled = false;
                 formaPagamentoSelect.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+            if (prazoDiasInput) {
+                prazoDiasInput.disabled = false;
+                prazoDiasInput.classList.remove('opacity-50', 'cursor-not-allowed');
             }
             if (!precoInput.value || parsePreco(precoInput.value) === 0) {
                 var opt = produtoSelect && produtoSelect.options[produtoSelect.selectedIndex];
@@ -2110,6 +2124,13 @@ document.addEventListener('DOMContentLoaded', function() {
         var formaPagEl = document.getElementById('inline-forma_pagamento');
         var formaPagamento = (formaPagEl && formaPagEl.value) ? String(formaPagEl.value).trim() : '';
         if (tipoOperacao === 'PERDA') formaPagamento = '';
+        var prazoEl = document.getElementById('inline-prazo_dias');
+        var prazoDias = null;
+        if (prazoEl && String(prazoEl.value || '').trim() !== '') {
+            var prazoNum = parseInt(prazoEl.value, 10);
+            if (!isNaN(prazoNum) && prazoNum >= 0) prazoDias = prazoNum;
+        }
+        if (tipoOperacao === 'PERDA') prazoDias = null;
         var jaEntregueEl = document.getElementById('inline-ja-entregue');
         var jaEntregue = !!(jaEntregueEl && jaEntregueEl.checked);
         var lucroPercentual = 0;
@@ -2148,6 +2169,7 @@ document.addEventListener('DOMContentLoaded', function() {
             lucro_percentual: lucroPercentual > 0 ? lucroPercentual : null,
             situacao: situacao,
             forma_pagamento: formaPagamento || null,
+            prazo_dias: prazoDias,
             ja_entregue: jaEntregue
         };
     }
@@ -2350,6 +2372,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 lucro_percentual: (typeof it.lucro_percentual === 'number' && it.lucro_percentual > 0) ? it.lucro_percentual : null,
                 situacao: it.situacao,
                 forma_pagamento: it.forma_pagamento || null,
+                prazo_dias: (typeof it.prazo_dias === 'number') ? it.prazo_dias : (it.prazo_dias != null && it.prazo_dias !== '' ? parseInt(it.prazo_dias, 10) : null),
                 ja_entregue: (typeof it.ja_entregue === 'boolean') ? (it.ja_entregue || jaEntregueAgora) : jaEntregueAgora
             };
         });
@@ -2359,6 +2382,31 @@ document.addEventListener('DOMContentLoaded', function() {
     if (clienteSelect) {
         clienteSelect.addEventListener('change', atualizarCampoClienteAvulso);
         atualizarCampoClienteAvulso();
+
+        var prazoFetchSeq = 0;
+        function preencherPrazoPadraoDoCliente() {
+            var prazoEl = document.getElementById('inline-prazo_dias');
+            if (!prazoEl) return;
+            var cid = (clienteSelect.value || '').trim();
+            if (!cid) {
+                prazoEl.value = '';
+                return;
+            }
+            var seq = ++prazoFetchSeq;
+            fetch('/api/clientes/' + encodeURIComponent(cid) + '/prazo-padrao', { credentials: 'same-origin' })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (seq !== prazoFetchSeq) return;
+                    if (!data || data.prazo_dias === null || data.prazo_dias === undefined) return;
+                    var n = parseInt(data.prazo_dias, 10);
+                    if (isNaN(n) || n < 0) return;
+                    prazoEl.value = String(n);
+                    prazoEl.classList.add('ring-2', 'ring-emerald-500', 'transition-all');
+                    setTimeout(function() { prazoEl.classList.remove('ring-2', 'ring-emerald-500'); }, 1000);
+                })
+                .catch(function(err) { console.error('Erro ao buscar prazo padrão:', err); });
+        }
+        clienteSelect.addEventListener('change', preencherPrazoPadraoDoCliente);
     }
 
     if (produtoSelect) {

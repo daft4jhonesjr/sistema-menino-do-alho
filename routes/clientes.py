@@ -12,6 +12,7 @@ Rotas extraídas do legado ``app.py`` (Fase 2 da refatoração):
     * POST /bulk_delete_clientes                  bulk_delete_clientes
     * GET/POST /clientes/importar                 importar_clientes  (admin)
     * POST /cliente/<id>/receber_lote             receber_lote_cliente
+    * GET  /api/clientes/<id>/prazo-padrao        prazo_padrao_cliente
 
 Endpoints novos: prefixo ``clientes.`` (ex.: ``clientes.listar_clientes``).
 
@@ -24,6 +25,7 @@ Em vez de repetir os decorators em cada handler, aplicamos via
 Rotas com necessidade adicional de ``@admin_required`` (ex.: importar)
 mantêm o decorator no próprio handler.
 """
+from collections import Counter
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 import io
@@ -287,6 +289,76 @@ def listar_clientes():
         has_next=len(clientes) >= per_page,
         top_10_ids=top_10_ids,
     )
+
+
+def _prazo_efetivo_venda(venda):
+    """Prazo em dias da venda: coluna explícita ou (vencimento - data da venda)."""
+    prazo = getattr(venda, 'prazo_dias', None)
+    try:
+        if prazo is not None:
+            n = int(prazo)
+            if n >= 0:
+                return n
+    except (TypeError, ValueError):
+        pass
+    data_venda = getattr(venda, 'data_venda', None)
+    data_venc = getattr(venda, 'data_vencimento', None)
+    if data_venda and data_venc:
+        try:
+            delta = (data_venc - data_venda).days
+        except Exception:
+            return None
+        if delta >= 0:
+            return int(delta)
+    return None
+
+
+@clientes_bp.route('/api/clientes/<int:cliente_id>/prazo-padrao', methods=['GET'])
+def prazo_padrao_cliente(cliente_id):
+    """Infere o prazo (dias) mais comum nas vendas recentes do cliente.
+
+    Usa as últimas 3 a 5 *pedidos* (agrupados por data+NF) que tenham
+    ``prazo_dias`` ou vencimento preenchido. Empate: o mais recente.
+    Sem histórico: ``{"prazo_dias": null}``.
+    """
+    cliente = query_tenant(Cliente).filter_by(id=cliente_id).first()
+    if not cliente:
+        return jsonify({'prazo_dias': None}), 404
+
+    vendas = (
+        query_tenant(Venda)
+        .filter(
+            Venda.cliente_id == cliente_id,
+            func.upper(func.coalesce(Venda.tipo_operacao, 'VENDA')) != 'PERDA',
+        )
+        .order_by(Venda.data_venda.desc(), Venda.id.desc())
+        .limit(40)
+        .all()
+    )
+
+    vistos = set()
+    prazos = []
+    for venda in vendas:
+        nf_norm = (venda.nf or '').strip()
+        chave = (venda.data_venda, nf_norm)
+        if chave in vistos:
+            continue
+        vistos.add(chave)
+        prazo = _prazo_efetivo_venda(venda)
+        if prazo is None:
+            continue
+        prazos.append(prazo)
+        if len(prazos) >= 5:
+            break
+
+    if not prazos:
+        return jsonify({'prazo_dias': None})
+
+    contagem = Counter(prazos)
+    max_freq = max(contagem.values())
+    # Empate: o mais recente (primeiro da lista, já ordenada desc).
+    escolhido = next(p for p in prazos if contagem[p] == max_freq)
+    return jsonify({'prazo_dias': int(escolhido)})
 
 
 @clientes_bp.route('/api/clientes/padronizar_maiusculas', methods=['POST'])

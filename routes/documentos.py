@@ -1021,7 +1021,7 @@ def vincular_documento_venda(id):
             if is_boleto:
                 vv.caminho_boleto = path
                 if data_venc_boleto:
-                    vv.data_vencimento = data_venc_boleto
+                    vv.aplicar_vencimento_e_prazo(data_venc_boleto)
             else:
                 vv.caminho_nf = path
 
@@ -1052,7 +1052,7 @@ def vincular_documento_venda(id):
                     if not (outra.caminho_boleto or '').strip():
                         outra.caminho_boleto = path
                         if data_venc_boleto and not outra.data_vencimento:
-                            outra.data_vencimento = data_venc_boleto
+                            outra.aplicar_vencimento_e_prazo(data_venc_boleto)
                 else:
                     if not (outra.caminho_nf or '').strip():
                         outra.caminho_nf = path
