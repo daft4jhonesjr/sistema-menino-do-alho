@@ -22,7 +22,7 @@ from flask import (
 from flask_login import current_user
 from sqlalchemy import and_, case, func, or_
 
-from models import db, ContagemGaveta, LancamentoCaixa, Venda
+from models import db, ContagemGaveta, LancamentoCaixa, Produto, Venda
 from routes.caixa import _limpar_valor_moeda
 from services.auth_utils import tenant_required
 from services.config_helpers import get_hoje_brasil
@@ -174,6 +174,18 @@ def _saldo_pix_livro_caixa() -> float:
     return round(max(saldo, 0.0), 2)
 
 
+def _total_valor_estoque() -> float:
+    """Soma financeira do estoque: ``estoque_atual * preco_custo`` por produto."""
+    eid = empresa_id_atual()
+    valor_expr = func.coalesce(Produto.estoque_atual, 0) * func.coalesce(Produto.preco_custo, 0)
+    q = db.session.query(func.coalesce(func.sum(valor_expr), 0)).filter(
+        func.coalesce(Produto.estoque_atual, 0) > 0,
+    )
+    if eid is not None:
+        q = q.filter(Produto.empresa_id == eid)
+    return round(float(q.scalar() or 0), 2)
+
+
 def _calcular_dados_balanco() -> dict:
     """Consolida os totais automáticos do sistema para o balanço rápido."""
     estado = _carregar_estado_gaveta()
@@ -181,6 +193,7 @@ def _calcular_dados_balanco() -> dict:
     total_dinheiro = _total_dinheiro_gaveta(estado)
     total_cheques = _total_cheques_pendentes_gaveta(estado)
     total_pix = _saldo_pix_livro_caixa()
+    total_estoque = _total_valor_estoque()
     return {
         'ok': True,
         'total_vendas_pendentes': total_pendentes,
@@ -189,6 +202,7 @@ def _calcular_dados_balanco() -> dict:
         'total_dinheiro_caixa': total_dinheiro,
         'total_cheques_caixa': total_cheques,
         'total_pix_caixa': total_pix,
+        'total_valor_estoque': total_estoque,
         'gerado_em': get_hoje_brasil().isoformat(),
     }
 
@@ -208,6 +222,7 @@ def api_balanco_dados_atuais():
             'total_dinheiro_caixa': 0.0,
             'total_cheques_caixa': 0.0,
             'total_pix_caixa': 0.0,
+            'total_valor_estoque': 0.0,
         }), 500
 
 
@@ -218,7 +233,7 @@ def api_balanco_exportar_csv():
     if not isinstance(payload, dict):
         payload = request.form.to_dict(flat=True) if request.form else {}
 
-    # Preferir valores enviados pelo formulário; se ausentes, recalcula do sistema.
+    # Preferir valores enviados pelo formulário; estoque sempre recalculado no servidor.
     sistema = _calcular_dados_balanco()
     pendentes = _float_seguro(
         payload.get('total_vendas_pendentes', payload.get('total_boletos_pendentes')),
@@ -227,12 +242,10 @@ def api_balanco_exportar_csv():
     dinheiro = _float_seguro(payload.get('total_dinheiro_caixa'), sistema['total_dinheiro_caixa'])
     cheques = _float_seguro(payload.get('total_cheques_caixa'), sistema['total_cheques_caixa'])
     pix = _float_seguro(payload.get('total_pix_caixa'), sistema['total_pix_caixa'])
+    valor_estoque = float(sistema.get('total_valor_estoque') or 0)
     divida_paty = _float_seguro(payload.get('divida_paty'))
     divida_destak = _float_seguro(payload.get('divida_destak'))
     a_receber_fora = _float_seguro(payload.get('a_receber_fora'))
-    valor_estoque = _float_seguro(
-        payload.get('valor_estoque', payload.get('valorEstoque'))
-    )
     observacoes = str(payload.get('observacoes') or '').strip()
 
     total_ativos = pendentes + dinheiro + cheques + pix + a_receber_fora + valor_estoque
@@ -246,29 +259,35 @@ def api_balanco_exportar_csv():
     writer.writerow(['BALANÇO PATRIMONIAL RÁPIDO'])
     writer.writerow(['Gerado em', agora.strftime('%d/%m/%Y %H:%M:%S')])
     writer.writerow([])
-    writer.writerow(['CONTA', 'TIPO', 'VALOR (R$)'])
+    writer.writerow(['TIPO', 'CONTA', 'ORIGEM', 'VALOR (R$)'])
 
     # Ativos
     writer.writerow([
+        'Ativo',
         'Total a Receber - Vendas/Notas Pendentes (Sistema)',
-        'ATIVO',
+        'Automático',
         _fmt_brl(pendentes),
     ])
-    writer.writerow(['Dinheiro em Caixa (Gaveta)', 'ATIVO', _fmt_brl(dinheiro)])
-    writer.writerow(['Cheques em Caixa (não enviados)', 'ATIVO', _fmt_brl(cheques)])
-    writer.writerow(['Pix / Transferência (saldo livro)', 'ATIVO', _fmt_brl(pix)])
-    writer.writerow(['A Receber Fora do Sistema', 'ATIVO', _fmt_brl(a_receber_fora)])
-    writer.writerow(['Valor em Estoque de Mercadorias', 'ATIVO', _fmt_brl(valor_estoque)])
-    writer.writerow(['SUBTOTAL ATIVOS', '', _fmt_brl(total_ativos)])
+    writer.writerow(['Ativo', 'Dinheiro em Caixa (Gaveta)', 'Automático', _fmt_brl(dinheiro)])
+    writer.writerow(['Ativo', 'Cheques em Caixa (não enviados)', 'Automático', _fmt_brl(cheques)])
+    writer.writerow(['Ativo', 'Pix / Transferência (saldo livro)', 'Automático', _fmt_brl(pix)])
+    writer.writerow([
+        'Ativo',
+        'Estoque Físico de Mercadorias (Custo)',
+        'Automático',
+        _fmt_brl(valor_estoque),
+    ])
+    writer.writerow(['Ativo', 'A Receber Fora do Sistema', 'Manual', _fmt_brl(a_receber_fora)])
+    writer.writerow(['', 'SUBTOTAL ATIVOS', '', _fmt_brl(total_ativos)])
     writer.writerow([])
 
     # Passivos
-    writer.writerow(['Dívida com a PATY', 'PASSIVO', _fmt_brl(divida_paty)])
-    writer.writerow(['Dívida com a DESTAK', 'PASSIVO', _fmt_brl(divida_destak)])
-    writer.writerow(['SUBTOTAL PASSIVOS', '', _fmt_brl(total_passivos)])
+    writer.writerow(['Passivo', 'Dívida com a PATY', 'Manual', _fmt_brl(divida_paty)])
+    writer.writerow(['Passivo', 'Dívida com a DESTAK', 'Manual', _fmt_brl(divida_destak)])
+    writer.writerow(['', 'SUBTOTAL PASSIVOS', '', _fmt_brl(total_passivos)])
     writer.writerow([])
 
-    writer.writerow(['SALDO LÍQUIDO REAL', '', _fmt_brl(saldo_liquido)])
+    writer.writerow(['', 'SALDO LÍQUIDO REAL', '', _fmt_brl(saldo_liquido)])
     if observacoes:
         writer.writerow([])
         writer.writerow(['Observações', observacoes])
