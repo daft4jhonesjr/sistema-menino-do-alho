@@ -4,6 +4,7 @@
 
 {% block head_extras %}
 <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <style>
     /* Animação da seção retrátil de documentos (migrada do Dashboard) */
     #lista-documentos {
@@ -146,6 +147,44 @@
     #cliente-select-wrap .ts-wrapper.campo-preenchido .ts-control { border-color: #28a745 !important; background-color: #e8f5e9 !important; }
     .dark #cliente-select-wrap .ts-wrapper.campo-preenchido .ts-control { border-color: #059669 !important; background-color: #064e3b !important; color: #f3f4f6 !important; }
 </style>
+<script>
+(function() {
+    function isDarkMode() {
+        return document.documentElement.classList.contains('dark');
+    }
+    function mostrarLoadingDeFiltro(mensagem) {
+        if (typeof Swal === 'undefined') return;
+        Swal.fire({
+            title: mensagem || 'Atualizando dados...',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showConfirmButton: false,
+            didOpen: function() { Swal.showLoading(); },
+            background: isDarkMode() ? '#1e293b' : '#ffffff',
+            color: isDarkMode() ? '#f8fafc' : '#1e293b'
+        });
+    }
+    window.mostrarLoadingDeFiltro = mostrarLoadingDeFiltro;
+
+    function ehLinkDeFiltro(link) {
+        if (!link || !link.href) return false;
+        if (link.classList.contains('js-filtro-navegacao') || link.id === 'btn-limpar-filtro') return true;
+        return !!(link.closest && link.closest('details.js-filtro-dropdown'));
+    }
+
+    document.addEventListener('click', function(e) {
+        var link = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+        if (!link || !ehLinkDeFiltro(link)) return;
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+        if (link.getAttribute('target') === '_blank') return;
+        mostrarLoadingDeFiltro('Recarregando tabela...');
+    }, true);
+
+    window.addEventListener('pageshow', function(e) {
+        if (e.persisted && typeof Swal !== 'undefined') Swal.close();
+    });
+})();
+</script>
 {% endblock %}
 
 {% block content %}
@@ -360,7 +399,7 @@
         </div>
     </div>
     <a href="{{ url_for('vendas.listar_vendas') }}"
-       class="bg-white dark:bg-gray-800 border border-emerald-700 dark:border-emerald-600 text-emerald-700 dark:text-emerald-400 px-4 py-2 rounded-xl hover:bg-emerald-700 hover:text-white transition flex items-center font-medium text-sm">
+       class="js-filtro-navegacao bg-white dark:bg-gray-800 border border-emerald-700 dark:border-emerald-600 text-emerald-700 dark:text-emerald-400 px-4 py-2 rounded-xl hover:bg-emerald-700 hover:text-white transition flex items-center font-medium text-sm">
         <i data-lucide="x" class="w-4 h-4 mr-2"></i>Limpar Filtro
     </a>
 </div>
@@ -772,7 +811,7 @@
         {% if request.args.get('produto_id') %}{% set _ = url_sem_vencidos.update({'produto_id': request.args.get('produto_id')}) %}{% endif %}
         {% if request.args.get('cliente_id') %}{% set _ = url_sem_vencidos.update({'cliente_id': request.args.get('cliente_id')}) %}{% endif %}
         {% set _ = url_sem_vencidos.update({'ordem_data': ordem_data}) %}
-        <a href="{{ url_for('vendas.listar_vendas', **url_sem_vencidos) }}" class="px-4 py-2 rounded-xl text-sm font-medium bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800 hover:bg-red-200 dark:hover:bg-red-900/60 transition">
+        <a href="{{ url_for('vendas.listar_vendas', **url_sem_vencidos) }}" id="btn-limpar-filtro" class="js-filtro-navegacao px-4 py-2 rounded-xl text-sm font-medium bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800 hover:bg-red-200 dark:hover:bg-red-900/60 transition">
             <i data-lucide="x" class="w-4 h-4 inline-block mr-1.5 align-middle"></i>Limpar filtro vencidos
         </a>
     {% endif %}
@@ -781,10 +820,10 @@
         {% set _ = url_filtro_geral.update({'filtro': 'geral', 'ordem_data': ordem_data}) %}
         {% set url_filtro_bacalhau = url_params.copy() %}
         {% set _ = url_filtro_bacalhau.update({'filtro': 'bacalhau', 'ordem_data': ordem_data}) %}
-        <a href="{{ url_for('vendas.listar_vendas', **url_filtro_geral) }}" class="px-3 py-1.5 rounded-md text-sm font-semibold transition-colors {{ 'bg-emerald-600 text-white' if (request.args.get('filtro', 'geral') == 'geral') else 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700' }}">
+        <a href="{{ url_for('vendas.listar_vendas', **url_filtro_geral) }}" class="js-filtro-navegacao px-3 py-1.5 rounded-md text-sm font-semibold transition-colors {{ 'bg-emerald-600 text-white' if (request.args.get('filtro', 'geral') == 'geral') else 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700' }}">
             🧄 Geral (Alho/Outros)
         </a>
-        <a href="{{ url_for('vendas.listar_vendas', **url_filtro_bacalhau) }}" class="px-3 py-1.5 rounded-md text-sm font-semibold transition-colors {{ 'bg-blue-600 text-white' if (request.args.get('filtro') == 'bacalhau') else 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700' }}">
+        <a href="{{ url_for('vendas.listar_vendas', **url_filtro_bacalhau) }}" class="js-filtro-navegacao px-3 py-1.5 rounded-md text-sm font-semibold transition-colors {{ 'bg-blue-600 text-white' if (request.args.get('filtro') == 'bacalhau') else 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700' }}">
             🐟 Bacalhau
         </a>
     </div>
@@ -2489,7 +2528,6 @@ document.addEventListener('DOMContentLoaded', function() {
 })();
 </script>
 
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
 <script>
 (function() {
