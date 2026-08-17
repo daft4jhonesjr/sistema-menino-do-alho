@@ -362,8 +362,8 @@
 </form>
 
 <!-- Overlay + Gaveta de Orçamento Pessoal -->
-<div id="gaveta-orcamento-overlay" class="fixed inset-0 z-40 hidden bg-black/50 transition-opacity" onclick="fecharGavetaOrcamento()" aria-hidden="true"></div>
-<div id="gaveta-orcamento" class="fixed inset-y-0 right-0 z-50 w-full max-w-md transform translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="gaveta-orcamento-titulo">
+<div id="gaveta-orcamento-overlay" class="fixed inset-0 z-[60] hidden bg-black/50" onclick="fecharGavetaOrcamento()" aria-hidden="true"></div>
+<div id="gaveta-orcamento" class="fixed inset-y-0 right-0 z-[70] hidden w-full max-w-md translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="gaveta-orcamento-titulo">
     <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80">
         <div>
             <h3 id="gaveta-orcamento-titulo" class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
@@ -2429,6 +2429,10 @@ document.addEventListener('keydown', function(e) {
 
     window.abrirGavetaOrcamento = function() {
         overlay && overlay.classList.remove('hidden');
+        gaveta.classList.remove('hidden');
+        gaveta.classList.add('translate-x-full');
+        gaveta.classList.remove('translate-x-0');
+        gaveta.offsetHeight;
         gaveta.classList.remove('translate-x-full');
         gaveta.classList.add('translate-x-0');
         gaveta.setAttribute('aria-hidden', 'false');
@@ -2444,9 +2448,18 @@ document.addEventListener('keydown', function(e) {
         gaveta.classList.add('translate-x-full');
         gaveta.setAttribute('aria-hidden', 'true');
         overlay && overlay.classList.add('hidden');
+        setTimeout(function() {
+            if (gaveta.classList.contains('translate-x-full')) {
+                gaveta.classList.add('hidden');
+            }
+        }, 300);
         if (typeof liberarFundo === 'function') liberarFundo();
         setErro('');
     };
+
+    gaveta.classList.remove('translate-x-0');
+    gaveta.classList.add('translate-x-full', 'hidden');
+    if (overlay) overlay.classList.add('hidden');
 
     var btnAbrir = document.getElementById('btn-abrir-orcamento');
     if (btnAbrir) btnAbrir.addEventListener('click', function(e) {
