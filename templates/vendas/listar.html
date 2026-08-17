@@ -5028,6 +5028,7 @@ document.addEventListener('click', function(ev) {
 
     function montarTextoPedidoNF(btn) {
         var razao  = (btn.getAttribute('data-razao') || '').trim();
+        var nomeCliente = (btn.getAttribute('data-nome-cliente') || '').trim();
         var cnpj   = formatarCnpjNF(btn.getAttribute('data-cnpj') || '');
         var loc    = separarCidadeUf(btn.getAttribute('data-cidade'), btn.getAttribute('data-uf'));
         var itens  = parseItensNF(btn.getAttribute('data-itens'));
@@ -5050,6 +5051,7 @@ document.addEventListener('click', function(ev) {
         var cabecalho = [];
         if (razao) cabecalho.push('🏢 *' + razao + '*');
         if (cnpj)  cabecalho.push('📄 CNPJ: ' + cnpj);
+        if (nomeCliente) cabecalho.push('👤 ' + nomeCliente);
         if (cidadeLinha) cabecalho.push('📍 ' + cidadeLinha);
         if (formaPagto === 'BOLETO' && prazoDias && prazoDias !== '0') {
             cabecalho.push('⏳ ' + prazoDias + ' dias');

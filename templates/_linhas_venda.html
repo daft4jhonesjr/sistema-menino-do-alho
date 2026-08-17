@@ -165,7 +165,8 @@
         <div class="flex items-center justify-end gap-1.5 flex-nowrap">
             {# Dados compartilhados: WhatsApp (resumo do pedido) + Copiar Pedido NF #}
             {% set cli_nf = pedido.vendas[0].cliente if pedido.vendas else none %}
-            {% set razao_nf = (cli_nf.razao_social if cli_nf and cli_nf.razao_social else none) or (cli_nf.nome_cliente if cli_nf else none) or pedido.cliente_nome or '' %}
+            {% set razao_nf = (cli_nf.razao_social if cli_nf and cli_nf.razao_social else none) or '' %}
+            {% set nome_cliente_nf = (cli_nf.nome_cliente if cli_nf and cli_nf.nome_cliente else none) or pedido.cliente_nome or '' %}
             {% set cnpj_nf = (cli_nf.cnpj if cli_nf and cli_nf.cnpj else none) or pedido.cliente_cnpj or '' %}
             {% set cidade_nf = (cli_nf.cidade if cli_nf and cli_nf.cidade else none) or '' %}
             {% set telefone_wa = (cli_nf.telefone if cli_nf and cli_nf.telefone else none) or '' %}
@@ -208,6 +209,7 @@
                 class="btn-copiar-pedido-nf flex-shrink-0 p-2.5 md:p-1.5 rounded text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 inline-flex transition-colors bg-transparent border-none cursor-pointer"
                 title="Copiar Pedido NF"
                 data-razao="{{ razao_nf }}"
+                data-nome-cliente="{{ nome_cliente_nf }}"
                 data-cnpj="{{ cnpj_nf }}"
                 data-cidade="{{ cidade_nf }}"
                 data-uf=""
