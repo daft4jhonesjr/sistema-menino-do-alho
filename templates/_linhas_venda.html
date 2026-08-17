@@ -325,6 +325,7 @@
                                     data-situacao="{{ venda.situacao or 'PENDENTE' }}"
                                     data-lucro-perc="{{ venda.lucro_percentual if venda.lucro_percentual is not none else '' }}"
                                     data-forma-pagamento="{{ venda.forma_pagamento or '' }}"
+                                    data-prazo-dias="{{ venda.prazo_dias if venda.prazo_dias is not none else '' }}"
                                     data-tipo-operacao="{{ venda.tipo_operacao or 'VENDA' }}">
                                     <i data-lucide="pencil" class="w-4 h-4"></i>
                                 </button>

@@ -1211,6 +1211,10 @@
                             <option value="TRANSFERENCIA">🏦 Transferência</option>
                         </select>
                     </div>
+                    <div class="mb-4">
+                        <label for="edit_prazo_dias" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Prazo (Dias)</label>
+                        <input type="number" id="edit_prazo_dias" name="prazo_dias" min="0" max="3650" step="1" inputmode="numeric" placeholder="Ex: 30" value="" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
+                    </div>
                 </div>
                 <div class="flex gap-4 mt-6">
                     <button type="submit" class="bg-emerald-700 text-white px-6 py-2.5 rounded-xl hover:bg-emerald-600 transition flex items-center font-medium" id="btn-salvar-editar-venda">
@@ -1525,6 +1529,7 @@ function loadingBotaoEditarVenda(formElement) {
         var empresa = limparValor(btn.getAttribute('data-empresa'));
         var situacao = limparValor(btn.getAttribute('data-situacao')) || 'PENDENTE';
         var formaPagamento = limparValor(btn.getAttribute('data-forma-pagamento'));
+        var prazoDias = limparValor(btn.getAttribute('data-prazo-dias'));
         var lucroPerc = limparValor(btn.getAttribute('data-lucro-perc'));
         var tipoOperacao = (limparValor(btn.getAttribute('data-tipo-operacao')) || 'VENDA').toUpperCase();
 
@@ -1554,6 +1559,18 @@ function loadingBotaoEditarVenda(formElement) {
                 editFormaPag.value = formaPagamento;
                 editFormaPag.disabled = false;
                 editFormaPag.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+        }
+        var editPrazo = document.getElementById('edit_prazo_dias');
+        if (editPrazo) {
+            if (tipoOperacao === 'PERDA') {
+                editPrazo.value = '';
+                editPrazo.disabled = true;
+                editPrazo.classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                editPrazo.value = prazoDias;
+                editPrazo.disabled = false;
+                editPrazo.classList.remove('opacity-50', 'cursor-not-allowed');
             }
         }
 
@@ -3208,6 +3225,7 @@ document.addEventListener('DOMContentLoaded', function() {
         var empresa = limparValor(btn.getAttribute('data-empresa'));
         var situacao = limparValor(btn.getAttribute('data-situacao')) || 'PENDENTE';
         var formaPagamento = limparValor(btn.getAttribute('data-forma-pagamento'));
+        var prazoDias = limparValor(btn.getAttribute('data-prazo-dias'));
         var lucroPerc = limparValor(btn.getAttribute('data-lucro-perc'));
         var tipoOperacao = (limparValor(btn.getAttribute('data-tipo-operacao')) || 'VENDA').toUpperCase();
 
@@ -3237,6 +3255,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 editFormaPag.value = formaPagamento;
                 editFormaPag.disabled = false;
                 editFormaPag.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+        }
+        var editPrazo = document.getElementById('edit_prazo_dias');
+        if (editPrazo) {
+            if (tipoOperacao === 'PERDA') {
+                editPrazo.value = '';
+                editPrazo.disabled = true;
+                editPrazo.classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                editPrazo.value = prazoDias;
+                editPrazo.disabled = false;
+                editPrazo.classList.remove('opacity-50', 'cursor-not-allowed');
             }
         }
 

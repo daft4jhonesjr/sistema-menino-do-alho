@@ -2274,6 +2274,7 @@ def editar_venda(id):
                 venda.situacao = 'PERDA'
                 venda.forma_pagamento = None
                 venda.lucro_percentual = None
+                venda.prazo_dias = None
 
             # --- INTEGRAÇÃO COM CAIXA (PILOTO AUTOMÁTICO V4) ---
             vendas_do_pedido = vendas_do_pedido_alvo
