@@ -118,7 +118,7 @@
             </thead>
             <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                 {% for u in usuarios %}
-                <tr class="hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition">
+                <tr class="hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition" data-usuario-id="{{ u.id }}">
                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
                         {{ u.username }}
                         {% if u.username == 'Jhones' %}
@@ -154,7 +154,7 @@
                             {{ 'admin' if u.is_admin() else 'user' }}
                         </span>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm cel-ultimo-acesso">
                         {% if not u.ultimo_acesso %}
                             <span class="text-gray-400 dark:text-gray-500 italic">Nunca acessou</span>
                         {% else %}
@@ -186,6 +186,15 @@
                                     title="Redefinir senha deste usuário">
                                 <i data-lucide="key-round" class="w-4 h-4"></i>
                                 <span class="hidden sm:inline">Resetar Senha</span>
+                            </button>
+                            <button type="button"
+                                    class="btn-forcar-logout bg-orange-100 dark:bg-orange-900/40 text-orange-800 dark:text-orange-300 px-3 py-1 rounded hover:bg-orange-200 dark:hover:bg-orange-800/50 transition text-sm font-medium inline-flex items-center gap-1"
+                                    data-id="{{ u.id }}"
+                                    data-nome="{{ (u.nome or u.username)|e }}"
+                                    onclick="forcarLogoutUsuario(this.dataset.id, this.dataset.nome)"
+                                    title="Desconectar este usuário de todos os dispositivos">
+                                <i data-lucide="log-out" class="w-4 h-4"></i>
+                                <span class="hidden sm:inline">Desconectar</span>
                             </button>
                             {% if u.id != current_user.id and u.username != 'Jhones' %}
                             <form action="{{ url_for('auth.excluir_usuario', id=u.id) }}" method="POST" class="inline" onsubmit="return confirm('Tem certeza que deseja EXCLUIR o usuário &quot;{{ u.username|e }}&quot;? Esta ação não pode ser desfeita.');">
@@ -229,7 +238,7 @@
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Senha Atual</label>
-                    <input type="password" name="senha_atual" class="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100" placeholder="Digite para autorizar a mudança">
+                    <input type="password" name="senha_atual" id="modal_senha_atual" class="w-full border border-gray-300 dark:border-gray-600 rounded-lg p-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100" placeholder="Digite para autorizar a mudança" autocomplete="current-password">
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nova Senha</label>
@@ -295,13 +304,129 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
+const CURRENT_USER_ID = {{ current_user.id|int }};
+
+function _swalLogoutTheme() {
+    var dark = document.documentElement.classList.contains('dark');
+    return {
+        background: dark ? '#1F2937' : '#FFFFFF',
+        color: dark ? '#F9FAFB' : '#111827',
+        confirmButtonColor: '#D97706',
+        cancelButtonColor: '#6B7280'
+    };
+}
+
+function _marcarUsuarioDesconectado(id) {
+    var linha = document.querySelector('tr[data-usuario-id="' + id + '"]');
+    if (!linha) return;
+    var celula = linha.querySelector('.cel-ultimo-acesso');
+    if (celula) {
+        celula.innerHTML =
+            '<span class="inline-flex items-center gap-2 text-orange-700 dark:text-orange-300 font-medium">' +
+            '<span class="inline-block w-2.5 h-2.5 rounded-full bg-orange-400" title="Sessões invalidadas"></span>' +
+            'Desconectado</span>';
+    }
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+async function forcarLogoutUsuario(id, nome) {
+    if (!id) return;
+    var rotulo = nome || 'este usuário';
+    if (typeof Swal === 'undefined') {
+        if (!confirm('Atenção: Deseja realmente desconectar ' + rotulo + ' de todos os dispositivos? Ele precisará fazer login novamente.')) {
+            return;
+        }
+    } else {
+        var confirmado = await Swal.fire(Object.assign(_swalLogoutTheme(), {
+            icon: 'warning',
+            title: 'Atenção',
+            text: 'Deseja realmente desconectar ' + rotulo + ' de todos os dispositivos? Ele precisará fazer login novamente.',
+            showCancelButton: true,
+            confirmButtonText: 'Sim, desconectar',
+            cancelButtonText: 'Cancelar'
+        }));
+        if (!confirmado.isConfirmed) return;
+    }
+
+    try {
+        var resp = await fetch('/api/usuarios/' + encodeURIComponent(id) + '/forcar_logout', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({})
+        });
+        var data = {};
+        try { data = await resp.json(); } catch (e) { data = {}; }
+
+        if (resp.ok && data.ok) {
+            _marcarUsuarioDesconectado(id);
+            var msg = data.mensagem || ('Usuário ' + rotulo + ' desconectado de todos os dispositivos.');
+            if (typeof showToast === 'function') {
+                showToast(msg, 'success');
+            } else if (typeof Swal !== 'undefined') {
+                await Swal.fire(Object.assign(_swalLogoutTheme(), {
+                    icon: 'success',
+                    title: 'Sessões encerradas',
+                    text: msg,
+                    confirmButtonColor: '#059669'
+                }));
+            } else {
+                alert(msg);
+            }
+            if (String(id) === String(CURRENT_USER_ID)) {
+                window.location.href = '/login';
+            }
+            return;
+        }
+
+        var erro = data.mensagem || ('Falha ao desconectar (HTTP ' + resp.status + ').');
+        if (typeof Swal !== 'undefined') {
+            Swal.fire(Object.assign(_swalLogoutTheme(), {
+                icon: 'error',
+                title: 'Erro',
+                text: erro,
+                confirmButtonColor: '#DC2626'
+            }));
+        } else if (typeof showToast === 'function') {
+            showToast(erro, 'error');
+        } else {
+            alert(erro);
+        }
+    } catch (err) {
+        console.error('Erro ao forçar logout:', err);
+        var msgRede = 'Erro de rede ao desconectar o usuário. Tente novamente.';
+        if (typeof Swal !== 'undefined') {
+            Swal.fire(Object.assign(_swalLogoutTheme(), {
+                icon: 'error',
+                title: 'Erro',
+                text: msgRede,
+                confirmButtonColor: '#DC2626'
+            }));
+        } else if (typeof showToast === 'function') {
+            showToast(msgRede, 'error');
+        } else {
+            alert(msgRede);
+        }
+    }
+}
+
 function abrirModalUsuario(id, username, role) {
     const form = document.getElementById('formEditarUsuario');
     form.action = '/gerenciar_usuarios/editar_completo/' + id;
     document.getElementById('modal_username').value = username || '';
     document.getElementById('modal_role').value = role || 'user';
-    form.querySelector('input[name="senha_atual"]').value = '';
+    const senhaAtual = document.getElementById('modal_senha_atual');
+    senhaAtual.value = '';
+    const editandoTerceiro = String(id) !== String(CURRENT_USER_ID);
+    senhaAtual.placeholder = editandoTerceiro
+        ? 'Digite a SUA senha para autorizar a mudança'
+        : 'Digite para autorizar a mudança';
     form.querySelector('input[name="nova_senha"]').value = '';
     form.querySelector('input[name="confirmar_senha"]').value = '';
     const modal = document.getElementById('modalUsuario');

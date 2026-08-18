@@ -1,4 +1,5 @@
 import json
+import uuid
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 from datetime import date, datetime
@@ -92,8 +93,34 @@ class Usuario(UserMixin, db.Model):
     notifica_logistica = db.Column(db.Boolean, default=True)
     notifica_frase = db.Column(db.Boolean, default=True)
     ultimo_acesso = db.Column(db.DateTime, nullable=True, index=True)
+    # Token de sessão: rotacionar invalida todos os dispositivos ativos.
+    # Nullable de propósito — usuários antigos sem token continuam válidos
+    # até o próximo login ou um force-logout (ver user_loader).
+    session_token = db.Column(
+        db.String(100),
+        nullable=True,
+        default=lambda: str(uuid.uuid4()),
+    )
 
     empresa = db.relationship('Empresa', backref=db.backref('usuarios', lazy='dynamic'))
+
+    def get_id(self):
+        """Identificador Flask-Login incluindo o token de sessão.
+
+        Assim, remember-me e o cookie de sessão carregam o token. Quando
+        ``session_token`` muda no banco, o valor persistido no navegador
+        deixa de bater e o usuário é deslogado em todos os dispositivos.
+        """
+        ident = str(self.id)
+        token = getattr(self, 'session_token', None)
+        if token:
+            return f'{ident}:{token}'
+        return ident
+
+    def rotacionar_session_token(self):
+        """Gera um novo UUID e invalida sessões anteriores."""
+        self.session_token = str(uuid.uuid4())
+        return self.session_token
 
     def is_master(self):
         """Administrador global do SaaS (acima de qualquer Empresa)."""

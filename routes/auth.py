@@ -6,6 +6,7 @@ Rotas extraídas do legado ``app.py``:
     * /api/logs/erros, /api/logs/limpar
     * /gerenciar_usuarios/*  (CRUD de usuários do tenant)
     * /api/usuarios/<id>/reset-senha  (admin redefine senha de outro usuário)
+    * /api/usuarios/<id>/forcar_logout  (invalida sessões em todos os dispositivos)
 
 Endpoints novos seguem o padrão ``auth.<nome>``. Os redirects internos
 e templates já foram atualizados para o novo formato.
@@ -18,10 +19,11 @@ perfil/configurações usam só ``login_required``; gerenciar_usuarios usa
 from datetime import datetime
 import os
 import traceback
+import uuid
 
 from flask import (
     Blueprint, render_template, request, redirect, url_for,
-    flash, jsonify, current_app,
+    flash, jsonify, current_app, session,
 )
 from flask_login import login_user, logout_user, login_required, current_user
 from sqlalchemy import func
@@ -50,21 +52,67 @@ from services.files_utils import _arquivo_imagem_permitido
 auth_bp = Blueprint('auth', __name__)
 
 
-def _checar_gestao_usuario_permitida(usuario_alvo):
-    """Garante que DONO só gerencia usuários da própria empresa.
+def _nivel_hierarquia(usuario):
+    """Rank de privilégio: FUNCIONARIO (1) < DONO/admin (2) < MASTER (3)."""
+    if usuario is None:
+        return 0
+    if getattr(usuario, 'is_master', lambda: False)():
+        return 3
+    perfil = (getattr(usuario, 'perfil', None) or '').upper()
+    if perfil == PERFIL_MASTER:
+        return 3
+    if perfil == PERFIL_DONO or getattr(usuario, 'role', None) == 'admin':
+        return 2
+    return 1
 
-    MASTER nunca chega aqui (``tenant_required`` redireciona para o
-    painel master). Retorna ``(ok, redirect_response)``.
+
+def _checar_gestao_usuario_permitida(usuario_alvo):
+    """Garante tenant + hierarquia na gestão de usuários.
+
+    Permite a operação se:
+      * o usuário logado está editando a si mesmo; OU
+      * o usuário logado é MASTER/admin/DONO e o alvo tem nível igual ou inferior.
+
+    DONO só gerencia usuários da própria empresa. MASTER, quando chega
+    aqui, não é filtrado por tenant (``empresa_id`` nulo). Retorna
+    ``(ok, redirect_response)``.
     """
     if usuario_alvo is None:
         flash('Usuario nao encontrado.', 'error')
         return False, redirect(url_for('auth.gerenciar_usuarios'))
+
+    eh_self = current_user.is_authenticated and current_user.id == usuario_alvo.id
+    if not eh_self:
+        eh_gestor = (
+            getattr(current_user, 'is_master', lambda: False)()
+            or getattr(current_user, 'is_admin', lambda: False)()
+            or getattr(current_user, 'is_dono', lambda: False)()
+        )
+        if not eh_gestor or _nivel_hierarquia(current_user) < _nivel_hierarquia(usuario_alvo):
+            flash('Acesso negado: você não pode editar um usuário de nível superior.', 'error')
+            return False, redirect(url_for('auth.gerenciar_usuarios'))
+
     eid_atual = empresa_id_atual()
     alvo_eid = getattr(usuario_alvo, 'empresa_id', None)
     if eid_atual and alvo_eid and alvo_eid != eid_atual:
         flash('Acesso negado: usuario pertence a outra empresa.', 'error')
         return False, redirect(url_for('auth.gerenciar_usuarios'))
     return True, None
+
+
+def _autorizar_com_senha_do_logado(senha_informada):
+    """Valida a senha do usuário autenticado (nunca a do usuário alvo).
+
+    Retorna ``True`` se a senha confere. Usado para autorizar edição de
+    perfil próprio ou de terceiros a partir da conta Master/Admin logada.
+    """
+    senha = (senha_informada or '').strip()
+    if not senha:
+        return False
+    hash_logado = getattr(current_user, 'password_hash', None)
+    if not hash_logado:
+        return False
+    return check_password_hash(hash_logado, senha)
 
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
@@ -115,6 +163,13 @@ def login():
                     flash('Seu usuário não está vinculado a nenhuma empresa. Contate o administrador.', 'error')
                     return render_template('auth/login.html')
             remember = True if request.form.get('remember') else False
+            if not getattr(user, 'session_token', None):
+                user.session_token = str(uuid.uuid4())
+                ok_token, err_token = _safe_db_commit()
+                if not ok_token:
+                    flash(err_token or 'Erro ao iniciar a sessão. Tente novamente.', 'error')
+                    return render_template('auth/login.html')
+            session['session_token'] = user.session_token
             login_user(user, remember=remember)
             destino_padrao = _pos_login_landing(user) or url_for('auth.login')
             next_url = request.form.get('next') or request.args.get('next')
@@ -142,6 +197,7 @@ def login():
 @auth_bp.route('/logout')
 @login_required
 def logout():
+    session.pop('session_token', None)
     logout_user()
     return redirect(url_for('auth.login'))
 
@@ -500,21 +556,26 @@ def editar_usuario_completo(id):
         confirmar_senha = (request.form.get('confirmar_senha') or '').strip()
         novo_role = request.form.get('role')
         senha_alterada = False
+        editando_terceiro = current_user.id != u.id
+        alterando_senha = bool(nova_senha or confirmar_senha)
+        # Qualquer edição de terceiro (ou troca de senha) é autorizada com a
+        # senha do usuário LOGADO — nunca com a senha do usuário alvo.
+        if alterando_senha or editando_terceiro:
+            if not senha_atual:
+                flash('Informe a sua senha atual para autorizar a alteração.', 'error')
+                return redirect(url_for('auth.gerenciar_usuarios'))
+            if not _autorizar_com_senha_do_logado(senha_atual):
+                flash('A senha informada está incorreta. Use a senha da sua conta para autorizar a alteração.', 'error')
+                return redirect(url_for('auth.gerenciar_usuarios'))
         if novo_nome and novo_nome != u.username:
             existe = Usuario.query.filter_by(username=novo_nome).first()
             if existe:
                 flash(f'Erro: O nome {novo_nome} já está em uso por outro usuário.', 'error')
                 return redirect(url_for('auth.gerenciar_usuarios'))
             u.username = novo_nome
-        if nova_senha or confirmar_senha:
+        if alterando_senha:
             if nova_senha != confirmar_senha:
                 flash('As novas senhas não coincidem. Tente novamente.', 'error')
-                return redirect(url_for('auth.gerenciar_usuarios'))
-            if not senha_atual:
-                flash('Para alterar a senha, você deve informar a Senha Atual.', 'error')
-                return redirect(url_for('auth.gerenciar_usuarios'))
-            if not check_password_hash(current_user.password_hash, senha_atual):
-                flash('A Senha Atual está incorreta. Alteração de senha negada.', 'error')
                 return redirect(url_for('auth.gerenciar_usuarios'))
             u.password_hash = generate_password_hash(nova_senha)
             senha_alterada = True
@@ -550,7 +611,7 @@ def api_reset_senha_usuario(usuario_id):
         u = Usuario.query.get_or_404(usuario_id)
         ok_perm, _resp = _checar_gestao_usuario_permitida(u)
         if not ok_perm:
-            return jsonify(ok=False, mensagem='Acesso negado: usuário pertence a outra empresa.'), 403
+            return jsonify(ok=False, mensagem='Acesso negado: você não pode redefinir a senha deste usuário.'), 403
 
         data = request.get_json(silent=True) or {}
         nova_senha = (data.get('nova_senha') or data.get('senha') or '').strip()
@@ -576,6 +637,64 @@ def api_reset_senha_usuario(usuario_id):
             ok=True,
             mensagem=f'Senha do usuário "{u.username}" atualizada com sucesso!',
         )
+
+    return _reset()
+
+
+@auth_bp.route('/api/usuarios/<int:id>/forcar_logout', methods=['POST'])
+@login_required
+def api_forcar_logout_usuario(id):
+    """Invalida todas as sessões ativas do usuário alvo.
+
+    Rotaciona ``session_token``. Na próxima requisição, o ``user_loader``
+    deixa de reconhecer o cookie antigo e o Flask-Login desloga o usuário
+    em todos os dispositivos.
+    """
+    eh_gestor = (
+        getattr(current_user, 'is_master', lambda: False)()
+        or getattr(current_user, 'is_admin', lambda: False)()
+        or getattr(current_user, 'is_dono', lambda: False)()
+        or getattr(current_user, 'role', None) == 'admin'
+    )
+    if not eh_gestor:
+        return jsonify(
+            ok=False,
+            mensagem='Acesso negado: apenas Master, Admin ou Executivo podem desconectar usuários.',
+        ), 403
+
+    usuario = Usuario.query.get(id)
+    if usuario is None:
+        return jsonify(ok=False, mensagem='Usuário não encontrado.'), 404
+
+    eh_self = current_user.is_authenticated and current_user.id == usuario.id
+    if not eh_self:
+        if _nivel_hierarquia(current_user) < _nivel_hierarquia(usuario):
+            return jsonify(
+                ok=False,
+                mensagem='Acesso negado: você não pode desconectar um usuário de nível superior.',
+            ), 403
+        eid_atual = empresa_id_atual()
+        alvo_eid = getattr(usuario, 'empresa_id', None)
+        if eid_atual and alvo_eid and alvo_eid != eid_atual:
+            return jsonify(
+                ok=False,
+                mensagem='Acesso negado: usuário pertence a outra empresa.',
+            ), 403
+
+    try:
+        usuario.rotacionar_session_token()
+        ok, err = _safe_db_commit()
+        if not ok:
+            return jsonify(ok=False, mensagem=err or 'Erro ao invalidar as sessões.'), 500
+    except Exception as exc:
+        db.session.rollback()
+        return erro_json(exc, 'Erro ao forçar logout.', contexto='api_forcar_logout_usuario')
+
+    return jsonify(
+        ok=True,
+        mensagem=f'Usuário "{usuario.username}" foi desconectado de todos os dispositivos.',
+        usuario_id=usuario.id,
+    )
 
     return _reset()
 

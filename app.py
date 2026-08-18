@@ -2823,7 +2823,37 @@ def _dashboard_cache_key() -> str:
 
 @login_manager.user_loader
 def load_user(user_id):
-    return Usuario.query.get(int(user_id))
+    """Carrega o usuário e valida o token de sessão do navegador.
+
+    Aceita tanto o id legado (``"42"``) quanto o formato ``"42:<token>"``
+    gravado por ``Usuario.get_id()``. Se o token do banco existir e não
+    bater com o da sessão/cookie, retorna ``None`` — o Flask-Login trata
+    como anônimo (logout automático). Token nulo no banco = usuário antigo,
+    sessão ainda válida.
+    """
+    raw = str(user_id or '').strip()
+    if not raw:
+        return None
+    token_do_id = None
+    if ':' in raw:
+        uid_str, token_do_id = raw.split(':', 1)
+    else:
+        uid_str = raw
+    try:
+        usuario = Usuario.query.get(int(uid_str))
+    except (TypeError, ValueError):
+        return None
+    if usuario is None:
+        return None
+    token_banco = getattr(usuario, 'session_token', None)
+    if not token_banco:
+        return usuario
+    token_navegador = session.get('session_token') or token_do_id
+    if token_navegador != token_banco:
+        return None
+    if session.get('session_token') != token_banco:
+        session['session_token'] = token_banco
+    return usuario
 
 
 @app.template_filter('formato_moeda')
@@ -3827,6 +3857,11 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
         # Migração: ultimo_acesso em usuarios (status online / última atividade)
         try:
             _adicionar_coluna_se_ausente('usuarios', 'ultimo_acesso', 'TIMESTAMP')
+        except (OperationalError, Exception):
+            db.session.rollback()
+        # Migração: session_token em usuarios (invalidação de sessões / force logout)
+        try:
+            _adicionar_coluna_se_ausente('usuarios', 'session_token', 'VARCHAR(100)')
         except (OperationalError, Exception):
             db.session.rollback()
         # --- MIGRACAO AUTOMATICA: Colunas de notificacao em usuarios (cross-database) ---
