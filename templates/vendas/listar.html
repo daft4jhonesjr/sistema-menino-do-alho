@@ -1277,6 +1277,69 @@
     </div>
 </div>
 
+<!-- Modal Troca de Mercadoria -->
+<div id="modalTrocaMercadoria-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
+    <div class="fixed inset-0 bg-black/60" id="modalTrocaMercadoria-overlay"></div>
+    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-gray-200 dark:border-slate-700 z-50" onclick="event.stopPropagation()">
+        <div class="flex justify-between items-center px-6 py-4 bg-blue-700 dark:bg-slate-900 text-white rounded-t-xl">
+            <h3 class="text-lg font-bold flex items-center gap-2">
+                <span aria-hidden="true">🔄</span> Troca de Mercadoria
+            </h3>
+            <button type="button" class="modalTrocaMercadoria-fechar w-9 h-9 flex items-center justify-center rounded-full hover:bg-blue-600 dark:hover:bg-slate-700 text-white font-bold transition" title="Fechar">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+        <form id="form-troca-mercadoria" class="p-6 space-y-4" onsubmit="return confirmarTroca(event)">
+            <input type="hidden" id="troca-venda-id" value="">
+            <input type="hidden" id="troca-item-id" value="">
+            <input type="hidden" id="troca-produto-atual-id" value="">
+            <input type="hidden" id="troca-novo-produto-id" value="">
+
+            <div class="rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/60 p-4">
+                <p class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-1">Produto original</p>
+                <p id="troca-produto-original" class="text-sm font-semibold text-slate-900 dark:text-slate-100"></p>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    Quantidade atual: <span id="troca-qtd-atual" class="font-medium text-slate-700 dark:text-slate-200"></span> caixas
+                </p>
+            </div>
+
+            <div>
+                <label for="troca-qtd" class="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1">Quantidade a Trocar</label>
+                <input type="number" id="troca-qtd" min="1" step="1" required
+                       class="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-700 dark:text-slate-100"
+                       placeholder="Ex: 5">
+            </div>
+
+            <div>
+                <label for="troca-produto-busca" class="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1">Novo produto / lote (estoque &gt; 0)</label>
+                <input type="text" id="troca-produto-busca" list="troca-produtos-datalist" autocomplete="off"
+                       class="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-700 dark:text-slate-100"
+                       placeholder="Busque pelo nome do lote...">
+                <datalist id="troca-produtos-datalist"></datalist>
+                <p id="troca-estoque-hint" class="mt-1 text-xs text-slate-500 dark:text-slate-400 hidden"></p>
+            </div>
+
+            <div>
+                <label for="troca-preco" class="block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1">Preço Unitário do novo item</label>
+                <input type="number" id="troca-preco" min="0.01" step="0.01" required
+                       class="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-700 dark:text-slate-100"
+                       placeholder="0,00">
+            </div>
+
+            <p id="troca-erro-cliente" class="hidden text-sm text-red-600 dark:text-red-400"></p>
+
+            <div class="flex gap-3 pt-2">
+                <button type="submit" id="btn-confirmar-troca" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2.5 rounded-xl transition font-medium">
+                    Confirmar Troca
+                </button>
+                <button type="button" class="modalTrocaMercadoria-fechar bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-slate-200 px-4 py-2.5 rounded-xl hover:bg-gray-300 dark:hover:bg-slate-600 transition font-medium">
+                    Cancelar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
 (function() {
     // Bulk delete desabilitado na estrutura de pedidos agrupados
@@ -1651,6 +1714,243 @@ function abrirModalAddItem(idVenda) {
     travarFundo();
     if (typeof lucide !== 'undefined') lucide.createIcons();
 }
+
+window._produtosDisponiveisTroca = window._produtosDisponiveisTroca || null;
+
+function _swalErroTroca(mensagem) {
+    var opts = {
+        icon: 'warning',
+        title: 'Não foi possível concluir a troca',
+        text: mensagem || 'Verifique os dados e tente novamente.',
+        confirmButtonText: 'Entendi',
+        confirmButtonColor: '#3B82F6',
+        background: '#1e293b',
+        color: '#f8fafc'
+    };
+    if (typeof Swal !== 'undefined') {
+        Swal.fire(opts);
+    } else {
+        alert(mensagem || 'Não foi possível concluir a troca.');
+    }
+}
+
+function fecharModalTroca() {
+    var wrap = document.getElementById('modalTrocaMercadoria-wrap');
+    if (wrap) wrap.classList.add('hidden');
+    if (typeof liberarFundo === 'function') liberarFundo();
+    var btn = document.getElementById('btn-confirmar-troca');
+    if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Confirmar Troca';
+    }
+}
+
+function _rotuloProdutoTroca(p) {
+    return (p.nome || p.lote || 'Lote') + ' (Est.: ' + (p.estoque_atual || 0) + ')';
+}
+
+function _aplicarProdutoSelecionadoTroca() {
+    var busca = document.getElementById('troca-produto-busca');
+    var hiddenId = document.getElementById('troca-novo-produto-id');
+    var precoInput = document.getElementById('troca-preco');
+    var hint = document.getElementById('troca-estoque-hint');
+    var valor = (busca && busca.value) ? busca.value.trim() : '';
+    var produtos = window._produtosDisponiveisTroca || [];
+    var atualId = String(document.getElementById('troca-produto-atual-id').value || '');
+    var escolhido = null;
+    for (var i = 0; i < produtos.length; i++) {
+        if (String(produtos[i].id) === atualId) continue;
+        if (_rotuloProdutoTroca(produtos[i]) === valor) {
+            escolhido = produtos[i];
+            break;
+        }
+    }
+    if (!escolhido) {
+        hiddenId.value = '';
+        if (hint) hint.classList.add('hidden');
+        return;
+    }
+    hiddenId.value = String(escolhido.id);
+    if (precoInput) precoInput.value = Number(escolhido.preco_venda_sugerido || 0).toFixed(2);
+    if (hint) {
+        hint.textContent = 'Estoque disponível: ' + escolhido.estoque_atual + ' caixas · Custo: R$ ' + Number(escolhido.preco_custo || 0).toFixed(2).replace('.', ',');
+        hint.classList.remove('hidden');
+    }
+}
+
+async function _carregarProdutosDisponiveisTroca(produtoAtualId) {
+    var datalist = document.getElementById('troca-produtos-datalist');
+    if (!datalist) return;
+    datalist.innerHTML = '';
+    try {
+        var resp = await fetch('/api/produtos/disponiveis', {
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        var data = await resp.json();
+        window._produtosDisponiveisTroca = (data && data.produtos) ? data.produtos : [];
+        var atualId = String(produtoAtualId || '');
+        (window._produtosDisponiveisTroca || []).forEach(function(p) {
+            if (String(p.id) === atualId) return;
+            var opt = document.createElement('option');
+            opt.value = _rotuloProdutoTroca(p);
+            opt.setAttribute('data-id', p.id);
+            datalist.appendChild(opt);
+        });
+    } catch (err) {
+        console.error('Erro ao carregar produtos disponíveis:', err);
+    }
+}
+
+async function abrirModalTroca(vendaIdOuBtn, itemVendaId, nomeProduto, qtdAtual, precoAtual, produtoIdAtual) {
+    var vendaId = vendaIdOuBtn;
+    var itemId = itemVendaId;
+    var nome = nomeProduto;
+    var qtd = qtdAtual;
+    var preco = precoAtual;
+    var produtoId = produtoIdAtual;
+    if (vendaIdOuBtn && vendaIdOuBtn.dataset) {
+        vendaId = vendaIdOuBtn.dataset.vendaId;
+        itemId = vendaIdOuBtn.dataset.itemId;
+        nome = vendaIdOuBtn.dataset.produtoNome;
+        qtd = vendaIdOuBtn.dataset.qtd;
+        preco = vendaIdOuBtn.dataset.preco;
+        produtoId = vendaIdOuBtn.dataset.produtoId;
+    }
+
+    var wrap = document.getElementById('modalTrocaMercadoria-wrap');
+    if (!wrap) return;
+
+    document.getElementById('troca-venda-id').value = vendaId || '';
+    document.getElementById('troca-item-id').value = itemId || '';
+    document.getElementById('troca-produto-atual-id').value = produtoId || '';
+    document.getElementById('troca-novo-produto-id').value = '';
+    document.getElementById('troca-produto-original').textContent = nome || 'Produto';
+    document.getElementById('troca-qtd-atual').textContent = qtd || '0';
+    var qtdInput = document.getElementById('troca-qtd');
+    qtdInput.value = qtd || 1;
+    qtdInput.max = qtd || 1;
+    document.getElementById('troca-produto-busca').value = '';
+    document.getElementById('troca-preco').value = preco ? Number(preco).toFixed(2) : '';
+    document.getElementById('troca-erro-cliente').classList.add('hidden');
+    document.getElementById('troca-estoque-hint').classList.add('hidden');
+
+    wrap.classList.remove('hidden');
+    if (typeof travarFundo === 'function') travarFundo();
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+    await _carregarProdutosDisponiveisTroca(produtoId);
+}
+
+async function confirmarTroca(event) {
+    if (event) event.preventDefault();
+
+    var erroEl = document.getElementById('troca-erro-cliente');
+    function showErroCliente(msg) {
+        erroEl.textContent = msg;
+        erroEl.classList.remove('hidden');
+    }
+    erroEl.classList.add('hidden');
+
+    var vendaId = document.getElementById('troca-venda-id').value;
+    var itemId = document.getElementById('troca-item-id').value;
+    var qtdTroca = parseInt(document.getElementById('troca-qtd').value, 10);
+    var qtdAtual = parseInt(document.getElementById('troca-qtd-atual').textContent, 10);
+    var novoProdutoId = document.getElementById('troca-novo-produto-id').value;
+    var preco = parseFloat(document.getElementById('troca-preco').value);
+
+    _aplicarProdutoSelecionadoTroca();
+    novoProdutoId = document.getElementById('troca-novo-produto-id').value;
+
+    if (!itemId) {
+        showErroCliente('Item do pedido não encontrado.');
+        return false;
+    }
+    if (!qtdTroca || qtdTroca <= 0 || qtdTroca > qtdAtual) {
+        showErroCliente('A quantidade de troca deve ser entre 1 e a quantidade atual do item.');
+        return false;
+    }
+    if (!novoProdutoId) {
+        showErroCliente('Selecione um lote disponível na lista de busca.');
+        return false;
+    }
+    if (!preco || preco <= 0) {
+        showErroCliente('Informe um preço unitário válido para o novo item.');
+        return false;
+    }
+
+    var btn = document.getElementById('btn-confirmar-troca');
+    btn.disabled = true;
+    btn.textContent = 'Processando...';
+
+    try {
+        var resp = await fetch('/api/vendas/item/trocar', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify({
+                venda_id: parseInt(vendaId, 10),
+                item_venda_id: parseInt(itemId, 10),
+                qtd_troca: qtdTroca,
+                novo_produto_id: parseInt(novoProdutoId, 10),
+                novo_preco_unitario: preco
+            })
+        });
+        var data = {};
+        try { data = await resp.json(); } catch (e) { data = {}; }
+
+        if (resp.ok && (data.success === true || data.ok === true)) {
+            fecharModalTroca();
+            var msg = data.message || data.mensagem || 'Troca de mercadoria realizada com sucesso!';
+            if (typeof showToast === 'function') {
+                showToast(msg, 'success');
+            } else if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Troca realizada',
+                    text: msg,
+                    background: '#1e293b',
+                    color: '#f8fafc',
+                    confirmButtonColor: '#10b981'
+                });
+            }
+            setTimeout(function() { window.location.reload(); }, 600);
+            return false;
+        }
+
+        btn.disabled = false;
+        btn.textContent = 'Confirmar Troca';
+        var erroServidor = data.error || data.mensagem || data.erro || ('Falha ao processar a troca (HTTP ' + resp.status + ').');
+        _swalErroTroca(erroServidor);
+    } catch (err) {
+        console.error('Erro na troca de mercadoria:', err);
+        btn.disabled = false;
+        btn.textContent = 'Confirmar Troca';
+        _swalErroTroca('Erro de rede ao processar a troca. Tente novamente.');
+    }
+    return false;
+}
+
+(function() {
+    var wrap = document.getElementById('modalTrocaMercadoria-wrap');
+    var overlay = document.getElementById('modalTrocaMercadoria-overlay');
+    var btnsFechar = document.querySelectorAll('.modalTrocaMercadoria-fechar');
+    var busca = document.getElementById('troca-produto-busca');
+    if (overlay) overlay.addEventListener('click', fecharModalTroca);
+    if (btnsFechar.length) btnsFechar.forEach(function(b) { b.addEventListener('click', fecharModalTroca); });
+    if (busca) {
+        busca.addEventListener('change', _aplicarProdutoSelecionadoTroca);
+        busca.addEventListener('input', _aplicarProdutoSelecionadoTroca);
+    }
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && wrap && !wrap.classList.contains('hidden')) {
+            fecharModalTroca();
+        }
+    });
+})();
 
 (function() {
     var wrap = document.getElementById('modalAddItemExistente-wrap');

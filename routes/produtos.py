@@ -29,6 +29,7 @@ Produtos (CRUD)
 API
     * GET  /api/produtos/<id>/fotos               get_fotos_produto
     * GET  /api/produto/<id>                      api_produto
+    * GET  /api/produtos/disponiveis              api_produtos_disponiveis
     * GET  /api/estoque/fifo                      api_estoque_fifo
 
 Endpoints novos: prefixo ``produtos.`` (ex.: ``produtos.listar_produtos``).
@@ -1785,3 +1786,25 @@ def api_produto(id):
         'estoque': produto.estoque_atual,
         'preco_custo': float(produto.preco_custo)
     })
+
+
+@produtos_bp.route('/api/produtos/disponiveis')
+def api_produtos_disponiveis():
+    """Lotes do tenant com estoque > 0 para troca de mercadoria e busca."""
+    produtos = (
+        query_tenant(Produto)
+        .filter(Produto.estoque_atual > 0)
+        .order_by(Produto.nome_produto.asc(), Produto.id.asc())
+        .all()
+    )
+    itens = []
+    for p in produtos:
+        itens.append({
+            'id': p.id,
+            'nome': p.nome_produto,
+            'lote': p.nome_produto,
+            'estoque_atual': int(p.estoque_atual or 0),
+            'preco_custo': float(p.preco_custo or 0),
+            'preco_venda_sugerido': float(p.preco_venda_alvo_ou_default()),
+        })
+    return jsonify(ok=True, success=True, produtos=itens, total=len(itens))

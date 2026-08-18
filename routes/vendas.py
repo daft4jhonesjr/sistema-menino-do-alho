@@ -10,6 +10,7 @@ Rotas extraídas do legado ``app.py`` (Fase 3 da refatoração):
     * POST /add_venda                               add_venda             (alias AJAX)
     * POST /processar_carrinho                      processar_carrinho
     * POST /venda/adicionar_item                    venda_adicionar_item
+    * POST /api/vendas/item/trocar                  trocar_item_venda
     * GET/POST /vendas/editar/<id>                  editar_venda
     * POST /venda/excluir_item/<id>                 excluir_item_venda
     * POST /vendas/excluir/<id>                     excluir_venda
@@ -48,6 +49,7 @@ from flask import (
 )
 from flask_login import current_user
 from sqlalchemy import and_, asc, case, desc, func, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 import pandas as pd
 from werkzeug.utils import secure_filename
@@ -2111,6 +2113,181 @@ def venda_adicionar_item():
     limpar_cache_dashboard()
     flash('Produto adicionado ao pedido com sucesso!', 'success')
     return redirect(url_for('vendas.listar_vendas'))
+
+
+def _json_erro_troca(mensagem, status=400):
+    return jsonify(success=False, error=mensagem, ok=False, mensagem=mensagem), status
+
+
+@vendas_bp.route('/api/vendas/item/trocar', methods=['POST'])
+def trocar_item_venda():
+    """Troca parcial ou total de um item do pedido por outro lote em estoque.
+
+    Payload JSON: ``venda_id``, ``item_venda_id``, ``qtd_troca``,
+    ``novo_produto_id``, ``novo_preco_unitario``.
+
+    Neste sistema cada linha de ``Venda`` é um item do pedido; não há
+    tabela ``ItemVenda``. Totais da venda são recalculados pelos métodos
+    ``calcular_total`` / ``calcular_lucro`` a partir de quantidade, preço
+    e custo do lote vinculado.
+    """
+    data = request.get_json(silent=True) or {}
+
+    def _int_campo(valor):
+        try:
+            return int(valor)
+        except (TypeError, ValueError):
+            return None
+
+    venda_id = _int_campo(data.get('venda_id'))
+    item_venda_id = _int_campo(data.get('item_venda_id') or data.get('venda_item_id'))
+    qtd_troca = _int_campo(data.get('qtd_troca'))
+    novo_produto_id = _int_campo(data.get('novo_produto_id'))
+    novo_preco = _limpar_valor_moeda(data.get('novo_preco_unitario'))
+
+    if not item_venda_id:
+        return _json_erro_troca('Item do pedido não encontrado.')
+
+    item = query_tenant(Venda).filter_by(id=item_venda_id).first()
+    if item is None:
+        return _json_erro_troca('Item do pedido não encontrado.')
+
+    if venda_id and venda_id != item.id:
+        ancora = query_tenant(Venda).filter_by(id=venda_id).first()
+        if ancora is None:
+            return _json_erro_troca('Item do pedido não encontrado.')
+        ids_pedido = {v.id for v in _vendas_do_pedido(ancora)}
+        if item.id not in ids_pedido:
+            return _json_erro_troca('Item do pedido não encontrado.')
+
+    if not _usuario_pode_gerenciar_venda(item):
+        return jsonify(
+            success=False,
+            error='Acesso negado.',
+            ok=False,
+            mensagem='Acesso negado.',
+        ), 403
+
+    qtd_atual = int(item.quantidade_venda or 0)
+    if qtd_troca is None or qtd_troca <= 0 or qtd_troca > qtd_atual:
+        return _json_erro_troca(
+            'A quantidade de troca deve ser entre 1 e a quantidade atual do item.'
+        )
+
+    if not novo_produto_id:
+        return _json_erro_troca('Selecione o produto de destino da troca.')
+
+    if novo_produto_id == item.produto_id:
+        return _json_erro_troca('Selecione um produto diferente do item atual.')
+
+    if str(getattr(item, 'tipo_operacao', 'VENDA') or 'VENDA').upper() == 'PERDA':
+        return _json_erro_troca('Não é possível trocar itens de uma operação de perda.')
+
+    if novo_preco <= 0:
+        return _json_erro_troca('Informe um preço unitário válido para o novo item.')
+
+    try:
+        _assumir_ownership_venda_orfa(item)
+
+        ids_para_travar = sorted({
+            pid for pid in (item.produto_id, novo_produto_id) if pid
+        })
+        produtos_travados = {}
+        for pid in ids_para_travar:
+            p = _produto_com_lock(pid)
+            if p:
+                produtos_travados[pid] = p
+
+        item = query_tenant(Venda).filter_by(id=item.id).with_for_update().first()
+        if item is None:
+            db.session.rollback()
+            return _json_erro_troca('Item do pedido não encontrado.')
+        qtd_atual = int(item.quantidade_venda or 0)
+        if qtd_troca <= 0 or qtd_troca > qtd_atual:
+            db.session.rollback()
+            return _json_erro_troca(
+                'A quantidade de troca deve ser entre 1 e a quantidade atual do item.'
+            )
+
+        produto_antigo = produtos_travados.get(item.produto_id)
+        novo_produto = produtos_travados.get(novo_produto_id)
+        if produto_antigo is None or novo_produto is None:
+            db.session.rollback()
+            return _json_erro_troca('Item do pedido não encontrado.')
+
+        estoque_novo = int(novo_produto.estoque_atual or 0)
+        if estoque_novo < qtd_troca:
+            db.session.rollback()
+            return _json_erro_troca(
+                f'Estoque insuficiente! O lote selecionado só possui {estoque_novo} caixas disponíveis.'
+            )
+
+        produto_antigo.estoque_atual = int(produto_antigo.estoque_atual or 0) + qtd_troca
+        novo_produto.estoque_atual = estoque_novo - qtd_troca
+
+        if qtd_troca == qtd_atual:
+            item.produto_id = novo_produto.id
+            item.preco_venda = Decimal(str(novo_preco))
+            novo_item = None
+        else:
+            item.quantidade_venda = qtd_atual - qtd_troca
+            novo_item = Venda(
+                cliente_id=item.cliente_id,
+                cliente_avulso=item.cliente_avulso,
+                produto_id=novo_produto.id,
+                nf=item.nf or '',
+                preco_venda=Decimal(str(novo_preco)),
+                quantidade_venda=qtd_troca,
+                data_venda=item.data_venda,
+                empresa_faturadora=item.empresa_faturadora,
+                situacao=item.situacao,
+                forma_pagamento=item.forma_pagamento,
+                prazo_dias=getattr(item, 'prazo_dias', None),
+                data_vencimento=getattr(item, 'data_vencimento', None),
+                status_entrega=item.status_entrega or 'PENDENTE',
+                tipo_operacao=item.tipo_operacao or 'VENDA',
+                lucro_percentual=item.lucro_percentual,
+                empresa_id=item.empresa_id or empresa_id_atual(),
+            )
+            db.session.add(novo_item)
+
+        db.session.flush()
+        _resincronizar_pagamento_venda(item)
+        if novo_item is not None:
+            _resincronizar_pagamento_venda(novo_item)
+
+        db.session.commit()
+        limpar_cache_dashboard()
+        try:
+            registrar_log(
+                'EDITAR',
+                'VENDAS',
+                f'Troca de mercadoria: {qtd_troca} cx do item #{item.id} '
+                f'para lote #{novo_produto.id} ({novo_produto.nome_produto}).',
+            )
+        except Exception:
+            pass
+    except IntegrityError:
+        db.session.rollback()
+        return _json_erro_troca(
+            'Não foi possível concluir a troca: estoque insuficiente ou dados inconsistentes.'
+        )
+    except Exception as exc:
+        db.session.rollback()
+        return erro_json(
+            exc,
+            'Falha ao processar a troca de mercadoria.',
+            extras={'success': False, 'error': 'Falha ao processar a troca de mercadoria.'},
+            chave_mensagem='mensagem',
+            contexto='trocar_item_venda',
+        )
+
+    return jsonify(
+        success=True,
+        message='Troca de mercadoria realizada com sucesso!',
+        ok=True,
+        mensagem='Troca de mercadoria realizada com sucesso!',
+    )
 
 
 @vendas_bp.route('/vendas/editar/<int:id>', methods=['GET', 'POST'])
