@@ -95,42 +95,47 @@ def login():
         destino = _pos_login_landing(current_user)
         return redirect(destino or url_for('auth.login'))
     if request.method == 'POST':
-        username = (request.form.get('username') or '').strip()
-        password = request.form.get('password') or ''
-        if not username or not password:
-            flash('Preencha usuário e senha.', 'error')
-            return render_template('auth/login.html')
         try:
+            username = (request.form.get('username') or '').strip()
+            password = request.form.get('password') or ''
+            if not username or not password:
+                flash('Preencha usuário e senha.', 'error')
+                return render_template('auth/login.html')
             user = Usuario.query.filter_by(username=username).first()
-        except Exception:
-            db.session.rollback()
+            if not user or not check_password_hash(user.password_hash, password):
+                flash('Usuário ou senha inválidos.', 'error')
+                return render_template('auth/login.html')
+            # Bloqueia login em tenants suspensos (exceto MASTER).
+            if not getattr(user, 'is_master', lambda: False)():
+                empresa = getattr(user, 'empresa', None)
+                if empresa is not None and not empresa.ativo:
+                    flash('Empresa suspensa. Contate o administrador do sistema.', 'error')
+                    return render_template('auth/login.html')
+                if not getattr(user, 'empresa_id', None):
+                    flash('Seu usuário não está vinculado a nenhuma empresa. Contate o administrador.', 'error')
+                    return render_template('auth/login.html')
+            remember = True if request.form.get('remember') else False
+            login_user(user, remember=remember)
+            destino_padrao = _pos_login_landing(user) or url_for('auth.login')
+            next_url = request.form.get('next') or request.args.get('next')
+            if not _is_safe_next_url(next_url):
+                next_url = destino_padrao
+            # MASTER NUNCA é redirecionado para rotas operacionais, mesmo com next=.
+            if getattr(user, 'is_master', lambda: False)():
+                next_url = url_for('master.master_admin')
+            return redirect(next_url)
+        except Exception as e:
             try:
-                user = Usuario.query.filter_by(username=username).first()
+                db.session.rollback()
             except Exception:
-                flash('Erro no sistema, tente novamente.', 'error')
-                return render_template('auth/login.html')
-        if not user or not check_password_hash(user.password_hash, password):
-            flash('Usuário ou senha inválidos.', 'error')
-            return render_template('auth/login.html')
-        # Bloqueia login em tenants suspensos (exceto MASTER).
-        if not getattr(user, 'is_master', lambda: False)():
-            empresa = getattr(user, 'empresa', None)
-            if empresa is not None and not empresa.ativo:
-                flash('Empresa suspensa. Contate o administrador do sistema.', 'error')
-                return render_template('auth/login.html')
-            if not getattr(user, 'empresa_id', None):
-                flash('Seu usuário não está vinculado a nenhuma empresa. Contate o administrador.', 'error')
-                return render_template('auth/login.html')
-        remember = True if request.form.get('remember') else False
-        login_user(user, remember=remember)
-        destino_padrao = _pos_login_landing(user) or url_for('auth.login')
-        next_url = request.form.get('next') or request.args.get('next')
-        if not _is_safe_next_url(next_url):
-            next_url = destino_padrao
-        # MASTER NUNCA é redirecionado para rotas operacionais, mesmo com next=.
-        if getattr(user, 'is_master', lambda: False)():
-            next_url = url_for('master.master_admin')
-        return redirect(next_url)
+                pass
+            print(f'[login] erro inesperado: {e}')
+            erro_flash(
+                e,
+                'Ocorreu um erro inesperado ao tentar fazer login. Por favor, tente novamente.',
+                contexto='login',
+            )
+            return redirect(url_for('auth.login'))
     return render_template('auth/login.html')
 
 

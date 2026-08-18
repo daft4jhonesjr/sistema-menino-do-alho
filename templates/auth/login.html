@@ -15,6 +15,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/output.css') }}">
     <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body class="bg-emerald-50 dark:bg-gray-900 min-h-screen flex flex-col items-center justify-center p-4">
     <div class="w-full max-w-md">
@@ -27,13 +28,18 @@
             <h2 class="text-lg font-semibold text-gray-800 dark:text-white mb-4 flex items-center">
                 <i data-lucide="log-in" class="w-5 h-5 mr-2 text-emerald-600 dark:text-emerald-400"></i>Entrar
             </h2>
+            {% set ns = namespace(system_error=false) %}
             {% with messages = get_flashed_messages(with_categories=true) %}
                 {% if messages %}
                     {% for category, message in messages %}
+                        {% if category == 'error' and 'erro inesperado' in message|lower %}
+                            {% set ns.system_error = true %}
+                        {% else %}
                         <div class="mb-4 p-3 rounded-lg text-sm flex items-center {% if category == 'error' %}bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800{% else %}bg-emerald-50 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800{% endif %}">
                             <i data-lucide="{% if category == 'error' %}alert-circle{% else %}check-circle{% endif %}" class="w-4 h-4 mr-2 flex-shrink-0"></i>
                             {{ message }}
                         </div>
+                        {% endif %}
                     {% endfor %}
                 {% endif %}
             {% endwith %}
@@ -81,6 +87,23 @@
     </div>
     <script>if (typeof lucide !== 'undefined') lucide.createIcons();</script>
     <script>
+    {% if ns.system_error %}
+    document.addEventListener('DOMContentLoaded', function() {
+        if (typeof Swal === 'undefined') return;
+        Swal.fire({
+            title: 'Ops! Algo deu errado.',
+            text: 'Tivemos um problema de comunicação com o servidor ao tentar entrar. Deseja tentar novamente?',
+            icon: 'error',
+            background: '#1e293b',
+            color: '#f8fafc',
+            confirmButtonColor: '#10b981',
+            confirmButtonText: 'Tentar Novamente'
+        }).then(function() {
+            var el = document.getElementById('username');
+            if (el) el.focus();
+        });
+    });
+    {% endif %}
     function togglePasswordVisibility() {
         const passwordInput = document.getElementById('login_password');
         const eyeOpen = document.getElementById('eye_icon_open');
