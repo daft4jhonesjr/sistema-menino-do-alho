@@ -196,6 +196,15 @@
                                 <i data-lucide="log-out" class="w-4 h-4"></i>
                                 <span class="hidden sm:inline">Desconectar</span>
                             </button>
+                            <button type="button"
+                                    class="btn-historico-login bg-slate-100 dark:bg-slate-700/50 text-slate-700 dark:text-slate-300 px-3 py-1 rounded hover:bg-slate-200 dark:hover:bg-slate-600/50 transition text-sm font-medium inline-flex items-center gap-1"
+                                    data-id="{{ u.id }}"
+                                    data-nome="{{ (u.nome or u.username)|e }}"
+                                    onclick="verHistorico(this.dataset.id, this.dataset.nome)"
+                                    title="Ver histórico de acessos">
+                                <i data-lucide="history" class="w-4 h-4"></i>
+                                <span class="hidden sm:inline">Histórico</span>
+                            </button>
                             {% if u.id != current_user.id and u.username != 'Jhones' %}
                             <form action="{{ url_for('auth.excluir_usuario', id=u.id) }}" method="POST" class="inline" onsubmit="return confirm('Tem certeza que deseja EXCLUIR o usuário &quot;{{ u.username|e }}&quot;? Esta ação não pode ser desfeita.');">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
@@ -299,6 +308,49 @@
                 <button type="submit" id="btn-confirmar-reset-senha" class="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 font-medium">Confirmar Reset</button>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- Modal Histórico de Login -->
+<div id="modalHistoricoLogin" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl dark:shadow-none border border-gray-200 dark:border-gray-700 w-full max-w-3xl max-h-[90vh] overflow-hidden p-6 mx-4 flex flex-col">
+        <div class="flex justify-between items-start mb-4 shrink-0">
+            <div>
+                <h3 class="text-lg font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
+                    <i data-lucide="history" class="w-5 h-5 text-slate-500"></i>
+                    Histórico de Acessos
+                </h3>
+                <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    Últimos 30 logins de
+                    <span id="historico_login_nome" class="font-semibold text-gray-900 dark:text-gray-100"></span>
+                </p>
+            </div>
+            <button type="button" onclick="fecharModalHistoricoLogin()" class="text-gray-400 dark:text-gray-500 hover:text-red-500 transition text-2xl" aria-label="Fechar">&times;</button>
+        </div>
+        <div id="historico_login_loading" class="hidden py-10 text-center text-gray-500 dark:text-gray-400">
+            <i data-lucide="loader-2" class="w-8 h-8 mx-auto animate-spin text-emerald-600"></i>
+            <p class="mt-3 text-sm">Carregando histórico...</p>
+        </div>
+        <div id="historico_login_erro" class="hidden mb-4 p-3 rounded-lg text-sm bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800"></div>
+        <div id="historico_login_conteudo" class="overflow-auto flex-1 min-h-0">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
+                <thead class="bg-gray-50 dark:bg-gray-900/50 sticky top-0">
+                    <tr>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Data/Hora</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Dispositivo</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">IP / Local</th>
+                    </tr>
+                </thead>
+                <tbody id="historico_login_tbody" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                </tbody>
+            </table>
+            <p id="historico_login_vazio" class="hidden py-8 text-center text-gray-500 dark:text-gray-400 italic">
+                Nenhum acesso registrado ainda.
+            </p>
+        </div>
+        <div class="mt-4 flex justify-end shrink-0">
+            <button type="button" onclick="fecharModalHistoricoLogin()" class="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600">Fechar</button>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -413,6 +465,85 @@ async function forcarLogoutUsuario(id, nome) {
         } else {
             alert(msgRede);
         }
+    }
+}
+
+function abrirModalHistoricoLogin() {
+    var modal = document.getElementById('modalHistoricoLogin');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    if (typeof travarFundo === 'function') travarFundo();
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function fecharModalHistoricoLogin() {
+    var modal = document.getElementById('modalHistoricoLogin');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    if (typeof liberarFundo === 'function') liberarFundo();
+}
+
+function _escapeHtmlHistorico(texto) {
+    var div = document.createElement('div');
+    div.textContent = texto == null ? '' : String(texto);
+    return div.innerHTML;
+}
+
+async function verHistorico(usuarioId, nomeUsuario) {
+    if (!usuarioId) return;
+
+    document.getElementById('historico_login_nome').textContent = nomeUsuario || 'usuário';
+    document.getElementById('historico_login_erro').classList.add('hidden');
+    document.getElementById('historico_login_erro').textContent = '';
+    document.getElementById('historico_login_vazio').classList.add('hidden');
+    document.getElementById('historico_login_tbody').innerHTML = '';
+    document.getElementById('historico_login_loading').classList.remove('hidden');
+    document.getElementById('historico_login_conteudo').classList.remove('hidden');
+
+    abrirModalHistoricoLogin();
+
+    try {
+        var resp = await fetch('/api/usuarios/' + encodeURIComponent(usuarioId) + '/historico_login', {
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        });
+        var data = {};
+        try { data = await resp.json(); } catch (e) { data = {}; }
+
+        document.getElementById('historico_login_loading').classList.add('hidden');
+
+        if (!resp.ok || !data.ok) {
+            var msgErro = data.mensagem || ('Falha ao carregar histórico (HTTP ' + resp.status + ').');
+            document.getElementById('historico_login_erro').textContent = msgErro;
+            document.getElementById('historico_login_erro').classList.remove('hidden');
+            return;
+        }
+
+        var itens = data.historico || [];
+        if (!itens.length) {
+            document.getElementById('historico_login_vazio').classList.remove('hidden');
+            return;
+        }
+
+        var tbody = document.getElementById('historico_login_tbody');
+        var html = '';
+        itens.forEach(function(item) {
+            html += '<tr class="hover:bg-gray-50 dark:hover:bg-gray-700/40">' +
+                '<td class="px-4 py-3 whitespace-nowrap text-gray-800 dark:text-gray-100 font-medium">' + _escapeHtmlHistorico(item.data_hora) + '</td>' +
+                '<td class="px-4 py-3 text-gray-700 dark:text-gray-300">' + _escapeHtmlHistorico(item.dispositivo) + '</td>' +
+                '<td class="px-4 py-3 text-gray-700 dark:text-gray-300 font-mono text-xs">' + _escapeHtmlHistorico(item.ip_local || item.ip_address) + '</td>' +
+                '</tr>';
+        });
+        tbody.innerHTML = html;
+    } catch (err) {
+        console.error('Erro ao carregar historico de login:', err);
+        document.getElementById('historico_login_loading').classList.add('hidden');
+        document.getElementById('historico_login_erro').textContent = 'Erro de rede ao carregar o histórico. Tente novamente.';
+        document.getElementById('historico_login_erro').classList.remove('hidden');
     }
 }
 

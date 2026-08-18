@@ -7,6 +7,7 @@ Rotas extraídas do legado ``app.py``:
     * /gerenciar_usuarios/*  (CRUD de usuários do tenant)
     * /api/usuarios/<id>/reset-senha  (admin redefine senha de outro usuário)
     * /api/usuarios/<id>/forcar_logout  (invalida sessões em todos os dispositivos)
+    * /api/usuarios/<id>/historico_login  (últimos acessos do usuário)
 
 Endpoints novos seguem o padrão ``auth.<nome>``. Os redirects internos
 e templates já foram atualizados para o novo formato.
@@ -33,7 +34,7 @@ import cloudinary
 import cloudinary.uploader
 
 from models import (
-    db, Usuario, Empresa, Configuracao,
+    db, Usuario, Empresa, Configuracao, HistoricoLogin,
     PERFIL_DONO, PERFIL_FUNCIONARIO, PERFIL_MASTER,
 )
 from extensions import limiter
@@ -115,6 +116,78 @@ def _autorizar_com_senha_do_logado(senha_informada):
     return check_password_hash(hash_logado, senha)
 
 
+def _extrair_ip_cliente():
+    """IP real do cliente, respeitando proxy reverso (Render, nginx, etc.)."""
+    forwarded = request.headers.get('X-Forwarded-For', request.remote_addr) or ''
+    ip = forwarded.split(',')[0].strip()
+    return (ip or None)[:45]
+
+
+def _extrair_dispositivo_login():
+    """Descrição legível do navegador/plataforma a partir do User-Agent."""
+    ua = request.user_agent
+    if ua is None:
+        return 'Desconhecido'
+    browser = (ua.browser or 'Navegador').strip()
+    platform = (ua.platform or 'Dispositivo').strip()
+    version = (ua.version or '').strip()
+    if browser and version:
+        browser = f'{browser} {version}'
+    return f'{browser} · {platform}'[:200]
+
+
+def _inferir_localizacao_por_ip(ip):
+    """Heurística simples — evita chamada externa no fluxo de login."""
+    if not ip:
+        return None
+    ip_lower = ip.lower().strip()
+    if ip_lower in ('127.0.0.1', '::1', 'localhost'):
+        return 'Localhost'
+    partes = ip_lower.split('.')
+    if len(partes) == 4:
+        try:
+            octeto_a, octeto_b = int(partes[0]), int(partes[1])
+            if octeto_a == 10:
+                return 'Rede local / privada'
+            if octeto_a == 192 and octeto_b == 168:
+                return 'Rede local / privada'
+            if octeto_a == 172 and 16 <= octeto_b <= 31:
+                return 'Rede local / privada'
+        except ValueError:
+            pass
+    return None
+
+
+def _registrar_historico_login(usuario):
+    """Persiste um registro de login bem-sucedido sem bloquear o fluxo."""
+    try:
+        ip = _extrair_ip_cliente()
+        db.session.add(HistoricoLogin(
+            usuario_id=usuario.id,
+            ip_address=ip,
+            dispositivo=_extrair_dispositivo_login(),
+            localizacao=_inferir_localizacao_por_ip(ip),
+        ))
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.warning(f'Falha ao registrar historico de login: {exc}')
+
+
+def _formatar_data_historico_login(dt):
+    """Formata datetime UTC para exibição no fuso do Brasil."""
+    if not dt:
+        return ''
+    try:
+        import pytz
+        if dt.tzinfo is None:
+            dt = pytz.utc.localize(dt)
+        dt_br = dt.astimezone(pytz.timezone('America/Recife'))
+    except Exception:
+        dt_br = dt.replace(tzinfo=None) if hasattr(dt, 'replace') else dt
+    return dt_br.strftime('%d/%m/%Y às %H:%M')
+
+
 @auth_bp.route('/login', methods=['GET', 'POST'])
 @limiter.limit(
     "5 per minute",
@@ -171,6 +244,7 @@ def login():
                     return render_template('auth/login.html')
             session['session_token'] = user.session_token
             login_user(user, remember=remember)
+            _registrar_historico_login(user)
             destino_padrao = _pos_login_landing(user) or url_for('auth.login')
             next_url = request.form.get('next') or request.args.get('next')
             if not _is_safe_next_url(next_url):
@@ -694,6 +768,72 @@ def api_forcar_logout_usuario(id):
         ok=True,
         mensagem=f'Usuário "{usuario.username}" foi desconectado de todos os dispositivos.',
         usuario_id=usuario.id,
+    )
+
+
+@auth_bp.route('/api/usuarios/<int:id>/historico_login', methods=['GET'])
+@login_required
+def api_historico_login_usuario(id):
+    """Retorna os últimos 30 logins bem-sucedidos do usuário alvo."""
+    eh_gestor = (
+        getattr(current_user, 'is_master', lambda: False)()
+        or getattr(current_user, 'is_admin', lambda: False)()
+        or getattr(current_user, 'is_dono', lambda: False)()
+        or getattr(current_user, 'role', None) == 'admin'
+    )
+    if not eh_gestor:
+        return jsonify(
+            ok=False,
+            mensagem='Acesso negado: apenas Master, Admin ou Executivo podem consultar o histórico.',
+        ), 403
+
+    usuario = Usuario.query.get(id)
+    if usuario is None:
+        return jsonify(ok=False, mensagem='Usuário não encontrado.'), 404
+
+    eh_self = current_user.is_authenticated and current_user.id == usuario.id
+    if not eh_self:
+        if _nivel_hierarquia(current_user) < _nivel_hierarquia(usuario):
+            return jsonify(
+                ok=False,
+                mensagem='Acesso negado: você não pode consultar um usuário de nível superior.',
+            ), 403
+        eid_atual = empresa_id_atual()
+        alvo_eid = getattr(usuario, 'empresa_id', None)
+        if eid_atual and alvo_eid and alvo_eid != eid_atual:
+            return jsonify(
+                ok=False,
+                mensagem='Acesso negado: usuário pertence a outra empresa.',
+            ), 403
+
+    registros = (
+        HistoricoLogin.query
+        .filter_by(usuario_id=usuario.id)
+        .order_by(HistoricoLogin.data_hora.desc())
+        .limit(30)
+        .all()
+    )
+
+    historico = []
+    for reg in registros:
+        ip = reg.ip_address or '-'
+        loc = (reg.localizacao or '').strip()
+        ip_local = f'{ip} ({loc})' if loc else ip
+        historico.append({
+            'id': reg.id,
+            'data_hora': _formatar_data_historico_login(reg.data_hora),
+            'dispositivo': reg.dispositivo or 'Desconhecido',
+            'ip_address': ip,
+            'localizacao': loc or None,
+            'ip_local': ip_local,
+        })
+
+    return jsonify(
+        ok=True,
+        usuario_id=usuario.id,
+        username=usuario.username,
+        total=len(historico),
+        historico=historico,
     )
 
     return _reset()

@@ -29,6 +29,7 @@ from models import (
     TipoProduto,
     PushSubscription,
     LogAtividade,
+    HistoricoLogin,
     Empresa,
     Lembrete,
     VotoFrase,
@@ -4162,6 +4163,12 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
         # Migração: tabela de auditoria de ações (log de atividades)
         try:
             LogAtividade.__table__.create(bind=db.engine, checkfirst=True)
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
+        # Migração: histórico de logins (auditoria de acesso)
+        try:
+            HistoricoLogin.__table__.create(bind=db.engine, checkfirst=True)
             db.session.commit()
         except (OperationalError, Exception):
             db.session.rollback()

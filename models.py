@@ -163,6 +163,33 @@ class Usuario(UserMixin, db.Model):
     def __repr__(self):
         return f'<Usuario {self.username} ({self.perfil})>'
 
+
+class HistoricoLogin(db.Model):
+    """Registro de auditoria de logins bem-sucedidos por usuário."""
+
+    __tablename__ = 'historico_login'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    usuario_id = db.Column(
+        db.Integer,
+        db.ForeignKey('usuarios.id', ondelete='CASCADE'),
+        nullable=False,
+        index=True,
+    )
+    data_hora = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+    ip_address = db.Column(db.String(45), nullable=True)
+    dispositivo = db.Column(db.String(200), nullable=True)
+    localizacao = db.Column(db.String(150), nullable=True)
+
+    usuario = db.relationship(
+        'Usuario',
+        backref=db.backref('historicos_login', lazy='dynamic'),
+    )
+
+    def __repr__(self):
+        return f'<HistoricoLogin {self.id} usuario={self.usuario_id}>'
+
+
 class Cliente(db.Model):
     """
     Cliente cadastrado. Possui vendas associadas.
