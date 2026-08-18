@@ -337,7 +337,15 @@ def ver_boleto_venda(id):
     if not os.path.isfile(full):
         flash('Arquivo do boleto não encontrado no servidor.', 'error')
         return redirect(request.referrer or url_for('vendas.listar_vendas'))
-    return send_file(full, mimetype='application/pdf')
+    try:
+        return send_file(full, mimetype='application/pdf')
+    except FileNotFoundError:
+        flash('Arquivo do boleto não encontrado no disco do servidor.', 'error')
+        return redirect(request.referrer or url_for('vendas.listar_vendas'))
+    except Exception as e:
+        current_app.logger.error(f"Erro ao servir boleto (venda {id}): {e}")
+        flash(f'Erro ao acessar o arquivo: {e}', 'error')
+        return redirect(request.referrer or url_for('vendas.listar_vendas'))
 
 
 @documentos_bp.route('/venda/<int:id>/whatsapp')
@@ -403,7 +411,21 @@ def ver_nf_venda(id):
     if not os.path.isfile(full):
         flash('Arquivo da nota fiscal não encontrado no servidor.', 'error')
         return redirect(request.referrer or url_for('vendas.listar_vendas'))
-    return send_file(full, mimetype='application/pdf')
+    try:
+        return send_file(full, mimetype='application/pdf')
+    except FileNotFoundError:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.is_json:
+            return jsonify({
+                'error': 'Arquivo da Nota Fiscal não encontrado no servidor. Pode ter sido removido.'
+            }), 404
+        flash('Arquivo da Nota Fiscal não encontrado no disco do servidor.', 'error')
+        return redirect(request.referrer or url_for('vendas.listar_vendas'))
+    except Exception as e:
+        current_app.logger.error(f"Erro ao servir NF (venda {id}): {e}")
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.is_json:
+            return jsonify({'error': f'Erro ao acessar o arquivo: {e}'}), 500
+        flash(f'Erro ao acessar o arquivo: {e}', 'error')
+        return redirect(request.referrer or url_for('vendas.listar_vendas'))
 
 
 @documentos_bp.route('/upload', methods=['POST'])

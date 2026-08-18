@@ -97,6 +97,13 @@ def get_hoje_brasil():
 # Extensões aceitas para upload de imagens (perfil, produto, cheque)
 _ALLOWED_IMAGE_EXT = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 
+_BASE_APP_DIR = os.path.abspath(os.path.dirname(__file__))
+LOG_DETALHADO_PATH = os.path.join(_BASE_APP_DIR, 'logs', 'detalhado.log')
+try:
+    os.makedirs(os.path.dirname(LOG_DETALHADO_PATH), exist_ok=True)
+except OSError:
+    pass
+
 def _arquivo_imagem_permitido(filename: str) -> bool:
     """Retorna True se a extensão do arquivo é uma imagem permitida."""
     return (
@@ -848,12 +855,17 @@ def _extrair_valor_boleto(texto):
 
 def _extrair_texto_primeira_pagina(caminho_arquivo):
     """Extrai o texto apenas da primeira página do PDF. Retorna str (vazia se erro ou sem páginas)."""
+    if not caminho_arquivo or not os.path.isfile(caminho_arquivo):
+        return ""
     try:
         with pdfplumber.open(caminho_arquivo) as pdf:
             if not pdf.pages:
                 return ""
             t = pdf.pages[0].extract_text()
             return (t or "").strip()
+    except FileNotFoundError:
+        app.logger.warning(f"PDF não encontrado ao extrair texto: {caminho_arquivo}")
+        return ""
     except Exception:
         return ""
 
@@ -1057,6 +1069,9 @@ def _processar_pdf(caminho_arquivo, tipo_documento):
     Returns:
         dict com campos: cnpj, numero_nf, razao_social, data_vencimento, empresa_destak, apenas_emissor (ou None se erro)
     """
+    if not caminho_arquivo or not os.path.isfile(caminho_arquivo):
+        app.logger.warning(f"PDF não encontrado para processamento: {caminho_arquivo}")
+        return None
     try:
         nome_arquivo = os.path.basename(caminho_arquivo)
         with pdfplumber.open(caminho_arquivo) as pdf:
@@ -1107,9 +1122,36 @@ def _processar_pdf(caminho_arquivo, tipo_documento):
             'apenas_emissor': apenas_emissor,
         }
         return resultado
+    except FileNotFoundError:
+        app.logger.warning(f"PDF removido durante processamento: {caminho_arquivo}")
+        return None
     except Exception as e:
         app.logger.error(f"Erro ao processar PDF {caminho_arquivo}: {str(e)}")
         return None
+
+
+def _upload_cloudinary_documento_local(caminho_absoluto):
+    """Envia PDF local ao Cloudinary; tolera arquivo ausente (deploy/restart efêmero)."""
+    if not caminho_absoluto or not os.path.isfile(caminho_absoluto):
+        app.logger.warning(f"Arquivo não encontrado para upload Cloudinary: {caminho_absoluto}")
+        return None, None
+    if not (os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL')):
+        return None, None
+    try:
+        resultado_nuvem = cloudinary.uploader.upload(
+            caminho_absoluto, resource_type='raw', timeout=_EXTERNAL_TIMEOUT
+        )
+        url = resultado_nuvem.get('secure_url')
+        pid = resultado_nuvem.get('public_id')
+        if url:
+            app.logger.info(f"✅ Sucesso Nuvem: {url}")
+        return url, pid
+    except FileNotFoundError:
+        app.logger.warning(f"Arquivo removido antes do upload Cloudinary: {caminho_absoluto}")
+        return None, None
+    except Exception as ex:
+        app.logger.error(f"Erro Cloudinary ({caminho_absoluto}): {ex}")
+        return None, None
 
 
 def _processar_documento(caminho_arquivo, user_id_forcado=None):
@@ -1146,8 +1188,8 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
     try:
         _log_detalhado(f"\n{'='*80}")
         _log_detalhado("=== PROCESSAMENTO DE DOCUMENTOS PENDENTES INICIADO ===")
-        _log_detalhado(f"Arquivo de log: {log_detalhado_path}")
-        _log_detalhado(f"Arquivo existe: {os.path.exists(log_detalhado_path)}")
+        _log_detalhado(f"Arquivo de log: {LOG_DETALHADO_PATH}")
+        _log_detalhado(f"Arquivo existe: {os.path.exists(LOG_DETALHADO_PATH)}")
         _log_detalhado(f"{'='*80}\n")
     except Exception as e:
         app.logger.error(f"ERRO no log inicial: {e}")
@@ -1174,6 +1216,17 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
         for arquivo in arquivos_pdf:
             caminho_completo = os.path.join(pasta, arquivo)
             caminho_relativo = os.path.join('documentos_entrada', 'boletos' if tipo == 'BOLETO' else 'notas_fiscais', arquivo)
+
+            if not os.path.isfile(caminho_completo):
+                msg_ausente = (
+                    f"Arquivo não encontrado no disco (pode ter sido removido após deploy/restart): "
+                    f"{caminho_completo}"
+                )
+                app.logger.warning(msg_ausente)
+                _log_detalhado(f"⚠️ {msg_ausente}")
+                resultado['erros'] += 1
+                resultado['mensagens'].append(f"⚠️ {arquivo}: arquivo ausente no servidor.")
+                continue
             
             # Verificar se é bonificação ANTES de processar (apenas para notas fiscais)
             if tipo == 'NOTA_FISCAL':
@@ -1213,13 +1266,11 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                 app.logger.debug(f"DEBUG: Documento ID {doc_existente.id} existe mas não está vinculado. Re-processando para tentar vincular.")
                 documento = doc_existente
                 if not documento.url_arquivo and (os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL')):
-                    try:
-                        resultado_nuvem = cloudinary.uploader.upload(caminho_completo, resource_type='raw', timeout=_EXTERNAL_TIMEOUT)
-                        documento.url_arquivo = resultado_nuvem.get('secure_url')
-                        documento.public_id = resultado_nuvem.get('public_id')
+                    url_arquivo, public_id = _upload_cloudinary_documento_local(caminho_completo)
+                    if url_arquivo:
+                        documento.url_arquivo = url_arquivo
+                        documento.public_id = public_id
                         db.session.flush()
-                    except Exception as ex:
-                        app.logger.error(f"Erro ao fazer upload para Cloudinary (doc existente): {ex}")
                 nf_cached = (getattr(doc_existente, 'nf_extraida', None) or doc_existente.numero_nf)
                 nf_cached = (nf_cached or '').strip() or None
                 if nf_cached:
@@ -1483,16 +1534,13 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                     public_id = None
 
                     # OBRIGATÓRIO: Fazer o upload para a nuvem ANTES de salvar no banco
-                    if os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL'):
-                        try:
-                            resultado_nuvem = cloudinary.uploader.upload(caminho_completo, resource_type='raw', timeout=_EXTERNAL_TIMEOUT)
-                            url_arquivo = resultado_nuvem.get('secure_url')
-                            public_id = resultado_nuvem.get('public_id')
-                            app.logger.info(f"✅ Sucesso Nuvem: {url_arquivo}")
-                        except Exception as ex:
-                            app.logger.error(f"❌ ERRO GRAVE Nuvem: {ex}")
-                    else:
+                    url_arquivo, public_id = _upload_cloudinary_documento_local(caminho_completo)
+                    if not url_arquivo and not (os.environ.get('CLOUDINARY_URL') or app.config.get('CLOUDINARY_URL')):
                         app.logger.warning("⚠️ Cloudinary não configurado. Salvando sem URL.")
+                    elif not url_arquivo and not os.path.isfile(caminho_completo):
+                        app.logger.warning(
+                            f"⚠️ Arquivo local ausente; documento será salvo sem URL na nuvem: {caminho_completo}"
+                        )
 
                     documento = Documento(
                         caminho_arquivo=caminho_relativo,
