@@ -153,85 +153,67 @@
         .rodape-romaneio strong { color: #047857; }
 
         /* ── Botão só na tela ───────────────────────────────────────── */
-        .btn-print-wrap { display: none; }
+        .no-print { display: block; }
+
+        .btn-print-wrap {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            z-index: 999;
+        }
+
+        .btn-print {
+            background: #047857;
+            color: #fff;
+            padding: 8px 18px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 11pt;
+            font-weight: bold;
+            box-shadow: 0 2px 6px rgba(0,0,0,.25);
+        }
+
+        .btn-print:hover { background: #065f46; }
 
         @media screen {
-            .btn-print-wrap {
-                display: block;
-                position: fixed;
-                top: 16px;
-                right: 16px;
-                z-index: 999;
+            html, body {
+                zoom: 1;
+                overflow: auto;
+                height: auto;
+                min-height: 100%;
             }
-
-            .btn-print {
-                background: #047857;
-                color: #fff;
-                padding: 8px 18px;
-                border: none;
-                border-radius: 5px;
-                cursor: pointer;
-                font-size: 11pt;
-                font-weight: bold;
-                box-shadow: 0 2px 6px rgba(0,0,0,.25);
-            }
-
-            .btn-print:hover { background: #065f46; }
         }
 
         @media print {
             @page { size: A4 portrait; margin: 0.6cm; }
 
+            .no-print,
+            .btn-print-wrap,
+            .btn-print {
+                display: none !important;
+            }
+
             html, body {
                 margin: 0 !important;
                 padding: 0 !important;
+                width: 100% !important;
                 background: #fff !important;
                 color: #000 !important;
+                overflow: visible !important;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
-                /* Ajuste Safari: evita PDF “em branco” / corte de layout */
-                zoom: 0.95;
             }
 
-            .btn-print-wrap,
-            .btn-print { display: none !important; }
-
+            #remanejo-print-area,
             .page {
-                max-width: none !important;
                 width: 100% !important;
+                max-width: none !important;
                 margin: 0 !important;
                 padding: 0 !important;
-                overflow: visible !important;
                 background: #fff !important;
                 color: #000 !important;
             }
-
-            .cabecalho,
-            .cabecalho-logo,
-            .cabecalho-texto,
-            .cabecalho-meta,
-            table.romaneio,
-            table.romaneio thead,
-            table.romaneio tbody,
-            table.romaneio tr,
-            table.romaneio th,
-            table.romaneio td,
-            .rodape-romaneio {
-                visibility: visible !important;
-                opacity: 1 !important;
-            }
-
-            table.romaneio {
-                display: table !important;
-                width: 100% !important;
-                page-break-inside: auto;
-            }
-
-            table.romaneio thead { display: table-header-group !important; }
-            table.romaneio tbody { display: table-row-group !important; }
-            table.romaneio tr { display: table-row !important; page-break-inside: avoid; }
-            table.romaneio th,
-            table.romaneio td { display: table-cell !important; }
 
             table.romaneio thead th {
                 background: #047857 !important;
@@ -251,6 +233,9 @@
                 background: #f0fdf4 !important;
             }
 
+            table.romaneio thead { display: table-header-group !important; }
+            table.romaneio tr { page-break-inside: avoid; }
+
             .cabecalho img {
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
@@ -261,10 +246,10 @@
 <body>
 
 <div class="btn-print-wrap no-print">
-    <button type="button" class="btn-print" onclick="window.print()">🖨️ Imprimir Remanejo</button>
+    <button type="button" class="btn-print no-print" onclick="window.print()">🖨️ Imprimir Remanejo</button>
 </div>
 
-<div class="page">
+<div id="remanejo-print-area" class="page">
 
     <!-- ── Cabeçalho único ──────────────────────────────────────── -->
     <div class="cabecalho">
