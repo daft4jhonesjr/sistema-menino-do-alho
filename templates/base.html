@@ -624,9 +624,9 @@
                         </div>
                     </div>
                     <div>
-                        <label for="balanco-a-receber-fora" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Valores a Receber Fora do Sistema (R$)</label>
-                        <input type="text" id="balanco-a-receber-fora" name="a_receber_fora" inputmode="decimal" placeholder="0,00"
-                               class="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
+                        <label for="balanco-a-receber-fora" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Valores a Receber Fora do Sistema</label>
+                        <input type="text" id="balanco-a-receber-fora" name="a_receber_fora" inputmode="decimal" placeholder="R$ 0,00"
+                               class="js-input-moeda-balanco w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500 tabular-nums font-semibold text-right">
                     </div>
                     <div>
                         <label for="balanco-observacoes" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Observações (opcional)</label>
@@ -691,6 +691,21 @@
             var n = Number(v) || 0;
             return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
         }
+        function formatarInputMoeda(v) {
+            var n = parseMoeda(v);
+            if (!n) return '';
+            return fmtMoeda(n);
+        }
+        function mascaraValorBRLInput(el) {
+            if (!el) return;
+            var digitos = String(el.value || '').replace(/\D/g, '');
+            if (!digitos) {
+                el.value = '';
+                return;
+            }
+            var centavos = (parseInt(digitos, 10) / 100).toFixed(2);
+            el.value = Number(centavos).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        }
         function escHtml(s) {
             return String(s == null ? '' : s)
                 .replace(/&/g, '&amp;')
@@ -726,8 +741,14 @@
         function ligarInputPreview(el) {
             if (!el || el.getAttribute('data-balanco-bound') === '1') return;
             el.setAttribute('data-balanco-bound', '1');
-            el.addEventListener('input', atualizarPreview);
-            el.addEventListener('change', atualizarPreview);
+            el.addEventListener('input', function() {
+                mascaraValorBRLInput(el);
+                atualizarPreview();
+            });
+            el.addEventListener('blur', function() {
+                if (el.value) mascaraValorBRLInput(el);
+                atualizarPreview();
+            });
         }
         function renderizarDividasFornecedores(lista) {
             var wrap = document.getElementById('balanco-dividas-fornecedores');
@@ -745,12 +766,12 @@
                 var valorSalvo = valoresDividasFornecedor[id] || '';
                 return '<div>'
                     + '<label for="balanco-divida-fornecedor-' + escHtml(id) + '" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">'
-                    + 'Dívida com ' + escHtml(nome) + ' (R$)</label>'
+                    + 'Dívida com ' + escHtml(nome) + '</label>'
                     + '<input type="text" id="balanco-divida-fornecedor-' + escHtml(id) + '" '
-                    + 'class="js-balanco-divida-fornecedor w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500" '
+                    + 'class="js-balanco-divida-fornecedor js-input-moeda-balanco w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500 tabular-nums font-semibold text-right" '
                     + 'data-fornecedor-id="' + escHtml(id) + '" '
                     + 'data-fornecedor-nome="' + escHtml(nome) + '" '
-                    + 'inputmode="decimal" placeholder="0,00" value="' + escHtml(valorSalvo) + '">'
+                    + 'inputmode="decimal" placeholder="R$ 0,00" value="' + escHtml(formatarInputMoeda(valorSalvo)) + '">'
                     + '</div>';
             }).join('');
             inputsDividaFornecedor().forEach(ligarInputPreview);
@@ -828,10 +849,7 @@
         var form = document.getElementById('form-balanco');
         if (form) {
             var aReceberForaEl = document.getElementById('balanco-a-receber-fora');
-            if (aReceberForaEl) {
-                aReceberForaEl.addEventListener('input', atualizarPreview);
-                aReceberForaEl.addEventListener('change', atualizarPreview);
-            }
+            if (aReceberForaEl) ligarInputPreview(aReceberForaEl);
             form.addEventListener('submit', function(e) {
                 e.preventDefault();
                 var btn = document.getElementById('btn-exportar-balanco');
