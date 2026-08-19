@@ -95,6 +95,27 @@
         return input ? input.value : '';
     }
 
+    function obterCoordenadasGPS() {
+        return new Promise(function(resolve) {
+            if (!navigator.geolocation) {
+                return resolve(null);
+            }
+            navigator.geolocation.getCurrentPosition(
+                function(position) {
+                    resolve({
+                        latitude: position.coords.latitude,
+                        longitude: position.coords.longitude
+                    });
+                },
+                function(error) {
+                    console.log('GPS negado ou indisponível:', error.message);
+                    resolve(null);
+                },
+                { timeout: 2500, enableHighAccuracy: true, maximumAge: 60000 }
+            );
+        });
+    }
+
     function showLoginError(message) {
         if (typeof Swal === 'undefined') {
             alert(message);
@@ -132,6 +153,10 @@
 
             var formData = new FormData(formLogin);
             var payload = Object.fromEntries(formData.entries());
+
+            var coords = await obterCoordenadasGPS();
+            payload.latitude = coords ? coords.latitude : null;
+            payload.longitude = coords ? coords.longitude : null;
 
             try {
                 var response = await fetch(formLogin.action || window.location.href, {

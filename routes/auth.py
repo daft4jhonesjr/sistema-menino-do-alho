@@ -173,6 +173,62 @@ def _extrair_dispositivo_login():
     return extrair_dispositivo_legivel(ua_string)[:200]
 
 
+def _extrair_coordenadas_gps():
+    """Lê latitude/longitude enviadas pelo navegador (JSON ou form)."""
+    dados = request.get_json(silent=True) or request.form
+    lat = dados.get('latitude')
+    lon = dados.get('longitude')
+    if lat is None or lon is None or lat == '' or lon == '':
+        return None, None
+    try:
+        return float(lat), float(lon)
+    except (TypeError, ValueError):
+        return None, None
+
+
+def _resolver_localizacao_por_gps(latitude, longitude):
+    """Reverse geocoding via Nominatim quando o cliente envia coordenadas GPS."""
+    if latitude is None or longitude is None:
+        return None
+
+    localizacao_formatada = None
+    try:
+        url_geo = (
+            f'https://nominatim.openstreetmap.org/reverse'
+            f'?format=json&lat={latitude}&lon={longitude}&zoom=16&addressdetails=1'
+        )
+        req = urllib.request.Request(
+            url_geo,
+            headers={'User-Agent': 'SistemaMeninoAlho/1.0'},
+        )
+        with urllib.request.urlopen(req, timeout=2) as resp:
+            if resp.status == 200:
+                addr = json.loads(resp.read().decode('utf-8')).get('address', {})
+                bairro = (
+                    addr.get('suburb')
+                    or addr.get('neighbourhood')
+                    or addr.get('city_district')
+                    or ''
+                )
+                cidade = (
+                    addr.get('city')
+                    or addr.get('town')
+                    or addr.get('municipality')
+                    or ''
+                )
+                estado = addr.get('state_code') or addr.get('state') or ''
+                partes = [p for p in [bairro, cidade, estado] if p]
+                if partes:
+                    localizacao_formatada = f"{', '.join(partes)} (GPS)"
+                else:
+                    localizacao_formatada = f'GPS: {latitude:.4f}, {longitude:.4f}'
+    except Exception as exc:
+        current_app.logger.warning(f'Erro no reverse geocoding GPS: {exc}')
+        localizacao_formatada = f'GPS: {latitude:.4f}, {longitude:.4f}'
+
+    return (localizacao_formatada or None)[:150]
+
+
 def _resolver_localizacao_por_ip(ip):
     """Resolve localização geográfica por IP com timeout curto e fallback seguro."""
     if not ip:
@@ -223,17 +279,22 @@ def _resolver_localizacao_por_ip(ip):
     return localizacao_formatada[:150]
 
 
-def _registrar_historico_login(usuario):
+def _registrar_historico_login(usuario, latitude=None, longitude=None):
     """Persiste um registro de login bem-sucedido sem bloquear o fluxo."""
     try:
         ip = _extrair_ip_cliente()
         ua_string = request.headers.get('User-Agent', '') or ''
         dispositivo_formatado = extrair_dispositivo_legivel(ua_string)
+
+        localizacao_formatada = _resolver_localizacao_por_gps(latitude, longitude)
+        if not localizacao_formatada:
+            localizacao_formatada = _resolver_localizacao_por_ip(ip)
+
         db.session.add(HistoricoLogin(
             usuario_id=usuario.id,
             ip_address=ip,
             dispositivo=dispositivo_formatado[:200],
-            localizacao=_resolver_localizacao_por_ip(ip),
+            localizacao=localizacao_formatada,
         ))
         db.session.commit()
     except Exception as exc:
@@ -355,7 +416,8 @@ def login():
 
             session['session_token'] = user.session_token
             login_user(user, remember=remember)
-            _registrar_historico_login(user)
+            latitude, longitude = _extrair_coordenadas_gps()
+            _registrar_historico_login(user, latitude=latitude, longitude=longitude)
 
             destino_padrao = _pos_login_landing(user) or url_for('auth.login')
             if not _is_safe_next_url(next_url):
