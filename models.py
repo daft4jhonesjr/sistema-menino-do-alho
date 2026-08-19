@@ -265,7 +265,7 @@ class Cliente(db.Model):
 
     Attributes:
         nome_cliente: Nome ou razão social.
-        cnpj: CNPJ único (opcional).
+        cnpj: CNPJ único por empresa (opcional).
         vendas: Relacionamento com Venda (lazy).
     """
 
@@ -274,6 +274,7 @@ class Cliente(db.Model):
         # Acelera listagens multi-tenant que filtram clientes ativos por empresa
         # (combinação muito frequente em selects de venda e listagens de cliente).
         db.Index('ix_clientes_empresa_ativo', 'empresa_id', 'ativo'),
+        db.UniqueConstraint('empresa_id', 'cnpj', name='uq_empresa_cnpj'),
     )
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
@@ -285,8 +286,7 @@ class Cliente(db.Model):
     )
     nome_cliente = db.Column(db.String(200), nullable=False, index=True)  # Índice para buscas por nome
     razao_social = db.Column(db.String(200), index=True)  # Índice para buscas por razão social
-    # TODO Fase 2: remover unique=True e trocar por UniqueConstraint(empresa_id, cnpj).
-    cnpj = db.Column(db.String(18), unique=True, index=True)
+    cnpj = db.Column(db.String(18), index=True)
     inscricao_estadual = db.Column(db.String(50), nullable=True)
     cidade = db.Column(db.String(100))
     bairro = db.Column(db.String(100), nullable=True)

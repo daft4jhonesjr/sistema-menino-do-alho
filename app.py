@@ -48,7 +48,7 @@ from functools import wraps
 import hmac
 from sqlalchemy import func, desc, asc, text, or_, and_, extract, case, cast, inspect
 from sqlalchemy.orm import joinedload, contains_eager, selectinload
-from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 import pandas as pd
 import os
 import re
@@ -4274,6 +4274,19 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
                 db.session.commit()
             except (OperationalError, Exception):
                 db.session.rollback()
+        # Migração: UNIQUE global de CNPJ -> UNIQUE composta (empresa_id, cnpj)
+        try:
+            _uri_cnpj = app.config.get('SQLALCHEMY_DATABASE_URI', '')
+            if _uri_cnpj.startswith('postgres'):
+                db.session.execute(text(
+                    'ALTER TABLE clientes DROP CONSTRAINT IF EXISTS clientes_cnpj_key'
+                ))
+                db.session.execute(text(
+                    'ALTER TABLE clientes ADD CONSTRAINT uq_empresa_cnpj UNIQUE (empresa_id, cnpj)'
+                ))
+                db.session.commit()
+        except (OperationalError, ProgrammingError, Exception):
+            db.session.rollback()
         # Migração P0 (laudo de crash em /vendas/editar — Achado #2):
         # editar_venda / _resincronizar_pagamento_venda / _apagar_lancamentos_
         # caixa_por_vendas fazem `descricao LIKE 'Venda #<id> -%'` para achar
