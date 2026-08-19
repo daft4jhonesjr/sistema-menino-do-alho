@@ -19,8 +19,10 @@ perfil/configurações usam só ``login_required``; gerenciar_usuarios usa
 ``tenant_required`` explicitamente porque é função de DONO).
 """
 from datetime import datetime
+import json
 import os
 import traceback
+import urllib.request
 import uuid
 
 from flask import (
@@ -129,35 +131,51 @@ def _extrair_dispositivo_login():
     """Descrição legível do navegador/plataforma a partir do User-Agent."""
     ua = request.user_agent
     if ua is None:
-        return 'Desconhecido'
-    browser = (ua.browser or 'Navegador').strip()
-    platform = (ua.platform or 'Dispositivo').strip()
-    version = (ua.version or '').strip()
-    if browser and version:
-        browser = f'{browser} {version}'
-    return f'{browser} · {platform}'[:200]
+        return 'Desconhecido / Navegador'
+    plataforma = ua.platform.capitalize() if ua.platform else 'Desconhecido'
+    navegador = ua.browser.capitalize() if ua.browser else 'Navegador'
+    return f'{plataforma} / {navegador}'[:200]
 
 
-def _inferir_localizacao_por_ip(ip):
-    """Heurística simples — evita chamada externa no fluxo de login."""
+def _resolver_localizacao_por_ip(ip):
+    """Resolve localização geográfica por IP com timeout curto e fallback seguro."""
     if not ip:
         return None
+
     ip_lower = ip.lower().strip()
     if ip_lower in ('127.0.0.1', '::1', 'localhost'):
-        return 'Localhost'
-    partes = ip_lower.split('.')
-    if len(partes) == 4:
+        return f'Localhost ({ip})'
+
+    partes_ip = ip_lower.split('.')
+    if len(partes_ip) == 4:
         try:
-            octeto_a, octeto_b = int(partes[0]), int(partes[1])
+            octeto_a, octeto_b = int(partes_ip[0]), int(partes_ip[1])
             if octeto_a == 10:
-                return 'Rede local / privada'
+                return f'Rede local / privada ({ip})'
             if octeto_a == 192 and octeto_b == 168:
-                return 'Rede local / privada'
+                return f'Rede local / privada ({ip})'
             if octeto_a == 172 and 16 <= octeto_b <= 31:
-                return 'Rede local / privada'
+                return f'Rede local / privada ({ip})'
         except ValueError:
             pass
-    return None
+
+    localizacao_formatada = ip
+    try:
+        url = f'http://ip-api.com/json/{urllib.request.quote(ip, safe="")}?fields=status,city,region'
+        req = urllib.request.Request(url, headers={'User-Agent': 'MeninoDoAlho/1.0'})
+        with urllib.request.urlopen(req, timeout=2) as res:
+            if res.status == 200:
+                dados_geo = json.loads(res.read().decode('utf-8'))
+                if dados_geo.get('status') == 'success':
+                    cidade = (dados_geo.get('city') or '').strip()
+                    estado = (dados_geo.get('region') or '').strip()
+                    partes_loc = [p for p in (cidade, estado) if p]
+                    if partes_loc:
+                        localizacao_formatada = f"{' - '.join(partes_loc)} ({ip})"
+    except Exception as exc:
+        current_app.logger.warning(f'Erro ao buscar geolocalizacao para {ip}: {exc}')
+
+    return localizacao_formatada[:150]
 
 
 def _registrar_historico_login(usuario):
@@ -168,7 +186,7 @@ def _registrar_historico_login(usuario):
             usuario_id=usuario.id,
             ip_address=ip,
             dispositivo=_extrair_dispositivo_login(),
-            localizacao=_inferir_localizacao_por_ip(ip),
+            localizacao=_resolver_localizacao_por_ip(ip),
         ))
         db.session.commit()
     except Exception as exc:
@@ -820,14 +838,13 @@ def api_historico_login_usuario(id):
     for reg in registros:
         ip = reg.ip_address or '-'
         loc = (reg.localizacao or '').strip()
-        ip_local = f'{ip} ({loc})' if loc else ip
         historico.append({
             'id': reg.id,
             'data_hora': _formatar_data_historico_login(reg.data_hora),
-            'dispositivo': reg.dispositivo or 'Desconhecido',
+            'dispositivo': reg.dispositivo or 'Desconhecido / Navegador',
             'ip_address': ip,
             'localizacao': loc or None,
-            'ip_local': ip_local,
+            'ip_local': loc or ip,
         })
 
     return jsonify(
