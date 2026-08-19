@@ -173,11 +173,25 @@ class Usuario(UserMixin, db.Model):
                 vistos.add(m)
         self.permissoes = json.dumps(limpos)
 
-    def tem_acesso_total(self):
-        """MASTER, DONO ou admin legado têm acesso implícito a todos os módulos."""
+    @property
+    def nivel_acesso(self):
+        """Nível legível para templates e checagens de permissão granular."""
         if self.is_master():
-            return True
-        if self.is_dono():
+            return 'master'
+        return (self.role or 'user').lower()
+
+    @property
+    def permissoes_lista(self):
+        """Lista de módulos permitidos (para uso em templates Jinja2)."""
+        return self.get_permissoes()
+
+    def tem_acesso_total(self):
+        """MASTER ou admin legado têm acesso implícito a todos os módulos.
+
+        Usuários com ``role='user'`` — mesmo que ``perfil=DONO`` — seguem
+        as permissões granulares configuradas pelo administrador.
+        """
+        if self.is_master():
             return True
         if (self.role or '').lower() == 'admin':
             return True

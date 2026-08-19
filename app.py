@@ -3248,7 +3248,10 @@ def inject_permissoes_usuario():
         try:
             if not current_user.is_authenticated:
                 return False
-            return usuario_tem_acesso_total(current_user) or usuario_tem_permissao(current_user, modulo)
+            nivel = getattr(current_user, 'nivel_acesso', None) or (current_user.role or 'user')
+            if nivel in ('admin', 'master'):
+                return True
+            return modulo in current_user.get_permissoes()
         except Exception:
             return False
 
@@ -3439,7 +3442,7 @@ def _checar_permissao_ou_redirecionar(modulo):
 
 
 def requer_permissao(modulo):
-    """Decorator: exige permissão de módulo (admin/DONO/MASTER passam automaticamente)."""
+    """Decorator: exige permissão de módulo (admin/MASTER passam automaticamente)."""
     def decorator(f):
         @wraps(f)
         def wrapped(*args, **kwargs):

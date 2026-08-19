@@ -853,10 +853,10 @@ def api_permissoes_usuario(id):
                 return jsonify(ok=False, mensagem='Acesso negado.'), 403
             return resp
 
-        if u.tem_acesso_total():
+        if (u.role or '').lower() != 'user':
             return jsonify(
                 ok=False,
-                mensagem='Usuários administradores possuem acesso total implícito.',
+                mensagem='Permissões granulares aplicam-se apenas a usuários de nível "user".',
             ), 400
 
         if request.method == 'GET':

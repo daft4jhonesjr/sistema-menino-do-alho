@@ -429,17 +429,17 @@
     <nav class="bg-emerald-700 shadow-sm">
         <div class="w-full px-4 sm:px-6 lg:px-8">
             <div class="flex flex-wrap justify-center gap-1 py-2 items-center">
-                {% if usuario_pode('dashboard') %}
+                {% if current_user.nivel_acesso in ['admin', 'master'] or 'dashboard' in current_user.permissoes_lista %}
                 <a href="{{ url_for('dashboard.dashboard') }}" class="px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors text-sm {% if request.endpoint == 'dashboard.dashboard' %}bg-white/20 text-white font-medium{% else %}text-emerald-50 hover:bg-white/10 hover:text-white{% endif %}">
                     <i data-lucide="layout-dashboard" class="w-4 h-4"></i>Dashboard
                 </a>
                 {% endif %}
-                {% if usuario_pode('clientes') %}
+                {% if current_user.nivel_acesso in ['admin', 'master'] or 'clientes' in current_user.permissoes_lista %}
                 <a href="{{ url_for('clientes.listar_clientes') }}" class="px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors text-sm {% if request.endpoint in ('clientes.listar_clientes', 'clientes.novo_cliente', 'clientes.editar_cliente') %}bg-white/20 text-white font-medium{% else %}text-emerald-50 hover:bg-white/10 hover:text-white{% endif %}">
                     <i data-lucide="users" class="w-4 h-4"></i>Clientes
                 </a>
                 {% endif %}
-                {% if usuario_pode('produtos') %}
+                {% if current_user.nivel_acesso in ['admin', 'master'] or 'produtos' in current_user.permissoes_lista %}
                 <a href="{{ url_for('produtos.listar_produtos') }}" class="px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors text-sm relative {% if request.endpoint in ('produtos.listar_produtos', 'produtos.novo_produto', 'produtos.editar_produto') %}bg-white/20 text-white font-medium{% else %}text-emerald-50 hover:bg-white/10 hover:text-white{% endif %}">
                     <i data-lucide="package" class="w-4 h-4"></i>Entrada de Produtos
                     {% if count_outros and count_outros > 0 %}
@@ -449,22 +449,22 @@
                     {% endif %}
                 </a>
                 {% endif %}
-                {% if usuario_pode('vendas') %}
+                {% if current_user.nivel_acesso in ['admin', 'master'] or 'vendas' in current_user.permissoes_lista %}
                 <a href="{{ url_for('vendas.listar_vendas') }}" class="px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors text-sm {% if request.endpoint in ('vendas.listar_vendas', 'vendas.nova_venda', 'vendas.editar_venda') %}bg-white/20 text-white font-medium{% else %}text-emerald-50 hover:bg-white/10 hover:text-white{% endif %}">
                     <i data-lucide="shopping-cart" class="w-4 h-4"></i>Vendas
                 </a>
                 {% endif %}
-                {% if usuario_pode('caixa') %}
+                {% if current_user.nivel_acesso in ['admin', 'master'] or 'caixa' in current_user.permissoes_lista %}
                 <a href="{{ url_for('caixa.caixa') }}" class="px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors text-sm {% if request.endpoint == 'caixa.caixa' %}bg-white/20 text-white font-medium{% else %}text-emerald-50 hover:bg-white/10 hover:text-white{% endif %}">
                     <i data-lucide="wallet" class="w-4 h-4"></i>Caixa Diário
                 </a>
                 {% endif %}
-                {% if current_user.is_authenticated and usuario_pode('caixa') %}
+                {% if current_user.is_authenticated and (current_user.nivel_acesso in ['admin', 'master'] or 'caixa' in current_user.permissoes_lista) %}
                 <button type="button" id="btn-abrir-balanco" onclick="abrirModalBalanco()" class="px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors text-sm text-emerald-50 hover:bg-white/10 hover:text-white" title="Balanço Patrimonial Rápido">
                     <i data-lucide="scale" class="w-4 h-4"></i>Gerar Balanço
                 </button>
                 {% endif %}
-                {% if usuario_pode('logistica') %}
+                {% if current_user.nivel_acesso in ['admin', 'master'] or 'logistica' in current_user.permissoes_lista %}
                 <a href="{{ url_for('vendas.logistica') }}" class="relative px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors text-sm {% if request.endpoint == 'vendas.logistica' %}bg-white/20 text-white font-medium{% else %}text-emerald-50 hover:bg-white/10 hover:text-white{% endif %}">
                     <i data-lucide="truck" class="w-4 h-4"></i>Logística
                     {% if entregas_pendentes and entregas_pendentes > 0 %}
@@ -568,13 +568,13 @@
             <span class="font-mono font-medium">🕒 <span id="relogio-rodape">00:00:00</span></span>
         </div>
         <div class="flex items-center justify-start sm:justify-end gap-3 w-full sm:w-1/3">
-            {% if usuario_pode('vendas') %}
+            {% if current_user.nivel_acesso in ['admin', 'master'] or 'vendas' in current_user.permissoes_lista %}
             <a href="/vendas" class="px-2 py-1.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:hover:bg-emerald-800/50 text-emerald-700 dark:text-emerald-400 rounded transition-colors font-medium flex items-center gap-1 border border-emerald-200 dark:border-emerald-800/50">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
                 Nova Venda
             </a>
             {% endif %}
-            {% if usuario_pode('caixa') %}
+            {% if current_user.nivel_acesso in ['admin', 'master'] or 'caixa' in current_user.permissoes_lista %}
             <a href="{{ url_for('caixa.caixa') }}?abrir_modal=true" class="px-2 py-1.5 bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded transition-colors font-medium flex items-center gap-1 border border-gray-200 dark:border-gray-600">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
                 Lançar Caixa
