@@ -205,6 +205,17 @@
                                 <i data-lucide="history" class="w-4 h-4"></i>
                                 <span class="hidden sm:inline">Histórico</span>
                             </button>
+                            {% if not u.tem_acesso_total() %}
+                            <button type="button"
+                                    class="btn-permissoes bg-violet-100 dark:bg-violet-900/40 text-violet-800 dark:text-violet-300 px-3 py-1 rounded hover:bg-violet-200 dark:hover:bg-violet-800/50 transition text-sm font-medium inline-flex items-center gap-1"
+                                    data-id="{{ u.id }}"
+                                    data-nome="{{ (u.nome or u.username)|e }}"
+                                    onclick="abrirModalPermissoes(this.dataset.id, this.dataset.nome)"
+                                    title="Configurar módulos permitidos">
+                                <i data-lucide="shield-check" class="w-4 h-4"></i>
+                                <span class="hidden sm:inline">Permissões</span>
+                            </button>
+                            {% endif %}
                             {% if u.id != current_user.id and u.username != 'Jhones' %}
                             <form action="{{ url_for('auth.excluir_usuario', id=u.id) }}" method="POST" class="inline" onsubmit="return confirm('Tem certeza que deseja EXCLUIR o usuário &quot;{{ u.username|e }}&quot;? Esta ação não pode ser desfeita.');">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
@@ -350,6 +361,56 @@
         </div>
         <div class="mt-4 flex justify-end shrink-0">
             <button type="button" onclick="fecharModalHistoricoLogin()" class="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600">Fechar</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Configurar Permissões -->
+<div id="modalPermissoes" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl dark:shadow-none border border-gray-200 dark:border-gray-700 w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 mx-4">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
+                <i data-lucide="shield-check" class="w-5 h-5 text-violet-600"></i>
+                Configurar Acessos de <span id="permissoes_usuario_nome" class="text-violet-700 dark:text-violet-300"></span>
+            </h3>
+            <button type="button" onclick="fecharModalPermissoes()" class="text-gray-400 dark:text-gray-500 hover:text-red-500 transition text-2xl" aria-label="Fechar">&times;</button>
+        </div>
+        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">Marque os módulos que este usuário pode visualizar e acessar no sistema.</p>
+        <input type="hidden" id="permissoes_usuario_id" value="">
+        <div id="permissoes_loading" class="hidden py-6 text-center text-gray-500 dark:text-gray-400">
+            <i data-lucide="loader-2" class="w-8 h-8 mx-auto animate-spin text-violet-600"></i>
+            <p class="mt-3 text-sm">Carregando permissões...</p>
+        </div>
+        <p id="permissoes_erro" class="hidden mb-4 p-3 rounded-lg text-sm bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800"></p>
+        <div id="permissoes_checkboxes" class="space-y-3">
+            <label class="flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/40 cursor-pointer transition">
+                <input type="checkbox" name="modulo" value="dashboard" class="w-5 h-5 rounded border-gray-300 text-violet-600 focus:ring-violet-500 dark:border-gray-600 dark:bg-gray-700">
+                <span class="text-sm font-medium text-gray-800 dark:text-gray-100">📊 Dashboard / Métricas</span>
+            </label>
+            <label class="flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/40 cursor-pointer transition">
+                <input type="checkbox" name="modulo" value="vendas" class="w-5 h-5 rounded border-gray-300 text-violet-600 focus:ring-violet-500 dark:border-gray-600 dark:bg-gray-700">
+                <span class="text-sm font-medium text-gray-800 dark:text-gray-100">🛒 Vendas &amp; Pedidos</span>
+            </label>
+            <label class="flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/40 cursor-pointer transition">
+                <input type="checkbox" name="modulo" value="produtos" class="w-5 h-5 rounded border-gray-300 text-violet-600 focus:ring-violet-500 dark:border-gray-600 dark:bg-gray-700">
+                <span class="text-sm font-medium text-gray-800 dark:text-gray-100">📦 Entrada de Produtos / Estoque</span>
+            </label>
+            <label class="flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/40 cursor-pointer transition">
+                <input type="checkbox" name="modulo" value="logistica" class="w-5 h-5 rounded border-gray-300 text-violet-600 focus:ring-violet-500 dark:border-gray-600 dark:bg-gray-700">
+                <span class="text-sm font-medium text-gray-800 dark:text-gray-100">🚚 Logística &amp; Entregas</span>
+            </label>
+            <label class="flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/40 cursor-pointer transition">
+                <input type="checkbox" name="modulo" value="caixa" class="w-5 h-5 rounded border-gray-300 text-violet-600 focus:ring-violet-500 dark:border-gray-600 dark:bg-gray-700">
+                <span class="text-sm font-medium text-gray-800 dark:text-gray-100">💰 Caixa Diário / Financeiro</span>
+            </label>
+            <label class="flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/40 cursor-pointer transition">
+                <input type="checkbox" name="modulo" value="clientes" class="w-5 h-5 rounded border-gray-300 text-violet-600 focus:ring-violet-500 dark:border-gray-600 dark:bg-gray-700">
+                <span class="text-sm font-medium text-gray-800 dark:text-gray-100">👥 Clientes</span>
+            </label>
+        </div>
+        <div class="mt-6 flex justify-end gap-3">
+            <button type="button" onclick="fecharModalPermissoes()" class="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600">Cancelar</button>
+            <button type="button" id="btn-salvar-permissoes" onclick="salvarPermissoes()" class="px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 font-medium">Salvar Permissões</button>
         </div>
     </div>
 </div>
@@ -663,6 +724,120 @@ function confirmarResetSenha(event) {
     });
 
     return false;
+}
+
+function abrirModalPermissoes(usuarioId, nomeUsuario) {
+    document.getElementById('permissoes_usuario_id').value = usuarioId || '';
+    document.getElementById('permissoes_usuario_nome').textContent = nomeUsuario || 'usuário';
+    document.getElementById('permissoes_erro').classList.add('hidden');
+    document.getElementById('permissoes_erro').textContent = '';
+    document.getElementById('permissoes_checkboxes').classList.add('hidden');
+    document.getElementById('permissoes_loading').classList.remove('hidden');
+
+    var modal = document.getElementById('modalPermissoes');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    if (typeof travarFundo === 'function') travarFundo();
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+
+    fetch('/api/usuarios/' + encodeURIComponent(usuarioId) + '/permissoes', {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(function(resp) { return resp.json().then(function(data) { return { okHttp: resp.ok, data: data || {} }; }); })
+    .then(function(result) {
+        document.getElementById('permissoes_loading').classList.add('hidden');
+        document.getElementById('permissoes_checkboxes').classList.remove('hidden');
+        if (!result.okHttp || !result.data.ok) {
+            var msg = result.data.mensagem || 'Falha ao carregar permissões.';
+            document.getElementById('permissoes_erro').textContent = msg;
+            document.getElementById('permissoes_erro').classList.remove('hidden');
+            return;
+        }
+        var ativas = result.data.permissoes || [];
+        document.querySelectorAll('#permissoes_checkboxes input[name="modulo"]').forEach(function(cb) {
+            cb.checked = ativas.indexOf(cb.value) !== -1;
+        });
+    })
+    .catch(function(err) {
+        console.error('Erro ao carregar permissoes:', err);
+        document.getElementById('permissoes_loading').classList.add('hidden');
+        document.getElementById('permissoes_checkboxes').classList.remove('hidden');
+        document.getElementById('permissoes_erro').textContent = 'Erro de rede ao carregar permissões.';
+        document.getElementById('permissoes_erro').classList.remove('hidden');
+    });
+}
+
+function fecharModalPermissoes() {
+    var modal = document.getElementById('modalPermissoes');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    if (typeof liberarFundo === 'function') liberarFundo();
+}
+
+async function salvarPermissoes() {
+    var userId = document.getElementById('permissoes_usuario_id').value;
+    if (!userId) return;
+
+    var selecionados = [];
+    document.querySelectorAll('#permissoes_checkboxes input[name="modulo"]:checked').forEach(function(cb) {
+        selecionados.push(cb.value);
+    });
+
+    var btn = document.getElementById('btn-salvar-permissoes');
+    var textoOriginal = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Salvando...';
+
+    try {
+        var resp = await fetch('/api/usuarios/' + encodeURIComponent(userId) + '/permissoes', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({ permissoes: selecionados })
+        });
+        var data = {};
+        try { data = await resp.json(); } catch (e) { data = {}; }
+
+        btn.disabled = false;
+        btn.textContent = textoOriginal;
+
+        if (resp.ok && data.ok) {
+            fecharModalPermissoes();
+            var msg = data.mensagem || 'Permissões salvas com sucesso.';
+            if (typeof Swal !== 'undefined') {
+                await Swal.fire(Object.assign(_swalLogoutTheme(), {
+                    icon: 'success',
+                    title: 'Permissões atualizadas',
+                    text: msg,
+                    confirmButtonColor: '#7C3AED'
+                }));
+            } else if (typeof showToast === 'function') {
+                showToast(msg, 'success');
+            } else {
+                alert(msg);
+            }
+            return;
+        }
+
+        var erro = data.mensagem || ('Falha ao salvar permissões (HTTP ' + resp.status + ').');
+        document.getElementById('permissoes_erro').textContent = erro;
+        document.getElementById('permissoes_erro').classList.remove('hidden');
+    } catch (err) {
+        console.error('Erro ao salvar permissoes:', err);
+        btn.disabled = false;
+        btn.textContent = textoOriginal;
+        document.getElementById('permissoes_erro').textContent = 'Erro de rede ao salvar permissões.';
+        document.getElementById('permissoes_erro').classList.remove('hidden');
+    }
 }
 </script>
 {% endblock %}

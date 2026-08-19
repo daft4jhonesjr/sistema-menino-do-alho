@@ -8,6 +8,7 @@ Rotas extraídas do legado ``app.py``:
     * /api/usuarios/<id>/reset-senha  (admin redefine senha de outro usuário)
     * /api/usuarios/<id>/forcar_logout  (invalida sessões em todos os dispositivos)
     * /api/usuarios/<id>/historico_login  (últimos acessos do usuário)
+    * /api/usuarios/<id>/permissoes  (configura módulos permitidos por usuário)
 
 Endpoints novos seguem o padrão ``auth.<nome>``. Os redirects internos
 e templates já foram atualizados para o novo formato.
@@ -36,6 +37,7 @@ import cloudinary.uploader
 from models import (
     db, Usuario, Empresa, Configuracao, HistoricoLogin,
     PERFIL_DONO, PERFIL_FUNCIONARIO, PERFIL_MASTER,
+    MODULOS_PERMISSAO,
 )
 from extensions import limiter
 from services.auth_utils import (
@@ -836,7 +838,53 @@ def api_historico_login_usuario(id):
         historico=historico,
     )
 
-    return _reset()
+
+@auth_bp.route('/api/usuarios/<int:id>/permissoes', methods=['GET', 'POST'])
+@login_required
+def api_permissoes_usuario(id):
+    """Consulta ou atualiza os módulos permitidos para um usuário comum."""
+    @tenant_required
+    @admin_required
+    def _permissoes():
+        u = Usuario.query.get_or_404(id)
+        ok_perm, resp = _checar_gestao_usuario_permitida(u)
+        if not ok_perm:
+            if request.method == 'GET':
+                return jsonify(ok=False, mensagem='Acesso negado.'), 403
+            return resp
+
+        if u.tem_acesso_total():
+            return jsonify(
+                ok=False,
+                mensagem='Usuários administradores possuem acesso total implícito.',
+            ), 400
+
+        if request.method == 'GET':
+            return jsonify(
+                ok=True,
+                usuario_id=u.id,
+                username=u.username,
+                permissoes=u.get_permissoes(),
+                modulos_disponiveis=list(MODULOS_PERMISSAO),
+            )
+
+        data = request.get_json(silent=True) or {}
+        modulos = data.get('permissoes') or data.get('modulos') or []
+        if not isinstance(modulos, list):
+            return jsonify(ok=False, mensagem='Informe um array de módulos.'), 400
+
+        u.set_permissoes(modulos)
+        ok, err = _safe_db_commit()
+        if not ok:
+            return jsonify(ok=False, mensagem=err or 'Erro ao salvar permissões.'), 500
+
+        return jsonify(
+            ok=True,
+            mensagem=f'Permissões de "{u.username}" atualizadas com sucesso.',
+            permissoes=u.get_permissoes(),
+        )
+
+    return _permissoes()
 
 
 @auth_bp.route('/gerenciar_usuarios/excluir/<int:id>', methods=['POST'])

@@ -24,7 +24,7 @@ from sqlalchemy import and_, case, func, or_
 
 from models import db, ContagemGaveta, Fornecedor, LancamentoCaixa, Produto, Venda
 from routes.caixa import _limpar_valor_moeda
-from services.auth_utils import tenant_required
+from services.auth_utils import tenant_required, _checar_permissao_ou_redirecionar
 from services.config_helpers import get_hoje_brasil
 from services.db_utils import empresa_id_atual, query_tenant
 
@@ -38,7 +38,10 @@ def _exigir_tenant_em_todas_rotas():
     def _ok():
         return None
 
-    return _ok()
+    resp = _ok()
+    if resp is not None:
+        return resp
+    return _checar_permissao_ou_redirecionar('caixa')
 
 
 def _float_seguro(valor, default: float = 0.0) -> float:

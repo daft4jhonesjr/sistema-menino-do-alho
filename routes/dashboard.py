@@ -54,6 +54,7 @@ from extensions import cache
 from models import db, Cliente, Produto, Venda, Documento, LancamentoCaixa, VotoFrase
 from services.auth_utils import (
     tenant_required, _e_admin_tenant, _usuario_pode_gerenciar_venda,
+    _checar_permissao_ou_redirecionar,
 )
 from services.db_utils import (
     query_tenant, empresa_id_atual,
@@ -85,7 +86,10 @@ def _exigir_tenant_em_todas_rotas():
     def _ok():
         return None
 
-    return _ok()
+    resp = _ok()
+    if resp is not None:
+        return resp
+    return _checar_permissao_ou_redirecionar('dashboard')
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -3241,6 +3241,27 @@ def _contar_cobrancas_pendentes_visiveis():
 
 
 @app.context_processor
+def inject_permissoes_usuario():
+    """Expõe ``usuario_pode(modulo)`` nos templates Jinja2."""
+
+    def usuario_pode(modulo):
+        try:
+            if not current_user.is_authenticated:
+                return False
+            return usuario_tem_acesso_total(current_user) or usuario_tem_permissao(current_user, modulo)
+        except Exception:
+            return False
+
+    def usuario_acesso_total():
+        try:
+            return current_user.is_authenticated and usuario_tem_acesso_total(current_user)
+        except Exception:
+            return False
+
+    return dict(usuario_pode=usuario_pode, usuario_acesso_total=usuario_acesso_total)
+
+
+@app.context_processor
 def injetar_alertas():
     """Disponibiliza alertas_sistema em todos os templates.
 
@@ -3386,6 +3407,53 @@ def tenant_required(f):
             return redirect(url_for('auth.login'))
         return f(*args, **kwargs)
     return wrapped
+
+
+def usuario_tem_acesso_total(user):
+    """Atalho para ``Usuario.tem_acesso_total()`` com guarda de None."""
+    if user is None or not getattr(user, 'is_authenticated', False):
+        return False
+    fn = getattr(user, 'tem_acesso_total', None)
+    return fn() if callable(fn) else False
+
+
+def usuario_tem_permissao(user, modulo):
+    """Verifica permissão granular de módulo para o usuário."""
+    if user is None or not getattr(user, 'is_authenticated', False):
+        return False
+    fn = getattr(user, 'tem_permissao', None)
+    return fn(modulo) if callable(fn) else False
+
+
+def _checar_permissao_ou_redirecionar(modulo):
+    """Usado em ``before_request`` dos blueprints. Retorna response se bloqueado."""
+    if not current_user.is_authenticated:
+        return None
+    if usuario_tem_acesso_total(current_user) or usuario_tem_permissao(current_user, modulo):
+        return None
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.is_json:
+        return jsonify(ok=False, mensagem='Acesso não autorizado a este módulo.'), 403
+    flash('Você não tem permissão para acessar este módulo.', 'warning')
+    destino = _pos_login_landing(current_user)
+    return redirect(destino or url_for('auth.login'))
+
+
+def requer_permissao(modulo):
+    """Decorator: exige permissão de módulo (admin/DONO/MASTER passam automaticamente)."""
+    def decorator(f):
+        @wraps(f)
+        def wrapped(*args, **kwargs):
+            if not current_user.is_authenticated:
+                return redirect(url_for('auth.login'))
+            if usuario_tem_acesso_total(current_user) or usuario_tem_permissao(current_user, modulo):
+                return f(*args, **kwargs)
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.is_json:
+                return jsonify(ok=False, mensagem='Acesso não autorizado a este módulo.'), 403
+            flash('Você não tem permissão para acessar este módulo.', 'warning')
+            destino = _pos_login_landing(current_user)
+            return redirect(destino or url_for('auth.login'))
+        return wrapped
+    return decorator
 
 
 def query_tenant(model):
@@ -3881,6 +3949,21 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
         except Exception as e:
             db.session.rollback()
             app.logger.error(f"Migração notificação (usuarios) falhou: {e}")
+        # Migração: permissoes granulares por módulo (JSON em TEXT)
+        try:
+            import json as _json_perm
+            from models import PERMISSOES_PADRAO as _PERM_PADRAO
+            if _adicionar_coluna_se_ausente('usuarios', 'permissoes', 'TEXT'):
+                padrao_json = _json_perm.dumps(_PERM_PADRAO)
+                db.session.execute(
+                    text('UPDATE usuarios SET permissoes = :padrao WHERE permissoes IS NULL'),
+                    {'padrao': padrao_json},
+                )
+                db.session.commit()
+                app.logger.info('Migração: coluna permissoes adicionada em usuarios.')
+        except (OperationalError, Exception) as e:
+            db.session.rollback()
+            app.logger.error(f"Migração permissoes (usuarios) falhou: {e}")
         # Migração: tabela de inscrições Web Push
         try:
             PushSubscription.__table__.create(bind=db.engine, checkfirst=True)
@@ -4247,7 +4330,7 @@ def _pos_login_landing(user):
     """Define a pagina inicial apos autenticacao segundo o perfil.
 
     * MASTER         -> /master-admin (nao opera rotas comuns).
-    * DONO/FUNCIONARIO (com empresa_id) -> /dashboard.
+    * DONO/FUNCIONARIO (com empresa_id) -> primeiro módulo permitido.
     * Qualquer outro (sem empresa_id) -> login com flash; eh um estado
       invalido para rotas operacionais.
     """
@@ -4255,7 +4338,21 @@ def _pos_login_landing(user):
         return url_for('master.master_admin')
     if not getattr(user, 'empresa_id', None):
         return None
-    return url_for('dashboard.dashboard')
+    if usuario_tem_acesso_total(user):
+        return url_for('dashboard.dashboard')
+    rotas_por_modulo = (
+        ('dashboard', 'dashboard.dashboard'),
+        ('vendas', 'vendas.listar_vendas'),
+        ('logistica', 'vendas.logistica'),
+        ('produtos', 'produtos.listar_produtos'),
+        ('caixa', 'caixa.caixa'),
+        ('clientes', 'clientes.listar_clientes'),
+    )
+    permissoes = user.get_permissoes() if hasattr(user, 'get_permissoes') else []
+    for modulo, endpoint in rotas_por_modulo:
+        if modulo in permissoes:
+            return url_for(endpoint)
+    return url_for('auth.perfil')
 
 
 

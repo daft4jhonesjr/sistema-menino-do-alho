@@ -60,6 +60,7 @@ from services.auth_utils import (
     tenant_required, admin_required, _is_ajax,
     _e_admin_tenant, _usuario_pode_gerenciar_venda,
     _resposta_sem_permissao, _assumir_ownership_venda_orfa,
+    _checar_permissao_ou_redirecionar,
 )
 from services.db_utils import (
     query_tenant, query_documentos_tenant, empresa_id_atual,
@@ -94,6 +95,16 @@ vendas_bp = Blueprint('vendas', __name__)
 # ============================================================
 # Proteção automática de tenant para todo o blueprint
 # ============================================================
+# Endpoints de logística exigem permissão 'logistica'; demais rotas exigem 'vendas'.
+_ENDPOINTS_LOGISTICA = frozenset({
+    'vendas.logistica',
+    'vendas.toggle_entrega',
+    'vendas.marcar_entregue_rapido',
+    'vendas.logistica_bulk_update',
+    'vendas.logistica_remanejo',
+})
+
+
 @vendas_bp.before_request
 def _exigir_tenant_em_todas_rotas():
     """Aplica ``@login_required`` + ``@tenant_required`` em todas as rotas
@@ -102,7 +113,11 @@ def _exigir_tenant_em_todas_rotas():
     def _ok():
         return None
 
-    return _ok()
+    resp = _ok()
+    if resp is not None:
+        return resp
+    modulo = 'logistica' if request.endpoint in _ENDPOINTS_LOGISTICA else 'vendas'
+    return _checar_permissao_ou_redirecionar(modulo)
 
 
 # ============================================================

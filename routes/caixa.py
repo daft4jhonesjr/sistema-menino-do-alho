@@ -55,7 +55,7 @@ import cloudinary
 import cloudinary.uploader
 
 from models import db, Venda, LancamentoCaixa, ContagemGaveta, ItemOrcamento, CATEGORIAS_ORCAMENTO
-from services.auth_utils import tenant_required, admin_required
+from services.auth_utils import tenant_required, admin_required, _checar_permissao_ou_redirecionar
 from services.db_utils import (
     query_tenant, empresa_id_atual, _safe_db_commit,
 )
@@ -78,7 +78,10 @@ def _exigir_tenant_em_todas_rotas():
     def _ok():
         return None
 
-    return _ok()
+    resp = _ok()
+    if resp is not None:
+        return resp
+    return _checar_permissao_ou_redirecionar('caixa')
 
 
 # ─────────────────────────────────────────────────────────────────────────────

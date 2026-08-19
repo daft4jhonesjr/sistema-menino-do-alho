@@ -47,7 +47,7 @@ from werkzeug.exceptions import HTTPException
 from werkzeug.utils import secure_filename
 
 from models import db, Cliente, Venda, LancamentoCaixa, Produto
-from services.auth_utils import tenant_required, admin_required, _is_ajax
+from services.auth_utils import tenant_required, admin_required, _is_ajax, _checar_permissao_ou_redirecionar
 from services.db_utils import query_tenant, empresa_id_atual
 from services.cache_utils import limpar_cache_dashboard
 from services.error_utils import erro_json, erro_flash
@@ -127,7 +127,10 @@ def _exigir_tenant_em_todas_rotas():
     def _ok():
         return None
 
-    return _ok()
+    resp = _ok()
+    if resp is not None:
+        return resp
+    return _checar_permissao_ou_redirecionar('clientes')
 
 
 # ============================================================

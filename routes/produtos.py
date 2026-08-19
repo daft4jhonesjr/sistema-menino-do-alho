@@ -63,6 +63,7 @@ import cloudinary.uploader
 from models import db, Produto, ProdutoFoto, Fornecedor, TipoProduto, Venda
 from services.auth_utils import (
     tenant_required, admin_required, _is_ajax,
+    _checar_permissao_ou_redirecionar,
 )
 from services.db_utils import query_tenant, empresa_id_atual, _safe_db_commit
 from services.cache_utils import limpar_cache_dashboard
@@ -104,7 +105,10 @@ def _exigir_tenant_em_todas_rotas():
     def _ok():
         return None
 
-    return _ok()
+    resp = _ok()
+    if resp is not None:
+        return resp
+    return _checar_permissao_ou_redirecionar('produtos')
 
 
 # ============================================================

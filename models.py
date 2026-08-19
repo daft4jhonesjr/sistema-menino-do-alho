@@ -20,6 +20,17 @@ PERFIL_DONO = 'DONO'
 PERFIL_FUNCIONARIO = 'FUNCIONARIO'
 PERFIS_USUARIO = (PERFIL_MASTER, PERFIL_DONO, PERFIL_FUNCIONARIO)
 
+# Módulos configuráveis por usuário comum (FUNCIONARIO / role='user').
+MODULOS_PERMISSAO = (
+    'dashboard',
+    'vendas',
+    'logistica',
+    'produtos',
+    'caixa',
+    'clientes',
+)
+PERMISSOES_PADRAO = list(MODULOS_PERMISSAO)
+
 
 class Empresa(db.Model):
     """
@@ -101,6 +112,9 @@ class Usuario(UserMixin, db.Model):
         nullable=True,
         default=lambda: str(uuid.uuid4()),
     )
+    # Lista JSON de módulos permitidos (ex.: ["dashboard", "vendas", "caixa"]).
+    # Armazenada como TEXT para compatibilidade SQLite/PostgreSQL na migração inline.
+    permissoes = db.Column(db.Text, nullable=True)
 
     empresa = db.relationship('Empresa', backref=db.backref('usuarios', lazy='dynamic'))
 
@@ -133,6 +147,47 @@ class Usuario(UserMixin, db.Model):
     def is_funcionario(self):
         """Funcionário comum dentro de uma Empresa."""
         return (self.perfil or '').upper() == PERFIL_FUNCIONARIO
+
+    def get_permissoes(self):
+        """Retorna a lista de módulos permitidos para este usuário."""
+        if self.tem_acesso_total():
+            return list(PERMISSOES_PADRAO)
+        raw = getattr(self, 'permissoes', None)
+        if not raw:
+            return list(PERMISSOES_PADRAO)
+        try:
+            parsed = json.loads(raw) if isinstance(raw, str) else raw
+        except (TypeError, ValueError):
+            return list(PERMISSOES_PADRAO)
+        if not isinstance(parsed, list):
+            return list(PERMISSOES_PADRAO)
+        return [m for m in parsed if m in MODULOS_PERMISSAO]
+
+    def set_permissoes(self, modulos):
+        """Persiste a lista de módulos (filtra valores inválidos)."""
+        limpos = []
+        vistos = set()
+        for m in (modulos or []):
+            if m in MODULOS_PERMISSAO and m not in vistos:
+                limpos.append(m)
+                vistos.add(m)
+        self.permissoes = json.dumps(limpos)
+
+    def tem_acesso_total(self):
+        """MASTER, DONO ou admin legado têm acesso implícito a todos os módulos."""
+        if self.is_master():
+            return True
+        if self.is_dono():
+            return True
+        if (self.role or '').lower() == 'admin':
+            return True
+        return False
+
+    def tem_permissao(self, modulo):
+        """Verifica se o usuário pode acessar um módulo específico."""
+        if self.tem_acesso_total():
+            return True
+        return modulo in self.get_permissoes()
 
     def is_admin(self):
         """Admin global do SaaS (acima de qualquer tenant).
