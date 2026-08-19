@@ -127,14 +127,50 @@ def _extrair_ip_cliente():
     return (ip or None)[:45]
 
 
+def extrair_dispositivo_legivel(user_agent_str):
+    """Identifica plataforma e navegador a partir do User-Agent bruto."""
+    if not user_agent_str:
+        return 'Desconhecido'
+
+    ua = user_agent_str.lower()
+
+    # 1. Identificação do aparelho/sistema
+    if 'ipad' in ua or ('macintosh' in ua and 'mobile' in ua):
+        dispositivo = 'iPad'
+    elif 'iphone' in ua:
+        dispositivo = 'iPhone'
+    elif 'android' in ua:
+        dispositivo = 'Android'
+    elif 'macintosh' in ua or 'mac os x' in ua:
+        dispositivo = 'Mac'
+    elif 'windows' in ua:
+        dispositivo = 'Windows PC'
+    elif 'linux' in ua:
+        dispositivo = 'Linux'
+    else:
+        dispositivo = 'Dispositivo Móvel' if 'mobile' in ua else 'Computador'
+
+    # 2. Identificação do navegador (ordem importa — Edge/Chrome antes de Safari)
+    if 'edg/' in ua or 'edge/' in ua:
+        navegador = 'Edge'
+    elif 'crios' in ua or 'chrome' in ua or 'chromium' in ua:
+        navegador = 'Chrome'
+    elif 'fxios' in ua or 'firefox' in ua:
+        navegador = 'Firefox'
+    elif 'safari' in ua and ('version/' in ua or 'mobile/' in ua):
+        navegador = 'Safari'
+    else:
+        navegador = 'Navegador Web'
+
+    return f'{dispositivo} / {navegador}'
+
+
 def _extrair_dispositivo_login():
-    """Descrição legível do navegador/plataforma a partir do User-Agent."""
-    ua = request.user_agent
-    if ua is None:
-        return 'Desconhecido / Navegador'
-    plataforma = ua.platform.capitalize() if ua.platform else 'Desconhecido'
-    navegador = ua.browser.capitalize() if ua.browser else 'Navegador'
-    return f'{plataforma} / {navegador}'[:200]
+    """Descrição legível do navegador/plataforma a partir do User-Agent HTTP."""
+    ua_string = request.headers.get('User-Agent', '') or ''
+    if not ua_string and request.user_agent is not None:
+        ua_string = request.user_agent.string or ''
+    return extrair_dispositivo_legivel(ua_string)[:200]
 
 
 def _resolver_localizacao_por_ip(ip):
@@ -144,7 +180,7 @@ def _resolver_localizacao_por_ip(ip):
 
     ip_lower = ip.lower().strip()
     if ip_lower in ('127.0.0.1', '::1', 'localhost'):
-        return f'Localhost ({ip})'
+        return 'Ambiente Local (Desenvolvimento)'
 
     partes_ip = ip_lower.split('.')
     if len(partes_ip) == 4:
@@ -161,17 +197,26 @@ def _resolver_localizacao_por_ip(ip):
 
     localizacao_formatada = ip
     try:
-        url = f'http://ip-api.com/json/{urllib.request.quote(ip, safe="")}?fields=status,city,region'
+        url = (
+            f'http://ip-api.com/json/{urllib.request.quote(ip, safe="")}'
+            f'?fields=status,city,region,regionName,country'
+        )
         req = urllib.request.Request(url, headers={'User-Agent': 'MeninoDoAlho/1.0'})
         with urllib.request.urlopen(req, timeout=2) as res:
             if res.status == 200:
                 dados_geo = json.loads(res.read().decode('utf-8'))
                 if dados_geo.get('status') == 'success':
                     cidade = (dados_geo.get('city') or '').strip()
-                    estado = (dados_geo.get('region') or '').strip()
-                    partes_loc = [p for p in (cidade, estado) if p]
-                    if partes_loc:
-                        localizacao_formatada = f"{' - '.join(partes_loc)} ({ip})"
+                    estado = (
+                        (dados_geo.get('region') or dados_geo.get('regionName') or '')
+                        .strip()
+                    )
+                    if cidade and estado:
+                        localizacao_formatada = f'{cidade} - {estado} ({ip})'
+                    elif cidade:
+                        localizacao_formatada = f'{cidade} ({ip})'
+                    elif estado:
+                        localizacao_formatada = f'{estado} ({ip})'
     except Exception as exc:
         current_app.logger.warning(f'Erro ao buscar geolocalizacao para {ip}: {exc}')
 
@@ -182,10 +227,12 @@ def _registrar_historico_login(usuario):
     """Persiste um registro de login bem-sucedido sem bloquear o fluxo."""
     try:
         ip = _extrair_ip_cliente()
+        ua_string = request.headers.get('User-Agent', '') or ''
+        dispositivo_formatado = extrair_dispositivo_legivel(ua_string)
         db.session.add(HistoricoLogin(
             usuario_id=usuario.id,
             ip_address=ip,
-            dispositivo=_extrair_dispositivo_login(),
+            dispositivo=dispositivo_formatado[:200],
             localizacao=_resolver_localizacao_por_ip(ip),
         ))
         db.session.commit()
@@ -893,7 +940,7 @@ def api_historico_login_usuario(id):
         historico.append({
             'id': reg.id,
             'data_hora': _formatar_data_historico_login(reg.data_hora),
-            'dispositivo': reg.dispositivo or 'Desconhecido / Navegador',
+            'dispositivo': reg.dispositivo or 'Desconhecido',
             'ip_address': ip,
             'localizacao': loc or None,
             'ip_local': loc or ip,

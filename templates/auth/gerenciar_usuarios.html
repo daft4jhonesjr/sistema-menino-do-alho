@@ -602,10 +602,12 @@ async function verHistorico(usuarioId, nomeUsuario) {
         var tbody = document.getElementById('historico_login_tbody');
         var html = '';
         itens.forEach(function(item) {
+            var dispositivo = item.dispositivo || 'Desconhecido';
+            var ipLocal = item.localizacao || item.ip_local || item.ip_address || '-';
             html += '<tr class="hover:bg-gray-50 dark:hover:bg-gray-700/40">' +
                 '<td class="px-4 py-3 whitespace-nowrap text-gray-800 dark:text-gray-100 font-medium">' + _escapeHtmlHistorico(item.data_hora) + '</td>' +
-                '<td class="px-4 py-3 text-gray-700 dark:text-gray-300">' + _escapeHtmlHistorico(item.dispositivo) + '</td>' +
-                '<td class="px-4 py-3 text-gray-700 dark:text-gray-300">' + _escapeHtmlHistorico(item.localizacao || item.ip_local || item.ip_address) + '</td>' +
+                '<td class="px-4 py-3 text-gray-700 dark:text-gray-300">' + _escapeHtmlHistorico(dispositivo) + '</td>' +
+                '<td class="px-4 py-3 text-gray-700 dark:text-gray-300">' + _escapeHtmlHistorico(ipLocal) + '</td>' +
                 '</tr>';
         });
         tbody.innerHTML = html;
