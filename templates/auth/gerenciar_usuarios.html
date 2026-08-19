@@ -10,94 +10,99 @@
     </div>
 </div>
 
-<!-- Cadastrar Nova Empresa (SaaS) - visível apenas para Jhones ou MASTER -->
-{% if current_user.username == 'Jhones' or current_user.perfil == 'MASTER' %}
-<div class="bg-white dark:bg-gray-800 rounded-xl border border-indigo-200 dark:border-indigo-900/50 shadow-sm dark:shadow-none p-6 mb-6">
-    <h3 class="text-lg font-bold text-indigo-700 dark:text-indigo-400 mb-1 flex items-center">
-        <i data-lucide="building-2" class="w-5 h-5 mr-2"></i>Cadastrar Nova Empresa (SaaS)
-    </h3>
-    <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">Crie uma nova empresa (tenant) e o usuário Dono correspondente. O Dono poderá acessar o sistema imediatamente com a senha provisória informada.</p>
-    <form method="POST" action="{{ url_for('auth.gerenciar_usuarios') }}" class="space-y-4 max-w-2xl">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-        <input type="hidden" name="acao" value="cadastrar_empresa"/>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-                <label for="nome_fantasia" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nome Fantasia (Empresa)</label>
-                <input type="text" id="nome_fantasia" name="nome_fantasia" required maxlength="150"
-                       class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm dark:bg-gray-700 dark:text-gray-100"
-                       placeholder="Ex: Supermercado Alfa">
-            </div>
-            <div>
-                <label for="username_dono" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Username do Dono</label>
-                <input type="text" id="username_dono" name="username_dono" required maxlength="80" autocomplete="off"
-                       class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm dark:bg-gray-700 dark:text-gray-100"
-                       placeholder="Ex: alfa_admin">
-            </div>
-            <div>
-                <label for="senha_provisoria" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Senha Provisória</label>
-                <input type="password" id="senha_provisoria" name="senha_provisoria" required minlength="6" autocomplete="new-password"
-                       class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm dark:bg-gray-700 dark:text-gray-100"
-                       placeholder="Mínimo 6 caracteres">
-            </div>
-        </div>
-        <button type="submit" class="bg-indigo-700 text-white px-5 py-2.5 rounded-xl hover:bg-indigo-600 transition font-medium flex items-center">
-            <i data-lucide="plus-circle" class="w-4 h-4 mr-2"></i>Cadastrar Empresa e Dono
-        </button>
-    </form>
-</div>
-{% endif %}
+{% set mostra_empresa = current_user.username == 'Jhones' or current_user.perfil == 'MASTER' %}
+<!-- Cards administrativos: 3 colunas iguais (100%) quando todos visíveis -->
+<div class="grid grid-cols-1 gap-6 mb-6 items-stretch{% if mostra_empresa and current_user.is_admin() %} lg:grid-cols-3{% elif mostra_empresa or current_user.is_admin() %} md:grid-cols-2{% else %} max-w-xl{% endif %}">
 
-<!-- Segurança do Cadastro + Trocar Minha Senha (lado a lado) -->
-<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-    {% if current_user.is_admin() %}
-    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-6 h-full">
-        <h3 class="text-lg font-bold text-emerald-700 dark:text-emerald-400 mb-3 flex items-center">
-            <i data-lucide="shield" class="w-5 h-5 mr-2"></i>Segurança do Cadastro
+    {% if mostra_empresa %}
+    <div class="bg-white dark:bg-gray-800 rounded-xl border border-indigo-200 dark:border-indigo-900/50 shadow-sm dark:shadow-none p-6 h-full flex flex-col">
+        <h3 class="text-lg font-bold text-indigo-700 dark:text-indigo-400 mb-1 flex items-center">
+            <i data-lucide="building-2" class="w-5 h-5 mr-2 shrink-0"></i>Cadastrar Nova Empresa (SaaS)
         </h3>
-        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">Quem for se cadastrar na rota pública precisa informar este código. Altere quando necessário.</p>
-        <form method="POST" action="{{ url_for('auth.atualizar_codigo_cadastro') }}" class="space-y-4">
+        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">Crie uma nova empresa (tenant) e o usuário Dono correspondente.</p>
+        <form method="POST" action="{{ url_for('auth.gerenciar_usuarios') }}" class="space-y-4 flex-1 flex flex-col">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-            <div>
-                <label for="codigo_cadastro" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Novo código de segurança</label>
-                <input type="password" id="codigo_cadastro" name="codigo_cadastro" required
-                       class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm dark:bg-gray-700 dark:text-gray-100"
-                       placeholder="Digite o novo código">
+            <input type="hidden" name="acao" value="cadastrar_empresa"/>
+            <div class="space-y-4 flex-1">
+                <div>
+                    <label for="nome_fantasia" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nome Fantasia (Empresa)</label>
+                    <input type="text" id="nome_fantasia" name="nome_fantasia" required maxlength="150"
+                           class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm dark:bg-gray-700 dark:text-gray-100"
+                           placeholder="Ex: Supermercado Alfa">
+                </div>
+                <div>
+                    <label for="username_dono" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Username do Dono</label>
+                    <input type="text" id="username_dono" name="username_dono" required maxlength="80" autocomplete="off"
+                           class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm dark:bg-gray-700 dark:text-gray-100"
+                           placeholder="Ex: alfa_admin">
+                </div>
+                <div>
+                    <label for="senha_provisoria" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Senha Provisória</label>
+                    <input type="password" id="senha_provisoria" name="senha_provisoria" required minlength="6" autocomplete="new-password"
+                           class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm dark:bg-gray-700 dark:text-gray-100"
+                           placeholder="Mínimo 6 caracteres">
+                </div>
             </div>
-            <div>
-                <label for="confirmar_codigo" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Confirme o novo código</label>
-                <input type="password" id="confirmar_codigo" name="confirmar_codigo" required
-                       class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm dark:bg-gray-700 dark:text-gray-100"
-                       placeholder="Digite novamente o mesmo código">
+            <button type="submit" class="bg-indigo-700 text-white px-5 py-2.5 rounded-xl hover:bg-indigo-600 transition font-medium flex items-center w-full sm:w-auto justify-center">
+                <i data-lucide="plus-circle" class="w-4 h-4 mr-2"></i>Cadastrar Empresa e Dono
+            </button>
+        </form>
+    </div>
+    {% endif %}
+
+    {% if current_user.is_admin() %}
+    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-6 h-full flex flex-col">
+        <h3 class="text-lg font-bold text-emerald-700 dark:text-emerald-400 mb-3 flex items-center">
+            <i data-lucide="shield" class="w-5 h-5 mr-2 shrink-0"></i>Segurança do Cadastro
+        </h3>
+        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">Quem for se cadastrar na rota pública precisa informar este código.</p>
+        <form method="POST" action="{{ url_for('auth.atualizar_codigo_cadastro') }}" class="space-y-4 flex-1 flex flex-col">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <div class="space-y-4 flex-1">
+                <div>
+                    <label for="codigo_cadastro" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Novo código de segurança</label>
+                    <input type="password" id="codigo_cadastro" name="codigo_cadastro" required
+                           class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm dark:bg-gray-700 dark:text-gray-100"
+                           placeholder="Digite o novo código">
+                </div>
+                <div>
+                    <label for="confirmar_codigo" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Confirme o novo código</label>
+                    <input type="password" id="confirmar_codigo" name="confirmar_codigo" required
+                           class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm dark:bg-gray-700 dark:text-gray-100"
+                           placeholder="Digite novamente o mesmo código">
+                </div>
             </div>
-            <button type="submit" class="bg-emerald-700 text-white px-5 py-2.5 rounded-xl hover:bg-emerald-600 transition font-medium flex items-center">
+            <button type="submit" class="bg-emerald-700 text-white px-5 py-2.5 rounded-xl hover:bg-emerald-600 transition font-medium flex items-center w-full sm:w-auto justify-center">
                 <i data-lucide="check" class="w-4 h-4 mr-2"></i>Atualizar Código
             </button>
         </form>
     </div>
     {% endif %}
 
-    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-6 h-full{% if not current_user.is_admin() %} md:col-span-2 max-w-xl{% endif %}">
+    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-6 h-full flex flex-col">
         <h3 class="text-lg font-bold text-emerald-700 dark:text-emerald-400 mb-1 flex items-center">
-            <i data-lucide="key-round" class="w-5 h-5 mr-2"></i>Trocar Minha Senha
+            <i data-lucide="key-round" class="w-5 h-5 mr-2 shrink-0"></i>Trocar Minha Senha
         </h3>
         <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
-            Atualize a senha do seu próprio usuário (<span class="font-semibold">{{ current_user.username }}</span>). Mínimo de 6 caracteres.
+            Atualize a senha do seu usuário (<span class="font-semibold">{{ current_user.username }}</span>). Mínimo de 6 caracteres.
         </p>
-        <form method="POST" action="{{ url_for('auth.trocar_minha_senha') }}" class="space-y-4" autocomplete="off">
+        <form method="POST" action="{{ url_for('auth.trocar_minha_senha') }}" class="space-y-4 flex-1 flex flex-col" autocomplete="off">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-            <div>
-                <label for="trocar_nova_senha" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nova Senha</label>
-                <input type="password" id="trocar_nova_senha" name="nova_senha" required minlength="6" autocomplete="new-password"
-                       class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm dark:bg-gray-700 dark:text-gray-100"
-                       placeholder="Digite a nova senha (mínimo 6 caracteres)">
+            <div class="space-y-4 flex-1">
+                <div>
+                    <label for="trocar_nova_senha" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nova Senha</label>
+                    <input type="password" id="trocar_nova_senha" name="nova_senha" required minlength="6" autocomplete="new-password"
+                           class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm dark:bg-gray-700 dark:text-gray-100"
+                           placeholder="Digite a nova senha (mínimo 6 caracteres)">
+                </div>
+                <div>
+                    <label for="trocar_confirmar_senha" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Confirmar Nova Senha</label>
+                    <input type="password" id="trocar_confirmar_senha" name="confirmar_senha" required minlength="6" autocomplete="new-password"
+                           class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm dark:bg-gray-700 dark:text-gray-100"
+                           placeholder="Repita a nova senha">
+                </div>
             </div>
-            <div>
-                <label for="trocar_confirmar_senha" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Confirmar Nova Senha</label>
-                <input type="password" id="trocar_confirmar_senha" name="confirmar_senha" required minlength="6" autocomplete="new-password"
-                       class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm dark:bg-gray-700 dark:text-gray-100"
-                       placeholder="Repita a nova senha">
-            </div>
-            <button type="submit" class="bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-xl transition font-medium flex items-center">
+            <button type="submit" class="bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-xl transition font-medium flex items-center w-full sm:w-auto justify-center">
                 <i data-lucide="save" class="w-4 h-4 mr-2"></i>Atualizar Minha Senha
             </button>
         </form>
