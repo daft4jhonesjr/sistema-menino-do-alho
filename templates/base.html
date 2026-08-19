@@ -2,7 +2,7 @@
 <html lang="pt-BR" class="font-sans antialiased">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <script>
         window.getCsrfHeaders = function() {
@@ -295,7 +295,7 @@
     {% block head_extras %}{% endblock %}
 </head>
 <body class="bg-emerald-50 text-gray-800 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-500 min-h-screen flex flex-col">
-    <div id="ptr-indicador" class="hidden lg:hidden fixed top-0 left-0 w-full flex justify-center items-end pb-3 h-16 bg-transparent text-emerald-600 font-medium text-sm z-50 transform -translate-y-full pointer-events-none transition-transform duration-300">
+    <div id="ptr-indicador" class="hidden md:hidden fixed top-0 left-0 w-full flex justify-center items-end pb-3 h-16 bg-transparent text-emerald-600 font-medium text-sm z-50 transform -translate-y-full pointer-events-none transition-transform duration-300">
         <div class="flex items-center gap-2 bg-white px-4 py-2 rounded-full shadow-md">
             <span id="ptr-icone" class="transition-transform duration-300">↓</span>
             <span id="ptr-texto">Puxe para atualizar</span>
@@ -316,8 +316,8 @@
     </script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Mantém a trava para não funcionar no Desktop
-            if (window.innerWidth >= 1024) return;
+            // Mantém a trava para não funcionar no Desktop/Tablet (>= 768px)
+            if (window.innerWidth >= 768) return;
 
             var ptrIndicador = document.getElementById('ptr-indicador');
             var ptrIcone = document.getElementById('ptr-icone');
@@ -416,7 +416,7 @@
     </script>
     <!-- Header -->
     <header class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 shadow-sm">
-        <div class="w-full px-4 sm:px-6 lg:px-8 py-5">
+        <div class="w-full px-2 md:px-4 lg:px-6 xl:px-8 py-5">
             <div class="flex justify-center">
                 <img src="{{ url_for('static', filename='images/logo_menino_do_alho_amarelo1.jpeg') }}"
                      alt="Menino do Alho - Gestão de Vendas"
@@ -427,7 +427,7 @@
 
     <!-- Navigation Bar -->
     <nav class="bg-emerald-700 shadow-sm">
-        <div class="w-full px-4 sm:px-6 lg:px-8">
+        <div class="w-full px-2 md:px-4 lg:px-6 xl:px-8">
             <div class="flex flex-wrap justify-center gap-1 py-2 items-center">
                 {% if current_user.nivel_acesso in ['admin', 'master'] or 'dashboard' in current_user.permissoes_lista %}
                 <a href="{{ url_for('dashboard.dashboard') }}" class="px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors text-sm {% if request.endpoint == 'dashboard.dashboard' %}bg-white/20 text-white font-medium{% else %}text-emerald-50 hover:bg-white/10 hover:text-white{% endif %}">
@@ -542,7 +542,7 @@
     </nav>
 
     <!-- Main Content -->
-    <main class="w-full px-4 sm:px-6 lg:px-8 py-6 pb-16 flex-1 overflow-x-hidden">
+    <main class="w-full px-2 md:px-4 lg:px-6 xl:px-8 py-6 pb-16 flex-1 overflow-x-hidden">
         {% block content %}{% endblock %}
     </main>
 

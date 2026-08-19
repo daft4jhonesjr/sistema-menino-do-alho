@@ -231,7 +231,7 @@
     <i data-lucide="calendar-days" class="w-5 h-5"></i>
     <h2 class="text-xl font-bold tracking-wide mb-0">Calendário de Entregas</h2>
 </div>
-<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8 w-full items-start"
+<div class="grid grid-cols-1 md:grid-cols-12 gap-6 mb-8 w-full items-start"
      id="calendario-split-wrap"
      data-detalhes-pendentes='{{ (detalhes_entrega_pendente or {})|tojson }}'
      data-pendentes='{{ (datas_entrega_pendente or [])|tojson }}'
@@ -240,7 +240,7 @@
      data-csrf='{{ csrf_token() }}'>
 
     <section id="calendario-pendencias-vendas"
-             class="lg:col-span-7 xl:col-span-8 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 sm:p-5 shadow-sm"
+             class="md:col-span-7 xl:col-span-8 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 sm:p-5 shadow-sm"
              aria-label="Calendário mensal de entregas pendentes">
         <div class="flex justify-between items-center mb-4">
             <div class="flex items-center gap-1">
@@ -273,7 +273,7 @@
         <div id="calendar-grid" class="grid grid-cols-7 border-l border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/20" role="grid"></div>
     </section>
 
-    <aside class="lg:col-span-5 xl:col-span-4 bg-white dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 rounded-xl p-5 flex flex-col h-full min-h-[400px] shadow-sm"
+    <aside class="md:col-span-5 xl:col-span-4 bg-white dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 rounded-xl p-5 flex flex-col h-full min-h-[400px] shadow-sm"
            aria-label="Detalhes das entregas do dia selecionado">
         <h3 id="display-data-titulo" class="text-lg font-bold text-gray-900 dark:text-white mb-4 border-b border-gray-200 dark:border-gray-700 pb-2">Selecione um dia</h3>
         <div id="display-conteudo" class="flex-1 overflow-y-auto space-y-3 max-h-[480px]">
