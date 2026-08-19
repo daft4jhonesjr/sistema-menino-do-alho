@@ -1957,5 +1957,88 @@
         }
     });
     </script>
+
+    {% if current_user.is_authenticated %}
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        var loginTimeMs = {{ (session.get('login_time', 0) * 1000)|int }};
+        if (!loginTimeMs) loginTimeMs = Date.now();
+
+        var tempoInativo = 0;
+        var limiteInatividadeMs = 15 * 60 * 1000;
+        var limiteAbsolutoMs = 4 * 60 * 60 * 1000;
+        var logoutUrl = {{ url_for('auth.logout')|tojson }};
+
+        function resetarInatividade() {
+            tempoInativo = 0;
+        }
+
+        var eventos = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'click'];
+        eventos.forEach(function(ev) {
+            window.addEventListener(ev, resetarInatividade, { passive: true });
+        });
+
+        setInterval(function() {
+            tempoInativo += 10000;
+            if (tempoInativo >= limiteInatividadeMs) {
+                encerrarSessaoVisual('Sua sessão foi encerrada por 15 minutos de inatividade.');
+            }
+        }, 10000);
+
+        var restanteAbsoluto = limiteAbsolutoMs - (Date.now() - loginTimeMs);
+        if (restanteAbsoluto <= 0) {
+            encerrarSessaoVisual('Limite de 4 horas de uso contínuo atingido. Faça login novamente.');
+        } else {
+            setTimeout(function() {
+                encerrarSessaoVisual('Limite de 4 horas de uso contínuo atingido. Faça login novamente.');
+            }, restanteAbsoluto);
+        }
+
+        function encerrarSessaoVisual(mensagem) {
+            if (window.sessionExpiredTriggered) return;
+            window.sessionExpiredTriggered = true;
+
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    title: 'Sessão Expirada',
+                    text: mensagem,
+                    icon: 'info',
+                    background: '#1e293b',
+                    color: '#f8fafc',
+                    confirmButtonColor: '#10b981',
+                    confirmButtonText: 'Ir para Login',
+                    allowOutsideClick: false,
+                    allowEscapeKey: false
+                }).then(function() {
+                    window.location.href = logoutUrl;
+                });
+            } else {
+                alert(mensagem);
+                window.location.href = logoutUrl;
+            }
+        }
+
+        if (window.fetch) {
+            var fetchAnterior = window.fetch.bind(window);
+            window.fetch = function(input, init) {
+                return fetchAnterior(input, init).then(function(response) {
+                    if (response.status === 401) {
+                        return response.clone().json().then(function(data) {
+                            if (data && data.session_expired) {
+                                encerrarSessaoVisual(data.message || 'Sua sessão expirou.');
+                            }
+                            return response;
+                        }).catch(function() {
+                            return response;
+                        });
+                    }
+                    return response;
+                });
+            };
+        }
+    });
+    </script>
+    {% endif %}
 </body>
 </html>

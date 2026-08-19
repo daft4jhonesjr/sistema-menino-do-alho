@@ -18,7 +18,7 @@ DEFINIÇÃO opera fora do contexto de tenant (login/cadastro são públicos;
 perfil/configurações usam só ``login_required``; gerenciar_usuarios usa
 ``tenant_required`` explicitamente porque é função de DONO).
 """
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 import os
 import traceback
@@ -415,6 +415,10 @@ def login():
                     )
 
             session['session_token'] = user.session_token
+            agora_ts = datetime.now(timezone.utc).timestamp()
+            session['login_time'] = agora_ts
+            session['last_activity'] = agora_ts
+            session.permanent = True
             login_user(user, remember=remember)
             latitude, longitude = _extrair_coordenadas_gps()
             _registrar_historico_login(user, latitude=latitude, longitude=longitude)

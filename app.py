@@ -39,7 +39,7 @@ from models import (
 )
 from quotes import frase_do_dia
 from config import Config
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
@@ -2641,6 +2641,55 @@ def limpar_sessao_anterior():
         db.session.rollback()
     except Exception:
         db.session.remove()
+
+
+@app.before_request
+def checar_expiracao_sessao():
+    """Encerra sessões por inatividade (15 min) ou tempo absoluto (4 h)."""
+    if not current_user.is_authenticated:
+        return
+
+    endpoint = request.endpoint or ''
+    if endpoint.startswith('static') or 'login' in endpoint or 'logout' in endpoint:
+        return
+
+    agora = datetime.now(timezone.utc).timestamp()
+    tempo_inatividade_max = 15 * 60
+    tempo_absoluto_max = 4 * 60 * 60
+
+    if 'login_time' not in session:
+        session['login_time'] = agora
+    if 'last_activity' not in session:
+        session['last_activity'] = agora
+
+    login_time = session['login_time']
+    last_activity = session['last_activity']
+
+    if agora - login_time > tempo_absoluto_max:
+        logout_user()
+        session.clear()
+        msg = (
+            'Sua sessão atingiu o limite máximo de 4 horas de uso contínuo. '
+            'Faça login novamente.'
+        )
+        if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'session_expired': True, 'message': msg}), 401
+        flash(msg, 'warning')
+        return redirect(url_for('auth.login'))
+
+    if agora - last_activity > tempo_inatividade_max:
+        logout_user()
+        session.clear()
+        msg = (
+            'Sua sessão expirou por 15 minutos de inatividade. '
+            'Por favor, faça login novamente.'
+        )
+        if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'session_expired': True, 'message': msg}), 401
+        flash(msg, 'warning')
+        return redirect(url_for('auth.login'))
+
+    session['last_activity'] = agora
 
 
 @app.before_request
