@@ -208,6 +208,41 @@ def _formatar_data_historico_login(dt):
     return dt_br.strftime('%d/%m/%Y às %H:%M')
 
 
+def _login_wants_json():
+    """True quando o cliente espera resposta JSON (fetch/AJAX)."""
+    return bool(
+        request.is_json
+        or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    )
+
+
+def _login_json(success, *, redirect_url=None, error=None, status=200):
+    payload = {'success': success}
+    if redirect_url:
+        payload['redirect_url'] = redirect_url
+    if error:
+        payload['error'] = error
+    return jsonify(payload), status
+
+
+def _extrair_credenciais_login():
+    """Lê credenciais de JSON ou form-urlencoded (login tradicional)."""
+    dados = request.get_json(silent=True) or request.form
+    username = (dados.get('username') or dados.get('login') or dados.get('email') or '').strip()
+    password = dados.get('password') or dados.get('senha') or ''
+    remember = bool(dados.get('remember'))
+    next_url = (dados.get('next') or request.args.get('next') or '').strip()
+    return username, password, remember, next_url
+
+
+def _responder_erro_login(mensagem, status=401):
+    if _login_wants_json():
+        return _login_json(False, error=mensagem, status=status)
+    flash(mensagem, 'error')
+    http_status = status if status >= 500 else 200
+    return render_template('auth/login.html'), http_status
+
+
 @auth_bp.route('/login', methods=['GET', 'POST'])
 @limiter.limit(
     "5 per minute",
@@ -234,57 +269,74 @@ def login():
     """
     if current_user.is_authenticated:
         destino = _pos_login_landing(current_user)
+        if _login_wants_json() and request.method == 'POST':
+            return _login_json(True, redirect_url=destino or url_for('auth.login'))
         return redirect(destino or url_for('auth.login'))
     if request.method == 'POST':
         try:
-            username = (request.form.get('username') or '').strip()
-            password = request.form.get('password') or ''
+            username, password, remember, next_url = _extrair_credenciais_login()
+
             if not username or not password:
-                flash('Preencha usuário e senha.', 'error')
-                return render_template('auth/login.html')
+                return _responder_erro_login('Preencha usuário e senha.', status=400)
+
             user = Usuario.query.filter_by(username=username).first()
             if not user or not check_password_hash(user.password_hash, password):
-                flash('Usuário ou senha inválidos.', 'error')
-                return render_template('auth/login.html')
+                return _responder_erro_login('Usuário ou senha incorretos.', status=401)
+
             # Bloqueia login em tenants suspensos (exceto MASTER).
             if not getattr(user, 'is_master', lambda: False)():
                 empresa = getattr(user, 'empresa', None)
                 if empresa is not None and not empresa.ativo:
-                    flash('Empresa suspensa. Contate o administrador do sistema.', 'error')
-                    return render_template('auth/login.html')
+                    return _responder_erro_login(
+                        'Empresa suspensa. Contate o administrador do sistema.',
+                        status=403,
+                    )
                 if not getattr(user, 'empresa_id', None):
-                    flash('Seu usuário não está vinculado a nenhuma empresa. Contate o administrador.', 'error')
-                    return render_template('auth/login.html')
-            remember = True if request.form.get('remember') else False
+                    return _responder_erro_login(
+                        'Seu usuário não está vinculado a nenhuma empresa. Contate o administrador.',
+                        status=403,
+                    )
+
             if not getattr(user, 'session_token', None):
                 user.session_token = str(uuid.uuid4())
                 ok_token, err_token = _safe_db_commit()
                 if not ok_token:
-                    flash(err_token or 'Erro ao iniciar a sessão. Tente novamente.', 'error')
-                    return render_template('auth/login.html')
+                    return _responder_erro_login(
+                        err_token or 'Erro ao iniciar a sessão. Tente novamente.',
+                        status=500,
+                    )
+
             session['session_token'] = user.session_token
             login_user(user, remember=remember)
             _registrar_historico_login(user)
+
             destino_padrao = _pos_login_landing(user) or url_for('auth.login')
-            next_url = request.form.get('next') or request.args.get('next')
             if not _is_safe_next_url(next_url):
                 next_url = destino_padrao
             # MASTER NUNCA é redirecionado para rotas operacionais, mesmo com next=.
             if getattr(user, 'is_master', lambda: False)():
                 next_url = url_for('master.master_admin')
+
+            if _login_wants_json():
+                return _login_json(True, redirect_url=next_url)
+
             return redirect(next_url)
+
         except Exception as e:
             try:
                 db.session.rollback()
             except Exception:
                 pass
-            print(f'[login] erro inesperado: {e}')
-            erro_flash(
-                e,
-                'Ocorreu um erro inesperado ao tentar fazer login. Por favor, tente novamente.',
-                contexto='login',
+            traceback.print_exc()
+            try:
+                current_app.logger.error('login: %s', e, exc_info=True)
+            except Exception:
+                print(f'[login] erro inesperado: {e}')
+            msg_erro = (
+                'Tivemos um problema de comunicação com o servidor. '
+                'O serviço pode estar ocupado.'
             )
-            return redirect(url_for('auth.login'))
+            return _responder_erro_login(msg_erro, status=500)
     return render_template('auth/login.html')
 
 

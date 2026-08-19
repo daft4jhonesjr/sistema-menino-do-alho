@@ -9,6 +9,7 @@
     </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Login - Menino do Alho</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -28,22 +29,7 @@
             <h2 class="text-lg font-semibold text-gray-800 dark:text-white mb-4 flex items-center">
                 <i data-lucide="log-in" class="w-5 h-5 mr-2 text-emerald-600 dark:text-emerald-400"></i>Entrar
             </h2>
-            {% set ns = namespace(system_error=false) %}
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    {% for category, message in messages %}
-                        {% if category == 'error' and 'erro inesperado' in message|lower %}
-                            {% set ns.system_error = true %}
-                        {% else %}
-                        <div class="mb-4 p-3 rounded-lg text-sm flex items-center {% if category == 'error' %}bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800{% else %}bg-emerald-50 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800{% endif %}">
-                            <i data-lucide="{% if category == 'error' %}alert-circle{% else %}check-circle{% endif %}" class="w-4 h-4 mr-2 flex-shrink-0"></i>
-                            {{ message }}
-                        </div>
-                        {% endif %}
-                    {% endfor %}
-                {% endif %}
-            {% endwith %}
-            <form method="POST" action="{{ url_for('auth.login') }}" class="space-y-4">
+            <form id="form-login" method="POST" action="{{ url_for('auth.login') }}" class="space-y-4">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <input type="hidden" name="next" value="{{ request.args.get('next', '') }}">
                 <div>
@@ -87,23 +73,6 @@
     </div>
     <script>if (typeof lucide !== 'undefined') lucide.createIcons();</script>
     <script>
-    {% if ns.system_error %}
-    document.addEventListener('DOMContentLoaded', function() {
-        if (typeof Swal === 'undefined') return;
-        Swal.fire({
-            title: 'Ops! Algo deu errado.',
-            text: 'Tivemos um problema de comunicação com o servidor ao tentar entrar. Deseja tentar novamente?',
-            icon: 'error',
-            background: '#1e293b',
-            color: '#f8fafc',
-            confirmButtonColor: '#10b981',
-            confirmButtonText: 'Tentar Novamente'
-        }).then(function() {
-            var el = document.getElementById('username');
-            if (el) el.focus();
-        });
-    });
-    {% endif %}
     function togglePasswordVisibility() {
         const passwordInput = document.getElementById('login_password');
         const eyeOpen = document.getElementById('eye_icon_open');
@@ -118,6 +87,89 @@
             eyeClosed.classList.add('hidden');
         }
     }
+
+    function getCsrfToken() {
+        var meta = document.querySelector('meta[name="csrf-token"]');
+        if (meta) return meta.getAttribute('content') || '';
+        var input = document.querySelector('#form-login input[name="csrf_token"]');
+        return input ? input.value : '';
+    }
+
+    function showLoginError(message) {
+        if (typeof Swal === 'undefined') {
+            alert(message);
+            return;
+        }
+        Swal.fire({
+            title: 'Falha no Acesso',
+            text: message || 'Não foi possível conectar ao servidor. Deseja tentar novamente?',
+            icon: 'error',
+            background: '#1e293b',
+            color: '#f8fafc',
+            confirmButtonColor: '#10b981',
+            confirmButtonText: 'Tentar Novamente',
+            showCancelButton: false
+        }).then(function() {
+            var el = document.getElementById('username');
+            if (el) el.focus();
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        var formLogin = document.getElementById('form-login');
+        if (!formLogin) return;
+
+        formLogin.addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            var btnSubmit = formLogin.querySelector('button[type="submit"]');
+            var textoOriginal = btnSubmit ? btnSubmit.innerHTML : 'Entrar';
+
+            if (btnSubmit) {
+                btnSubmit.disabled = true;
+                btnSubmit.innerHTML = '<span class="animate-spin inline-block mr-2">🔄</span> Verificando...';
+            }
+
+            var formData = new FormData(formLogin);
+            var payload = Object.fromEntries(formData.entries());
+
+            try {
+                var response = await fetch(formLogin.action || window.location.href, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRFToken': getCsrfToken()
+                    },
+                    body: JSON.stringify(payload),
+                    credentials: 'same-origin'
+                });
+
+                var data = await response.json().catch(function() { return {}; });
+
+                if (response.ok && data.success) {
+                    window.location.href = data.redirect_url || '/';
+                    return;
+                }
+
+                var msg = data.error
+                    || data.message
+                    || (response.status === 429
+                        ? 'Muitas tentativas de login. Aguarde 1 minuto e tente novamente.'
+                        : 'Credenciais inválidas ou falha de autenticação.');
+                throw new Error(msg);
+            } catch (error) {
+                console.error('Erro no login:', error);
+                showLoginError(error.message);
+            } finally {
+                if (btnSubmit) {
+                    btnSubmit.disabled = false;
+                    btnSubmit.innerHTML = textoOriginal;
+                    if (typeof lucide !== 'undefined') lucide.createIcons();
+                }
+            }
+        });
+    });
     </script>
 </body>
 </html>
