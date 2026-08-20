@@ -72,7 +72,36 @@
         </div>
     </div>
     <div class="text-sm text-gray-600 dark:text-gray-300 mb-3">
+        {% if pedido.vendas %}
+        <div class="my-2 space-y-1.5 border-t border-b border-gray-100 dark:border-gray-700/80 py-2">
+            {% for item in pedido.vendas %}
+            {% set nome_item = (item.produto.nome_produto if item.produto else 'Produto') %}
+            <div class="flex items-center justify-between gap-2 text-xs text-gray-600 dark:text-slate-300 group hover:bg-gray-50 dark:hover:bg-slate-800/40 px-1 py-0.5 rounded transition-colors">
+                <div class="flex items-center gap-1.5 min-w-0 truncate">
+                    <span class="font-bold text-amber-600 dark:text-amber-400 flex-shrink-0">📦 {{ item.quantidade_venda }}x</span>
+                    <span class="text-gray-800 dark:text-slate-200 truncate font-medium" title="{{ nome_item }}">{{ nome_item }}</span>
+                    <span class="text-[10px] text-gray-400 dark:text-slate-400 flex-shrink-0 valor-financeiro">({{ item.preco_venda|formato_moeda }})</span>
+                    {% if item.tipo_operacao == 'PERDA' %}
+                    <span class="text-[9px] font-bold uppercase text-red-500 flex-shrink-0">Perda</span>
+                    {% endif %}
+                </div>
+                {% if item.tipo_operacao != 'PERDA' %}
+                <button type="button"
+                        onclick="abrirModalTrocaItem({{ pedido.primeira_venda_id }}, {{ item.id }}, {{ nome_item|tojson }}, {{ item.quantidade_venda }}, {{ item.preco_venda or 0 }}, {{ item.produto_id or 'null' }})"
+                        title="Trocar este produto"
+                        class="flex-shrink-0 p-1 text-cyan-500 dark:text-cyan-400 hover:text-cyan-600 dark:hover:text-cyan-300 hover:bg-cyan-500/20 rounded transition-all inline-flex items-center gap-0.5 text-[10px] font-semibold border border-cyan-500/30 bg-transparent cursor-pointer">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    <span>Trocar</span>
+                </button>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
         <p class="text-gray-500 dark:text-gray-400">📦 {{ pedido.total_quantidade }} itens</p>
+        {% endif %}
         {% if pedido.situacao == 'PARCIAL' and pedido.total_valor_pago and pedido.total_valor_pago > 0 %}
         <p class="font-bold text-orange-600 dark:text-orange-400 text-lg mt-1 valor-financeiro">{{ pedido.total_saldo_devedor|formato_moeda }}</p>
         <p class="text-[10px] text-gray-500 dark:text-gray-400 -mt-1">(Total: {{ pedido.total_valor|formato_moeda }} | Pago: {{ pedido.total_valor_pago|formato_moeda }})</p>
@@ -220,30 +249,6 @@
             data-prazo-dias="{{ v0.prazo_dias if v0.prazo_dias is not none else '' }}"
             data-tipo-operacao="{{ v0.tipo_operacao or 'VENDA' }}">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
-        </button>
-        {% endif %}
-        {% set itens_troca = [] %}
-        {% for v in pedido.vendas %}
-            {% if v.tipo_operacao != 'PERDA' %}
-                {% set _ = itens_troca.append({
-                    'item_id': v.id,
-                    'produto_id': v.produto_id or '',
-                    'nome': (v.produto.nome_produto if v.produto else 'Produto'),
-                    'qtd': v.quantidade_venda,
-                    'preco': v.preco_venda
-                }) %}
-            {% endif %}
-        {% endfor %}
-        {% if itens_troca %}
-        <button type="button"
-                class="btn-trocar-card p-1.5 rounded text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 transition-transform hover:scale-110 bg-transparent border-none cursor-pointer"
-                title="Trocar Mercadoria"
-                data-venda-id="{{ pedido.primeira_venda_id }}"
-                data-itens='{{ itens_troca|tojson }}'
-                onclick="abrirModalTrocaCard(this)">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
         </button>
         {% endif %}
         <form action="{{ url_for('vendas.excluir_venda', id=pedido.primeira_venda_id) }}" method="POST" class="inline form-excluir-pedido" data-cliente="{{ pedido.cliente_nome }}" data-nf="{{ pedido.nf }}" data-data="{{ pedido.data_venda.strftime('%d/%m/%Y') }}">
