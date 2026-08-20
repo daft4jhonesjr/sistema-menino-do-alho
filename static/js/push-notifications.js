@@ -1,5 +1,7 @@
 /**
  * Web Push (PWA) — registro de Service Worker, inscrição e envio ao backend.
+ * No Capacitor iOS/Android, usa plugins nativos quando disponíveis
+ * (sem tratar WKWebView como "navegador sem suporte").
  * Usado em Configurações e disponível globalmente como window.MeninoAlhoPush.
  */
 (function(global) {
@@ -8,6 +10,24 @@
     var SUBSCRIBE_URL = '/api/push/subscribe';
     var UNSUBSCRIBE_URL = '/api/push/unsubscribe';
     var VAPID_URL = '/api/push/vapid-public-key';
+
+    function isCapacitorNative() {
+        try {
+            var Cap = global.Capacitor;
+            if (!Cap) return false;
+            if (typeof Cap.isNativePlatform === 'function') {
+                return !!Cap.isNativePlatform();
+            }
+            return true;
+        } catch (err) {
+            return false;
+        }
+    }
+
+    function getCapacitorPlugins() {
+        var Cap = global.Capacitor;
+        return (Cap && Cap.Plugins) ? Cap.Plugins : null;
+    }
 
     function urlBase64ToUint8Array(base64String) {
         var padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -33,19 +53,92 @@
         return headers;
     }
 
+    function isWebPushSupported() {
+        return ('serviceWorker' in navigator) && ('PushManager' in global) && ('Notification' in global);
+    }
+
+    /** Capaz de ativar alertas neste ambiente (Web Push ou shell nativo). */
     function isSupported() {
-        return ('serviceWorker' in navigator) && ('PushManager' in global);
+        if (isCapacitorNative()) return true;
+        return isWebPushSupported();
+    }
+
+    async function ativarNativoCapacitor(onStatus) {
+        var plugins = getCapacitorPlugins();
+
+        try {
+            if (plugins && plugins.PushNotifications) {
+                var Push = plugins.PushNotifications;
+                var perm = await Push.requestPermissions();
+                var receive = (perm && (perm.receive || perm.granted)) || '';
+                if (String(receive).toLowerCase() !== 'granted') {
+                    if (onStatus) {
+                        onStatus('bloqueado', 'Permissão de notificações negada nas configurações do iPhone.');
+                    }
+                    return false;
+                }
+                if (typeof Push.register === 'function') {
+                    await Push.register();
+                }
+                global.localStorage.setItem('menino_alho_device_notif', 'true');
+                if (onStatus) {
+                    onStatus('ativo', 'Notificações nativas ativas neste dispositivo.');
+                }
+                return true;
+            }
+
+            if (plugins && plugins.LocalNotifications) {
+                var Local = plugins.LocalNotifications;
+                var localPerm = await Local.requestPermissions();
+                var display = (localPerm && (localPerm.display || localPerm.granted)) || '';
+                if (String(display).toLowerCase() !== 'granted') {
+                    if (onStatus) {
+                        onStatus('bloqueado', 'Permissão de notificações negada nas configurações do iPhone.');
+                    }
+                    return false;
+                }
+                global.localStorage.setItem('menino_alho_device_notif', 'true');
+                if (onStatus) {
+                    onStatus('ativo', 'Notificações nativas ativas neste dispositivo.');
+                }
+                return true;
+            }
+        } catch (err) {
+            console.warn('[Push] Plugin nativo falhou, usando fallback:', err);
+        }
+
+        // Fallback: API Notification no WebView (quando existir) ou preferência local.
+        if ('Notification' in global && typeof Notification.requestPermission === 'function') {
+            var webPerm = await Notification.requestPermission();
+            if (webPerm !== 'granted') {
+                if (onStatus) {
+                    onStatus('bloqueado', 'Permissão de notificações negada. Ative em Ajustes > Menino do Alho.');
+                }
+                return false;
+            }
+        }
+
+        global.localStorage.setItem('menino_alho_device_notif', 'true');
+        if (onStatus) {
+            onStatus('ativo', 'Notificações habilitadas no app. Alertas nativos serão usados neste dispositivo.');
+        }
+        return true;
     }
 
     /**
      * Solicita permissão, registra SW (se necessário) e inscreve no PushManager.
+     * No Capacitor, prioriza plugins nativos.
      * options.onStatus(tipo, mensagem) — callback opcional para UI (configurações).
      */
     async function ativar(options) {
         options = options || {};
         var onStatus = typeof options.onStatus === 'function' ? options.onStatus : null;
 
-        if (!isSupported()) {
+        if (isCapacitorNative()) {
+            return ativarNativoCapacitor(onStatus);
+        }
+
+        if (!isWebPushSupported()) {
             if (onStatus) onStatus('aviso', 'Seu navegador não suporta Push Notifications em segundo plano.');
             return false;
         }
@@ -106,8 +199,11 @@
 
     async function desativar() {
         global.localStorage.setItem('menino_alho_device_notif', 'false');
+        if (isCapacitorNative()) {
+            return;
+        }
         try {
-            if (!isSupported()) return;
+            if (!isWebPushSupported()) return;
             var reg = await navigator.serviceWorker.ready;
             var sub = await reg.pushManager.getSubscription();
             if (sub) {
@@ -125,7 +221,10 @@
     }
 
     async function verificarSubscriptionAtiva() {
-        if (!isSupported()) return false;
+        if (isCapacitorNative()) {
+            return global.localStorage.getItem('menino_alho_device_notif') === 'true';
+        }
+        if (!isWebPushSupported()) return false;
         try {
             var reg = await navigator.serviceWorker.ready;
             var sub = await reg.pushManager.getSubscription();
@@ -139,6 +238,7 @@
 
     global.MeninoAlhoPush = {
         isSupported: isSupported,
+        isCapacitorNative: isCapacitorNative,
         urlBase64ToUint8Array: urlBase64ToUint8Array,
         ativar: ativar,
         desativar: desativar,

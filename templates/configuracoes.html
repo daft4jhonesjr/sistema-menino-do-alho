@@ -230,19 +230,59 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    function isCapacitorNative() {
+        try {
+            if (window.MeninoAlhoPush && typeof window.MeninoAlhoPush.isCapacitorNative === 'function') {
+                return window.MeninoAlhoPush.isCapacitorNative();
+            }
+            var Cap = window.Capacitor;
+            if (!Cap) return false;
+            if (typeof Cap.isNativePlatform === 'function') return !!Cap.isNativePlatform();
+            return true;
+        } catch (err) {
+            return false;
+        }
+    }
+
+    function notificacoesSuportadas() {
+        // No app Capacitor (WKWebView) a API Notification web pode não existir,
+        // mas o dispositivo tem suporte nativo — não tratar como incompatível.
+        if (isCapacitorNative()) return true;
+        if (window.MeninoAlhoPush && typeof window.MeninoAlhoPush.isSupported === 'function') {
+            return window.MeninoAlhoPush.isSupported();
+        }
+        return ('Notification' in window);
+    }
+
     function atualizarEstadoNotificacoes() {
         if (!toggleNotif) return;
-        var suportado = ('Notification' in window);
         var preferencia = localStorage.getItem('menino_alho_device_notif') === 'true';
+        var nativo = isCapacitorNative();
 
-        if (!suportado) {
+        if (!notificacoesSuportadas()) {
             toggleNotif.checked = false;
             toggleNotif.disabled = true;
             mostrarStatus('aviso', '⚠️ Seu navegador não suporta notificações.');
             return;
         }
 
-        var permissao = Notification.permission;
+        toggleNotif.disabled = false;
+
+        // Capacitor: não depende de Notification.permission do WebView.
+        if (nativo) {
+            if (preferencia) {
+                toggleNotif.checked = true;
+                mostrarStatus('ativo', '✅ Notificações ativas neste dispositivo.');
+            } else {
+                toggleNotif.checked = false;
+                notifContainer.classList.remove('border-emerald-300', 'dark:border-emerald-700', 'border-red-300', 'dark:border-red-700');
+                notifContainer.classList.add('border-gray-200', 'dark:border-gray-700');
+                if (notifStatus) notifStatus.classList.add('hidden');
+            }
+            return;
+        }
+
+        var permissao = ('Notification' in window) ? Notification.permission : 'denied';
 
         if (preferencia && permissao === 'granted') {
             toggleNotif.checked = true;
