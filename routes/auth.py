@@ -280,40 +280,92 @@ def _resolver_localizacao_por_ip(ip):
     return localizacao_formatada[:150]
 
 
-def _registrar_historico_login(usuario, latitude=None, longitude=None):
-    """Persiste um registro de login bem-sucedido sem bloquear o fluxo."""
+def _registrar_historico_login(usuario, latitude=None, longitude=None,
+                              ip=None, dispositivo=None, resolver_geo=False):
+    """Persiste login SEMPRE (IP/dispositivo/data). Geolocalização é best-effort.
+
+    Importante: IP e dispositivo devem ser capturados no request thread
+    (ou passados explicitamente). Nunca depender de ``request`` em thread
+    background — isso era a causa dos logs sumirem após o login.
+
+    Args:
+        resolver_geo: se True, tenta geolocalização no mesmo request
+            (pode atrasar ~2s). Preferir False + deferred no login.
+    """
+    agora_utc = datetime.utcnow()
+    rotulo = getattr(usuario, 'nome', None) or getattr(usuario, 'username', '?')
+    registro = None
     try:
-        ip = _extrair_ip_cliente()
-        ua_string = request.headers.get('User-Agent', '') or ''
-        dispositivo_formatado = extrair_dispositivo_legivel(ua_string)
+        if not ip:
+            try:
+                ip = _extrair_ip_cliente()
+            except Exception:
+                ip = None
+        if not dispositivo:
+            try:
+                dispositivo = _extrair_dispositivo_login()
+            except Exception:
+                dispositivo = 'Desconhecido'
 
-        localizacao_formatada = _resolver_localizacao_por_gps(latitude, longitude)
-        if not localizacao_formatada:
-            localizacao_formatada = _resolver_localizacao_por_ip(ip)
-
-        db.session.add(HistoricoLogin(
+        registro = HistoricoLogin(
             usuario_id=usuario.id,
+            data_hora=agora_utc,
             ip_address=ip,
-            dispositivo=dispositivo_formatado[:200],
-            localizacao=localizacao_formatada,
-        ))
+            dispositivo=(dispositivo or 'Desconhecido')[:200],
+            localizacao=None,
+        )
+        db.session.add(registro)
         db.session.commit()
+        print(f'--> [AUDITORIA LOGIN] Log registrado para {rotulo} em {agora_utc}')
+        current_app.logger.info(
+            'AUDITORIA LOGIN: historico_login id=%s usuario_id=%s dispositivo=%s',
+            registro.id, usuario.id, registro.dispositivo,
+        )
     except Exception as exc:
         db.session.rollback()
         current_app.logger.warning(f'Falha ao registrar historico de login: {exc}')
+        print(f'--> [AUDITORIA LOGIN] FALHA ao gravar log de {rotulo}: {exc}')
+        return None
+
+    if not resolver_geo:
+        return registro
+
+    # Geolocalização isolada: falha aqui NÃO apaga o registro já commitado.
+    try:
+        localizacao_formatada = None
+        if latitude is not None and longitude is not None:
+            localizacao_formatada = _resolver_localizacao_por_gps(latitude, longitude)
+        if not localizacao_formatada:
+            localizacao_formatada = _resolver_localizacao_por_ip(ip)
+        if localizacao_formatada:
+            registro.localizacao = localizacao_formatada
+            db.session.commit()
+    except Exception as geo_exc:
+        db.session.rollback()
+        current_app.logger.warning(
+            f'Geolocalizacao do historico de login ignorada (registro {registro.id}): {geo_exc}'
+        )
+
+    return registro
 
 
 def _formatar_data_historico_login(dt):
-    """Formata datetime UTC para exibição no fuso do Brasil."""
+    """Formata datetime UTC para exibição no fuso America/Sao_Paulo (UTC-3)."""
     if not dt:
         return ''
     try:
         import pytz
         if dt.tzinfo is None:
             dt = pytz.utc.localize(dt)
-        dt_br = dt.astimezone(pytz.timezone('America/Recife'))
+        dt_br = dt.astimezone(pytz.timezone('America/Sao_Paulo'))
     except Exception:
-        dt_br = dt.replace(tzinfo=None) if hasattr(dt, 'replace') else dt
+        try:
+            # Fallback UTC-3 sem pytz
+            from datetime import timedelta
+            dt_naive = dt.replace(tzinfo=None) if getattr(dt, 'tzinfo', None) else dt
+            dt_br = dt_naive - timedelta(hours=3)
+        except Exception:
+            dt_br = dt
     return dt_br.strftime('%d/%m/%Y às %H:%M')
 
 
@@ -339,21 +391,33 @@ def _login_json(success, *, redirect_url=None, error=None, status=200,
     return jsonify(payload), status
 
 
-def _registrar_historico_login_deferred(usuario, latitude=None, longitude=None):
-    """Registra histórico em background para não atrasar a resposta do login."""
-    usuario_id = getattr(usuario, 'id', None)
-    if not usuario_id:
+def _atualizar_localizacao_historico_deferred(registro_id, ip=None,
+                                             latitude=None, longitude=None):
+    """Atualiza só a localização em background (opcional, não bloqueia login)."""
+    if not registro_id:
         return
     app = current_app._get_current_object()
 
     def _run():
         with app.app_context():
             try:
-                user = Usuario.query.get(usuario_id)
-                if user:
-                    _registrar_historico_login(user, latitude=latitude, longitude=longitude)
+                registro = HistoricoLogin.query.get(registro_id)
+                if registro is None or registro.localizacao:
+                    return
+                localizacao = None
+                if latitude is not None and longitude is not None:
+                    localizacao = _resolver_localizacao_por_gps(latitude, longitude)
+                if not localizacao:
+                    localizacao = _resolver_localizacao_por_ip(ip)
+                if localizacao:
+                    registro.localizacao = localizacao
+                    db.session.commit()
             except Exception as exc:
-                app.logger.warning(f'Historico de login em background falhou: {exc}')
+                try:
+                    db.session.rollback()
+                except Exception:
+                    pass
+                app.logger.warning(f'Geolocalizacao deferred falhou: {exc}')
 
     threading.Thread(target=_run, daemon=True).start()
 
@@ -446,7 +510,36 @@ def login():
             session.permanent = True
             login_user(user, remember=remember)
             latitude, longitude = _extrair_coordenadas_gps()
-            _registrar_historico_login_deferred(user, latitude=latitude, longitude=longitude)
+            # Captura IP/UA AINDA no request context; grava histórico de forma
+            # síncrona (commit explícito). Geolocalização vai em background.
+            ip_login = _extrair_ip_cliente()
+            dispositivo_login = _extrair_dispositivo_login()
+            registro_hist = _registrar_historico_login(
+                user,
+                latitude=latitude,
+                longitude=longitude,
+                ip=ip_login,
+                dispositivo=dispositivo_login,
+                resolver_geo=False,
+            )
+            if registro_hist is not None:
+                _atualizar_localizacao_historico_deferred(
+                    registro_hist.id,
+                    ip=ip_login,
+                    latitude=latitude,
+                    longitude=longitude,
+                )
+            # Marca presença imediatamente na tabela de usuários
+            try:
+                import pytz
+                fuso = pytz.timezone('America/Sao_Paulo')
+                user.ultimo_acesso = datetime.now(fuso).replace(tzinfo=None)
+                db.session.commit()
+            except Exception:
+                try:
+                    db.session.rollback()
+                except Exception:
+                    pass
 
             destino_padrao = _pos_login_landing(user) or url_for('auth.login')
             if not _is_safe_next_url(next_url):
@@ -1041,7 +1134,7 @@ def api_historico_login_usuario(id):
     registros = (
         HistoricoLogin.query
         .filter_by(usuario_id=usuario.id)
-        .order_by(HistoricoLogin.data_hora.desc())
+        .order_by(HistoricoLogin.data_hora.desc(), HistoricoLogin.id.desc())
         .limit(30)
         .all()
     )

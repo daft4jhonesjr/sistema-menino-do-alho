@@ -2734,7 +2734,7 @@ def rastrear_ultimo_acesso():
         # Polling/API muito frequentes não precisam disparar o throttle
         # além do intervalo — a checagem de 5 min já cobre isso.
 
-        fuso = pytz.timezone('America/Recife')
+        fuso = pytz.timezone('America/Sao_Paulo')
         agora = datetime.now(fuso).replace(tzinfo=None)
         ultimo = getattr(current_user, 'ultimo_acesso', None)
         if ultimo is not None:
