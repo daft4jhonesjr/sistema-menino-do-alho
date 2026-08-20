@@ -1769,28 +1769,18 @@
     </script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            if (typeof Notification === 'undefined') return;
+            // Agenda (não dispara agora): horários escolhidos em Configurações.
+            // Capacitor → LocalNotifications; Web → CRON + Web Push no servidor.
             if (localStorage.getItem('menino_alho_device_notif') !== 'true') return;
-            if (Notification.permission === 'denied') {
-                localStorage.setItem('menino_alho_device_notif', 'false');
+            if (!window.MeninoAlhoPush || typeof window.MeninoAlhoPush.agendarNotificacoesLocais !== 'function') {
                 return;
             }
-            if (Notification.permission !== 'granted') return;
-            var hoje = new Date().toDateString();
-            if (localStorage.getItem('menino_alho_notif_ultima_data') === hoje) return;
-            fetch('{{ url_for("dashboard.api_cobrancas_pendentes") }}', { credentials: 'same-origin' })
-                .then(function(r) { return r.json(); })
-                .then(function(data) {
-                    if (data.has_pendentes && data.total > 0) {
-                        var valor = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(data.total);
-                        new Notification('Menino do Alho - Cobranças Pendentes', {
-                            body: 'Há cobranças pendentes no valor de ' + valor + '. Acesse o sistema para mais detalhes.',
-                            icon: '{{ url_for("static", filename="images/logo_menino_do_alho_amarelo1.jpeg") }}'
-                        });
-                        localStorage.setItem('menino_alho_notif_ultima_data', hoje);
-                    }
-                })
-                .catch(function() {});
+            setTimeout(function() {
+                window.MeninoAlhoPush.agendarNotificacoesLocais()
+                    .catch(function(err) {
+                        console.warn('[Notif] agendarNotificacoesLocais:', err);
+                    });
+            }, 1500);
         });
     </script>
 

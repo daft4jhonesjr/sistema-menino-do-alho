@@ -1,9 +1,10 @@
-"""Rotas de Web Push (PWA) — inscrição e chave VAPID pública."""
+"""Rotas de Web Push (PWA) — inscrição, chave VAPID e pendências."""
 
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 
 from extensions import csrf, limiter
+from services.notificacoes_pendencias import resumo_pendencias_usuario
 from services.push_service import (
     get_vapid_public_key_raw,
     remover_push_subscription,
@@ -56,3 +57,25 @@ def push_unsubscribe():
 def push_status():
     """Indica se o servidor está pronto para enviar Web Push."""
     return jsonify({'vapid_configurado': vapid_configurado()}), 200
+
+
+@push_bp.route('/api/notificacoes/verificar_pendencias', methods=['GET'])
+@login_required
+@limiter.limit('30 per minute')
+def verificar_pendencias():
+    """Resumo de alertas (boletos / radar / logística) conforme toggles do usuário.
+
+    Consumido no login/dashboard para disparar notificação local (Web ou
+    Capacitor) apenas quando a preferência correspondente estiver ativa.
+    """
+    try:
+        return jsonify(resumo_pendencias_usuario(current_user)), 200
+    except Exception as exc:
+        return jsonify({
+            'ok': False,
+            'preferencias': {},
+            'alertas': [],
+            'total_alertas': 0,
+            'mensagem': 'Não foi possível verificar pendências agora.',
+            'erro': str(exc),
+        }), 500

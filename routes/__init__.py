@@ -57,7 +57,8 @@ Estado atual:
                            /api/orcamento
     * ``financeiro_bp``  → /api/balanco/dados-atuais, /api/balanco/exportar-csv
     * ``push_bp``        → /api/push/subscribe, /api/push/unsubscribe,
-                           /api/push/vapid-public-key, /api/vapid-public-key (legado)
+                           /api/push/vapid-public-key, /api/vapid-public-key (legado),
+                           /api/push/status, /api/notificacoes/verificar_pendencias
 
 Convenção (Fase 5 finalizada):
     Cada blueprint expõe uma única variável module-level ``<nome>_bp`` que

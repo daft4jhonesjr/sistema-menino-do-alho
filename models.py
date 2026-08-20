@@ -103,6 +103,11 @@ class Usuario(UserMixin, db.Model):
     notifica_radar = db.Column(db.Boolean, default=True)
     notifica_logistica = db.Column(db.Boolean, default=True)
     notifica_frase = db.Column(db.Boolean, default=True)
+    # Horários locais (HH:MM) para disparo diário — fuso America/Recife no servidor.
+    horario_boletos = db.Column(db.String(5), nullable=True, default='08:00')
+    horario_radar = db.Column(db.String(5), nullable=True, default='09:00')
+    horario_logistica = db.Column(db.String(5), nullable=True, default='07:30')
+    horario_frase = db.Column(db.String(5), nullable=True, default='06:00')
     ultimo_acesso = db.Column(db.DateTime, nullable=True, index=True)
     # Token de sessão: rotacionar invalida todos os dispositivos ativos.
     # Nullable de propósito — usuários antigos sem token continuam válidos

@@ -347,6 +347,269 @@
         return true;
     }
 
+    /**
+     * Exibe uma notificação local (não Web Push do servidor).
+     * Capacitor → LocalNotifications; Web → SW showNotification / Notification.
+     */
+    async function exibirNotificacaoLocal(titulo, corpo, opcoes) {
+        opcoes = opcoes || {};
+        var icon = opcoes.icon || TEST_ICON;
+        var tag = opcoes.tag || ('menino-alho-' + Date.now());
+
+        if (isCapacitorNative()) {
+            var plugins = getCapacitorPlugins();
+            if (plugins && plugins.LocalNotifications) {
+                var Local = plugins.LocalNotifications;
+                var permStatus = await Local.checkPermissions();
+                if (!permStatus || String(permStatus.display || '').toLowerCase() !== 'granted') {
+                    permStatus = await Local.requestPermissions();
+                }
+                if (!permStatus || String(permStatus.display || '').toLowerCase() !== 'granted') {
+                    throw new Error('Permissão de notificação negada no dispositivo.');
+                }
+                if (typeof Local.createChannel === 'function') {
+                    try {
+                        await Local.createChannel({
+                            id: 'menino_alho_alertas',
+                            name: 'Alertas do Sistema',
+                            importance: 5,
+                            visibility: 1,
+                            sound: 'default'
+                        });
+                    } catch (channelErr) { /* canal opcional */ }
+                }
+                var notifId = Math.floor((Date.now() + Math.random() * 1000) % 2147483647);
+                await Local.schedule({
+                    notifications: [{
+                        id: notifId,
+                        title: titulo,
+                        body: corpo,
+                        channelId: 'menino_alho_alertas',
+                        schedule: { at: new Date(Date.now() + 500) }
+                    }]
+                });
+                return true;
+            }
+        }
+
+        if (!('Notification' in global)) {
+            throw new Error('Notificações não suportadas neste ambiente.');
+        }
+        if (Notification.permission === 'denied') {
+            throw new Error('Permissão de notificação bloqueada.');
+        }
+        if (Notification.permission !== 'granted') {
+            var perm = await Notification.requestPermission();
+            if (perm !== 'granted') {
+                throw new Error('Permissão de notificação não concedida.');
+            }
+        }
+
+        if ('serviceWorker' in navigator) {
+            try {
+                var registration = await navigator.serviceWorker.ready;
+                if (registration && typeof registration.showNotification === 'function') {
+                    await registration.showNotification(titulo, {
+                        body: corpo,
+                        icon: icon,
+                        tag: tag,
+                        renotify: true,
+                        data: { url: opcoes.url || '/' }
+                    });
+                    return true;
+                }
+            } catch (swErr) { /* cai no fallback */ }
+        }
+
+        new Notification(titulo, { body: corpo, icon: icon, tag: tag });
+        return true;
+    }
+
+    function _chaveSilencioDiario(tipo) {
+        var hoje = new Date().toDateString();
+        return 'menino_alho_notif_' + tipo + '_' + hoje;
+    }
+
+    var IDS_AGENDAMENTO_FIXOS = [9101, 9102, 9103, 9104];
+
+    function _parseHorario(hhmm) {
+        var parts = String(hhmm || '08:00').split(':');
+        var h = parseInt(parts[0], 10);
+        var m = parseInt(parts[1], 10);
+        if (isNaN(h) || h < 0 || h > 23) h = 8;
+        if (isNaN(m) || m < 0 || m > 59) m = 0;
+        return { hour: h, minute: m };
+    }
+
+    function _proximaOcorrencia(hour, minute) {
+        var agora = new Date();
+        var alvo = new Date(
+            agora.getFullYear(),
+            agora.getMonth(),
+            agora.getDate(),
+            hour,
+            minute,
+            0,
+            0
+        );
+        if (alvo.getTime() <= agora.getTime() + 5000) {
+            alvo.setDate(alvo.getDate() + 1);
+        }
+        return alvo;
+    }
+
+    /**
+     * Agenda notificações locais no Capacitor para os horários escolhidos.
+     *
+     * A) Cancela IDs fixos anteriores (evita duplicatas).
+     * B) Lê pendências/frase da API.
+     * C) Schedule diário (repeats) ou próxima ocorrência.
+     *
+     * WEB: agendamento local com aba fechada não é confiável — o disparo
+     * em horário fica a cargo do CRON + Web Push no backend
+     * (``/api/cron/enviar_alertas_pendencias`` e ``/api/cron/enviar_frase_diaria``).
+     */
+    async function agendarNotificacoesLocais() {
+        if (global.localStorage.getItem('menino_alho_device_notif') !== 'true') {
+            return { ok: false, motivo: 'dispositivo_inativo' };
+        }
+
+        var resp = await fetch('/api/notificacoes/verificar_pendencias', {
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json' }
+        });
+        if (!resp.ok) {
+            return { ok: false, motivo: 'http_' + resp.status };
+        }
+        var data = await resp.json();
+        if (!data || !data.ok) {
+            return { ok: false, motivo: 'payload_invalido' };
+        }
+
+        var agendamentos = data.agendamentos || [];
+
+        // --- Capacitor (iOS/Android): schedule nativo confiável em background ---
+        if (isCapacitorNative()) {
+            var plugins = getCapacitorPlugins();
+            if (!plugins || !plugins.LocalNotifications) {
+                return { ok: false, motivo: 'sem_local_notifications' };
+            }
+            var Local = plugins.LocalNotifications;
+
+            var permStatus = await Local.checkPermissions();
+            if (!permStatus || String(permStatus.display || '').toLowerCase() !== 'granted') {
+                permStatus = await Local.requestPermissions();
+            }
+            if (!permStatus || String(permStatus.display || '').toLowerCase() !== 'granted') {
+                throw new Error('Permissão de notificação negada no dispositivo.');
+            }
+
+            if (typeof Local.createChannel === 'function') {
+                try {
+                    await Local.createChannel({
+                        id: 'menino_alho_alertas',
+                        name: 'Alertas do Sistema',
+                        importance: 5,
+                        visibility: 1,
+                        sound: 'default'
+                    });
+                } catch (channelErr) { /* opcional */ }
+            }
+
+            // A) Cancela agendamentos anteriores dos IDs fixos
+            try {
+                await Local.cancel({
+                    notifications: IDS_AGENDAMENTO_FIXOS.map(function(id) {
+                        return { id: id };
+                    })
+                });
+            } catch (cancelErr) {
+                console.warn('[Push] cancel agendamentos:', cancelErr);
+            }
+
+            var paraAgendar = [];
+            for (var i = 0; i < agendamentos.length; i++) {
+                var item = agendamentos[i];
+                if (!item || !item.ativo || !item.titulo) continue;
+                var hm = _parseHorario(item.horario);
+                var notif = {
+                    id: item.id_local || IDS_AGENDAMENTO_FIXOS[i],
+                    title: item.titulo,
+                    body: item.mensagem || '',
+                    channelId: 'menino_alho_alertas',
+                    extra: { tipo: item.tipo, url: item.link || '/' }
+                };
+                // Preferência: recorrência diária no horário escolhido
+                if (item.recorrente_diario) {
+                    notif.schedule = {
+                        on: { hour: hm.hour, minute: hm.minute },
+                        repeats: true,
+                        allowWhileIdle: true
+                    };
+                } else {
+                    notif.schedule = {
+                        at: _proximaOcorrencia(hm.hour, hm.minute),
+                        allowWhileIdle: true
+                    };
+                }
+                paraAgendar.push(notif);
+            }
+
+            if (paraAgendar.length) {
+                try {
+                    await Local.schedule({ notifications: paraAgendar });
+                } catch (schedErr) {
+                    // Fallback: algumas versões do plugin exigem `at` em vez de `on`
+                    console.warn('[Push] schedule repeats falhou, tentando at:', schedErr);
+                    paraAgendar = paraAgendar.map(function(n) {
+                        var hm2 = (n.schedule && n.schedule.on) ? n.schedule.on : { hour: 8, minute: 0 };
+                        return Object.assign({}, n, {
+                            schedule: {
+                                at: _proximaOcorrencia(hm2.hour, hm2.minute),
+                                allowWhileIdle: true
+                            }
+                        });
+                    });
+                    await Local.schedule({ notifications: paraAgendar });
+                }
+            }
+
+            console.log('[Push] Agendadas', paraAgendar.length, 'notificações locais.');
+            return { ok: true, plataforma: 'capacitor', agendadas: paraAgendar.length };
+        }
+
+        // --- WEB / PWA ---
+        // Fundação: não dispara imediatamente. O horário é honrado pelo
+        // backend via CRON + Web Push (aba fechada). Aqui só registramos
+        // as preferências em localStorage para auditoria/debug.
+        try {
+            global.localStorage.setItem(
+                'menino_alho_notif_agenda',
+                JSON.stringify({
+                    salvo_em: new Date().toISOString(),
+                    horarios: data.horarios || {},
+                    preferencias: data.preferencias || {},
+                    agendamentos: agendamentos.map(function(a) {
+                        return { tipo: a.tipo, ativo: a.ativo, horario: a.horario };
+                    })
+                })
+            );
+        } catch (lsErr) { /* ignore */ }
+
+        console.log(
+            '[Push] Web: horários salvos. Disparo em background via CRON + Web Push ' +
+            '(agendamento local no browser não é confiável com a aba fechada).'
+        );
+        return { ok: true, plataforma: 'web_cron', agendadas: 0 };
+    }
+
+    /**
+     * @deprecated Preferir agendarNotificacoesLocais — não dispara mais ao abrir o app.
+     */
+    async function verificarPendenciasENotificar() {
+        return agendarNotificacoesLocais();
+    }
+
     global.MeninoAlhoPush = {
         isSupported: isSupported,
         isCapacitorNative: isCapacitorNative,
@@ -354,6 +617,9 @@
         ativar: ativar,
         desativar: desativar,
         verificarSubscriptionAtiva: verificarSubscriptionAtiva,
-        dispararTeste: dispararTeste
+        dispararTeste: dispararTeste,
+        exibirNotificacaoLocal: exibirNotificacaoLocal,
+        agendarNotificacoesLocais: agendarNotificacoesLocais,
+        verificarPendenciasENotificar: verificarPendenciasENotificar
     };
 })(window);

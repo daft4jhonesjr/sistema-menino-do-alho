@@ -496,11 +496,28 @@ def logout():
 def configuracoes():
     usuario = current_user
     if request.method == 'POST':
+        from services.notificacoes_pendencias import normalizar_horario
+
         usuario.notifica_boletos = 'notifica_boletos' in request.form
         usuario.notifica_radar = 'notifica_radar' in request.form
         usuario.notifica_logistica = 'notifica_logistica' in request.form
         usuario.notifica_frase = 'notifica_frase' in request.form
+        usuario.horario_boletos = normalizar_horario(
+            request.form.get('horario_boletos'), '08:00'
+        )
+        usuario.horario_radar = normalizar_horario(
+            request.form.get('horario_radar'), '09:00'
+        )
+        usuario.horario_logistica = normalizar_horario(
+            request.form.get('horario_logistica'), '07:30'
+        )
+        usuario.horario_frase = normalizar_horario(
+            request.form.get('horario_frase'), '06:00'
+        )
         db.session.commit()
+        # Invalida cache de toasts in-app para refletir os novos toggles já.
+        session.pop('_alertas_pendencias_ts_v1', None)
+        session.pop('_alertas_pendencias_val_v1', None)
         flash('Configurações de notificação atualizadas com sucesso!', 'success')
         return redirect(url_for('auth.configuracoes'))
 

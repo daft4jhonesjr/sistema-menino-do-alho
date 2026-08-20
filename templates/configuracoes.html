@@ -44,59 +44,112 @@
 
         <h3 class="text-lg font-bold text-emerald-700 dark:text-emerald-500 border-b border-gray-100 dark:border-gray-700 pb-2 mb-4 mt-8">Alertas e Notificações</h3>
 
-        <form method="POST" action="{{ url_for('auth.configuracoes') }}" class="mb-6">
+        <form method="POST" action="{{ url_for('auth.configuracoes') }}" class="mb-6" id="form-prefs-notif">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
                 <div class="px-5 py-4 border-b border-gray-200 dark:border-gray-700">
                     <h3 class="text-lg font-semibold text-emerald-800 dark:text-emerald-400">Preferências de Notificação</h3>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Escolha o que receber e o horário diário do disparo (fuso Brasil).</p>
                 </div>
                 <div class="p-5 space-y-5">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Vencimento de Boletos</h4>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">Receba alertas diários sobre clientes com pagamentos vencendo hoje.</p>
+                    {% macro linha_notif(nome_toggle, nome_horario, titulo, descricao, checked, horario_val) %}
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3" data-notif-row>
+                        <div class="flex-1 min-w-0">
+                            <h4 class="text-sm font-semibold text-gray-900 dark:text-white">{{ titulo }}</h4>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">{{ descricao }}</p>
                         </div>
-                        <label class="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" name="notifica_boletos" value="true" class="sr-only peer" {% if usuario and usuario.notifica_boletos %}checked{% endif %} onchange="this.form.submit()">
-                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
-                        </label>
+                        <div class="flex items-center gap-3 flex-shrink-0">
+                            <label class="notif-horario-wrap flex items-center gap-2 {% if not checked %}invisible pointer-events-none{% endif %}" data-horario-wrap>
+                                <span class="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">Horário</span>
+                                <input type="time"
+                                       name="{{ nome_horario }}"
+                                       value="{{ horario_val }}"
+                                       class="notif-horario px-2 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                                       {% if not checked %}tabindex="-1"{% endif %}>
+                            </label>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox"
+                                       name="{{ nome_toggle }}"
+                                       value="true"
+                                       class="sr-only peer notif-toggle"
+                                       data-toggle-notif
+                                       {% if checked %}checked{% endif %}>
+                                <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                            </label>
+                        </div>
                     </div>
+                    {% endmacro %}
+
+                    {{ linha_notif(
+                        'notifica_boletos', 'horario_boletos',
+                        'Vencimento de Boletos',
+                        'Receba alertas diários sobre clientes com pagamentos vencendo hoje.',
+                        usuario and usuario.notifica_boletos,
+                        (usuario.horario_boletos if usuario and usuario.horario_boletos else '08:00')
+                    ) }}
                     <hr class="border-gray-100 dark:border-gray-700">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Radar de Recompra</h4>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">Seja avisado quando um cliente chegar no dia previsto para fazer um novo pedido.</p>
-                        </div>
-                        <label class="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" name="notifica_radar" value="true" class="sr-only peer" {% if usuario and usuario.notifica_radar %}checked{% endif %} onchange="this.form.submit()">
-                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
-                        </label>
-                    </div>
+                    {{ linha_notif(
+                        'notifica_radar', 'horario_radar',
+                        'Radar de Recompra',
+                        'Seja avisado quando um cliente chegar no dia previsto para fazer um novo pedido.',
+                        usuario and usuario.notifica_radar,
+                        (usuario.horario_radar if usuario and usuario.horario_radar else '09:00')
+                    ) }}
                     <hr class="border-gray-100 dark:border-gray-700">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Resumo de Logística</h4>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">Receba um resumo com as entregas programadas para o dia e rotas otimizadas.</p>
-                        </div>
-                        <label class="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" name="notifica_logistica" value="true" class="sr-only peer" {% if usuario and usuario.notifica_logistica %}checked{% endif %} onchange="this.form.submit()">
-                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
-                        </label>
-                    </div>
+                    {{ linha_notif(
+                        'notifica_logistica', 'horario_logistica',
+                        'Resumo de Logística',
+                        'Receba um resumo com as entregas programadas para o dia e rotas otimizadas.',
+                        usuario and usuario.notifica_logistica,
+                        (usuario.horario_logistica if usuario and usuario.horario_logistica else '07:30')
+                    ) }}
                     <hr class="border-gray-100 dark:border-gray-700">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Frase Motivacional Diária</h4>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">Receba uma citação filosófica por e-mail e notificação todas as manhãs.</p>
-                        </div>
-                        <label class="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" name="notifica_frase" value="true" class="sr-only peer" {% if usuario and usuario.notifica_frase %}checked{% endif %} onchange="this.form.submit()">
-                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
-                        </label>
+                    {{ linha_notif(
+                        'notifica_frase', 'horario_frase',
+                        'Frase Motivacional Diária',
+                        'Receba uma citação filosófica por e-mail e notificação todas as manhãs.',
+                        usuario and usuario.notifica_frase,
+                        (usuario.horario_frase if usuario and usuario.horario_frase else '06:00')
+                    ) }}
+
+                    <div class="pt-2 flex justify-end">
+                        <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-md transition-colors">
+                            Salvar preferências
+                        </button>
                     </div>
                 </div>
             </div>
         </form>
+        <script>
+        (function() {
+            var form = document.getElementById('form-prefs-notif');
+            if (!form) return;
+
+            function syncHorarioVisibility(row) {
+                var toggle = row.querySelector('[data-toggle-notif]');
+                var wrap = row.querySelector('[data-horario-wrap]');
+                if (!toggle || !wrap) return;
+                var on = !!toggle.checked;
+                wrap.classList.toggle('invisible', !on);
+                wrap.classList.toggle('pointer-events-none', !on);
+                var input = wrap.querySelector('input[type="time"]');
+                if (input) {
+                    if (on) input.removeAttribute('tabindex');
+                    else input.setAttribute('tabindex', '-1');
+                }
+            }
+
+            form.querySelectorAll('[data-notif-row]').forEach(function(row) {
+                syncHorarioVisibility(row);
+                var toggle = row.querySelector('[data-toggle-notif]');
+                if (toggle) {
+                    toggle.addEventListener('change', function() {
+                        syncHorarioVisibility(row);
+                    });
+                }
+            });
+        })();
+        </script>
 
         <div id="notif-container" class="mb-6 p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 transition-colors">
             <div class="flex items-center justify-between">
@@ -306,13 +359,22 @@ document.addEventListener('DOMContentLoaded', function() {
 
     async function ativarPushNotificacoes() {
         if (window.MeninoAlhoPush) {
-            return window.MeninoAlhoPush.ativar({
+            var ok = await window.MeninoAlhoPush.ativar({
                 onStatus: function(tipo, msg) {
                     if (tipo === 'ativo') mostrarStatus('ativo', '✅ ' + msg);
                     else if (tipo === 'bloqueado') mostrarStatus('bloqueado', '🚫 ' + msg);
                     else mostrarStatus('aviso', '⚠️ ' + msg);
                 }
             });
+            if (ok && typeof window.MeninoAlhoPush.agendarNotificacoesLocais === 'function') {
+                try {
+                    await window.MeninoAlhoPush.agendarNotificacoesLocais();
+                    mostrarStatus('ativo', '✅ Notificações ativas e horários agendados.');
+                } catch (agErr) {
+                    console.warn('[Notif] agendar após ativar:', agErr);
+                }
+            }
+            return ok;
         }
         mostrarStatus('aviso', '⚠️ Módulo de push não carregado. Recarregue a página.');
         return false;

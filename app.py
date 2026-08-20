@@ -95,6 +95,20 @@ def get_hoje_brasil():
         return date.today()
 
 
+def get_agora_brasil():
+    """Retorna ``datetime`` aware no fuso America/Recife."""
+    try:
+        fuso = pytz.timezone('America/Recife')
+        return datetime.now(fuso)
+    except Exception:
+        return datetime.now()
+
+
+def get_hora_brasil_hhmm():
+    """Hora atual no Brasil como string ``HH:MM`` (para matching de cron)."""
+    return get_agora_brasil().strftime('%H:%M')
+
+
 # Extensões aceitas para upload de imagens (perfil, produto, cheque)
 _ALLOWED_IMAGE_EXT = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 
@@ -3320,6 +3334,9 @@ def injetar_alertas():
     Optimização C2: o cálculo pesado só é chamado em requisições HTML de
     páginas completas (não em XHR/API/estáticos). O resultado é guardado na
     sessão Flask com TTL de 60 s para não repetir a query em cliques rápidos.
+
+    Fonte única: ``services.notificacoes_pendencias`` (respeita os 3 toggles
+    de boletos / radar / logística).
     """
     alertas = []
     try:
@@ -3334,32 +3351,41 @@ def injetar_alertas():
         if is_ajax:
             return dict(alertas_sistema=alertas)
 
-        if getattr(current_user, 'notifica_boletos', False):
-            # Sufixo v2: invalida cache antigo (contagem por venda, não por pedido).
-            _cache_key = '_alertas_boletos_ts_v2'
-            _cache_val = '_alertas_boletos_val_v2'
-            _agora = datetime.now().timestamp()
-            _ts = session.get(_cache_key, 0)
+        prefs_ativas = (
+            getattr(current_user, 'notifica_boletos', False)
+            or getattr(current_user, 'notifica_radar', False)
+            or getattr(current_user, 'notifica_logistica', False)
+        )
+        if not prefs_ativas:
+            return dict(alertas_sistema=alertas)
 
-            if _agora - _ts > 60:
-                boletos_vencendo = _contar_cobrancas_pendentes_visiveis()
-                session[_cache_key] = _agora
-                session[_cache_val] = boletos_vencendo
-            else:
-                boletos_vencendo = session.get(_cache_val, 0)
+        _cache_key = '_alertas_pendencias_ts_v1'
+        _cache_val = '_alertas_pendencias_val_v1'
+        _agora = datetime.now().timestamp()
+        _ts = session.get(_cache_key, 0)
 
-            if boletos_vencendo > 0:
-                alertas.append({
-                    'id': 'alerta_boletos',
-                    'titulo': 'Cobranças Pendentes',
-                    'mensagem': f'Você tem {boletos_vencendo} boleto(s) vencido(s) para envio ao fornecedor.',
-                    'cor': 'red',
-                    'cor_border': 'border-red-500',
-                    'cor_text': 'text-red-600',
-                    'link': url_for('vendas.listar_vendas', filtro_vencidos=1, ordem_data='decrescente')
-                })
+        if _agora - _ts > 60:
+            from services.notificacoes_pendencias import montar_alertas_pendencias
+            alertas = montar_alertas_pendencias(current_user, incluir_links=True)
+            # Sessão Flask só serializa tipos simples — strip para dicts leves.
+            alertas_sessao = [
+                {
+                    'id': a['id'],
+                    'titulo': a['titulo'],
+                    'mensagem': a['mensagem'],
+                    'cor_border': a.get('cor_border', 'border-red-500'),
+                    'cor_text': a.get('cor_text', 'text-red-600'),
+                    'link': a.get('link'),
+                }
+                for a in alertas
+            ]
+            session[_cache_key] = _agora
+            session[_cache_val] = alertas_sessao
+            alertas = alertas_sessao
+        else:
+            alertas = session.get(_cache_val, []) or []
     except Exception:
-        pass
+        alertas = []
     return dict(alertas_sistema=alertas)
 
 
@@ -4001,6 +4027,26 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
         except Exception as e:
             db.session.rollback()
             app.logger.error(f"Migração notificação (usuarios) falhou: {e}")
+        # --- MIGRACAO: horários de disparo das notificações (HH:MM) ---
+        try:
+            horarios_notif = (
+                ('horario_boletos', "VARCHAR(5) DEFAULT '08:00'"),
+                ('horario_radar', "VARCHAR(5) DEFAULT '09:00'"),
+                ('horario_logistica', "VARCHAR(5) DEFAULT '07:30'"),
+                ('horario_frase', "VARCHAR(5) DEFAULT '06:00'"),
+            )
+            adicionadas_h = []
+            for col, tipo in horarios_notif:
+                if _adicionar_coluna_se_ausente('usuarios', col, tipo):
+                    adicionadas_h.append(col)
+            if adicionadas_h:
+                app.logger.info(
+                    'Migração: colunas de horário de notificação: %s',
+                    ', '.join(adicionadas_h),
+                )
+        except Exception as e:
+            db.session.rollback()
+            app.logger.error(f"Migração horários notificação (usuarios) falhou: {e}")
         # Migração: permissoes granulares por módulo (JSON em TEXT)
         try:
             import json as _json_perm
@@ -5186,20 +5232,21 @@ def debug_testar_push():
 
 
 @app.route('/api/cron/enviar_frase_diaria', methods=['GET', 'POST'])
-@limiter.limit("5 per hour")
+@limiter.limit("120 per hour")
 def enviar_frase_diaria():
-    """Envia a frase filosófica do dia por e-mail para usuários que optaram por recebê-la.
+    """Envia a frase filosófica do dia por e-mail/push no horário de cada usuário.
 
-    Protegido por CRON_SECRET. Projetado para ser disparado diariamente
-    às 6h por um cron job externo (cron-job.org).
+    Protegido por CRON_SECRET. Projetado para ser disparado **a cada minuto**
+    por um cron externo; só envia quando ``horario_frase`` do usuário
+    coincide com a hora atual no Brasil (America/Recife).
     """
     erro = _validar_cron_token()
     if erro is not None:
         return erro
 
-    if not MAIL_USERNAME or not MAIL_PASSWORD:
-        return jsonify({'erro': 'Credenciais de e-mail não configuradas.'}), 500
+    from services.notificacoes_pendencias import horario_bate
 
+    hora_agora = get_hora_brasil_hhmm()
     frase = frase_do_dia()
 
     destinatarios = Usuario.query.filter(
@@ -5207,6 +5254,11 @@ def enviar_frase_diaria():
         Usuario.email.isnot(None),
         Usuario.email != ''
     ).all()
+    # Filtra pelo horário preferido (default 06:00 se coluna vazia).
+    destinatarios = [
+        u for u in destinatarios
+        if horario_bate(getattr(u, 'horario_frase', None) or '06:00', hora_agora)
+    ]
 
     data_hoje = datetime.now().strftime('%d/%m/%Y')
 
@@ -5255,10 +5307,19 @@ def enviar_frase_diaria():
     from services.push_service import enviar_push_para_subscriptions, montar_payload_push, vapid_configurado
 
     if vapid_configurado():
-        ids_notifica = {u.id for u in destinatarios}
+        # Inclui usuários com frase ativa + horário batendo (mesmo sem e-mail).
+        ids_email = {u.id for u in destinatarios}
+        extras_push = Usuario.query.filter(
+            Usuario.notifica_frase.is_(True),
+        ).all()
+        ids_notifica = set(ids_email)
+        for u in extras_push:
+            if horario_bate(getattr(u, 'horario_frase', None) or '06:00', hora_agora):
+                ids_notifica.add(u.id)
+
         subs = PushSubscription.query.filter(
             PushSubscription.user_id.in_(ids_notifica)
-        ).all()
+        ).all() if ids_notifica else []
         payload = montar_payload_push(
             'Sabedoria do Dia 🏛️',
             f'"{frase["texto"]}" — {frase["autor"]}',
@@ -5270,22 +5331,159 @@ def enviar_frase_diaria():
         push_erros = resultado_push['erros']
         push_removidos = resultado_push['removidos']
         current_app.logger.info(
-            f"Web Push frase diária: {push_enviados} ok, {push_erros} erros, "
+            f"Web Push frase diária ({hora_agora}): {push_enviados} ok, {push_erros} erros, "
             f"{push_removidos} subscriptions removidas."
         )
 
     total_enviados = emails_enviados + push_enviados
-    if total_enviados == 0 and not destinatarios:
-        return jsonify({'status': 'ok', 'mensagem': 'Nenhum usuário optou por receber a frase diária.', 'enviados': 0}), 200
+    if total_enviados == 0 and not destinatarios and not push_enviados:
+        return jsonify({
+            'status': 'ok',
+            'mensagem': f'Nenhum usuário com frase no horário {hora_agora}.',
+            'hora': hora_agora,
+            'enviados': 0,
+        }), 200
 
     return jsonify({
         'status': 'ok',
         'mensagem': f'Frase diária enviada: {emails_enviados} e-mail(s), {push_enviados} push(es).',
+        'hora': hora_agora,
         'frase': frase['texto'],
         'autor': frase['autor'],
         'emails_enviados': emails_enviados,
         'push_enviados': push_enviados,
         'push_erros': push_erros
+    }), 200
+
+
+@app.route('/api/cron/enviar_alertas_pendencias', methods=['GET', 'POST'])
+@limiter.limit("120 per hour")
+def enviar_alertas_pendencias():
+    """Web Push de boletos / radar / logística no horário escolhido por usuário.
+
+    Protegido por CRON_SECRET. Chamar **a cada minuto**; só envia o tipo
+    cujo ``horario_*`` coincide com a hora atual no Brasil.
+
+    Fundação WEB: com a aba fechada o browser não agenda de forma
+    confiável — este cron + Web Push é o caminho suportado.
+    """
+    erro = _validar_cron_token()
+    if erro is not None:
+        return erro
+
+    from sqlalchemy import or_
+    from services.notificacoes_pendencias import (
+        horario_bate,
+        montar_alertas_pendencias,
+        normalizar_horario,
+    )
+    from services.push_service import (
+        enviar_notificacao_push,
+        vapid_configurado,
+    )
+
+    if not vapid_configurado():
+        return jsonify({
+            'status': 'erro',
+            'mensagem': 'VAPID não configurado; impossível enviar Web Push.',
+        }), 503
+
+    hora_agora = get_hora_brasil_hhmm()
+
+    usuarios = Usuario.query.filter(
+        or_(
+            Usuario.notifica_boletos.is_(True),
+            Usuario.notifica_radar.is_(True),
+            Usuario.notifica_logistica.is_(True),
+        ),
+        Usuario.empresa_id.isnot(None),
+    ).all()
+
+    total_push = 0
+    total_erros = 0
+    usuarios_com_alerta = 0
+    disparos = []
+
+    for user in usuarios:
+        tem_sub = PushSubscription.query.filter_by(user_id=user.id).count()
+        if tem_sub < 1:
+            continue
+
+        # Quais tipos caem exatamente neste minuto?
+        tipos_na_hora = []
+        if user.notifica_boletos and horario_bate(
+            getattr(user, 'horario_boletos', None) or '08:00', hora_agora
+        ):
+            tipos_na_hora.append('boletos')
+        if user.notifica_radar and horario_bate(
+            getattr(user, 'horario_radar', None) or '09:00', hora_agora
+        ):
+            tipos_na_hora.append('radar')
+        if user.notifica_logistica and horario_bate(
+            getattr(user, 'horario_logistica', None) or '07:30', hora_agora
+        ):
+            tipos_na_hora.append('logistica')
+
+        if not tipos_na_hora:
+            continue
+
+        try:
+            alertas = montar_alertas_pendencias(
+                user,
+                incluir_links=True,
+                empresa_id=user.empresa_id,
+            )
+        except Exception as exc:
+            current_app.logger.warning(
+                'Cron alertas: falha ao montar user_id=%s: %s', user.id, exc
+            )
+            total_erros += 1
+            continue
+
+        alertas_filtrados = [a for a in alertas if a.get('tipo') in tipos_na_hora]
+        if not alertas_filtrados:
+            continue
+
+        usuarios_com_alerta += 1
+        for alerta in alertas_filtrados:
+            try:
+                resultado = enviar_notificacao_push(
+                    user.id,
+                    alerta['titulo'],
+                    alerta['mensagem'],
+                    alerta.get('link') or '/',
+                    tag=f"cron-{alerta['tipo']}-{hora_agora}",
+                )
+                enviados = int(resultado.get('enviados') or 0)
+                total_push += enviados
+                total_erros += int(resultado.get('erros') or 0)
+                if enviados:
+                    disparos.append({
+                        'user_id': user.id,
+                        'tipo': alerta['tipo'],
+                        'horario': normalizar_horario(
+                            getattr(user, f"horario_{alerta['tipo']}", None)
+                        ),
+                    })
+            except Exception as exc:
+                total_erros += 1
+                current_app.logger.warning(
+                    'Cron alertas: push falhou user_id=%s tipo=%s: %s',
+                    user.id, alerta.get('tipo'), exc,
+                )
+
+    return jsonify({
+        'status': 'ok',
+        'hora': hora_agora,
+        'mensagem': (
+            f'Alertas {hora_agora}: {usuarios_com_alerta} usuário(s), '
+            f'{total_push} push(es).'
+        ),
+        'usuarios_avaliados': len(usuarios),
+        'usuarios_com_alerta': usuarios_com_alerta,
+        'push_enviados': total_push,
+        'push_erros': total_erros,
+        'disparos': disparos,
     }), 200
 
 
