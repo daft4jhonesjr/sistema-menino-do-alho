@@ -1841,6 +1841,86 @@ async function abrirModalTroca(vendaIdOuBtn, itemVendaId, nomeProduto, qtdAtual,
     await _carregarProdutosDisponiveisTroca(produtoId);
 }
 
+/** Aciona troca a partir do card de pedido (1 item = modal direto; N itens = seletor). */
+async function abrirModalTrocaCard(btnOuVendaId) {
+    var vendaId = null;
+    var itens = [];
+
+    if (btnOuVendaId && btnOuVendaId.dataset) {
+        vendaId = btnOuVendaId.dataset.vendaId;
+        try {
+            itens = JSON.parse(btnOuVendaId.dataset.itens || '[]');
+        } catch (e) {
+            itens = [];
+        }
+    } else {
+        vendaId = btnOuVendaId;
+        var btn = document.querySelector('.btn-trocar-card[data-venda-id="' + String(vendaId) + '"]');
+        if (btn) {
+            try {
+                itens = JSON.parse(btn.dataset.itens || '[]');
+            } catch (e) {
+                itens = [];
+            }
+        }
+    }
+
+    if (!Array.isArray(itens) || !itens.length) {
+        _swalErroTroca('Nenhum item disponível para troca neste pedido.');
+        return;
+    }
+
+    function _abrirComItem(it) {
+        return abrirModalTroca(
+            vendaId,
+            it.item_id,
+            it.nome,
+            it.qtd,
+            it.preco,
+            it.produto_id
+        );
+    }
+
+    if (itens.length === 1) {
+        await _abrirComItem(itens[0]);
+        return;
+    }
+
+    var inputOptions = {};
+    itens.forEach(function(it, idx) {
+        inputOptions[String(idx)] = (it.nome || 'Produto') + ' — Qtd: ' + (it.qtd || 0);
+    });
+
+    if (typeof Swal === 'undefined') {
+        await _abrirComItem(itens[0]);
+        return;
+    }
+
+    var result = await Swal.fire({
+        title: 'Qual item deseja trocar?',
+        input: 'select',
+        inputOptions: inputOptions,
+        inputPlaceholder: 'Selecione o produto',
+        showCancelButton: true,
+        confirmButtonText: 'Continuar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#06b6d4',
+        cancelButtonColor: '#64748b',
+        background: '#1e293b',
+        color: '#f8fafc',
+        inputValidator: function(value) {
+            if (value === '' || value === null || value === undefined) {
+                return 'Selecione um item';
+            }
+        }
+    });
+
+    if (!result.isConfirmed) return;
+    var escolhido = itens[parseInt(result.value, 10)];
+    if (!escolhido) return;
+    await _abrirComItem(escolhido);
+}
+
 async function confirmarTroca(event) {
     if (event) event.preventDefault();
 
