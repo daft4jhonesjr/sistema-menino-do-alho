@@ -1,11 +1,16 @@
 /**
  * Ponte Capacitor ↔ Live Activities (Dynamic Island).
- * Seguro na Web: no-op quando não há Capacitor/iOS.
+ * Delega para static/js/dynamic_island.js quando disponível;
+ * mantém API MeninoAlhoDynamicIsland para a logística.
  */
 (function (global) {
     'use strict';
 
-    var STORAGE_KEY = 'menino_alho_live_activity';
+    function ensureHelpers() {
+        if (typeof global.iniciarLiveActivity === 'function') return true;
+        // Carrega dynamic_island.js dinamicamente se ainda não existir
+        return false;
+    }
 
     function isCapacitorIOS() {
         try {
@@ -13,7 +18,7 @@
             if (!Cap || typeof Cap.isNativePlatform !== 'function') return false;
             if (!Cap.isNativePlatform()) return false;
             var platform = typeof Cap.getPlatform === 'function' ? Cap.getPlatform() : '';
-            return platform === 'ios';
+            return platform === 'ios' || Cap.isNativePlatform();
         } catch (err) {
             return false;
         }
@@ -31,117 +36,81 @@
         return null;
     }
 
-    function calcProgresso(entregues, total) {
-        if (!total || total <= 0) return 0;
-        return Math.min(entregues / total, 1);
-    }
-
-    function salvarEstado(estado) {
-        try {
-            global.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(estado));
-        } catch (err) {}
-    }
-
-    function lerEstado() {
-        try {
-            var raw = global.sessionStorage.getItem(STORAGE_KEY);
-            return raw ? JSON.parse(raw) : null;
-        } catch (err) {
-            return null;
-        }
-    }
-
-    function limparEstado() {
-        try {
-            global.sessionStorage.removeItem(STORAGE_KEY);
-        } catch (err) {}
-    }
-
     async function startDeliveryActivity(options) {
         options = options || {};
+        if (typeof global.iniciarLiveActivity === 'function') {
+            return global.iniciarLiveActivity(
+                options.numeroCarga,
+                options.totalCaixas,
+                options.proximoCliente
+            );
+        }
         if (!isCapacitorIOS()) {
             return { started: false, skipped: true, reason: 'not_ios' };
         }
         var plugin = getPlugin();
-        if (!plugin || typeof plugin.start !== 'function') {
-            console.warn('[DynamicIsland] Plugin DeliveryActivity indisponível.');
-            return { started: false, skipped: true, reason: 'no_plugin' };
+        if (!plugin) return { started: false, skipped: true, reason: 'no_plugin' };
+        var fn = plugin.startDeliveryActivity || plugin.start;
+        if (typeof fn !== 'function') return { started: false, skipped: true, reason: 'no_method' };
+        try {
+            return await fn.call(plugin, {
+                numeroCarga: String(options.numeroCarga || '—'),
+                totalCaixas: Number(options.totalCaixas || 0),
+                caixasEntregues: Number(options.caixasEntregues || 0),
+                proximoCliente: String(options.proximoCliente || '—'),
+                status: String(options.status || 'Em rota')
+            });
+        } catch (err) {
+            return { started: false, skipped: true, reason: 'plugin_error' };
         }
-
-        var totalCaixas = Number(options.totalCaixas || 0);
-        var caixasEntregues = Number(options.caixasEntregues || 0);
-        var payload = {
-            numeroCarga: String(options.numeroCarga || gerarNumeroCarga()),
-            placaVeiculo: String(options.placaVeiculo || ''),
-            proximoCliente: String(options.proximoCliente || '—'),
-            totalCaixas: totalCaixas,
-            caixasEntregues: caixasEntregues,
-            status: String(options.status || 'Em rota'),
-            progresso: calcProgresso(caixasEntregues, totalCaixas)
-        };
-
-        var result = await plugin.start(payload);
-        salvarEstado(Object.assign({}, payload, { activityId: result && result.activityId }));
-        return result;
     }
 
     async function updateDeliveryActivity(options) {
         options = options || {};
+        if (typeof global.atualizarLiveActivity === 'function') {
+            return global.atualizarLiveActivity(
+                options.caixasEntregues,
+                options.totalCaixas,
+                options.proximoCliente,
+                options.status
+            );
+        }
         if (!isCapacitorIOS()) {
             return { updated: false, skipped: true, reason: 'not_ios' };
         }
         var plugin = getPlugin();
-        if (!plugin || typeof plugin.update !== 'function') {
-            return { updated: false, skipped: true, reason: 'no_plugin' };
+        if (!plugin) return { updated: false, skipped: true, reason: 'no_plugin' };
+        var fn = plugin.updateDeliveryActivity || plugin.update;
+        if (typeof fn !== 'function') return { updated: false, skipped: true, reason: 'no_method' };
+        try {
+            return await fn.call(plugin, options);
+        } catch (err) {
+            return { updated: false, skipped: true, reason: 'plugin_error' };
         }
-
-        var estado = lerEstado() || {};
-        var caixasEntregues = options.caixasEntregues != null
-            ? Number(options.caixasEntregues)
-            : Number(estado.caixasEntregues || 0);
-        var totalCaixas = options.totalCaixas != null
-            ? Number(options.totalCaixas)
-            : Number(estado.totalCaixas || 0);
-        var payload = {
-            caixasEntregues: caixasEntregues,
-            totalCaixas: totalCaixas,
-            proximoCliente: String(options.proximoCliente || estado.proximoCliente || '—'),
-            status: String(options.status || estado.status || 'Em rota'),
-            progresso: calcProgresso(caixasEntregues, totalCaixas)
-        };
-
-        var result = await plugin.update(payload);
-        salvarEstado(Object.assign({}, estado, payload));
-        return result;
     }
 
     async function stopDeliveryActivity(options) {
         options = options || {};
+        if (typeof global.encerrarLiveActivity === 'function' && !options.status) {
+            return global.encerrarLiveActivity();
+        }
         if (!isCapacitorIOS()) {
-            limparEstado();
             return { stopped: false, skipped: true, reason: 'not_ios' };
         }
         var plugin = getPlugin();
-        if (!plugin || typeof plugin.stop !== 'function') {
-            limparEstado();
-            return { stopped: false, skipped: true, reason: 'no_plugin' };
+        if (!plugin) return { stopped: false, skipped: true, reason: 'no_plugin' };
+        var fn = plugin.endDeliveryActivity || plugin.stop;
+        if (typeof fn !== 'function') return { stopped: false, skipped: true, reason: 'no_method' };
+        try {
+            return await fn.call(plugin, {
+                status: options.status || 'Concluído',
+                caixasEntregues: options.caixasEntregues,
+                totalCaixas: options.totalCaixas,
+                dismissalSeconds: options.dismissalSeconds != null ? options.dismissalSeconds : 5
+            });
+        } catch (err) {
+            return { stopped: false, skipped: true, reason: 'plugin_error' };
         }
-
-        var estado = lerEstado() || {};
-        var payload = {
-            status: String(options.status || 'Finalizado'),
-            caixasEntregues: options.caixasEntregues != null
-                ? Number(options.caixasEntregues)
-                : Number(estado.caixasEntregues || 0),
-            totalCaixas: options.totalCaixas != null
-                ? Number(options.totalCaixas)
-                : Number(estado.totalCaixas || 0),
-            dismissalSeconds: Number(options.dismissalSeconds != null ? options.dismissalSeconds : 5)
-        };
-
-        var result = await plugin.stop(payload);
-        limparEstado();
-        return result;
     }
 
     function gerarNumeroCarga() {
@@ -152,12 +121,14 @@
         return 'CG-' + y + '-' + m + day;
     }
 
+    ensureHelpers();
+
     global.MeninoAlhoDynamicIsland = {
         isAvailable: isCapacitorIOS,
         startDeliveryActivity: startDeliveryActivity,
         updateDeliveryActivity: updateDeliveryActivity,
         stopDeliveryActivity: stopDeliveryActivity,
-        lerEstado: lerEstado,
+        lerEstado: function () { return null; },
         gerarNumeroCarga: gerarNumeroCarga
     };
 })(typeof window !== 'undefined' ? window : this);
