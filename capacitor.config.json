@@ -1,0 +1,12 @@
+{
+  "appId": "com.meninodoalho.app",
+  "appName": "Menino do Alho",
+  "webDir": "static",
+  "server": {
+    "url": "https://sistema-menino-do-alho.onrender.com",
+    "cleartext": false,
+    "allowNavigation": [
+      "sistema-menino-do-alho.onrender.com"
+    ]
+  }
+}

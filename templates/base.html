@@ -1468,6 +1468,7 @@
     {% block scripts %}{% endblock %}
     <script>(function(){ if (typeof lucide !== 'undefined') lucide.createIcons(); })();</script>
     <script src="{{ url_for('static', filename='js/push-notifications.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/auth-session.js') }}"></script>
     
     <!-- Service Worker Registration + App Badging API -->
     <script>
@@ -1998,6 +1999,10 @@
         function encerrarSessaoVisual(mensagem) {
             if (window.sessionExpiredTriggered) return;
             window.sessionExpiredTriggered = true;
+
+            if (window.MeninoAlhoAuth && typeof window.MeninoAlhoAuth.limparSessaoPersistida === 'function') {
+                window.MeninoAlhoAuth.limparSessaoPersistida();
+            }
 
             if (typeof Swal !== 'undefined') {
                 Swal.fire({

@@ -21,6 +21,7 @@ perfil/configurações usam só ``login_required``; gerenciar_usuarios usa
 from datetime import datetime, timezone
 import json
 import os
+import threading
 import traceback
 import urllib.request
 import uuid
@@ -324,13 +325,37 @@ def _login_wants_json():
     )
 
 
-def _login_json(success, *, redirect_url=None, error=None, status=200):
+def _login_json(success, *, redirect_url=None, error=None, status=200,
+                session_token=None, user_id=None):
     payload = {'success': success}
     if redirect_url:
         payload['redirect_url'] = redirect_url
     if error:
         payload['error'] = error
+    if session_token:
+        payload['session_token'] = session_token
+    if user_id is not None:
+        payload['user_id'] = user_id
     return jsonify(payload), status
+
+
+def _registrar_historico_login_deferred(usuario, latitude=None, longitude=None):
+    """Registra histórico em background para não atrasar a resposta do login."""
+    usuario_id = getattr(usuario, 'id', None)
+    if not usuario_id:
+        return
+    app = current_app._get_current_object()
+
+    def _run():
+        with app.app_context():
+            try:
+                user = Usuario.query.get(usuario_id)
+                if user:
+                    _registrar_historico_login(user, latitude=latitude, longitude=longitude)
+            except Exception as exc:
+                app.logger.warning(f'Historico de login em background falhou: {exc}')
+
+    threading.Thread(target=_run, daemon=True).start()
 
 
 def _extrair_credenciais_login():
@@ -421,7 +446,7 @@ def login():
             session.permanent = True
             login_user(user, remember=remember)
             latitude, longitude = _extrair_coordenadas_gps()
-            _registrar_historico_login(user, latitude=latitude, longitude=longitude)
+            _registrar_historico_login_deferred(user, latitude=latitude, longitude=longitude)
 
             destino_padrao = _pos_login_landing(user) or url_for('auth.login')
             if not _is_safe_next_url(next_url):
@@ -431,7 +456,12 @@ def login():
                 next_url = url_for('master.master_admin')
 
             if _login_wants_json():
-                return _login_json(True, redirect_url=next_url)
+                return _login_json(
+                    True,
+                    redirect_url=next_url,
+                    session_token=user.session_token,
+                    user_id=user.id,
+                )
 
             return redirect(next_url)
 

@@ -17,6 +17,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/output.css') }}">
     <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="{{ url_for('static', filename='js/auth-session.js') }}"></script>
 </head>
 <body class="bg-emerald-50 dark:bg-gray-900 min-h-screen flex flex-col items-center justify-center p-4">
     <div class="w-full max-w-md">
@@ -95,8 +96,30 @@
         return input ? input.value : '';
     }
 
+    function comTimeout(promise, ms, mensagemErro) {
+        return Promise.race([
+            promise,
+            new Promise(function(_, reject) {
+                setTimeout(function() {
+                    reject(new Error(mensagemErro || 'Tempo esgotado.'));
+                }, ms);
+            })
+        ]);
+    }
+
+    function fetchComTimeout(url, options, timeoutMs) {
+        var controller = new AbortController();
+        var timer = setTimeout(function() {
+            controller.abort();
+        }, timeoutMs);
+        return fetch(url, Object.assign({}, options, { signal: controller.signal }))
+            .finally(function() {
+                clearTimeout(timer);
+            });
+    }
+
     function obterCoordenadasGPS() {
-        return new Promise(function(resolve) {
+        var promessaGPS = new Promise(function(resolve) {
             if (!navigator.geolocation) {
                 return resolve(null);
             }
@@ -108,12 +131,38 @@
                     });
                 },
                 function(error) {
-                    console.log('GPS negado ou indisponível:', error.message);
+                    console.log('GPS negado ou indisponível:', error && error.message);
                     resolve(null);
                 },
-                { timeout: 2500, enableHighAccuracy: true, maximumAge: 60000 }
+                { timeout: 2500, enableHighAccuracy: false, maximumAge: 60000 }
             );
         });
+
+        return comTimeout(promessaGPS, 3000, 'GPS timeout')
+            .catch(function() {
+                return null;
+            });
+    }
+
+    function mensagemErroLogin(error) {
+        if (!error) {
+            return 'Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.';
+        }
+        if (error.name === 'AbortError') {
+            return 'A conexão demorou demais (mais de 15 segundos). Verifique sua internet e tente novamente.';
+        }
+        var msg = error.message || '';
+        if (!msg || msg === 'Failed to fetch' || msg === 'Load failed' || msg === 'NetworkError when attempting to fetch resource.') {
+            return 'Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.';
+        }
+        return msg;
+    }
+
+    function resetarBotaoLogin(btnSubmit, textoOriginal) {
+        if (!btnSubmit) return;
+        btnSubmit.disabled = false;
+        btnSubmit.innerHTML = textoOriginal;
+        if (typeof lucide !== 'undefined') lucide.createIcons();
     }
 
     function showLoginError(message) {
@@ -140,12 +189,16 @@
         var formLogin = document.getElementById('form-login');
         if (!formLogin) return;
 
+        var enviando = false;
+
         formLogin.addEventListener('submit', async function(e) {
             e.preventDefault();
+            if (enviando) return;
 
             var btnSubmit = formLogin.querySelector('button[type="submit"]');
             var textoOriginal = btnSubmit ? btnSubmit.innerHTML : 'Entrar';
 
+            enviando = true;
             if (btnSubmit) {
                 btnSubmit.disabled = true;
                 btnSubmit.innerHTML = '<span class="animate-spin inline-block mr-2">🔄</span> Verificando...';
@@ -154,26 +207,42 @@
             var formData = new FormData(formLogin);
             var payload = Object.fromEntries(formData.entries());
 
-            var coords = await obterCoordenadasGPS();
-            payload.latitude = coords ? coords.latitude : null;
-            payload.longitude = coords ? coords.longitude : null;
-
             try {
-                var response = await fetch(formLogin.action || window.location.href, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest',
-                        'X-CSRFToken': getCsrfToken()
-                    },
-                    body: JSON.stringify(payload),
-                    credentials: 'same-origin'
-                });
+                var coords = await obterCoordenadasGPS();
+                payload.latitude = coords ? coords.latitude : null;
+                payload.longitude = coords ? coords.longitude : null;
 
-                var data = await response.json().catch(function() { return {}; });
+                var response = await fetchComTimeout(
+                    formLogin.action || window.location.href,
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'X-CSRFToken': getCsrfToken()
+                        },
+                        body: JSON.stringify(payload),
+                        credentials: 'include'
+                    },
+                    15000
+                );
+
+                var data = {};
+                try {
+                    data = await response.json();
+                } catch (parseErr) {
+                    data = {};
+                }
 
                 if (response.ok && data.success) {
-                    window.location.href = data.redirect_url || '/';
+                    if (window.MeninoAlhoAuth && typeof window.MeninoAlhoAuth.persistirSessao === 'function') {
+                        window.MeninoAlhoAuth.persistirSessao(data);
+                    }
+                    var destino = (window.MeninoAlhoAuth && window.MeninoAlhoAuth.normalizarUrlRedirect)
+                        ? window.MeninoAlhoAuth.normalizarUrlRedirect(data.redirect_url || '/dashboard')
+                        : (data.redirect_url || '/dashboard');
+                    window.location.href = destino;
                     return;
                 }
 
@@ -185,13 +254,10 @@
                 throw new Error(msg);
             } catch (error) {
                 console.error('Erro no login:', error);
-                showLoginError(error.message);
+                showLoginError(mensagemErroLogin(error));
             } finally {
-                if (btnSubmit) {
-                    btnSubmit.disabled = false;
-                    btnSubmit.innerHTML = textoOriginal;
-                    if (typeof lucide !== 'undefined') lucide.createIcons();
-                }
+                enviando = false;
+                resetarBotaoLogin(btnSubmit, textoOriginal);
             }
         });
     });
