@@ -170,6 +170,98 @@
             </button>
         </div>
 
+        <!-- Central de Permissões do Dispositivo (GPS, Notificações, etc.) -->
+        <h3 class="text-lg font-bold text-emerald-700 dark:text-emerald-500 border-b border-gray-100 dark:border-gray-700 pb-2 mb-2 mt-8">
+            Privacidade e Permissões do Dispositivo
+        </h3>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            Gerencie as autorizações de acesso para recursos de auditoria de localização e notificações em tempo real.
+        </p>
+
+        <div id="central-permissoes-dispositivo" class="space-y-3 mb-6">
+            <!-- GPS -->
+            <div class="bg-gray-50 dark:bg-slate-900/60 border border-gray-200 dark:border-slate-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="text-lg" aria-hidden="true">📍</span>
+                        <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Localização Precisa (GPS)</h4>
+                        <span id="badge-perm-gps" class="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">Pendente</span>
+                    </div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Permite capturar cidade e bairro nos registros de auditoria e rotas de entrega.</p>
+                </div>
+                <button type="button" id="btn-autorizar-gps"
+                        class="flex-shrink-0 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+                    Autorizar Localização
+                </button>
+            </div>
+
+            <!-- Notificações -->
+            <div class="bg-gray-50 dark:bg-slate-900/60 border border-gray-200 dark:border-slate-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="text-lg" aria-hidden="true">🔔</span>
+                        <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Notificações no Aparelho</h4>
+                        <span id="badge-perm-notif" class="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">Pendente</span>
+                    </div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Permite receber alertas programados de boletos, recompra e logística.</p>
+                </div>
+                <button type="button" id="btn-autorizar-notif"
+                        class="flex-shrink-0 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+                    Autorizar Notificações
+                </button>
+            </div>
+
+            <!-- Câmera / Arquivos -->
+            <div class="bg-gray-50 dark:bg-slate-900/60 border border-gray-200 dark:border-slate-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="text-lg" aria-hidden="true">📷</span>
+                        <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Câmera e Arquivos</h4>
+                        <span id="badge-perm-camera" class="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">Pendente</span>
+                    </div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Necessário para anexar fotos de cheques, comprovantes e documentos no Caixa.</p>
+                </div>
+                <button type="button" id="btn-autorizar-camera"
+                        class="flex-shrink-0 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+                    Autorizar Câmera
+                </button>
+            </div>
+
+            <!-- Clipboard -->
+            <div class="bg-gray-50 dark:bg-slate-900/60 border border-gray-200 dark:border-slate-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="text-lg" aria-hidden="true">📋</span>
+                        <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Área de Transferência</h4>
+                        <span id="badge-perm-clipboard" class="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">Pendente</span>
+                    </div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Permite copiar NFs, pedidos e textos para WhatsApp com um toque.</p>
+                </div>
+                <button type="button" id="btn-autorizar-clipboard"
+                        class="flex-shrink-0 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+                    Autorizar Clipboard
+                </button>
+            </div>
+
+            <!-- Conceder todas -->
+            <div class="pt-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <p class="text-xs text-gray-500 dark:text-gray-400">
+                    Se alguma permissão estiver bloqueada no iPhone/iPad, use o atalho abaixo para abrir os Ajustes do app.
+                </p>
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" id="btn-abrir-ajustes-ios"
+                            class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-slate-700 hover:bg-slate-600 text-white transition-colors">
+                        Abrir Ajustes do App
+                    </button>
+                    <button type="button" id="btn-solicitar-todas-permissoes"
+                            class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2 rounded-lg flex items-center gap-2 transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+                        Solicitar Todas as Permissões
+                    </button>
+                </div>
+            </div>
+        </div>
+
         {% if current_user.is_admin() %}
         <h3 class="text-lg font-bold text-emerald-700 dark:text-emerald-500 border-b border-gray-100 dark:border-gray-700 pb-2 mb-4 mt-8">Gerenciamento do Sistema</h3>
 
@@ -542,6 +634,395 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+
+    // ============================================================
+    // Central de Permissões do Dispositivo (GPS / Notif / Câmera / Clipboard)
+    // ============================================================
+    var LS_GPS = 'menino_alho_perm_gps';
+    var LS_CAMERA = 'menino_alho_perm_camera';
+    var LS_CLIPBOARD = 'menino_alho_perm_clipboard';
+
+    function getCapacitorPlugins() {
+        try {
+            var Cap = window.Capacitor;
+            if (!Cap) return null;
+            return Cap.Plugins || (typeof Cap.getPlugin === 'function' ? null : null) || Cap.Plugins;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function toastPerm(msg, tipo) {
+        if (typeof showToast === 'function') {
+            showToast(msg, tipo || 'info');
+        } else if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                toast: true,
+                position: 'top-end',
+                icon: tipo === 'error' ? 'error' : (tipo === 'success' ? 'success' : 'info'),
+                title: msg,
+                showConfirmButton: false,
+                timer: 3200
+            });
+        } else {
+            alert(msg);
+        }
+    }
+
+    async function abrirAjustesIOS() {
+        try {
+            var plugins = getCapacitorPlugins();
+            var Cap = window.Capacitor;
+            if (plugins && plugins.App && typeof plugins.App.openUrl === 'function') {
+                await plugins.App.openUrl({ url: 'app-settings:' });
+                return true;
+            }
+            if (Cap && Cap.Plugins && Cap.Plugins.App && typeof Cap.Plugins.App.openUrl === 'function') {
+                await Cap.Plugins.App.openUrl({ url: 'app-settings:' });
+                return true;
+            }
+            // Fallback: tenta deep-link genérico (pode ser bloqueado no Safari puro)
+            window.location.href = 'app-settings:';
+            return true;
+        } catch (err) {
+            console.warn('[Permissões] Falha ao abrir Ajustes:', err);
+            return false;
+        }
+    }
+
+    async function avisarPermissaoBloqueada(titulo, detalhe) {
+        var msg = detalhe || 'A permissão foi bloqueada. Abra os Ajustes do app e reative o acesso.';
+        if (typeof Swal !== 'undefined') {
+            var result = await Swal.fire({
+                icon: 'warning',
+                title: titulo || 'Permissão bloqueada',
+                text: msg,
+                showCancelButton: true,
+                confirmButtonText: isCapacitorNative() ? 'Abrir Ajustes' : 'Entendi',
+                cancelButtonText: 'Fechar',
+                confirmButtonColor: '#059669'
+            });
+            if (result.isConfirmed && isCapacitorNative()) {
+                await abrirAjustesIOS();
+            }
+        } else if (isCapacitorNative() && confirm(msg + '\n\nAbrir Ajustes do app agora?')) {
+            await abrirAjustesIOS();
+        } else {
+            alert(msg);
+        }
+    }
+
+    function pintarBadge(el, estado) {
+        if (!el) return;
+        el.className = 'text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ';
+        if (estado === 'granted') {
+            el.className += 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300';
+            el.textContent = 'Ativo';
+        } else if (estado === 'denied') {
+            el.className += 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300';
+            el.textContent = 'Bloqueado';
+        } else {
+            el.className += 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300';
+            el.textContent = 'Pendente';
+        }
+    }
+
+    function pintarBotaoAutorizado(btn, autorizado, labelPendente) {
+        if (!btn) return;
+        if (autorizado) {
+            btn.textContent = 'Autorizado';
+            btn.disabled = true;
+            btn.className = 'flex-shrink-0 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 cursor-default';
+        } else {
+            btn.disabled = false;
+            btn.textContent = labelPendente;
+            btn.className = 'flex-shrink-0 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors';
+        }
+    }
+
+    async function consultarEstadoGPS() {
+        try {
+            if (navigator.permissions && typeof navigator.permissions.query === 'function') {
+                var status = await navigator.permissions.query({ name: 'geolocation' });
+                return status.state; // granted | denied | prompt
+            }
+        } catch (e) { /* Safari/iOS pode não suportar query geolocation */ }
+        if (localStorage.getItem(LS_GPS) === 'granted') return 'granted';
+        if (localStorage.getItem(LS_GPS) === 'denied') return 'denied';
+        return 'prompt';
+    }
+
+    async function consultarEstadoNotificacoes() {
+        try {
+            if (isCapacitorNative()) {
+                var plugins = getCapacitorPlugins();
+                if (plugins && plugins.LocalNotifications && typeof plugins.LocalNotifications.checkPermissions === 'function') {
+                    var check = await plugins.LocalNotifications.checkPermissions();
+                    var display = (check && (check.display || check.permission)) || 'prompt';
+                    if (display === 'granted') return 'granted';
+                    if (display === 'denied') return 'denied';
+                    return 'prompt';
+                }
+                return localStorage.getItem('menino_alho_device_notif') === 'true' ? 'granted' : 'prompt';
+            }
+            if ('Notification' in window) {
+                if (Notification.permission === 'granted') return 'granted';
+                if (Notification.permission === 'denied') return 'denied';
+                return 'prompt';
+            }
+        } catch (e) {
+            console.warn('[Permissões] consultar notif:', e);
+        }
+        return 'prompt';
+    }
+
+    async function consultarEstadoClipboard() {
+        try {
+            if (navigator.permissions && typeof navigator.permissions.query === 'function') {
+                var status = await navigator.permissions.query({ name: 'clipboard-write' });
+                return status.state;
+            }
+        } catch (e) { /* ignore */ }
+        if (localStorage.getItem(LS_CLIPBOARD) === 'granted') return 'granted';
+        return 'prompt';
+    }
+
+    async function atualizarEstadosPermissoesUI() {
+        var gps = await consultarEstadoGPS();
+        pintarBadge(document.getElementById('badge-perm-gps'), gps);
+        pintarBotaoAutorizado(document.getElementById('btn-autorizar-gps'), gps === 'granted', 'Autorizar Localização');
+
+        var notif = await consultarEstadoNotificacoes();
+        pintarBadge(document.getElementById('badge-perm-notif'), notif);
+        pintarBotaoAutorizado(document.getElementById('btn-autorizar-notif'), notif === 'granted', 'Autorizar Notificações');
+
+        var camera = localStorage.getItem(LS_CAMERA) === 'granted' ? 'granted' : 'prompt';
+        pintarBadge(document.getElementById('badge-perm-camera'), camera);
+        pintarBotaoAutorizado(document.getElementById('btn-autorizar-camera'), camera === 'granted', 'Autorizar Câmera');
+
+        var clip = await consultarEstadoClipboard();
+        pintarBadge(document.getElementById('badge-perm-clipboard'), clip === 'granted' ? 'granted' : (clip === 'denied' ? 'denied' : 'prompt'));
+        pintarBotaoAutorizado(document.getElementById('btn-autorizar-clipboard'), clip === 'granted', 'Autorizar Clipboard');
+    }
+
+    async function solicitarPermissaoGPS() {
+        if (!navigator.geolocation) {
+            toastPerm('Geolocalização não disponível neste dispositivo.', 'error');
+            return false;
+        }
+        return new Promise(function(resolve) {
+            navigator.geolocation.getCurrentPosition(
+                function(pos) {
+                    localStorage.setItem(LS_GPS, 'granted');
+                    toastPerm('Localização permitida com sucesso!', 'success');
+                    atualizarEstadosPermissoesUI();
+                    resolve(true);
+                },
+                function(err) {
+                    console.warn('[Permissões] GPS:', err);
+                    localStorage.setItem(LS_GPS, 'denied');
+                    var code = err && err.code;
+                    if (code === 1) {
+                        avisarPermissaoBloqueada(
+                            'Localização bloqueada',
+                            'A permissão de localização foi negada. No iPhone/iPad: Ajustes → Menino do Alho → Localização → Ao Usar o App.'
+                        );
+                    } else {
+                        toastPerm('Não foi possível obter a localização. Tente novamente.', 'error');
+                    }
+                    atualizarEstadosPermissoesUI();
+                    resolve(false);
+                },
+                { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+            );
+        });
+    }
+
+    async function solicitarPermissaoNotificacoes() {
+        try {
+            if (isCapacitorNative()) {
+                var plugins = getCapacitorPlugins();
+                if (plugins && plugins.LocalNotifications && typeof plugins.LocalNotifications.requestPermissions === 'function') {
+                    var result = await plugins.LocalNotifications.requestPermissions();
+                    var display = (result && (result.display || result.permission)) || 'denied';
+                    if (display === 'granted') {
+                        localStorage.setItem('menino_alho_device_notif', 'true');
+                        if (window.MeninoAlhoPush && typeof window.MeninoAlhoPush.ativar === 'function') {
+                            await window.MeninoAlhoPush.ativar({ onStatus: function() {} });
+                        }
+                        toastPerm('Notificações autorizadas!', 'success');
+                        if (toggleNotif) toggleNotif.checked = true;
+                        atualizarEstadoNotificacoes();
+                        await atualizarEstadosPermissoesUI();
+                        return true;
+                    }
+                    localStorage.setItem('menino_alho_device_notif', 'false');
+                    await avisarPermissaoBloqueada(
+                        'Notificações bloqueadas',
+                        'Ative as notificações em Ajustes → Menino do Alho → Notificações.'
+                    );
+                    await atualizarEstadosPermissoesUI();
+                    return false;
+                }
+            }
+
+            if (window.MeninoAlhoPush && typeof window.MeninoAlhoPush.ativar === 'function') {
+                var ok = await ativarPushNotificacoes();
+                if (ok && toggleNotif) toggleNotif.checked = true;
+                await atualizarEstadosPermissoesUI();
+                return !!ok;
+            }
+
+            if ('Notification' in window && typeof Notification.requestPermission === 'function') {
+                var perm = await Notification.requestPermission();
+                if (perm === 'granted') {
+                    localStorage.setItem('menino_alho_device_notif', 'true');
+                    toastPerm('Notificações autorizadas!', 'success');
+                    if (toggleNotif) toggleNotif.checked = true;
+                    atualizarEstadoNotificacoes();
+                    await atualizarEstadosPermissoesUI();
+                    return true;
+                }
+                await avisarPermissaoBloqueada(
+                    'Notificações bloqueadas',
+                    'Toque no cadeado na barra de endereço e permita notificações, ou use Ajustes do Safari.'
+                );
+                await atualizarEstadosPermissoesUI();
+                return false;
+            }
+
+            toastPerm('Notificações não suportadas neste ambiente.', 'error');
+            return false;
+        } catch (err) {
+            console.error('[Permissões] Notificações:', err);
+            toastPerm('Erro ao solicitar notificações.', 'error');
+            return false;
+        }
+    }
+
+    async function solicitarPermissaoCamera() {
+        try {
+            if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+                // Em iOS WebView, input file já dispara o prompt nativo — marcar como ok se o usuário confirmar
+                localStorage.setItem(LS_CAMERA, 'granted');
+                toastPerm('No app iOS, a câmera será solicitada ao anexar uma foto.', 'success');
+                await atualizarEstadosPermissoesUI();
+                return true;
+            }
+            var stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+            if (stream) {
+                stream.getTracks().forEach(function(t) { t.stop(); });
+            }
+            localStorage.setItem(LS_CAMERA, 'granted');
+            toastPerm('Câmera autorizada!', 'success');
+            await atualizarEstadosPermissoesUI();
+            return true;
+        } catch (err) {
+            console.warn('[Permissões] Câmera:', err);
+            localStorage.setItem(LS_CAMERA, 'denied');
+            await avisarPermissaoBloqueada(
+                'Câmera bloqueada',
+                'Permita o acesso à Câmera em Ajustes → Menino do Alho → Câmera.'
+            );
+            await atualizarEstadosPermissoesUI();
+            return false;
+        }
+    }
+
+    async function solicitarPermissaoClipboard() {
+        try {
+            if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                await navigator.clipboard.writeText('Menino do Alho — teste de clipboard');
+                localStorage.setItem(LS_CLIPBOARD, 'granted');
+                toastPerm('Área de transferência autorizada!', 'success');
+                await atualizarEstadosPermissoesUI();
+                return true;
+            }
+            // Fallback legado
+            var ta = document.createElement('textarea');
+            ta.value = 'Menino do Alho';
+            ta.style.position = 'fixed';
+            ta.style.left = '-9999px';
+            document.body.appendChild(ta);
+            ta.select();
+            var ok = document.execCommand('copy');
+            document.body.removeChild(ta);
+            if (ok) {
+                localStorage.setItem(LS_CLIPBOARD, 'granted');
+                toastPerm('Área de transferência autorizada!', 'success');
+                await atualizarEstadosPermissoesUI();
+                return true;
+            }
+            toastPerm('Clipboard não disponível neste navegador.', 'error');
+            return false;
+        } catch (err) {
+            console.warn('[Permissões] Clipboard:', err);
+            await avisarPermissaoBloqueada(
+                'Clipboard bloqueado',
+                'O navegador bloqueou a área de transferência. Tente novamente após interagir com a página.'
+            );
+            await atualizarEstadosPermissoesUI();
+            return false;
+        }
+    }
+
+    async function solicitarTodasPermissoes() {
+        var btn = document.getElementById('btn-solicitar-todas-permissoes');
+        if (btn) {
+            btn.disabled = true;
+            btn.classList.add('opacity-70');
+        }
+        try {
+            await solicitarPermissaoNotificacoes();
+            await solicitarPermissaoGPS();
+            await solicitarPermissaoCamera();
+            await solicitarPermissaoClipboard();
+
+            var gps = await consultarEstadoGPS();
+            var notif = await consultarEstadoNotificacoes();
+            var algumaBloqueada = (gps === 'denied' || notif === 'denied');
+            if (algumaBloqueada && isCapacitorNative()) {
+                await avisarPermissaoBloqueada(
+                    'Algumas permissões estão bloqueadas',
+                    'Abra os Ajustes do app para reativar Localização e/ou Notificações.'
+                );
+            } else {
+                toastPerm('Solicitação de permissões concluída.', 'success');
+            }
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.classList.remove('opacity-70');
+            }
+            await atualizarEstadosPermissoesUI();
+        }
+    }
+
+    var btnGps = document.getElementById('btn-autorizar-gps');
+    var btnNotifPerm = document.getElementById('btn-autorizar-notif');
+    var btnCamera = document.getElementById('btn-autorizar-camera');
+    var btnClipboard = document.getElementById('btn-autorizar-clipboard');
+    var btnTodas = document.getElementById('btn-solicitar-todas-permissoes');
+    var btnAjustes = document.getElementById('btn-abrir-ajustes-ios');
+
+    if (btnGps) btnGps.addEventListener('click', function() { solicitarPermissaoGPS(); });
+    if (btnNotifPerm) btnNotifPerm.addEventListener('click', function() { solicitarPermissaoNotificacoes(); });
+    if (btnCamera) btnCamera.addEventListener('click', function() { solicitarPermissaoCamera(); });
+    if (btnClipboard) btnClipboard.addEventListener('click', function() { solicitarPermissaoClipboard(); });
+    if (btnTodas) btnTodas.addEventListener('click', function() { solicitarTodasPermissoes(); });
+    if (btnAjustes) {
+        btnAjustes.addEventListener('click', async function() {
+            var ok = await abrirAjustesIOS();
+            if (!ok) {
+                toastPerm('Abra manualmente: Ajustes → Menino do Alho.', 'info');
+            }
+        });
+        if (!isCapacitorNative()) {
+            btnAjustes.classList.add('hidden');
+        }
+    }
+
+    atualizarEstadosPermissoesUI();
 });
 </script>
 {% endblock %}
