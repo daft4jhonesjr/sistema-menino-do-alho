@@ -4,6 +4,7 @@
 
 {% block head_extras %}
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ url_for('static', filename='js/dynamicIslandService.js') }}"></script>
 {% endblock %}
 
 {% block content %}
@@ -36,6 +37,14 @@
             <button type="button" onclick="gerarRotaMaps()" class="w-full sm:w-auto justify-center bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-lg shadow-emerald-500/30 flex items-center gap-2 transition-colors">
                 <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path></svg>
                 <span class="whitespace-nowrap">Rota no Maps</span>
+            </button>
+            <button type="button" id="btn-iniciar-live-activity" onclick="iniciarLiveActivityRota()" title="Inicia acompanhamento na Dynamic Island (iOS)" class="w-full sm:w-auto justify-center bg-slate-800 hover:bg-slate-700 text-white px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center gap-2 transition-colors">
+                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                <span class="whitespace-nowrap">Iniciar Rota (Island)</span>
+            </button>
+            <button type="button" id="btn-finalizar-live-activity" onclick="finalizarLiveActivityCarga()" title="Finaliza a Live Activity na Dynamic Island" class="w-full sm:w-auto justify-center bg-white hover:bg-gray-50 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-100 border border-gray-200 dark:border-gray-600 px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center gap-2 transition-colors">
+                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                <span class="whitespace-nowrap">Finalizar Carga</span>
             </button>
             <button type="button" id="btn-copiar-whatsapp" onclick="copiarRomaneioWhatsApp()" title="Copiar romaneio formatado para enviar ao entregador via WhatsApp" class="w-full sm:w-auto justify-center bg-white hover:bg-emerald-50 dark:bg-gray-800 dark:hover:bg-gray-700/80 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center gap-2 transition-colors">
                 <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
@@ -75,7 +84,7 @@
                 {% for e in entregas %}
                 <tr class="hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition">
                     <td class="px-4 py-4">
-                        <input type="checkbox" class="check-entrega rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" value="{{ e.ids[0] }}" data-ids="{{ e.ids|join(',') }}" data-endereco="{{ e.endereco }}">
+                        <input type="checkbox" class="check-entrega rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" value="{{ e.ids[0] }}" data-ids="{{ e.ids|join(',') }}" data-endereco="{{ e.endereco }}" data-cliente="{{ e.cliente_nome }}">
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">{{ e.data }}</td>
                     <td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">{{ e.cliente_nome }}</td>
@@ -92,7 +101,8 @@
                         <form method="post" action="{{ url_for('vendas.toggle_entrega', venda_id=e.ids[0], status=filtro_status) }}" class="inline form-swal-confirm"
                               data-title="{% if filtro_status == 'PENDENTE' %}Confirmar Entrega{% else %}Desfazer Entrega{% endif %}"
                               data-message="{% if filtro_status == 'PENDENTE' %}Deseja marcar este pedido como ENTREGUE?{% else %}Deseja reverter este pedido para PENDENTE?{% endif %}"
-                              data-confirm-text="{% if filtro_status == 'PENDENTE' %}Sim, marcar como entregue{% else %}Sim, reverter{% endif %}">
+                              data-confirm-text="{% if filtro_status == 'PENDENTE' %}Sim, marcar como entregue{% else %}Sim, reverter{% endif %}"
+                              data-cliente="{{ e.cliente_nome }}">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                             <input type="hidden" name="ids" value="{{ e.ids|join(',') }}"/>
                             {% if filtro_status == 'PENDENTE' %}
@@ -129,6 +139,7 @@
     var carregando = false;
     var fimDasEntregas = {{ 'false' if has_next_logistica else 'true' }};
     var csrfToken = '{{ csrf_token() }}';
+    var totalCaixasPendentes = {{ total_caixas_pendentes or 0 }};
     var tbodyEntregas = document.getElementById('tbody-entregas');
     var sentinela = document.getElementById('sentinela-loading');
     var checkAll = document.getElementById('check-all-entregas');
@@ -139,6 +150,8 @@
             });
         });
     }
+
+    window.__LOGISTICA_TOTAL_CAIXAS__ = totalCaixasPendentes;
 
     function esconderSentinela() {
         fimDasEntregas = true;
@@ -183,14 +196,14 @@
         }).join('') + '</ul>';
 
         tr.innerHTML = ''
-            + '<td class="px-4 py-4"><input type="checkbox" class="check-entrega rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" value="' + escapeHtml(vendaRef) + '" data-ids="' + escapeHtml(idsRaw) + '" data-endereco="' + escapeHtml(e.endereco || '') + '"></td>'
+            + '<td class="px-4 py-4"><input type="checkbox" class="check-entrega rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" value="' + escapeHtml(vendaRef) + '" data-ids="' + escapeHtml(idsRaw) + '" data-endereco="' + escapeHtml(e.endereco || '') + '" data-cliente="' + escapeHtml(e.cliente_nome || '') + '"></td>'
             + '<td class="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">' + escapeHtml(e.data) + '</td>'
             + '<td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">' + escapeHtml(e.cliente_nome) + '</td>'
             + '<td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">' + escapeHtml(e.endereco || '—') + '</td>'
             + '<td class="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">' + produtosHtml + '</td>'
             + '<td class="px-6 py-4 text-sm font-semibold text-emerald-600 dark:text-emerald-400 text-right">' + formatMoeda(e.total) + '</td>'
             + '<td class="px-6 py-4 text-center">'
-            + '  <form method="post" action="/logistica/toggle/' + encodeURIComponent(vendaRef) + '?status=' + encodeURIComponent(filtroStatusAtual) + '" class="inline form-swal-confirm" data-title="' + escapeHtml(confirmarTitle) + '" data-message="' + escapeHtml(confirmarMsg) + '" data-confirm-text="' + escapeHtml(confirmarBtnTxt) + '">'
+            + '  <form method="post" action="/logistica/toggle/' + encodeURIComponent(vendaRef) + '?status=' + encodeURIComponent(filtroStatusAtual) + '" class="inline form-swal-confirm" data-title="' + escapeHtml(confirmarTitle) + '" data-message="' + escapeHtml(confirmarMsg) + '" data-confirm-text="' + escapeHtml(confirmarBtnTxt) + '" data-cliente="' + escapeHtml(e.cliente_nome || '') + '">'
             + '    <input type="hidden" name="csrf_token" value="' + escapeHtml(csrfToken) + '"/>'
             + '    <input type="hidden" name="ids" value="' + escapeHtml(idsRaw) + '"/>'
             + '    <button type="submit" class="' + acaoClasse + ' text-sm font-medium">' + acaoTexto + '</button>'
@@ -296,15 +309,135 @@ function _swalErro(texto) {
     }));
 }
 
+function _proximoClientePendente(excludeCliente) {
+    var checks = document.querySelectorAll('.check-entrega');
+    for (var i = 0; i < checks.length; i++) {
+        var nome = (checks[i].dataset.cliente || '').trim();
+        if (!nome) continue;
+        if (excludeCliente && nome === excludeCliente) continue;
+        return nome;
+    }
+    return 'Rota concluída';
+}
+
+function _coletarClientesSelecionados() {
+    var nomes = [];
+    var vistos = {};
+    document.querySelectorAll('.check-entrega:checked').forEach(function(cb) {
+        var nome = (cb.dataset.cliente || '').trim();
+        if (nome && !vistos[nome]) {
+            vistos[nome] = true;
+            nomes.push(nome);
+        }
+    });
+    return nomes;
+}
+
+async function iniciarLiveActivityRota() {
+    var DI = window.MeninoAlhoDynamicIsland;
+    if (!DI) return;
+
+    var clientes = _coletarClientesSelecionados();
+    if (!clientes.length) {
+        _swalAviso('Selecione pelo menos um pedido para iniciar a rota na Dynamic Island.');
+        return;
+    }
+
+    var totalCaixas = Number(window.__LOGISTICA_TOTAL_CAIXAS__ || clientes.length || 0);
+    try {
+        var result = await DI.startDeliveryActivity({
+            numeroCarga: DI.gerarNumeroCarga(),
+            placaVeiculo: '',
+            proximoCliente: clientes[0],
+            totalCaixas: totalCaixas,
+            caixasEntregues: 0,
+            status: 'Em rota'
+        });
+        if (result && result.skipped) {
+            _swalAviso('Dynamic Island disponível apenas no app iOS (Capacitor).');
+            return;
+        }
+        Swal.fire(Object.assign(_swalBase(), {
+            icon: 'success',
+            title: 'Rota iniciada',
+            text: 'Acompanhe a carga na Dynamic Island / Tela de Bloqueio.',
+            timer: 2200,
+            showConfirmButton: false
+        }));
+    } catch (err) {
+        console.error(err);
+        _swalErro((err && err.message) || 'Não foi possível iniciar a Live Activity.');
+    }
+}
+
+async function atualizarLiveActivityAposEntrega(clienteEntregue, qtdIncremento) {
+    var DI = window.MeninoAlhoDynamicIsland;
+    if (!DI || typeof DI.isAvailable !== 'function' || !DI.isAvailable()) return;
+
+    var estado = DI.lerEstado ? DI.lerEstado() : null;
+    if (!estado) return;
+
+    var entregues = Number(estado.caixasEntregues || 0) + Number(qtdIncremento || 1);
+    var total = Number(estado.totalCaixas || window.__LOGISTICA_TOTAL_CAIXAS__ || 0);
+    var proximo = _proximoClientePendente(clienteEntregue);
+    var status = entregues >= total && total > 0 ? 'Chegando' : 'Em rota';
+
+    try {
+        await DI.updateDeliveryActivity({
+            caixasEntregues: entregues,
+            totalCaixas: total,
+            proximoCliente: proximo,
+            status: status
+        });
+        if (entregues >= total && total > 0) {
+            await DI.stopDeliveryActivity({
+                status: 'Finalizado',
+                caixasEntregues: entregues,
+                totalCaixas: total,
+                dismissalSeconds: 5
+            });
+        }
+    } catch (err) {
+        console.warn('[DynamicIsland] update falhou:', err);
+    }
+}
+
+async function finalizarLiveActivityCarga() {
+    var DI = window.MeninoAlhoDynamicIsland;
+    if (!DI) return;
+    try {
+        var estado = DI.lerEstado ? DI.lerEstado() : null;
+        var result = await DI.stopDeliveryActivity({
+            status: 'Finalizado',
+            caixasEntregues: estado ? estado.caixasEntregues : undefined,
+            totalCaixas: estado ? estado.totalCaixas : undefined,
+            dismissalSeconds: 5
+        });
+        if (result && result.skipped) {
+            _swalAviso('Dynamic Island disponível apenas no app iOS (Capacitor).');
+            return;
+        }
+        Swal.fire(Object.assign(_swalBase(), {
+            icon: 'success',
+            title: 'Carga finalizada',
+            text: 'Live Activity encerrada na Dynamic Island.',
+            timer: 2000,
+            showConfirmButton: false
+        }));
+    } catch (err) {
+        console.error(err);
+        _swalErro((err && err.message) || 'Não foi possível finalizar a Live Activity.');
+    }
+}
+
 /* ── Handler delegado para forms com class="form-swal-confirm" ────────── */
 document.addEventListener('submit', function(e) {
     const form = e.target;
     if (!form.classList.contains('form-swal-confirm')) return;
-    if (form.dataset.swalConfirmed === '1') return; // já confirmado
+    if (form.dataset.swalConfirmed === '1') return;
 
     e.preventDefault();
 
-    const dark = document.documentElement.classList.contains('dark');
     Swal.fire(Object.assign(_swalBase(), {
         title:             form.dataset.title   || 'Confirmar?',
         text:              form.dataset.message || 'Deseja continuar?',
@@ -314,6 +447,14 @@ document.addEventListener('submit', function(e) {
         cancelButtonText:  'Cancelar',
     })).then(function(result) {
         if (result.isConfirmed) {
+            var titulo = (form.dataset.title || '').toLowerCase();
+            if (titulo.indexOf('confirmar entrega') !== -1) {
+                var row = form.closest('tr');
+                var cliente = form.dataset.cliente
+                    || (row && row.querySelector('.check-entrega') && row.querySelector('.check-entrega').dataset.cliente)
+                    || '';
+                atualizarLiveActivityAposEntrega(cliente, 1);
+            }
             form.dataset.swalConfirmed = '1';
             form.submit();
         }
@@ -339,6 +480,11 @@ function gerarRotaMaps() {
         return;
     }
 
+    // Inicia Live Activity junto com a abertura da rota (iOS only; no-op na Web).
+    if (window.MeninoAlhoDynamicIsland) {
+        iniciarLiveActivityRota().catch(function() {});
+    }
+
     let url = 'https://www.google.com/maps/dir/?api=1&travelmode=driving';
     const destination = enderecos.pop();
     url += '&destination=' + destination;
@@ -362,7 +508,6 @@ function copiarRomaneioWhatsApp() {
         const tr = cb.closest('tr');
         if (!tr || !tr.cells || tr.cells.length < 6) return;
 
-        // Ordem das colunas na tabela: [checkbox, Data, Cliente, Endereço, Produto, Total, Ações]
         const cliente  = (tr.cells[2].innerText || '').replace(/\s+/g, ' ').trim();
         const endereco = (tr.cells[3].innerText || '').replace(/\s+/g, ' ').trim();
         const total    = (tr.cells[5].innerText || '').replace(/\s+/g, ' ').trim();
@@ -427,7 +572,6 @@ function _copiarTextoRomaneio(texto) {
         return;
     }
 
-    // Fallback para navegadores/contextos sem Clipboard API (ex.: sem HTTPS)
     const textarea = document.createElement('textarea');
     textarea.value = texto;
     textarea.style.position = 'fixed';
@@ -469,12 +613,14 @@ function gerarDocumentoRemanejo() {
 function atualizarStatusMassa(novoStatus) {
     const selecionados = document.querySelectorAll('.check-entrega:checked');
     const idsSet = new Set();
+    const clientes = [];
     selecionados.forEach(function(cb) {
         const raw = cb.getAttribute('data-ids') || cb.value || '';
         raw.split(',').forEach(function(idTxt) {
             const id = parseInt((idTxt || '').trim(), 10);
             if (!isNaN(id)) idsSet.add(id);
         });
+        if (cb.dataset.cliente) clientes.push(cb.dataset.cliente);
     });
     const ids = Array.from(idsSet);
 
@@ -504,8 +650,11 @@ function atualizarStatusMassa(novoStatus) {
             body:    JSON.stringify({ ids: ids, status: novoStatus }),
         })
         .then(r => r.json())
-        .then(data => {
+        .then(async function(data) {
             if (data.success) {
+                if (ehEntrega) {
+                    await atualizarLiveActivityAposEntrega(clientes[0] || '', ids.length);
+                }
                 window.location.reload();
             } else {
                 _swalErro('Erro: ' + (data.message || 'Resposta inválida do servidor.'));

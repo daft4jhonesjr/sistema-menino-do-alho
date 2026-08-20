@@ -20,6 +20,8 @@
 		A1AA0003220C412B000D30F8 /* DeliveryActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1AA0000220C412B000D30F8 /* DeliveryActivityAttributes.swift */; };
 		A1AA0005220C412B000D30F8 /* DynamicIslandWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1AA0004220C412B000D30F8 /* DynamicIslandWidget.swift */; };
 		A1AA0007220C412B000D30F8 /* DeliveryWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A1AA0006220C412B000D30F8 /* DeliveryWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A1AA0014220C412B000D30F8 /* DeliveryActivityPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1AA0013220C412B000D30F8 /* DeliveryActivityPlugin.swift */; };
+		A1AA0016220C412B000D30F8 /* MyViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1AA0015220C412B000D30F8 /* MyViewController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -62,6 +64,8 @@
 		A1AA0004220C412B000D30F8 /* DynamicIslandWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynamicIslandWidget.swift; sourceTree = "<group>"; };
 		A1AA0006220C412B000D30F8 /* DeliveryWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = DeliveryWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1AA0008220C412B000D30F8 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A1AA0013220C412B000D30F8 /* DeliveryActivityPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryActivityPlugin.swift; sourceTree = "<group>"; };
+		A1AA0015220C412B000D30F8 /* MyViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyViewController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -108,6 +112,8 @@
 				9582B6822FE993A50072D4E8 /* SceneDelegate.swift */,
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
+				A1AA0015220C412B000D30F8 /* MyViewController.swift */,
+				A1AA0013220C412B000D30F8 /* DeliveryActivityPlugin.swift */,
 				A1AA0000220C412B000D30F8 /* DeliveryActivityAttributes.swift */,
 				A1AA0004220C412B000D30F8 /* DynamicIslandWidget.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
@@ -243,6 +249,8 @@
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
+				A1AA0016220C412B000D30F8 /* MyViewController.swift in Sources */,
+				A1AA0014220C412B000D30F8 /* DeliveryActivityPlugin.swift in Sources */,
 				A1AA0001220C412B000D30F8 /* DeliveryActivityAttributes.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

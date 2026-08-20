@@ -10,13 +10,18 @@ struct DeliveryActivityWidget: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    HStack {
-                        Image(systemName: "box.truck.badge.clock.fill")
-                            .foregroundStyle(.green)
-                        Text("Carga \(context.attributes.numeroCarga)")
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Carga #\(context.attributes.numeroCarga)")
                             .font(.caption)
                             .fontWeight(.bold)
                             .foregroundStyle(.white)
+                            .lineLimit(1)
+                        if !context.attributes.placaVeiculo.isEmpty {
+                            Text(context.attributes.placaVeiculo)
+                                .font(.caption2)
+                                .foregroundStyle(.white.opacity(0.75))
+                                .lineLimit(1)
+                        }
                     }
                 }
 
@@ -24,36 +29,36 @@ struct DeliveryActivityWidget: Widget {
                     Text(context.state.status)
                         .font(.caption2)
                         .fontWeight(.semibold)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(Color.green.opacity(0.85)))
                 }
 
                 DynamicIslandExpandedRegion(.center) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Próxima parada: \(context.state.proximoCliente)")
-                            .font(.subheadline)
-                            .foregroundStyle(.white.opacity(0.9))
-                            .lineLimit(1)
-                    }
+                    Text("Próxima parada: \(context.state.proximoCliente)")
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.9))
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
                 DynamicIslandExpandedRegion(.bottom) {
-                    VStack(spacing: 4) {
-                        DeliveryProgressBar(
-                            delivered: context.state.caixasEntregues,
-                            total: context.state.totalCaixas
-                        )
-
+                    VStack(spacing: 6) {
+                        DeliveryProgressBar(progress: context.state.progresso)
                         Text("\(context.state.caixasEntregues) de \(context.state.totalCaixas) caixas entregues")
                             .font(.caption2)
                             .foregroundStyle(.white.opacity(0.85))
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
             } compactLeading: {
-                Image(systemName: "box.truck.fill")
+                Image(systemName: "box.truck.badge.clock.fill")
                     .foregroundStyle(.green)
             } compactTrailing: {
-                Text("\(context.state.caixasEntregues)/\(context.state.totalCaixas)")
+                Text("\(context.state.caixasEntregues)/\(context.state.totalCaixas) cx")
                     .font(.caption2)
+                    .fontWeight(.semibold)
                     .foregroundStyle(.white)
             } minimal: {
                 Image(systemName: "box.truck.fill")
@@ -69,22 +74,37 @@ private struct DeliveryLockScreenView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: "truck.box.fill")
+            HStack(alignment: .top) {
+                Image(systemName: "box.truck.badge.clock.fill")
                     .font(.title3)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(.green)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Menino do Alho - Carga \(context.attributes.numeroCarga)")
+                    Text("Menino do Alho")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.green)
+
+                    Text("Carga #\(context.attributes.numeroCarga)")
                         .font(.headline)
                         .foregroundStyle(.white)
 
-                    Text(context.state.status)
-                        .font(.caption)
-                        .foregroundStyle(.green)
+                    if !context.attributes.placaVeiculo.isEmpty {
+                        Text("Placa \(context.attributes.placaVeiculo)")
+                            .font(.caption2)
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
                 }
 
                 Spacer()
+
+                Text(context.state.status)
+                    .font(.caption2)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(Color.green.opacity(0.85)))
             }
 
             Text("Próxima parada: \(context.state.proximoCliente)")
@@ -92,30 +112,21 @@ private struct DeliveryLockScreenView: View {
                 .foregroundStyle(.white.opacity(0.9))
                 .lineLimit(2)
 
-            DeliveryProgressBar(
-                delivered: context.state.caixasEntregues,
-                total: context.state.totalCaixas
-            )
+            DeliveryProgressBar(progress: context.state.progresso)
 
             Text("\(context.state.caixasEntregues) de \(context.state.totalCaixas) caixas entregues")
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.75))
         }
         .padding(16)
-        .activityBackgroundTint(Color(red: 0.12, green: 0.12, blue: 0.14))
+        .activityBackgroundTint(Color(red: 0.10, green: 0.12, blue: 0.14))
         .activitySystemActionForegroundColor(.white)
     }
 }
 
 @available(iOS 16.1, *)
 private struct DeliveryProgressBar: View {
-    let delivered: Int
-    let total: Int
-
-    private var progress: Double {
-        guard total > 0 else { return 0 }
-        return min(Double(delivered) / Double(total), 1.0)
-    }
+    let progress: Double
 
     var body: some View {
         GeometryReader { geometry in
@@ -124,8 +135,8 @@ private struct DeliveryProgressBar: View {
                     .fill(Color.white.opacity(0.2))
 
                 Capsule()
-                    .fill(Color.orange)
-                    .frame(width: geometry.size.width * progress)
+                    .fill(Color.green)
+                    .frame(width: geometry.size.width * max(0, min(progress, 1)))
             }
         }
         .frame(height: 6)
