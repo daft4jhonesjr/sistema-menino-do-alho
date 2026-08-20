@@ -4976,6 +4976,24 @@ def service_worker():
     return send_file('static/sw.js', mimetype='application/javascript')
 
 
+@app.route('/.well-known/apple-app-site-association')
+def apple_app_site_association():
+    """Associa o domínio web ao app iOS para iCloud Keychain / AutoFill.
+
+    Público (sem login). Team ID padrão vem do projeto Xcode; pode ser
+    sobrescrito com a env ``APPLE_TEAM_ID``.
+    """
+    team_id = (os.environ.get('APPLE_TEAM_ID') or 'A7YQBGPZ5B').strip()
+    payload = {
+        'webcredentials': {
+            'apps': [f'{team_id}.com.meninodoalho.app'],
+        },
+    }
+    response = jsonify(payload)
+    response.headers['Content-Type'] = 'application/json'
+    return response
+
+
 def _validar_cron_token():
     """Valida o token de cron via header ``X-CRON-TOKEN``.
 
