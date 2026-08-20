@@ -1794,7 +1794,12 @@ def api_produto(id):
 
 @produtos_bp.route('/api/produtos/disponiveis')
 def api_produtos_disponiveis():
-    """Lotes do tenant com estoque > 0 para troca de mercadoria e busca."""
+    """Lotes do tenant com estoque > 0 para troca de mercadoria e busca.
+
+    Resposta: ``{ success, produtos: [{ id, nome, estoque, preco_venda,
+    preco_custo, ... }] }``. Aliases ``estoque_atual`` / ``preco_venda_sugerido``
+    são mantidos por compatibilidade com o frontend legado.
+    """
     produtos = (
         query_tenant(Produto)
         .filter(Produto.estoque_atual > 0)
@@ -1803,12 +1808,17 @@ def api_produtos_disponiveis():
     )
     itens = []
     for p in produtos:
+        estoque = int(p.estoque_atual or 0)
+        preco_venda = float(p.preco_venda_alvo_ou_default())
+        preco_custo = float(p.preco_custo or 0)
         itens.append({
             'id': p.id,
             'nome': p.nome_produto,
             'lote': p.nome_produto,
-            'estoque_atual': int(p.estoque_atual or 0),
-            'preco_custo': float(p.preco_custo or 0),
-            'preco_venda_sugerido': float(p.preco_venda_alvo_ou_default()),
+            'estoque': estoque,
+            'estoque_atual': estoque,
+            'preco_venda': preco_venda,
+            'preco_venda_sugerido': preco_venda,
+            'preco_custo': preco_custo,
         })
     return jsonify(ok=True, success=True, produtos=itens, total=len(itens))
