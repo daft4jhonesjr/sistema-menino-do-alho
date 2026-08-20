@@ -449,7 +449,15 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     if (document.getElementById('logMonitor')) carregarLogs();
 
-    // Botão de teste de Push Notification
+    function feedbackNotif(msg, tipo) {
+        if (typeof showToast === 'function') {
+            showToast(msg, tipo || 'info');
+        } else {
+            alert(msg);
+        }
+    }
+
+    // Botão de teste local (auditoria Web / Capacitor — sem servidor)
     if (btnTestarPush) {
         btnTestarPush.addEventListener('click', async function() {
             var textoOriginal = btnTestarPush.innerHTML;
@@ -457,41 +465,15 @@ document.addEventListener('DOMContentLoaded', function() {
             btnTestarPush.innerHTML = '<svg class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg> Enviando...';
 
             try {
-                var headers = { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
-                if (typeof getCsrfHeaders === 'function') {
-                    var csrfH = getCsrfHeaders();
-                    for (var k in csrfH) headers[k] = csrfH[k];
+                if (!window.MeninoAlhoPush || typeof window.MeninoAlhoPush.dispararTeste !== 'function') {
+                    throw new Error('Módulo de notificações não carregado. Recarregue a página.');
                 }
-                var resp = await fetch('/api/debug/testar_push', { method: 'POST', headers: headers });
-                var data = await resp.json();
-
-                if (resp.ok && data.status === 'ok') {
-                    if (typeof showToast === 'function') {
-                        showToast(data.mensagem, 'success');
-                    } else {
-                        alert('✅ ' + data.mensagem);
-                    }
-                } else {
-                    var msg = (data && data.mensagem) ? data.mensagem : 'Erro desconhecido.';
-                    if (typeof showToast === 'function') {
-                        showToast(msg, 'error');
-                    } else {
-                        alert('⚠️ ' + msg);
-                    }
-                    // Se a subscription foi revogada, oculta o botão e atualiza o estado
-                    if (resp.status === 410) {
-                        btnTestarPush.classList.add('hidden');
-                        localStorage.setItem('menino_alho_device_notif', 'false');
-                        atualizarEstadoNotificacoes();
-                    }
-                }
+                await window.MeninoAlhoPush.dispararTeste();
+                feedbackNotif('Notificação de teste enviada!', 'success');
             } catch (err) {
-                var errMsg = (err && err.message) ? err.message : 'Falha na comunicação com o servidor.';
-                if (typeof showToast === 'function') {
-                    showToast('Erro: ' + errMsg, 'error');
-                } else {
-                    alert('❌ Erro: ' + errMsg);
-                }
+                console.error('Auditoria falhou:', err);
+                var errMsg = (err && err.message) ? err.message : 'Falha desconhecida.';
+                feedbackNotif('Erro: ' + errMsg + ' (veja o Console)', 'error');
             } finally {
                 btnTestarPush.disabled = false;
                 btnTestarPush.innerHTML = textoOriginal;

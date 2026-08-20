@@ -236,12 +236,124 @@
         return false;
     }
 
+    var TEST_TITLE = 'Menino do Alho';
+    var TEST_BODY_WEB = 'Teste Web: auditoria concluída com sucesso!';
+    var TEST_BODY_NATIVE = 'Teste nativo: auditoria concluída com sucesso!';
+    var TEST_ICON = '/static/images/icon-192x192.png';
+
+    async function dispararTesteNativoCapacitor() {
+        var plugins = getCapacitorPlugins();
+        if (!plugins) {
+            throw new Error('Plugins nativos do Capacitor não estão disponíveis.');
+        }
+
+        if (plugins.LocalNotifications) {
+            var Local = plugins.LocalNotifications;
+            var localPerm = await Local.requestPermissions();
+            var display = (localPerm && (localPerm.display || localPerm.granted)) || '';
+            if (String(display).toLowerCase() !== 'granted') {
+                throw new Error('Permissão de notificações negada nas configurações do aparelho.');
+            }
+
+            if (typeof Local.createChannel === 'function') {
+                try {
+                    await Local.createChannel({
+                        id: 'menino_alho_teste',
+                        name: 'Testes',
+                        importance: 5,
+                        visibility: 1,
+                        sound: 'default'
+                    });
+                } catch (channelErr) {
+                    console.warn('[Push] createChannel (opcional):', channelErr);
+                }
+            }
+
+            var notifId = Math.floor(Date.now() % 2147483647);
+            await Local.schedule({
+                notifications: [{
+                    id: notifId,
+                    title: TEST_TITLE,
+                    body: TEST_BODY_NATIVE,
+                    channelId: 'menino_alho_teste',
+                    schedule: { at: new Date(Date.now() + 400) }
+                }]
+            });
+            console.log('Auditoria: Notificação nativa agendada via LocalNotifications.');
+            return;
+        }
+
+        // Fallback: API Notification no WebView, se existir.
+        if ('Notification' in global && typeof Notification.requestPermission === 'function') {
+            return dispararTesteWeb();
+        }
+
+        throw new Error('Nenhum plugin de notificação local disponível neste app.');
+    }
+
+    async function dispararTesteWeb() {
+        if (!('Notification' in global)) {
+            throw new Error('A API de Notificação não é suportada por este navegador.');
+        }
+
+        console.log('Auditoria: Estado atual da permissão:', Notification.permission);
+
+        if (Notification.permission === 'denied') {
+            throw new Error('A permissão de notificação foi bloqueada nas configurações do navegador.');
+        }
+
+        if (Notification.permission !== 'granted') {
+            var permission = await Notification.requestPermission();
+            console.log('Auditoria: Permissão solicitada. Resultado:', permission);
+            if (permission !== 'granted') {
+                throw new Error('A permissão não foi concedida pelo usuário.');
+            }
+        }
+
+        if ('serviceWorker' in navigator) {
+            var registration = await navigator.serviceWorker.getRegistration();
+            if (registration) {
+                console.log('Auditoria: Disparando notificação via Service Worker.');
+                await registration.showNotification(TEST_TITLE, {
+                    body: TEST_BODY_WEB,
+                    icon: TEST_ICON,
+                    tag: 'menino-alho-teste-local',
+                    renotify: true
+                });
+                return;
+            }
+            console.log('Auditoria: Service Worker não encontrado, disparando via API padrão.');
+        }
+
+        new Notification(TEST_TITLE, {
+            body: TEST_BODY_WEB,
+            icon: TEST_ICON
+        });
+    }
+
+    /**
+     * Auditoria local: exibe uma notificação no aparelho sem passar pelo servidor.
+     * Capacitor → LocalNotifications (ou Notification no WebView).
+     * Web → Service Worker showNotification, com fallback para Notification.
+     */
+    async function dispararTeste() {
+        console.log('Auditoria: Iniciando teste de notificação.',
+            isCapacitorNative() ? '(Capacitor)' : '(Web)');
+        if (isCapacitorNative()) {
+            await dispararTesteNativoCapacitor();
+        } else {
+            await dispararTesteWeb();
+        }
+        return true;
+    }
+
     global.MeninoAlhoPush = {
         isSupported: isSupported,
         isCapacitorNative: isCapacitorNative,
         urlBase64ToUint8Array: urlBase64ToUint8Array,
         ativar: ativar,
         desativar: desativar,
-        verificarSubscriptionAtiva: verificarSubscriptionAtiva
+        verificarSubscriptionAtiva: verificarSubscriptionAtiva,
+        dispararTeste: dispararTeste
     };
 })(window);

@@ -2145,6 +2145,9 @@ def trocar_item_venda():
     tabela ``ItemVenda``. Totais da venda são recalculados pelos métodos
     ``calcular_total`` / ``calcular_lucro`` a partir de quantidade, preço
     e custo do lote vinculado.
+
+    Após a troca, a mercadoria nova fica com ``status_entrega=PENDENTE``
+    para entrar na fila de Logística (reentrega).
     """
     data = request.get_json(silent=True) or {}
 
@@ -2240,9 +2243,12 @@ def trocar_item_venda():
         produto_antigo.estoque_atual = int(produto_antigo.estoque_atual or 0) + qtd_troca
         novo_produto.estoque_atual = estoque_novo - qtd_troca
 
+        # Mercadoria trocada precisa ser reentregue: força PENDENTE para
+        # aparecer na fila de /logistica (mesmo padrão de "Adicionar Produto").
         if qtd_troca == qtd_atual:
             item.produto_id = novo_produto.id
             item.preco_venda = Decimal(str(novo_preco))
+            item.status_entrega = 'PENDENTE'
             novo_item = None
         else:
             item.quantidade_venda = qtd_atual - qtd_troca
@@ -2259,7 +2265,7 @@ def trocar_item_venda():
                 forma_pagamento=item.forma_pagamento,
                 prazo_dias=getattr(item, 'prazo_dias', None),
                 data_vencimento=getattr(item, 'data_vencimento', None),
-                status_entrega=item.status_entrega or 'PENDENTE',
+                status_entrega='PENDENTE',
                 tipo_operacao=item.tipo_operacao or 'VENDA',
                 lucro_percentual=item.lucro_percentual,
                 empresa_id=item.empresa_id or empresa_id_atual(),
