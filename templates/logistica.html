@@ -198,6 +198,47 @@
 </div><!-- /wrapper px-4 -->
 
 <script>
+function mudarVisualizacaoLogistica(tipo) {
+    var containerLista = document.getElementById('container-lista');
+    var containerCards = document.getElementById('container-cards');
+    var btnLista = document.getElementById('btn-view-lista');
+    var btnCards = document.getElementById('btn-view-cards');
+    if (!containerLista || !containerCards) return;
+
+    var activeClasses = ['bg-white', 'dark:bg-gray-700', 'text-emerald-600', 'dark:text-emerald-400', 'shadow'];
+    var inactiveClasses = ['text-gray-500', 'dark:text-gray-400'];
+
+    function ativar(btn) {
+        if (!btn) return;
+        inactiveClasses.forEach(function(c) { btn.classList.remove(c); });
+        activeClasses.forEach(function(c) { btn.classList.add(c); });
+    }
+    function desativar(btn) {
+        if (!btn) return;
+        activeClasses.forEach(function(c) { btn.classList.remove(c); });
+        inactiveClasses.forEach(function(c) { btn.classList.add(c); });
+    }
+
+    if (tipo === 'cards') {
+        containerLista.classList.add('hidden');
+        containerCards.classList.remove('hidden');
+        ativar(btnCards);
+        desativar(btnLista);
+    } else {
+        containerCards.classList.add('hidden');
+        containerLista.classList.remove('hidden');
+        ativar(btnLista);
+        desativar(btnCards);
+        tipo = 'lista';
+    }
+    localStorage.setItem('visualizacao_logistica', tipo);
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    var salva = localStorage.getItem('visualizacao_logistica') || 'lista';
+    mudarVisualizacaoLogistica(salva);
+});
+
 (function() {
     var filtroStatusAtual = '{{ filtro_status }}';
     var paginaAtual = 1;
@@ -206,15 +247,43 @@
     var csrfToken = '{{ csrf_token() }}';
     var totalCaixasPendentes = {{ total_caixas_pendentes or 0 }};
     var tbodyEntregas = document.getElementById('tbody-entregas');
+    var gridCards = document.getElementById('grid-cards-entregas');
     var sentinela = document.getElementById('sentinela-loading');
     var checkAll = document.getElementById('check-all-entregas');
-    if (checkAll && tbodyEntregas) {
-        checkAll.addEventListener('change', function() {
-            tbodyEntregas.querySelectorAll('.check-entrega').forEach(function(cb) {
-                cb.checked = checkAll.checked;
-            });
+    var checkAllCards = document.getElementById('check-all-entregas-cards');
+
+    function sincronizarChecksPorIds(origem) {
+        var ids = origem.getAttribute('data-ids') || origem.value || '';
+        document.querySelectorAll('.check-entrega').forEach(function(cb) {
+            if (cb === origem) return;
+            var cbIds = cb.getAttribute('data-ids') || cb.value || '';
+            if (cbIds === ids) cb.checked = origem.checked;
         });
     }
+
+    function aplicarSelecaoTodos(marcado) {
+        document.querySelectorAll('.check-entrega').forEach(function(cb) {
+            cb.checked = marcado;
+        });
+        if (checkAll) checkAll.checked = marcado;
+        if (checkAllCards) checkAllCards.checked = marcado;
+    }
+
+    if (checkAll) {
+        checkAll.addEventListener('change', function() {
+            aplicarSelecaoTodos(checkAll.checked);
+        });
+    }
+    if (checkAllCards) {
+        checkAllCards.addEventListener('change', function() {
+            aplicarSelecaoTodos(checkAllCards.checked);
+        });
+    }
+
+    document.addEventListener('change', function(e) {
+        if (!e.target || !e.target.classList || !e.target.classList.contains('check-entrega')) return;
+        sincronizarChecksPorIds(e.target);
+    });
 
     window.__LOGISTICA_TOTAL_CAIXAS__ = totalCaixasPendentes;
 
@@ -236,6 +305,12 @@
     function formatMoeda(valor) {
         var num = Number(valor || 0);
         return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(num);
+    }
+
+    function attrsCheckboxEntrega(e, idsRaw, vendaRef, produtosLista, extraClass) {
+        var produtosAttr = produtosLista.join(' || ');
+        var cls = 'check-entrega rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500' + (extraClass ? ' ' + extraClass : '');
+        return 'class="' + cls + '" value="' + escapeHtml(vendaRef) + '" data-ids="' + escapeHtml(idsRaw) + '" data-endereco="' + escapeHtml(e.endereco || '') + '" data-cliente="' + escapeHtml(e.cliente_nome || '') + '" data-produtos="' + escapeHtml(produtosAttr) + '" data-total="' + escapeHtml(formatMoeda(e.total)) + '"';
     }
 
     function criarLinhaEntrega(e) {
@@ -261,7 +336,7 @@
         }).join('') + '</ul>';
 
         tr.innerHTML = ''
-            + '<td class="px-4 py-4"><input type="checkbox" class="check-entrega rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" value="' + escapeHtml(vendaRef) + '" data-ids="' + escapeHtml(idsRaw) + '" data-endereco="' + escapeHtml(e.endereco || '') + '" data-cliente="' + escapeHtml(e.cliente_nome || '') + '"></td>'
+            + '<td class="px-4 py-4"><input type="checkbox" ' + attrsCheckboxEntrega(e, idsRaw, vendaRef, produtosLista) + '></td>'
             + '<td class="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">' + escapeHtml(e.data) + '</td>'
             + '<td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">' + escapeHtml(e.cliente_nome) + '</td>'
             + '<td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">' + escapeHtml(e.endereco || '—') + '</td>'
@@ -275,6 +350,49 @@
             + '  </form>'
             + '</td>';
         return tr;
+    }
+
+    function criarCardEntrega(e) {
+        var card = document.createElement('div');
+        card.className = 'bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-4 shadow-sm dark:shadow-lg flex flex-col gap-3';
+
+        var idsLista = Array.isArray(e.ids) ? e.ids : [];
+        var idsRaw = idsLista.map(function(v) { return String(v); }).join(',');
+        var vendaRef = idsLista.length ? idsLista[0] : e.venda_id;
+        var produtosLista = Array.isArray(e.produtos) ? e.produtos : (e.produto ? [e.produto] : []);
+        var produtosHtml = produtosLista.map(function(p) {
+            return '<li class="truncate">' + escapeHtml(p) + '</li>';
+        }).join('');
+
+        var confirmarTitle = filtroStatusAtual === 'PENDENTE' ? 'Confirmar Entrega' : 'Desfazer Entrega';
+        var confirmarMsg   = filtroStatusAtual === 'PENDENTE'
+            ? 'Deseja marcar este pedido como ENTREGUE?'
+            : 'Deseja reverter este pedido para PENDENTE?';
+        var confirmarBtnTxt = filtroStatusAtual === 'PENDENTE' ? 'Sim, marcar como entregue' : 'Sim, reverter';
+        var btnAcaoHtml = filtroStatusAtual === 'PENDENTE'
+            ? '<button type="submit" class="px-3 py-1.5 rounded-lg text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors">Marcar como Entregue</button>'
+            : '<button type="submit" class="px-3 py-1.5 rounded-lg text-sm font-semibold bg-amber-600 hover:bg-amber-700 text-white transition-colors">Reverter</button>';
+
+        card.setAttribute('data-ids', idsRaw);
+        card.innerHTML = ''
+            + '<div class="flex items-center justify-between gap-3">'
+            + '  <input type="checkbox" ' + attrsCheckboxEntrega(e, idsRaw, vendaRef, produtosLista, 'check-entrega-card') + '>'
+            + '  <span class="text-xs text-gray-500 dark:text-gray-400">' + escapeHtml(e.data) + '</span>'
+            + '</div>'
+            + '<div class="flex-1 min-w-0 space-y-2">'
+            + '  <h3 class="font-bold text-lg text-gray-900 dark:text-white truncate" title="' + escapeHtml(e.cliente_nome || '') + '">' + escapeHtml(e.cliente_nome) + '</h3>'
+            + '  <p class="text-sm text-gray-600 dark:text-gray-400 line-clamp-2"><span class="text-gray-400 dark:text-gray-500">📍</span> ' + escapeHtml(e.endereco || 'Endereço não informado') + '</p>'
+            + '  <ul class="space-y-1 text-sm text-gray-700 dark:text-gray-300 border-t border-b border-gray-100 dark:border-slate-700 py-2">' + produtosHtml + '</ul>'
+            + '</div>'
+            + '<div class="flex items-center justify-between gap-3 pt-1">'
+            + '  <span class="text-base font-bold text-emerald-600 dark:text-emerald-400">' + formatMoeda(e.total) + '</span>'
+            + '  <form method="post" action="/logistica/toggle/' + encodeURIComponent(vendaRef) + '?status=' + encodeURIComponent(filtroStatusAtual) + '" class="inline form-swal-confirm" data-title="' + escapeHtml(confirmarTitle) + '" data-message="' + escapeHtml(confirmarMsg) + '" data-confirm-text="' + escapeHtml(confirmarBtnTxt) + '" data-cliente="' + escapeHtml(e.cliente_nome || '') + '">'
+            + '    <input type="hidden" name="csrf_token" value="' + escapeHtml(csrfToken) + '"/>'
+            + '    <input type="hidden" name="ids" value="' + escapeHtml(idsRaw) + '"/>'
+            +      btnAcaoHtml
+            + '  </form>'
+            + '</div>';
+        return card;
     }
 
     function carregarMaisEntregas() {
@@ -303,14 +421,21 @@
                 if (rowSemEntregas && rowSemEntregas.parentNode) {
                     rowSemEntregas.parentNode.removeChild(rowSemEntregas);
                 }
+                var cardSemEntregas = document.getElementById('card-sem-entregas');
+                if (cardSemEntregas && cardSemEntregas.parentNode) {
+                    cardSemEntregas.parentNode.removeChild(cardSemEntregas);
+                }
+
+                var marcarTodos = (checkAll && checkAll.checked) || (checkAllCards && checkAllCards.checked);
 
                 lista.forEach(function(entrega) {
-                    tbodyEntregas.appendChild(criarLinhaEntrega(entrega));
+                    if (tbodyEntregas) tbodyEntregas.appendChild(criarLinhaEntrega(entrega));
+                    if (gridCards) gridCards.appendChild(criarCardEntrega(entrega));
                 });
                 paginaAtual = proximaPagina;
 
-                if (checkAll && checkAll.checked) {
-                    tbodyEntregas.querySelectorAll('.check-entrega').forEach(function(cb) { cb.checked = true; });
+                if (marcarTodos) {
+                    document.querySelectorAll('.check-entrega').forEach(function(cb) { cb.checked = true; });
                 }
 
                 if (!data.has_next) {
@@ -339,6 +464,7 @@
             paginaAtual = 1;
             fimDasEntregas = false;
             if (tbodyEntregas) tbodyEntregas.innerHTML = '';
+            if (gridCards) gridCards.innerHTML = '';
         });
     });
 
@@ -374,8 +500,24 @@ function _swalErro(texto) {
     }));
 }
 
+function _checksEntregaUnicos() {
+    var mapa = {};
+    var lista = [];
+    document.querySelectorAll('.check-entrega').forEach(function(cb) {
+        var key = cb.getAttribute('data-ids') || cb.value || '';
+        if (!key || mapa[key]) return;
+        mapa[key] = true;
+        lista.push(cb);
+    });
+    return lista;
+}
+
+function _checksEntregaSelecionadosUnicos() {
+    return _checksEntregaUnicos().filter(function(cb) { return cb.checked; });
+}
+
 function _proximoClientePendente(excludeCliente) {
-    var checks = document.querySelectorAll('.check-entrega');
+    var checks = _checksEntregaUnicos();
     for (var i = 0; i < checks.length; i++) {
         var nome = (checks[i].dataset.cliente || '').trim();
         if (!nome) continue;
@@ -388,7 +530,7 @@ function _proximoClientePendente(excludeCliente) {
 function _coletarClientesSelecionados() {
     var nomes = [];
     var vistos = {};
-    document.querySelectorAll('.check-entrega:checked').forEach(function(cb) {
+    _checksEntregaSelecionadosUnicos().forEach(function(cb) {
         var nome = (cb.dataset.cliente || '').trim();
         if (nome && !vistos[nome]) {
             vistos[nome] = true;
@@ -515,8 +657,10 @@ document.addEventListener('submit', function(e) {
             var titulo = (form.dataset.title || '').toLowerCase();
             if (titulo.indexOf('confirmar entrega') !== -1) {
                 var row = form.closest('tr');
+                var card = form.closest('[data-ids]');
                 var cliente = form.dataset.cliente
                     || (row && row.querySelector('.check-entrega') && row.querySelector('.check-entrega').dataset.cliente)
+                    || (card && card.querySelector('.check-entrega') && card.querySelector('.check-entrega').dataset.cliente)
                     || '';
                 atualizarLiveActivityAposEntrega(cliente, 1);
             }
@@ -528,7 +672,7 @@ document.addEventListener('submit', function(e) {
 
 /* ── Rota no Maps ─────────────────────────────────────────────────────── */
 function gerarRotaMaps() {
-    const selecionados = document.querySelectorAll('.check-entrega:checked');
+    const selecionados = _checksEntregaSelecionadosUnicos();
     const enderecos = [];
     const vistos = new Set();
 
@@ -561,7 +705,7 @@ function gerarRotaMaps() {
 
 /* ── Romaneio para WhatsApp ───────────────────────────────────────────── */
 function copiarRomaneioWhatsApp() {
-    const selecionados = document.querySelectorAll('.check-entrega:checked');
+    const selecionados = _checksEntregaSelecionadosUnicos();
 
     if (selecionados.length === 0) {
         _swalAviso('Selecione pelo menos um pedido para gerar o romaneio!');
@@ -570,20 +714,13 @@ function copiarRomaneioWhatsApp() {
 
     const blocos = [];
     selecionados.forEach(function(cb) {
-        const tr = cb.closest('tr');
-        if (!tr || !tr.cells || tr.cells.length < 6) return;
-
-        const cliente  = (tr.cells[2].innerText || '').replace(/\s+/g, ' ').trim();
-        const endereco = (tr.cells[3].innerText || '').replace(/\s+/g, ' ').trim();
-        const total    = (tr.cells[5].innerText || '').replace(/\s+/g, ' ').trim();
-
-        const produtosTd = tr.cells[4];
-        const itensProduto = Array.from(produtosTd.querySelectorAll('li'))
-            .map(function(li) { return li.innerText.replace(/\s+/g, ' ').trim(); })
-            .filter(Boolean);
-        const produtoTexto = itensProduto.length
-            ? itensProduto.join(', ')
-            : (produtosTd.innerText || '').replace(/\s+/g, ' ').trim();
+        const cliente  = (cb.dataset.cliente || '').replace(/\s+/g, ' ').trim();
+        const endereco = (cb.dataset.endereco || '').replace(/\s+/g, ' ').trim();
+        const total    = (cb.dataset.total || '').replace(/\s+/g, ' ').trim();
+        const produtosRaw = (cb.dataset.produtos || '').trim();
+        const produtoTexto = produtosRaw
+            ? produtosRaw.split(' || ').map(function(p) { return p.replace(/\s+/g, ' ').trim(); }).filter(Boolean).join(', ')
+            : '—';
 
         blocos.push(
             '📦 *Cliente:* ' + (cliente || '—') + '\n' +
@@ -655,7 +792,7 @@ function _copiarTextoRomaneio(texto) {
 
 /* ── Remanejo: documento de impressão sem canhoto ────────────────────── */
 function gerarDocumentoRemanejo() {
-    const selecionados = document.querySelectorAll('.check-entrega:checked');
+    const selecionados = _checksEntregaSelecionadosUnicos();
     const idsSet = new Set();
     selecionados.forEach(function(cb) {
         const raw = cb.getAttribute('data-ids') || cb.value || '';
@@ -676,7 +813,7 @@ function gerarDocumentoRemanejo() {
 
 /* ── Atualizar em massa ───────────────────────────────────────────────── */
 function atualizarStatusMassa(novoStatus) {
-    const selecionados = document.querySelectorAll('.check-entrega:checked');
+    const selecionados = _checksEntregaSelecionadosUnicos();
     const idsSet = new Set();
     const clientes = [];
     selecionados.forEach(function(cb) {
