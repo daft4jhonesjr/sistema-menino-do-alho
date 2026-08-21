@@ -29,6 +29,15 @@
             <a href="{{ url_for('vendas.logistica', status='ENTREGUE') }}" class="flex-1 text-center px-4 py-2 rounded-md text-sm font-medium transition-colors {% if filtro_status == 'ENTREGUE' %}bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm{% else %}text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200{% endif %}">Já Entregues</a>
         </div>
 
+        <div class="flex items-center bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md p-1 gap-1 self-center" title="Alternar visualização">
+            <button type="button" onclick="mudarVisualizacaoLogistica('lista')" id="btn-view-lista" class="px-3 py-1.5 text-sm rounded transition-colors bg-white dark:bg-gray-700 text-emerald-600 dark:text-emerald-400 shadow" title="Visualização em Lista">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path></svg>
+            </button>
+            <button type="button" onclick="mudarVisualizacaoLogistica('cards')" id="btn-view-cards" class="px-3 py-1.5 text-sm rounded transition-colors text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white" title="Visualização em Cards">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
+            </button>
+        </div>
+
         <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto mt-1 sm:mt-0">
             {% if filtro_status == 'PENDENTE' %}
             <button type="button" onclick="atualizarStatusMassa('ENTREGUE')" class="w-full sm:w-auto justify-center bg-emerald-100 hover:bg-emerald-200 text-emerald-800 dark:bg-emerald-900/40 dark:hover:bg-emerald-900/60 dark:text-emerald-300 px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center gap-2 transition-colors">
@@ -65,7 +74,7 @@
     </div>
 </div>
 
-<div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-hidden">
+<div id="container-lista" class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-hidden">
     <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead class="bg-gray-50 dark:bg-gray-900/50">
@@ -85,7 +94,7 @@
                 {% for e in entregas %}
                 <tr class="hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition">
                     <td class="px-4 py-4">
-                        <input type="checkbox" class="check-entrega rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" value="{{ e.ids[0] }}" data-ids="{{ e.ids|join(',') }}" data-endereco="{{ e.endereco }}" data-cliente="{{ e.cliente_nome }}">
+                        <input type="checkbox" class="check-entrega rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" value="{{ e.ids[0] }}" data-ids="{{ e.ids|join(',') }}" data-endereco="{{ e.endereco }}" data-cliente="{{ e.cliente_nome }}" data-produtos="{{ e.produtos|join(' || ') }}" data-total="{{ e.total | formato_moeda }}">
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">{{ e.data }}</td>
                     <td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">{{ e.cliente_nome }}</td>
@@ -129,6 +138,61 @@
         </table>
     </div>
 </div>
+
+<div id="container-cards" class="hidden">
+    {% if entregas %}
+    <div class="mb-3 flex items-center gap-2 px-1">
+        <input type="checkbox" id="check-all-entregas-cards" class="rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" title="Selecionar todos">
+        <label for="check-all-entregas-cards" class="text-sm text-gray-600 dark:text-gray-400 cursor-pointer">Selecionar todos</label>
+    </div>
+    {% endif %}
+    <div id="grid-cards-entregas" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {% for e in entregas %}
+        <div class="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-4 shadow-sm dark:shadow-lg flex flex-col gap-3" data-ids="{{ e.ids|join(',') }}">
+            <div class="flex items-center justify-between gap-3">
+                <input type="checkbox" class="check-entrega check-entrega-card rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" value="{{ e.ids[0] }}" data-ids="{{ e.ids|join(',') }}" data-endereco="{{ e.endereco }}" data-cliente="{{ e.cliente_nome }}" data-produtos="{{ e.produtos|join(' || ') }}" data-total="{{ e.total | formato_moeda }}">
+                <span class="text-xs text-gray-500 dark:text-gray-400">{{ e.data }}</span>
+            </div>
+            <div class="flex-1 min-w-0 space-y-2">
+                <h3 class="font-bold text-lg text-gray-900 dark:text-white truncate" title="{{ e.cliente_nome }}">{{ e.cliente_nome }}</h3>
+                <p class="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
+                    <span class="text-gray-400 dark:text-gray-500">📍</span> {{ e.endereco or 'Endereço não informado' }}
+                </p>
+                <ul class="space-y-1 text-sm text-gray-700 dark:text-gray-300 border-t border-b border-gray-100 dark:border-slate-700 py-2">
+                    {% for item_produto in e.produtos %}
+                    <li class="truncate">{{ item_produto }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            <div class="flex items-center justify-between gap-3 pt-1">
+                <span class="text-base font-bold text-emerald-600 dark:text-emerald-400">{{ e.total | formato_moeda }}</span>
+                <form method="post" action="{{ url_for('vendas.toggle_entrega', venda_id=e.ids[0], status=filtro_status) }}" class="inline form-swal-confirm"
+                      data-title="{% if filtro_status == 'PENDENTE' %}Confirmar Entrega{% else %}Desfazer Entrega{% endif %}"
+                      data-message="{% if filtro_status == 'PENDENTE' %}Deseja marcar este pedido como ENTREGUE?{% else %}Deseja reverter este pedido para PENDENTE?{% endif %}"
+                      data-confirm-text="{% if filtro_status == 'PENDENTE' %}Sim, marcar como entregue{% else %}Sim, reverter{% endif %}"
+                      data-cliente="{{ e.cliente_nome }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <input type="hidden" name="ids" value="{{ e.ids|join(',') }}"/>
+                    {% if filtro_status == 'PENDENTE' %}
+                    <button type="submit" class="px-3 py-1.5 rounded-lg text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors">Marcar como Entregue</button>
+                    {% else %}
+                    <button type="submit" class="px-3 py-1.5 rounded-lg text-sm font-semibold bg-amber-600 hover:bg-amber-700 text-white transition-colors">Reverter</button>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+        {% else %}
+        <div id="card-sem-entregas" class="col-span-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-12 text-center text-gray-500 dark:text-gray-400">
+            {% if filtro_status == 'PENDENTE' %}
+            Nenhum pedido pendente de entrega.
+            {% else %}
+            Nenhum pedido entregue.
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
 <div id="sentinela-loading" class="text-center p-4 text-sm text-gray-500 dark:text-gray-400 {% if not has_next_logistica %}hidden{% endif %}">⏳ Carregando mais entregas...</div>
 
 </div><!-- /wrapper px-4 -->
