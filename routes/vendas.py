@@ -1603,12 +1603,71 @@ def logistica():
             'total_caixas_pendentes': total_caixas_pendentes,
         })
 
+    # Resumo da semana: entregas concluídas de segunda a domingo (ordem crescente).
+    hoje = get_hoje_brasil()
+    inicio_semana = hoje - timedelta(days=hoje.weekday())
+    fim_semana = inicio_semana + timedelta(days=6)
+
+    vendas_semana = (
+        query_tenant(Venda)
+        .filter(
+            Venda.status_entrega == 'ENTREGUE',
+            Venda.data_venda >= inicio_semana,
+            Venda.data_venda <= fim_semana,
+        )
+        .options(
+            joinedload(Venda.cliente),
+            joinedload(Venda.produto),
+        )
+        .order_by(Venda.data_venda.asc())
+        .all()
+    )
+
+    semana_dict = {}
+    semana_keys = []
+    for v in vendas_semana:
+        cliente = v.cliente
+        if not cliente:
+            continue
+
+        cnpj_cliente = (cliente.cnpj or '').strip()
+        is_consumidor_final = cnpj_cliente in ('0', '00000000000000', '')
+        data_venda_normalizada = v.data_venda.date() if hasattr(v.data_venda, 'date') else v.data_venda
+        if is_consumidor_final:
+            pedido_key = (v.cliente_id, data_venda_normalizada)
+        else:
+            nf_normalizada = str(v.nf).strip() if v.nf else ''
+            pedido_key = (v.cliente_id, nf_normalizada, data_venda_normalizada)
+
+        if pedido_key not in semana_dict:
+            semana_dict[pedido_key] = {
+                'data': _formatar_data_com_dia_semana(v.data_venda),
+                'data_ordenacao': data_venda_normalizada,
+                'cliente_nome': cliente.nome_cliente or 'Sem Nome',
+                'produtos': [],
+                'qtd_itens': 0,
+                'total': 0.0,
+            }
+            semana_keys.append(pedido_key)
+
+        produto_nome = v.produto.nome_produto if v.produto else 'Item'
+        semana_dict[pedido_key]['produtos'].append(f"{v.quantidade_venda}x {produto_nome}")
+        semana_dict[pedido_key]['qtd_itens'] += int(getattr(v, 'quantidade_venda', 0) or 0)
+        semana_dict[pedido_key]['total'] += float(v.calcular_total())
+
+    entregues_semana = [semana_dict[k] for k in semana_keys]
+    total_semana = sum(p['total'] for p in entregues_semana)
+
     return render_template(
         'logistica.html',
         entregas=entregas,
         filtro_status=filtro_status,
         has_next_logistica=has_next,
         total_caixas_pendentes=total_caixas_pendentes,
+        entregues_semana=entregues_semana,
+        total_semana=total_semana,
+        inicio_semana=inicio_semana,
+        fim_semana=fim_semana,
     )
 
 
