@@ -87,13 +87,18 @@
                 </div>
                 {% if item.tipo_operacao != 'PERDA' %}
                 <button type="button"
-                        onclick="abrirModalTrocaItem({{ pedido.primeira_venda_id }}, {{ item.id }}, {{ nome_item|tojson }}, {{ item.quantidade_venda }}, {{ item.preco_venda or 0 }}, {{ item.produto_id or 'null' }})"
+                        class="btn-trocar-item-card flex-shrink-0 p-1 text-cyan-500 dark:text-cyan-400 hover:text-cyan-600 dark:hover:text-cyan-300 hover:bg-cyan-500/20 rounded transition-all inline-flex items-center gap-0.5 text-[10px] font-semibold border border-cyan-500/30 bg-transparent cursor-pointer"
                         title="Trocar este produto"
-                        class="flex-shrink-0 p-1 text-cyan-500 dark:text-cyan-400 hover:text-cyan-600 dark:hover:text-cyan-300 hover:bg-cyan-500/20 rounded transition-all inline-flex items-center gap-0.5 text-[10px] font-semibold border border-cyan-500/30 bg-transparent cursor-pointer">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" aria-hidden="true">
+                        data-venda-id="{{ pedido.primeira_venda_id }}"
+                        data-item-id="{{ item.id }}"
+                        data-produto-id="{{ item.produto_id or '' }}"
+                        data-produto-nome="{{ nome_item }}"
+                        data-qtd="{{ item.quantidade_venda }}"
+                        data-preco="{{ '%.2f'|format((item.preco_venda or 0)|float) }}">
+                    <svg class="w-3.5 h-3.5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                     </svg>
-                    <span>Trocar</span>
+                    <span class="pointer-events-none">Trocar</span>
                 </button>
                 {% endif %}
             </div>

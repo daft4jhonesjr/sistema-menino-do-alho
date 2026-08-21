@@ -1343,6 +1343,327 @@
     </div>
 </div>
 
+<!-- Modal Troca de Mercadoria (cards + tabela) -->
+<div id="modalTrocaItem" class="fixed inset-0 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4" style="z-index:99999;" aria-hidden="true">
+    <div class="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-md shadow-2xl relative text-slate-100" data-troca-panel="1">
+        <button type="button" class="btn-fechar-modal-troca absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full text-slate-400 hover:text-white hover:bg-slate-700 transition" title="Fechar" aria-label="Fechar">×</button>
+        <h3 class="text-lg font-bold text-slate-100 mb-4">🔄 Trocar Mercadoria</h3>
+        <form id="formTrocaItem">
+            <input type="hidden" id="troca_venda_id" value="">
+            <input type="hidden" id="troca_item_id" value="">
+            <input type="hidden" id="troca_produto_atual_id" value="">
+
+            <p class="text-sm text-slate-300 mb-4">
+                Produto atual:
+                <span id="troca_nome_produto" class="font-bold text-amber-400"></span>
+            </p>
+            <p class="text-xs text-slate-400 mb-4 -mt-3">
+                Qtd. no pedido: <span id="troca_qtd_atual_label" class="font-medium text-slate-200">0</span> caixas
+            </p>
+
+            <div class="space-y-3">
+                <div>
+                    <label for="troca_qtd" class="block text-xs text-slate-400 mb-1">Quantidade a Trocar</label>
+                    <input type="number" id="troca_qtd" min="1" step="1" required
+                           class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                </div>
+                <div>
+                    <label for="troca_novo_produto" class="block text-xs text-slate-400 mb-1">Novo Produto</label>
+                    <select id="troca_novo_produto" required
+                            class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                        <option value="">Carregando produtos...</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="troca_novo_preco" class="block text-xs text-slate-400 mb-1">Novo Preço Unitário (R$)</label>
+                    <input type="number" step="0.01" min="0.01" id="troca_novo_preco" required
+                           class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-2 mt-6">
+                <button type="button" class="btn-fechar-modal-troca px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-700 rounded">Cancelar</button>
+                <button type="submit" id="btn_submit_troca_item" class="px-4 py-2 text-sm bg-cyan-600 hover:bg-cyan-500 text-white rounded font-medium">Confirmar Troca</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+/* Troca de mercadoria — registro global + delegação em capture (não depende de onclick). */
+(function () {
+    'use strict';
+
+    function _swalTroca(msg) {
+        var texto = msg || 'Tivemos uma instabilidade temporária. Por favor, tente novamente.';
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Não foi possível concluir a troca',
+                text: texto,
+                confirmButtonText: 'Entendi',
+                confirmButtonColor: '#3B82F6',
+                background: '#1e293b',
+                color: '#f8fafc'
+            });
+        } else {
+            alert(texto);
+        }
+    }
+
+    function _estoqueDe(p) {
+        return Number((p && (p.estoque != null ? p.estoque : p.estoque_atual)) || 0);
+    }
+
+    function _precoDe(p) {
+        return Number((p && (p.preco_venda != null ? p.preco_venda : p.preco_venda_sugerido)) || 0);
+    }
+
+    function _el(id) {
+        return document.getElementById(id);
+    }
+
+    window.carregarProdutosDisponiveis = function (produtoAtualId) {
+        var select = _el('troca_novo_produto');
+        if (!select) return Promise.resolve();
+        select.innerHTML = '<option value="">Carregando produtos...</option>';
+        return fetch('/api/produtos/disponiveis', {
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+        })
+            .then(function (resp) { return resp.json(); })
+            .then(function (data) {
+                var lista = (data && Array.isArray(data.produtos)) ? data.produtos : (Array.isArray(data) ? data : []);
+                var atualId = String(produtoAtualId || '');
+                select.innerHTML = '<option value="">Selecione o lote...</option>';
+                lista.forEach(function (p) {
+                    if (String(p.id) === atualId) return;
+                    if (_estoqueDe(p) <= 0) return;
+                    var opt = document.createElement('option');
+                    opt.value = String(p.id);
+                    opt.textContent = (p.nome || p.lote || 'Lote') + ' (Est.: ' + _estoqueDe(p) + ')';
+                    opt.setAttribute('data-preco', String(_precoDe(p)));
+                    select.appendChild(opt);
+                });
+                if (select.options.length <= 1) {
+                    select.innerHTML = '<option value="">Nenhum lote com estoque disponível</option>';
+                }
+            })
+            .catch(function (err) {
+                console.error('Erro ao carregar produtos disponíveis:', err);
+                select.innerHTML = '<option value="">Erro ao carregar produtos</option>';
+            });
+    };
+
+    window.fecharModalTrocaItem = function () {
+        var modal = _el('modalTrocaItem');
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            modal.style.display = 'none';
+            modal.setAttribute('aria-hidden', 'true');
+        }
+        var btn = _el('btn_submit_troca_item');
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Confirmar Troca';
+        }
+    };
+
+    window.abrirModalTrocaItem = function (vendaIdOuBtn, itemId, nomeProduto, qtdAtual, precoAtual, produtoIdAtual) {
+        try {
+            var vendaId = vendaIdOuBtn;
+            var item = itemId;
+            var nome = nomeProduto;
+            var qtd = qtdAtual;
+            var preco = precoAtual;
+            var produtoId = produtoIdAtual;
+
+            if (vendaIdOuBtn && vendaIdOuBtn.nodeType === 1) {
+                var ds = vendaIdOuBtn.dataset || {};
+                vendaId = ds.vendaId;
+                item = ds.itemId;
+                nome = ds.produtoNome;
+                qtd = ds.qtd;
+                preco = ds.preco;
+                produtoId = ds.produtoId;
+            }
+
+            var modal = _el('modalTrocaItem');
+            if (!modal) {
+                _swalTroca('Modal de troca não encontrado. Recarregue a página (Ctrl+F5).');
+                return;
+            }
+
+            _el('troca_venda_id').value = vendaId || '';
+            _el('troca_item_id').value = item || '';
+            _el('troca_produto_atual_id').value = produtoId || '';
+            _el('troca_nome_produto').textContent = nome || 'Produto';
+            _el('troca_qtd_atual_label').textContent = qtd || '0';
+
+            var inputQtd = _el('troca_qtd');
+            inputQtd.value = qtd || 1;
+            inputQtd.max = qtd || 1;
+            inputQtd.min = 1;
+
+            _el('troca_novo_preco').value = preco ? Number(preco).toFixed(2) : '';
+            _el('troca_novo_produto').innerHTML = '<option value="">Carregando produtos...</option>';
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            modal.style.display = 'flex';
+            modal.setAttribute('aria-hidden', 'false');
+
+            window.carregarProdutosDisponiveis(produtoId);
+        } catch (err) {
+            console.error('abrirModalTrocaItem falhou:', err);
+            _swalTroca('Não foi possível abrir o modal de troca. Recarregue a página.');
+        }
+    };
+
+    window.submitTrocaItem = function (event) {
+        if (event) event.preventDefault();
+
+        var vendaId = _el('troca_venda_id').value;
+        var itemId = _el('troca_item_id').value;
+        var qtdTroca = parseInt(_el('troca_qtd').value, 10);
+        var qtdMax = parseInt(_el('troca_qtd_atual_label').textContent, 10);
+        var novoProdutoId = _el('troca_novo_produto').value;
+        var novoPreco = parseFloat(_el('troca_novo_preco').value);
+
+        if (!itemId) {
+            _swalTroca('Item do pedido não encontrado.');
+            return false;
+        }
+        if (!qtdTroca || qtdTroca <= 0 || qtdTroca > qtdMax) {
+            _swalTroca('A quantidade para troca deve ser entre 1 e ' + (qtdMax || 1) + ' caixas.');
+            return false;
+        }
+        if (!novoProdutoId) {
+            _swalTroca('Selecione o novo produto/lote.');
+            return false;
+        }
+        if (!novoPreco || novoPreco <= 0) {
+            _swalTroca('Informe um preço unitário válido.');
+            return false;
+        }
+
+        var btn = _el('btn_submit_troca_item');
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Processando...';
+        }
+
+        fetch('/api/vendas/item/trocar', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify({
+                venda_id: parseInt(vendaId, 10),
+                item_venda_id: parseInt(itemId, 10),
+                qtd_troca: qtdTroca,
+                novo_produto_id: parseInt(novoProdutoId, 10),
+                novo_preco_unitario: novoPreco
+            })
+        })
+            .then(function (resp) {
+                return resp.json().then(function (data) {
+                    return { ok: resp.ok, data: data || {} };
+                }).catch(function () {
+                    return { ok: resp.ok, data: {} };
+                });
+            })
+            .then(function (res) {
+                if (res.ok && (res.data.success === true || res.data.ok === true)) {
+                    window.fecharModalTrocaItem();
+                    var msg = res.data.message || res.data.mensagem || 'Troca de mercadoria realizada com sucesso!';
+                    if (typeof showToast === 'function') {
+                        showToast(msg, 'success');
+                    } else if (typeof Swal !== 'undefined') {
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Troca realizada',
+                            text: msg,
+                            background: '#1e293b',
+                            color: '#f8fafc',
+                            confirmButtonColor: '#10b981'
+                        });
+                    }
+                    setTimeout(function () { window.location.reload(); }, 600);
+                    return;
+                }
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Confirmar Troca';
+                }
+                _swalTroca(res.data.error || res.data.mensagem || res.data.erro || 'Tivemos uma instabilidade temporária. Por favor, tente novamente.');
+            })
+            .catch(function (err) {
+                console.error('Erro na troca:', err);
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Confirmar Troca';
+                }
+                _swalTroca('Tivemos uma instabilidade temporária. Por favor, tente novamente.');
+            });
+
+        return false;
+    };
+
+    // CAPTURE: funciona mesmo se outro listener der stopPropagation no bubble
+    document.addEventListener('click', function (ev) {
+        var t = ev.target;
+        if (!t || !t.closest) return;
+
+        if (t.closest('.btn-fechar-modal-troca')) {
+            ev.preventDefault();
+            window.fecharModalTrocaItem();
+            return;
+        }
+
+        var modal = _el('modalTrocaItem');
+        if (modal && t === modal) {
+            window.fecharModalTrocaItem();
+            return;
+        }
+
+        var btnTroca = t.closest('.btn-trocar-item-card, .btn-trocar-item');
+        if (!btnTroca) return;
+
+        ev.preventDefault();
+        ev.stopPropagation();
+        window.abrirModalTrocaItem(btnTroca);
+    }, true);
+
+    document.addEventListener('change', function (e) {
+        if (!e.target || e.target.id !== 'troca_novo_produto') return;
+        var opt = e.target.options[e.target.selectedIndex];
+        var preco = opt && opt.getAttribute('data-preco');
+        if (preco) {
+            var input = _el('troca_novo_preco');
+            if (input) input.value = Number(preco).toFixed(2);
+        }
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Escape') return;
+        var modal = _el('modalTrocaItem');
+        if (modal && !modal.classList.contains('hidden')) window.fecharModalTrocaItem();
+    });
+
+    var form = _el('formTrocaItem');
+    if (form) {
+        form.addEventListener('submit', function (e) {
+            return window.submitTrocaItem(e);
+        });
+    }
+})();
+</script>
+
 <script>
 (function() {
     // Bulk delete desabilitado na estrutura de pedidos agrupados
@@ -1866,11 +2187,11 @@ async function abrirModalTroca(vendaIdOuBtn, itemVendaId, nomeProduto, qtdAtual,
     await _carregarProdutosDisponiveisTroca(produtoId);
 }
 
-/** Abre o modal de troca já com o item específico do card (sem seletor). */
-async function abrirModalTrocaItem(vendaId, itemId, nomeProduto, qtdAtual, precoAtual, produtoIdAtual) {
-    return abrirModalTroca(vendaId, itemId, nomeProduto, qtdAtual, precoAtual, produtoIdAtual);
+/** Abre o modal de troca (legado da tabela). Cards usam window.abrirModalTrocaItem → #modalTrocaItem. */
+async function abrirModalTrocaLegado(vendaIdOuBtn, itemVendaId, nomeProduto, qtdAtual, precoAtual, produtoIdAtual) {
+    return abrirModalTroca(vendaIdOuBtn, itemVendaId, nomeProduto, qtdAtual, precoAtual, produtoIdAtual);
 }
-window.abrirModalTrocaItem = abrirModalTrocaItem;
+// Não sobrescrever window.abrirModalTrocaItem — já definido pelo script do #modalTrocaItem.
 
 async function confirmarTroca(event) {
     if (event) event.preventDefault();
