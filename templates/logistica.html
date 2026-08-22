@@ -92,7 +92,7 @@
             </thead>
             <tbody id="tbody-entregas" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                 {% for e in entregas %}
-                <tr class="hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition">
+                <tr class="hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition ios-draggable-item" data-id="{{ e.ids|join(',') }}">
                     <td class="px-4 py-4">
                         <input type="checkbox" class="check-entrega rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" value="{{ e.ids[0] }}" data-ids="{{ e.ids|join(',') }}" data-endereco="{{ e.endereco }}" data-cliente="{{ e.cliente_nome }}" data-produtos="{{ e.produtos|join(' || ') }}" data-total="{{ e.total | formato_moeda }}">
                     </td>
@@ -148,7 +148,7 @@
     {% endif %}
     <div id="grid-cards-entregas" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {% for e in entregas %}
-        <div class="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-4 shadow-sm dark:shadow-lg flex flex-col gap-3" data-ids="{{ e.ids|join(',') }}">
+        <div class="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-4 shadow-sm dark:shadow-lg flex flex-col gap-3 ios-draggable-item" data-id="{{ e.ids|join(',') }}" data-ids="{{ e.ids|join(',') }}">
             <div class="flex items-center justify-between gap-3">
                 <input type="checkbox" class="check-entrega check-entrega-card rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" value="{{ e.ids[0] }}" data-ids="{{ e.ids|join(',') }}" data-endereco="{{ e.endereco }}" data-cliente="{{ e.cliente_nome }}" data-produtos="{{ e.produtos|join(' || ') }}" data-total="{{ e.total | formato_moeda }}">
                 <span class="text-xs text-gray-500 dark:text-gray-400">{{ e.data }}</span>
@@ -374,7 +374,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function criarLinhaEntrega(e) {
         var tr = document.createElement('tr');
-        tr.className = 'hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition';
+        tr.className = 'hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition ios-draggable-item';
 
         var acaoTexto = filtroStatusAtual === 'PENDENTE' ? 'Marcar como Entregue' : 'Reverter';
         var acaoClasse = filtroStatusAtual === 'PENDENTE'
@@ -388,6 +388,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         var idsLista = Array.isArray(e.ids) ? e.ids : [];
         var idsRaw = idsLista.map(function(v) { return String(v); }).join(',');
+        tr.setAttribute('data-id', idsRaw);
         var vendaRef = idsLista.length ? idsLista[0] : e.venda_id;
         var produtosLista = Array.isArray(e.produtos) ? e.produtos : (e.produto ? [e.produto] : []);
         var produtosHtml = '<ul class="space-y-1">' + produtosLista.map(function(p) {
@@ -413,10 +414,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function criarCardEntrega(e) {
         var card = document.createElement('div');
-        card.className = 'bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-4 shadow-sm dark:shadow-lg flex flex-col gap-3';
+        card.className = 'bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-4 shadow-sm dark:shadow-lg flex flex-col gap-3 ios-draggable-item';
 
         var idsLista = Array.isArray(e.ids) ? e.ids : [];
         var idsRaw = idsLista.map(function(v) { return String(v); }).join(',');
+        card.setAttribute('data-id', idsRaw);
+        card.setAttribute('data-ids', idsRaw);
         var vendaRef = idsLista.length ? idsLista[0] : e.venda_id;
         var produtosLista = Array.isArray(e.produtos) ? e.produtos : (e.produto ? [e.produto] : []);
         var produtosHtml = produtosLista.map(function(p) {
@@ -926,5 +929,70 @@ function atualizarStatusMassa(novoStatus) {
         });
     });
 }
+
+/* ── Drag & Drop iOS: reordenar carga/rota ─────────────────────────────── */
+(function initLogisticaDragDrop() {
+    function persistirOrdemLogistica(novaOrdemIds) {
+        try {
+            localStorage.setItem('logistica_ordem_' + '{{ filtro_status }}', JSON.stringify(novaOrdemIds || []));
+        } catch (err) { /* ignore */ }
+        fetch('/logistica/ordem', {
+            method: 'POST',
+            headers: Object.assign({ 'Content-Type': 'application/json' }, window.getCsrfHeaders ? window.getCsrfHeaders() : {}),
+            body: JSON.stringify({ ids: novaOrdemIds || [] }),
+        }).catch(function() { /* silencioso */ });
+    }
+
+    function sincronizarOrdemEntreVistas(origemSelector, destinoSelector, ordemIds) {
+        var dest = document.querySelector(destinoSelector);
+        if (!dest || !ordemIds || !ordemIds.length) return;
+        ordemIds.forEach(function(id) {
+            var el = dest.querySelector('[data-id="' + String(id).replace(/"/g, '\\"') + '"]');
+            if (el) dest.appendChild(el);
+        });
+    }
+
+    function boot() {
+        if (typeof window.iniciarDragDropIOS !== 'function') return;
+
+        var dndTabela = window.iniciarDragDropIOS('#tbody-entregas', function(ids) {
+            sincronizarOrdemEntreVistas('#tbody-entregas', '#grid-cards-entregas', ids);
+            persistirOrdemLogistica(ids);
+        }, {
+            itemSelector: 'tr.ios-draggable-item',
+            idAttribute: 'data-id',
+            pressDelay: 150,
+            filterSelector: 'input, button, a, select, textarea, label, .no-drag, .form-swal-confirm'
+        });
+
+        var dndCards = window.iniciarDragDropIOS('#grid-cards-entregas', function(ids) {
+            sincronizarOrdemEntreVistas('#grid-cards-entregas', '#tbody-entregas', ids);
+            persistirOrdemLogistica(ids);
+        }, {
+            itemSelector: '.ios-draggable-item',
+            idAttribute: 'data-id',
+            pressDelay: 150,
+            filterSelector: 'input, button, a, select, textarea, label, .no-drag, .form-swal-confirm'
+        });
+
+        // Após infinite scroll, refresca itens
+        var tbody = document.getElementById('tbody-entregas');
+        var grid = document.getElementById('grid-cards-entregas');
+        if (tbody && typeof MutationObserver !== 'undefined') {
+            var mo = new MutationObserver(function() {
+                if (dndTabela && dndTabela.refresh) dndTabela.refresh();
+                if (dndCards && dndCards.refresh) dndCards.refresh();
+            });
+            mo.observe(tbody, { childList: true });
+            if (grid) mo.observe(grid, { childList: true });
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', boot);
+    } else {
+        boot();
+    }
+})();
 </script>
 {% endblock %}

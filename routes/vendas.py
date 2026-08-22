@@ -139,10 +139,19 @@ def criar_lembrete():
         return jsonify({'ok': False, 'erro': 'Data inválida.'}), 400
 
     try:
+        _max_ordem = (
+            db.session.query(func.coalesce(func.max(Lembrete.ordem), -1))
+            .filter(
+                Lembrete.empresa_id == empresa_id_atual(),
+                Lembrete.data == data_obj,
+            )
+            .scalar()
+        )
         lembrete = Lembrete(
             empresa_id=empresa_id_atual(),
             data=data_obj,
             descricao=descricao,
+            ordem=int(_max_ordem) + 1,
         )
         db.session.add(lembrete)
         db.session.commit()
@@ -152,6 +161,7 @@ def criar_lembrete():
             'data': data_obj.isoformat(),
             'descricao': lembrete.descricao,
             'concluido': False,
+            'ordem': lembrete.ordem,
         })
     except Exception:
         db.session.rollback()
@@ -231,6 +241,67 @@ def voltar_lembrete(id):
     except Exception:
         db.session.rollback()
         return jsonify({'ok': False, 'erro': 'Erro ao voltar lembrete.'}), 500
+
+
+@vendas_bp.route('/lembretes/reordenar', methods=['POST'])
+def reordenar_lembretes():
+    """Persiste a ordem dos lembretes manuais após drag & drop (iOS)."""
+    payload = request.get_json(silent=True) or {}
+    ids_raw = payload.get('ids') or request.form.getlist('ids[]') or []
+    if isinstance(ids_raw, str):
+        ids_raw = [x.strip() for x in ids_raw.split(',') if x.strip()]
+
+    ids = []
+    for raw in ids_raw:
+        try:
+            ids.append(int(str(raw).replace('lem-', '').strip()))
+        except (TypeError, ValueError):
+            continue
+
+    if not ids:
+        return jsonify({'ok': False, 'erro': 'Lista de IDs vazia.'}), 400
+
+    try:
+        lembretes = (
+            query_tenant(Lembrete)
+            .filter(Lembrete.id.in_(ids))
+            .all()
+        )
+        by_id = {l.id: l for l in lembretes}
+        for idx, lid in enumerate(ids):
+            lem = by_id.get(lid)
+            if lem is not None:
+                lem.ordem = idx
+        db.session.commit()
+        return jsonify({'ok': True, 'ids': ids})
+    except Exception:
+        db.session.rollback()
+        return jsonify({'ok': False, 'erro': 'Erro ao reordenar lembretes.'}), 500
+
+
+@vendas_bp.route('/logistica/ordem', methods=['POST'])
+def salvar_ordem_logistica():
+    """Persiste a ordem da carga/rota na sessão (drag & drop iOS)."""
+    payload = request.get_json(silent=True) or {}
+    ids = payload.get('ids') or []
+    if not isinstance(ids, list):
+        return jsonify({'ok': False, 'erro': 'ids deve ser uma lista.'}), 400
+    # Normaliza para strings (grupos data-ids podem ter vírgulas)
+    session['logistica_ordem'] = [str(x) for x in ids if x is not None and str(x).strip()]
+    session.modified = True
+    return jsonify({'ok': True, 'count': len(session['logistica_ordem'])})
+
+
+@vendas_bp.route('/vendas/ordem', methods=['POST'])
+def salvar_ordem_vendas():
+    """Persiste ordem customizada da grade/lista de vendas na sessão."""
+    payload = request.get_json(silent=True) or {}
+    ids = payload.get('ids') or []
+    if not isinstance(ids, list):
+        return jsonify({'ok': False, 'erro': 'ids deve ser uma lista.'}), 400
+    session['vendas_ordem'] = [str(x) for x in ids if x is not None and str(x).strip()]
+    session.modified = True
+    return jsonify({'ok': True, 'count': len(session['vendas_ordem'])})
 
 
 # ============================================================
@@ -1238,7 +1309,7 @@ def listar_vendas():
         _lembs = (
             query_tenant(Lembrete)
             .filter(_ini_lem, _fim_lem)
-            .order_by(Lembrete.data.asc(), Lembrete.criado_em.asc())
+            .order_by(Lembrete.data.asc(), Lembrete.ordem.asc(), Lembrete.criado_em.asc())
             .all()
         )
         for _l in _lembs:
@@ -1247,6 +1318,7 @@ def listar_vendas():
                 'id': _l.id,
                 'descricao': _l.descricao,
                 'concluido': bool(getattr(_l, 'concluido', False)),
+                'ordem': int(getattr(_l, 'ordem', 0) or 0),
                 'tipo': 'manual',
             })
     except Exception:
@@ -1575,6 +1647,19 @@ def logistica():
         pedidos_dict[pedido_key]['total'] += float(v.calcular_total())
 
     pedidos_agrupados = [pedidos_dict[k] for k in pedidos_ordenados_keys]
+
+    # Aplica ordem customizada salva via drag & drop (sessão)
+    _ordem_log = session.get('logistica_ordem') or []
+    if _ordem_log and pedidos_agrupados:
+        _idx = {','.join(str(i) for i in e['ids']): n for n, e in enumerate(pedidos_agrupados)}
+        def _sort_key(e):
+            key = ','.join(str(i) for i in e['ids'])
+            try:
+                return (_ordem_log.index(key), _idx.get(key, 0))
+            except ValueError:
+                return (len(_ordem_log) + _idx.get(key, 0), _idx.get(key, 0))
+        pedidos_agrupados = sorted(pedidos_agrupados, key=_sort_key)
+
     total_pedidos = len(pedidos_agrupados)
     start_idx = (page - 1) * per_page
     end_idx = start_idx + per_page

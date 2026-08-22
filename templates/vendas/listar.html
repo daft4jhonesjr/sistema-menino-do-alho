@@ -3696,6 +3696,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 lucide.createIcons();
             }
 
+            if (typeof window._refreshVendasDnD === 'function') {
+                window._refreshVendasDnD();
+            }
+
             // Re-aplicar filtro de empresa aos novos elementos
             var filtroEmp = document.getElementById('filtro-empresa');
             if (filtroEmp && filtroEmp.value !== 'TODAS') {
@@ -4338,6 +4342,55 @@ function ordenarVendasTabela(colIndex, tipo) {
             !document.getElementById('form-lembrete-' + iso).classList.contains('hidden')) {
             inp.focus();
         }
+
+        _iniciarDnDLembretes(iso);
+    }
+
+    var _dndLembretesApi = null;
+
+    function _iniciarDnDLembretes(iso) {
+        if (typeof window.iniciarDragDropIOS !== 'function') return;
+        if (_dndLembretesApi && _dndLembretesApi.destroy) {
+            try { _dndLembretesApi.destroy(); } catch (eD) {}
+            _dndLembretesApi = null;
+        }
+        var lista = document.getElementById('lista-lembretes-' + iso);
+        if (!lista) return;
+        var manuais = lista.querySelectorAll(':scope > .ios-draggable-item');
+        if (!manuais.length) return;
+
+        _dndLembretesApi = window.iniciarDragDropIOS(lista, function(novaOrdemIds) {
+            var idsNumericos = (novaOrdemIds || []).map(function(id) {
+                return String(id).replace(/^lem-/, '');
+            });
+            // Atualiza array em memória na nova ordem
+            if (lembretes[iso]) {
+                var byId = {};
+                lembretes[iso].forEach(function(l) {
+                    if (l && l.tipo !== 'recompra') byId[String(l.id)] = l;
+                });
+                var reordenados = [];
+                idsNumericos.forEach(function(id) {
+                    if (byId[id]) {
+                        reordenados.push(byId[id]);
+                        delete byId[id];
+                    }
+                });
+                Object.keys(byId).forEach(function(k) { reordenados.push(byId[k]); });
+                var radar = (lembretes[iso] || []).filter(function(l) { return l && l.tipo === 'recompra'; });
+                lembretes[iso] = radar.concat(reordenados);
+            }
+            fetch('/lembretes/reordenar', {
+                method: 'POST',
+                headers: Object.assign({ 'Content-Type': 'application/json' }, window.getCsrfHeaders ? window.getCsrfHeaders() : {}),
+                body: JSON.stringify({ ids: idsNumericos }),
+            }).catch(function() { /* silencioso */ });
+        }, {
+            itemSelector: '.ios-draggable-item',
+            idAttribute: 'data-id',
+            pressDelay: 150,
+            filterSelector: 'input, button, a, select, textarea, label, .no-drag'
+        });
     }
 
     // ── Helpers globais de lembretes ─────────────────────────────
@@ -4536,9 +4589,9 @@ function ordenarVendasTabela(colIndex, tipo) {
             : 'inline-flex items-center gap-1 text-[11px] font-medium text-gray-400 dark:text-gray-500 hover:text-emerald-500 dark:hover:text-emerald-400 hover:bg-emerald-500/10 rounded-md px-1.5 py-0.5 transition-colors';
         var btnLabel = concluido ? 'Desfazer' : 'Concluído';
 
-        return '<div class="' + cardCls + '" id="lem-' + lem.id + '" data-concluido="' + (concluido ? '1' : '0') + '">' +
+        return '<div class="' + cardCls + ' ios-draggable-item" id="lem-' + lem.id + '" data-id="' + lem.id + '" data-concluido="' + (concluido ? '1' : '0') + '">' +
             '<span class="' + textoCls + '">' + esc(lem.descricao) + '</span>' +
-            '<div class="flex items-center gap-1.5 flex-shrink-0 mt-0.5">' +
+            '<div class="flex items-center gap-1.5 flex-shrink-0 mt-0.5 no-drag">' +
                 '<button type="button" onclick="concluirLembrete(' + lem.id + ',\'' + esc(iso) + '\', this)" ' +
                     'title="' + btnTitulo + '" ' +
                     'class="' + btnCls + '">' +
@@ -4701,6 +4754,7 @@ function ordenarVendasTabela(colIndex, tipo) {
                     var tmp = document.createElement('div');
                     tmp.innerHTML = _htmlLembrete(iso, { id: res.id, descricao: res.descricao, concluido: false });
                     lista.appendChild(tmp.firstElementChild);
+                    _iniciarDnDLembretes(iso);
                 }
 
                 fecharFormLembrete(iso);
@@ -6914,4 +6968,69 @@ async function executarExclusaoDocumentosMassa(ids) {
         </div>
     </div>
 </div>
+
+<script>
+/* Drag & Drop iOS — grade e lista de vendas */
+(function initVendasDragDrop() {
+    function persistirOrdemVendas(ids) {
+        try {
+            localStorage.setItem('vendas_ordem_custom', JSON.stringify(ids || []));
+        } catch (e) { /* ignore */ }
+        fetch('/vendas/ordem', {
+            method: 'POST',
+            headers: Object.assign({ 'Content-Type': 'application/json' }, window.getCsrfHeaders ? window.getCsrfHeaders() : {}),
+            body: JSON.stringify({ ids: ids || [] }),
+        }).catch(function() { /* silencioso */ });
+    }
+
+    function reancorarDetalhesPedidos(tbody) {
+        if (!tbody) return;
+        tbody.querySelectorAll('tr.pedido-resumo').forEach(function(resumo) {
+            var pid = resumo.getAttribute('data-pedido-id');
+            if (!pid) return;
+            var detalhes = tbody.querySelector('tr.pedido-detalhes[data-pedido-id="' + pid + '"]');
+            if (detalhes && resumo.nextElementSibling !== detalhes) {
+                resumo.parentNode.insertBefore(detalhes, resumo.nextSibling);
+            }
+        });
+    }
+
+    var apiGrade = null;
+    var apiTabela = null;
+
+    function boot() {
+        if (typeof window.iniciarDragDropIOS !== 'function') return;
+
+        apiGrade = window.iniciarDragDropIOS('#view-grade', function(ids) {
+            persistirOrdemVendas(ids);
+        }, {
+            itemSelector: '.ios-draggable-item',
+            idAttribute: 'data-id',
+            pressDelay: 150,
+            filterSelector: 'input, button, a, select, textarea, label, .no-drag, .btn-editar-venda, .badge-baixa-entrega'
+        });
+
+        apiTabela = window.iniciarDragDropIOS('#vendas-tbody', function(ids) {
+            reancorarDetalhesPedidos(document.getElementById('vendas-tbody'));
+            persistirOrdemVendas(ids);
+        }, {
+            itemSelector: 'tr.pedido-resumo.ios-draggable-item',
+            idAttribute: 'data-id',
+            pressDelay: 150,
+            filterSelector: 'input, button, a, select, textarea, label, .no-drag, .bulk-row-check, .badge-baixa-entrega'
+        });
+
+        window._refreshVendasDnD = function() {
+            if (apiGrade && apiGrade.refresh) apiGrade.refresh();
+            if (apiTabela && apiTabela.refresh) apiTabela.refresh();
+        };
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', boot);
+    } else {
+        boot();
+    }
+})();
+</script>
 {% endblock %}

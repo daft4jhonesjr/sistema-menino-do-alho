@@ -23,7 +23,7 @@
 {% set zebra_class = row_bg_class %}
 {% set zebra_bg_class = 'bg-white dark:bg-gray-800' if loop.index % 2 == 0 else 'bg-emerald-50/30 dark:bg-emerald-900/30' %}
 <!-- Linha de Resumo do Pedido (Expansível) -->
-<tr class="pedido-resumo cursor-pointer transition {{ row_bg_class }} {{ row_hover_class }} border-b border-gray-200 dark:border-gray-700" data-pedido-id="{{ pedido_unique_id }}" data-venda-ids="{{ pedido.vendas|map(attribute='id')|list|tojson }}" data-lucro-total="{{ pedido.total_lucro }}" data-empresa="{{ (pedido.empresa_faturadora or 'NENHUM') | upper }}">
+<tr class="pedido-resumo cursor-pointer transition ios-draggable-item {{ row_bg_class }} {{ row_hover_class }} border-b border-gray-200 dark:border-gray-700" data-id="{{ pedido_unique_id }}" data-pedido-id="{{ pedido_unique_id }}" data-venda-ids="{{ pedido.vendas|map(attribute='id')|list|tojson }}" data-lucro-total="{{ pedido.total_lucro }}" data-empresa="{{ (pedido.empresa_faturadora or 'NENHUM') | upper }}">
     <td class="px-2 py-4 text-center text-xs text-gray-400 dark:text-gray-500 font-bold celula-numero"></td>
     {# Coluna de seleção em massa. NÃO usar onclick="event.stopPropagation();"
        aqui: o ``stopPropagation`` interrompe o bubbling antes que listeners

@@ -4341,6 +4341,11 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             _adicionar_coluna_se_ausente('lembretes', 'concluido', 'BOOLEAN NOT NULL DEFAULT FALSE')
         except (OperationalError, Exception):
             db.session.rollback()
+        # Migração: ordem customizada de lembretes (drag & drop iOS)
+        try:
+            _adicionar_coluna_se_ausente('lembretes', 'ordem', 'INTEGER NOT NULL DEFAULT 0')
+        except (OperationalError, Exception):
+            db.session.rollback()
         # Migração: tabela de auditoria de ações (log de atividades)
         try:
             LogAtividade.__table__.create(bind=db.engine, checkfirst=True)

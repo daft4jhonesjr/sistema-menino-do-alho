@@ -243,6 +243,24 @@
                 </button>
             </div>
 
+            <!-- Face ID / Touch ID -->
+            <div id="card-faceid-permission"
+                 class="bg-gray-50 dark:bg-slate-900/60 border border-gray-200 dark:border-slate-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+                 data-username="{{ current_user.username|e }}">
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 mb-1 flex-wrap">
+                        <span class="text-lg" aria-hidden="true">🆔</span>
+                        <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Autenticação por Face ID / Touch ID</h4>
+                        <span id="badge-perm-faceid" class="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">Pendente</span>
+                    </div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Permite desbloquear e acessar o sistema instantaneamente usando a biometria nativa deste iPhone.</p>
+                </div>
+                <button type="button" id="btn-faceid-ativar"
+                        class="flex-shrink-0 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+                    Ativar Face ID
+                </button>
+            </div>
+
             <!-- Conceder todas -->
             <div class="pt-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <p class="text-xs text-gray-500 dark:text-gray-400">
@@ -1022,7 +1040,248 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // ============================================================
+    // Face ID / Touch ID (Keychain via NativeBiometric)
+    // ============================================================
+    var BIOMETRIC_SERVER = 'sistema-menino-do-alho.onrender.com';
+    var faceIdEstado = 'web'; // web | unavailable | pending | active
+
+    function getNativeBiometric() {
+        try {
+            var Cap = window.Capacitor;
+            if (!Cap || typeof Cap.isNativePlatform !== 'function' || !Cap.isNativePlatform()) {
+                return null;
+            }
+            return (Cap.Plugins && Cap.Plugins.NativeBiometric) || null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function pintarBadgeFaceId(estado) {
+        var badge = document.getElementById('badge-perm-faceid');
+        var btn = document.getElementById('btn-faceid-ativar');
+        if (!badge || !btn) return;
+
+        badge.className = 'text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ';
+        btn.disabled = false;
+        btn.classList.remove('opacity-50', 'cursor-not-allowed', 'hidden');
+
+        if (estado === 'web') {
+            badge.className += 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300';
+            badge.textContent = 'Exclusivo no App iOS';
+            btn.classList.add('hidden');
+            return;
+        }
+        if (estado === 'unavailable') {
+            badge.className += 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300';
+            badge.textContent = 'Indisponível';
+            btn.textContent = 'Biometria indisponível';
+            btn.disabled = true;
+            btn.classList.add('opacity-50', 'cursor-not-allowed');
+            return;
+        }
+        if (estado === 'active') {
+            badge.className += 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300';
+            badge.textContent = 'Ativo / Configurado';
+            btn.textContent = 'Redefinir Biometria';
+            return;
+        }
+        badge.className += 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300';
+        badge.textContent = 'Pendente';
+        btn.textContent = 'Ativar no Aparelho';
+    }
+
+    async function credenciaisFaceIdSalvas(NativeBiometric) {
+        try {
+            if (typeof NativeBiometric.isCredentialsSaved === 'function') {
+                var check = await NativeBiometric.isCredentialsSaved({ server: BIOMETRIC_SERVER });
+                return !!(check && check.isSaved);
+            }
+            await NativeBiometric.getCredentials({ server: BIOMETRIC_SERVER });
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    async function atualizarEstadoFaceIdUI() {
+        var card = document.getElementById('card-faceid-permission');
+        if (!card) return;
+
+        var NativeBiometric = getNativeBiometric();
+        if (!NativeBiometric) {
+            faceIdEstado = 'web';
+            pintarBadgeFaceId('web');
+            return;
+        }
+
+        try {
+            var disponivel = await NativeBiometric.isAvailable();
+            if (!disponivel || !disponivel.isAvailable) {
+                faceIdEstado = 'unavailable';
+                pintarBadgeFaceId('unavailable');
+                return;
+            }
+            var salvas = await credenciaisFaceIdSalvas(NativeBiometric);
+            faceIdEstado = salvas ? 'active' : 'pending';
+            pintarBadgeFaceId(faceIdEstado);
+        } catch (e) {
+            console.log('[Face ID] indisponível:', e);
+            faceIdEstado = 'unavailable';
+            pintarBadgeFaceId('unavailable');
+        }
+    }
+
+    function swalDarkBase(opts) {
+        return Object.assign({
+            background: '#1e293b',
+            color: '#f8fafc',
+            confirmButtonColor: '#10b981',
+            cancelButtonColor: '#64748b'
+        }, opts || {});
+    }
+
+    async function solicitarSenhaParaFaceId() {
+        if (typeof Swal === 'undefined') {
+            return window.prompt('Digite sua senha atual para vincular o Face ID:') || '';
+        }
+        var result = await Swal.fire(swalDarkBase({
+            title: 'Ativar Face ID',
+            html: '<p class="text-sm text-slate-300 mb-2">Confirme sua senha atual para vincular o login biométrico com segurança neste aparelho.</p>',
+            input: 'password',
+            inputPlaceholder: 'Senha atual',
+            inputAttributes: {
+                autocapitalize: 'off',
+                autocorrect: 'off',
+                autocomplete: 'current-password'
+            },
+            showCancelButton: true,
+            confirmButtonText: 'Continuar',
+            cancelButtonText: 'Cancelar',
+            focusConfirm: false,
+            preConfirm: function(value) {
+                if (!value || !String(value).trim()) {
+                    Swal.showValidationMessage('Informe sua senha para continuar.');
+                    return false;
+                }
+                return String(value);
+            }
+        }));
+        if (!result.isConfirmed) return null;
+        return result.value || null;
+    }
+
+    async function ativarFaceIdNoAparelho() {
+        var NativeBiometric = getNativeBiometric();
+        var card = document.getElementById('card-faceid-permission');
+        var btn = document.getElementById('btn-faceid-ativar');
+        if (!NativeBiometric || !card) {
+            toastPerm('Face ID disponível apenas no app iOS.', 'info');
+            return;
+        }
+
+        var username = (card.getAttribute('data-username') || '').trim();
+        if (!username) {
+            toastPerm('Não foi possível identificar o usuário logado.', 'error');
+            return;
+        }
+
+        var senha = await solicitarSenhaParaFaceId();
+        if (senha == null) return;
+        if (!senha) {
+            toastPerm('Senha obrigatória para ativar o Face ID.', 'error');
+            return;
+        }
+
+        var textoOriginal = btn ? btn.textContent : '';
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Autenticando...';
+        }
+
+        try {
+            await NativeBiometric.verifyIdentity({
+                reason: 'Autorize o uso do Face ID para login rápido',
+                title: 'Ativar Face ID',
+                subtitle: 'Menino do Alho',
+                description: 'Confirme sua identidade para salvar o login biométrico'
+            });
+
+            await NativeBiometric.setCredentials({
+                server: BIOMETRIC_SERVER,
+                username: username,
+                password: senha
+            });
+
+            faceIdEstado = 'active';
+            pintarBadgeFaceId('active');
+            toastPerm('Face ID ativado com sucesso para este dispositivo!', 'success');
+        } catch (error) {
+            var code = error && error.code != null ? Number(error.code) : NaN;
+            if (code === 11 || code === 15 || code === 16 || code === 17) {
+                toastPerm('Ativação do Face ID cancelada.', 'info');
+            } else {
+                console.error('[Face ID] ativar:', error);
+                toastPerm((error && error.message) || 'Não foi possível ativar o Face ID.', 'error');
+            }
+            await atualizarEstadoFaceIdUI();
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                if (faceIdEstado !== 'active') {
+                    btn.textContent = textoOriginal || 'Ativar no Aparelho';
+                }
+            }
+        }
+    }
+
+    async function redefinirFaceId() {
+        var NativeBiometric = getNativeBiometric();
+        if (!NativeBiometric) return;
+
+        var confirmar = true;
+        if (typeof Swal !== 'undefined') {
+            var result = await Swal.fire(swalDarkBase({
+                icon: 'warning',
+                title: 'Redefinir biometria?',
+                text: 'As credenciais Face ID deste aparelho serão removidas. Você poderá ativar novamente depois.',
+                showCancelButton: true,
+                confirmButtonText: 'Redefinir',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#ef4444'
+            }));
+            confirmar = !!result.isConfirmed;
+        } else {
+            confirmar = window.confirm('Remover Face ID deste aparelho?');
+        }
+        if (!confirmar) return;
+
+        try {
+            await NativeBiometric.deleteCredentials({ server: BIOMETRIC_SERVER });
+            faceIdEstado = 'pending';
+            pintarBadgeFaceId('pending');
+            toastPerm('Biometria removida deste dispositivo.', 'success');
+        } catch (error) {
+            console.error('[Face ID] redefinir:', error);
+            toastPerm('Não foi possível remover as credenciais biométricas.', 'error');
+            await atualizarEstadoFaceIdUI();
+        }
+    }
+
+    var btnFaceId = document.getElementById('btn-faceid-ativar');
+    if (btnFaceId) {
+        btnFaceId.addEventListener('click', function() {
+            if (faceIdEstado === 'active') {
+                redefinirFaceId();
+            } else if (faceIdEstado === 'pending') {
+                ativarFaceIdNoAparelho();
+            }
+        });
+    }
+
     atualizarEstadosPermissoesUI();
+    atualizarEstadoFaceIdUI();
 });
 </script>
 {% endblock %}

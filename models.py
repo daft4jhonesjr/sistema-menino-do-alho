@@ -874,6 +874,7 @@ class Lembrete(db.Model):
     data       = db.Column(db.Date, nullable=False, index=True)
     descricao  = db.Column(db.String(500), nullable=False)
     concluido  = db.Column(db.Boolean, default=False, nullable=False)
+    ordem      = db.Column(db.Integer, default=0, nullable=False)
     criado_em  = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     empresa = db.relationship('Empresa', backref=db.backref('lembretes', lazy='dynamic'))
