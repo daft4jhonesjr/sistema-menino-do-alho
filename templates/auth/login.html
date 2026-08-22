@@ -80,6 +80,21 @@
                     <i data-lucide="log-in" class="w-4 h-4 mr-2"></i>Entrar
                 </button>
             </form>
+            <div id="bloco-faceid" class="hidden mt-4">
+                <div class="relative my-3">
+                    <div class="absolute inset-0 flex items-center" aria-hidden="true">
+                        <div class="w-full border-t border-gray-200 dark:border-gray-600"></div>
+                    </div>
+                    <div class="relative flex justify-center text-xs">
+                        <span class="bg-white dark:bg-gray-800 px-2 text-gray-400 dark:text-gray-500">ou</span>
+                    </div>
+                </div>
+                <button type="button"
+                        id="btn-faceid"
+                        class="w-full border border-emerald-600 text-emerald-700 dark:text-emerald-400 dark:border-emerald-500 py-2.5 rounded-xl hover:bg-emerald-50 dark:hover:bg-gray-700 transition font-medium flex items-center justify-center">
+                    <i data-lucide="scan-face" class="w-4 h-4 mr-2"></i>Entrar com Face ID
+                </button>
+            </div>
             <p class="mt-4 text-center text-sm text-gray-500 dark:text-gray-400">
                 Não tem conta? <a href="{{ url_for('auth.cadastro') }}" class="text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 font-medium">Cadastre-se</a>
             </p>
@@ -171,6 +186,8 @@
         return msg;
     }
 
+    var BIOMETRIC_SERVER = 'sistema-menino-do-alho.onrender.com';
+
     function resetarBotaoLogin(btnSubmit, textoOriginal) {
         if (!btnSubmit) return;
         btnSubmit.disabled = false;
@@ -198,11 +215,203 @@
         });
     }
 
+    function getNativeBiometric() {
+        try {
+            var Cap = window.Capacitor;
+            if (!Cap || typeof Cap.isNativePlatform !== 'function' || !Cap.isNativePlatform()) {
+                return null;
+            }
+            return (Cap.Plugins && Cap.Plugins.NativeBiometric) || null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function erroBiometriaCancelado(error) {
+        if (!error) return false;
+        var code = error.code != null ? Number(error.code) : NaN;
+        // 11 App Cancel, 15 System Cancel, 16 User Cancel, 17 User Fallback
+        return code === 11 || code === 15 || code === 16 || code === 17;
+    }
+
+    async function salvarCredenciaisBiometria(username, password) {
+        var NativeBiometric = getNativeBiometric();
+        if (!NativeBiometric || !username || !password) return;
+        try {
+            var disponivel = await NativeBiometric.isAvailable();
+            if (!disponivel || !disponivel.isAvailable) return;
+            await NativeBiometric.setCredentials({
+                username: username,
+                password: password,
+                server: BIOMETRIC_SERVER
+            });
+        } catch (e) {
+            console.log('Não foi possível salvar credenciais biométricas:', e);
+        }
+    }
+
+    async function checarBiometriaDisponivel() {
+        var NativeBiometric = getNativeBiometric();
+        var bloco = document.getElementById('bloco-faceid');
+        if (!NativeBiometric || !bloco) return;
+
+        try {
+            var result = await NativeBiometric.isAvailable();
+            if (!result || !result.isAvailable) return;
+
+            var credenciaisSalvas = false;
+            try {
+                if (typeof NativeBiometric.isCredentialsSaved === 'function') {
+                    var check = await NativeBiometric.isCredentialsSaved({ server: BIOMETRIC_SERVER });
+                    credenciaisSalvas = !!(check && check.isSaved);
+                } else {
+                    await NativeBiometric.getCredentials({ server: BIOMETRIC_SERVER });
+                    credenciaisSalvas = true;
+                }
+            } catch (e) {
+                credenciaisSalvas = false;
+            }
+
+            if (credenciaisSalvas) {
+                bloco.classList.remove('hidden');
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+            }
+        } catch (e) {
+            console.log('Biometria indisponível:', e);
+        }
+    }
+
+    async function executarLoginComCredenciais(username, password, extras) {
+        var formLogin = document.getElementById('form-login');
+        var nextInput = formLogin ? formLogin.querySelector('input[name="next"]') : null;
+        var rememberInput = formLogin ? formLogin.querySelector('input[name="remember"]') : null;
+
+        var payload = {
+            username: username,
+            password: password,
+            csrf_token: getCsrfToken(),
+            next: nextInput ? nextInput.value : '',
+            remember: rememberInput ? !!rememberInput.checked : true
+        };
+
+        if (extras) {
+            Object.keys(extras).forEach(function(k) {
+                payload[k] = extras[k];
+            });
+        }
+
+        var coords = await obterCoordenadasGPS();
+        payload.latitude = coords ? coords.latitude : null;
+        payload.longitude = coords ? coords.longitude : null;
+
+        var action = (formLogin && formLogin.action) || window.location.href;
+        var response = await fetchComTimeout(
+            action,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                body: JSON.stringify(payload),
+                credentials: 'include'
+            },
+            15000
+        );
+
+        var data = {};
+        try {
+            data = await response.json();
+        } catch (parseErr) {
+            data = {};
+        }
+
+        if (response.ok && data.success) {
+            return data;
+        }
+
+        var msg = data.error
+            || data.message
+            || (response.status === 429
+                ? 'Muitas tentativas de login. Aguarde 1 minuto e tente novamente.'
+                : 'Credenciais inválidas ou falha de autenticação.');
+        throw new Error(msg);
+    }
+
+    function redirecionarAposLogin(data) {
+        if (window.MeninoAlhoAuth && typeof window.MeninoAlhoAuth.persistirSessao === 'function') {
+            window.MeninoAlhoAuth.persistirSessao(data);
+        }
+        var destino = (window.MeninoAlhoAuth && window.MeninoAlhoAuth.normalizarUrlRedirect)
+            ? window.MeninoAlhoAuth.normalizarUrlRedirect(data.redirect_url || '/dashboard')
+            : (data.redirect_url || '/dashboard');
+        window.location.href = destino;
+    }
+
+    async function entrarComFaceId() {
+        var NativeBiometric = getNativeBiometric();
+        var btnFace = document.getElementById('btn-faceid');
+        if (!NativeBiometric) return;
+
+        var textoOriginal = btnFace ? btnFace.innerHTML : '';
+        if (btnFace) {
+            btnFace.disabled = true;
+            btnFace.innerHTML = '<span class="animate-spin inline-block mr-2">🔄</span> Autenticando...';
+        }
+
+        try {
+            await NativeBiometric.verifyIdentity({
+                reason: 'Acesse sua conta no Menino do Alho',
+                title: 'Login biométrico',
+                subtitle: 'Menino do Alho',
+                description: 'Use Face ID ou Touch ID para entrar'
+            });
+
+            var credentials = await NativeBiometric.getCredentials({
+                server: BIOMETRIC_SERVER
+            });
+
+            if (!credentials || !credentials.username || !credentials.password) {
+                throw new Error('Nenhuma credencial salva. Entre com usuário e senha uma vez para ativar o Face ID.');
+            }
+
+            var data = await executarLoginComCredenciais(credentials.username, credentials.password);
+            redirecionarAposLogin(data);
+        } catch (error) {
+            if (erroBiometriaCancelado(error)) {
+                console.log('Face ID cancelado pelo usuário.');
+                return;
+            }
+            console.error('Erro no login biométrico:', error);
+            showLoginError(
+                mensagemErroLogin(error) ||
+                'Não foi possível autenticar com Face ID. Use usuário e senha.'
+            );
+        } finally {
+            if (btnFace) {
+                btnFace.disabled = false;
+                btnFace.innerHTML = textoOriginal || '<i data-lucide="scan-face" class="w-4 h-4 mr-2"></i>Entrar com Face ID';
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+            }
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
         var formLogin = document.getElementById('form-login');
         if (!formLogin) return;
 
         var enviando = false;
+        checarBiometriaDisponivel();
+
+        var btnFace = document.getElementById('btn-faceid');
+        if (btnFace) {
+            btnFace.addEventListener('click', function() {
+                if (enviando) return;
+                entrarComFaceId();
+            });
+        }
 
         formLogin.addEventListener('submit', async function(e) {
             e.preventDefault();
@@ -210,6 +419,8 @@
 
             var btnSubmit = formLogin.querySelector('button[type="submit"]');
             var textoOriginal = btnSubmit ? btnSubmit.innerHTML : 'Entrar';
+            var username = (document.getElementById('username') || {}).value || '';
+            var password = (document.getElementById('password') || {}).value || '';
 
             enviando = true;
             if (btnSubmit) {
@@ -217,54 +428,10 @@
                 btnSubmit.innerHTML = '<span class="animate-spin inline-block mr-2">🔄</span> Verificando...';
             }
 
-            var formData = new FormData(formLogin);
-            var payload = Object.fromEntries(formData.entries());
-
             try {
-                var coords = await obterCoordenadasGPS();
-                payload.latitude = coords ? coords.latitude : null;
-                payload.longitude = coords ? coords.longitude : null;
-
-                var response = await fetchComTimeout(
-                    formLogin.action || window.location.href,
-                    {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json',
-                            'X-Requested-With': 'XMLHttpRequest',
-                            'X-CSRFToken': getCsrfToken()
-                        },
-                        body: JSON.stringify(payload),
-                        credentials: 'include'
-                    },
-                    15000
-                );
-
-                var data = {};
-                try {
-                    data = await response.json();
-                } catch (parseErr) {
-                    data = {};
-                }
-
-                if (response.ok && data.success) {
-                    if (window.MeninoAlhoAuth && typeof window.MeninoAlhoAuth.persistirSessao === 'function') {
-                        window.MeninoAlhoAuth.persistirSessao(data);
-                    }
-                    var destino = (window.MeninoAlhoAuth && window.MeninoAlhoAuth.normalizarUrlRedirect)
-                        ? window.MeninoAlhoAuth.normalizarUrlRedirect(data.redirect_url || '/dashboard')
-                        : (data.redirect_url || '/dashboard');
-                    window.location.href = destino;
-                    return;
-                }
-
-                var msg = data.error
-                    || data.message
-                    || (response.status === 429
-                        ? 'Muitas tentativas de login. Aguarde 1 minuto e tente novamente.'
-                        : 'Credenciais inválidas ou falha de autenticação.');
-                throw new Error(msg);
+                var data = await executarLoginComCredenciais(username, password);
+                await salvarCredenciaisBiometria(username, password);
+                redirecionarAposLogin(data);
             } catch (error) {
                 console.error('Erro no login:', error);
                 showLoginError(mensagemErroLogin(error));

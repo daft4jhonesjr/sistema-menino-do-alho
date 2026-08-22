@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@capacitor/ios": "^8.5.0",
-    "@capacitor/local-notifications": "^8.3.1"
+    "@capacitor/local-notifications": "^8.3.1",
+    "@capgo/capacitor-native-biometric": "^8.6.7"
   }
 }

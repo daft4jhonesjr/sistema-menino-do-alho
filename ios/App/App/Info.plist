@@ -32,6 +32,8 @@
 	<string>Usamos a câmera para fotografar cheques, comprovantes e documentos no Caixa Diário.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Usamos a galeria para anexar fotos de cheques, comprovantes e documentos.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Utilize o Face ID para acessar o sistema com rapidez e segurança.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>
