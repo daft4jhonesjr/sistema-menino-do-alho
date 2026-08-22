@@ -392,7 +392,7 @@
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ produto.fornecedor }}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ produto.caminhoneiro }}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium w-24">
-                                <button type="button" class="btn-editar-produto text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 mr-4 inline-flex items-center cursor-pointer bg-transparent border-none p-0"
+                                <button type="button" class="btn-editar-produto relative z-10 text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 mr-4 inline-flex items-center cursor-pointer bg-transparent border-none p-0"
                                         data-id="{{ produto.id }}"
                                         data-preco-custo="{{ produto.preco_custo }}"
                                         data-quantidade-entrada="0"
@@ -404,7 +404,7 @@
                                         data-marca="{{ (produto.marca or '')|replace('\n', ' ')|e }}"
                                         data-caminhoneiro="{{ (produto.caminhoneiro or '')|replace('\n', ' ')|e }}"
                                         data-estoque-atual="{{ produto.estoque_atual }}"
-                                        onclick="abrirOuSalvarEdicaoProduto({{ produto.id }}, null, this)"
+                                        onclick="event.stopPropagation(); abrirModalEdicaoProduto({{ produto.id }}, this);"
                                         title="Editar produto">
                                     <i data-lucide="pencil" class="w-4 h-4"></i>
                                 </button>
@@ -529,7 +529,7 @@
                         <div class="pt-3 border-t border-gray-100 dark:border-gray-700">
                             <span class="text-[10px] text-gray-500 dark:text-gray-400 uppercase block mb-2">Ações</span>
                             <div class="flex justify-end gap-2 flex-wrap">
-                                <button type="button" class="btn-editar-produto p-2 rounded-lg text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 inline-flex items-center cursor-pointer bg-transparent border-none"
+                                <button type="button" class="btn-editar-produto relative z-10 p-2 rounded-lg text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 inline-flex items-center cursor-pointer bg-transparent border-none"
                                         data-id="{{ produto.id }}"
                                         data-preco-custo="{{ produto.preco_custo }}"
                                         data-quantidade-entrada="0"
@@ -541,7 +541,7 @@
                                         data-marca="{{ (produto.marca or '')|replace('\n', ' ')|e }}"
                                         data-caminhoneiro="{{ (produto.caminhoneiro or '')|replace('\n', ' ')|e }}"
                                         data-estoque-atual="{{ produto.estoque_atual }}"
-                                        onclick="abrirOuSalvarEdicaoProduto({{ produto.id }}, null, this)"
+                                        onclick="event.stopPropagation(); abrirModalEdicaoProduto({{ produto.id }}, this);"
                                         title="Editar produto">
                                     <i data-lucide="pencil" class="w-5 h-5"></i>
                                 </button>
@@ -1156,9 +1156,9 @@ function editarTipoCadastrado(id, nomeAtual) {
 {% endif %}
 
 <!-- Modal Editar Produto -->
-<div id="modal-editar-produto-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
-    <div class="fixed inset-0 bg-black/50" id="modal-editar-produto-overlay"></div>
-    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-xl shadow-sm dark:shadow-none border border-gray-200 dark:border-gray-700 z-50" onclick="event.stopPropagation()">
+<div id="modal-editar-produto-wrap" class="fixed inset-0 z-[70] hidden pointer-events-auto" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="fixed inset-0 bg-black/60 z-[70]" id="modal-editar-produto-overlay"></div>
+    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-xl shadow-sm dark:shadow-none border border-gray-200 dark:border-gray-700 z-[80] pointer-events-auto" onclick="event.stopPropagation()">
         <div class="sticky top-0 flex justify-between items-center px-8 py-5 bg-emerald-700 text-white rounded-t-xl z-10">
             <h3 class="text-xl font-bold flex items-center">
                 <i data-lucide="pencil" class="w-5 h-5 mr-2"></i>Editar Produto
@@ -1453,12 +1453,17 @@ function editarTipoCadastrado(id, nomeAtual) {
 
 // Modal Editar Produto: abertura e salvamento protegidos contra falha de rede/timeout
 (function() {
-    var wrap = document.getElementById('modal-editar-produto-wrap');
-    var form = document.getElementById('form-editar-produto');
+    function elWrap() { return document.getElementById('modal-editar-produto-wrap'); }
+    function elForm() { return document.getElementById('form-editar-produto'); }
+    var wrap = elWrap();
+    var form = elForm();
     var overlay = document.getElementById('modal-editar-produto-overlay');
     var btnsFechar = document.querySelectorAll('.modal-editar-produto-fechar');
     var actionBase = form && form.getAttribute('data-action-base');
     if (!actionBase) actionBase = '';
+    if (wrap && wrap.parentElement !== document.body) {
+        document.body.appendChild(wrap);
+    }
     var editTipo = document.getElementById('edit_tipo');
     var editTamanho = document.getElementById('edit_tamanho');
     var editNacionalidade = document.getElementById('edit_nacionalidade');
@@ -1539,7 +1544,12 @@ function editarTipoCadastrado(id, nomeAtual) {
     }
 
     function preencherModalComDados(p) {
-        if (!form || !p) return;
+        wrap = elWrap();
+        form = elForm();
+        if (!wrap || !form || !p) return false;
+        if (wrap.parentElement !== document.body) {
+            document.body.appendChild(wrap);
+        }
         form.action = actionBase.replace(/\/0$/, '/') + p.id;
         form.setAttribute('data-produto-id', String(p.id));
 
@@ -1578,8 +1588,10 @@ function editarTipoCadastrado(id, nomeAtual) {
         }
 
         wrap.classList.remove('hidden');
+        wrap.setAttribute('aria-hidden', 'false');
         if (typeof travarFundo === 'function') travarFundo();
         if (typeof lucide !== 'undefined') lucide.createIcons();
+        return true;
     }
 
     function dadosDoBotao(btn) {
@@ -1674,9 +1686,13 @@ function editarTipoCadastrado(id, nomeAtual) {
 
             // GET — abre modal com dados do servidor (fallback: data-* do botão)
             if (data && data.produto) {
-                preencherModalComDados(data.produto);
+                if (!preencherModalComDados(data.produto)) {
+                    throw new Error('Modal de edição não encontrado.');
+                }
             } else if (btnFallback) {
-                preencherModalComDados(dadosDoBotao(btnFallback));
+                if (!preencherModalComDados(dadosDoBotao(btnFallback))) {
+                    throw new Error('Modal de edição não encontrado.');
+                }
             } else {
                 throw new Error('Produto sem dados para edição.');
             }
@@ -1685,8 +1701,7 @@ function editarTipoCadastrado(id, nomeAtual) {
             // GET com data-* local: abre o modal mesmo se o servidor falhar (não quebra a navegação).
             if (!formData && btnFallback) {
                 try {
-                    preencherModalComDados(dadosDoBotao(btnFallback));
-                    return;
+                    if (preencherModalComDados(dadosDoBotao(btnFallback))) return;
                 } catch (e2) { /* segue para alerta */ }
             }
             alertarInstabilidade(id, formData, btnFallback);
@@ -1701,14 +1716,42 @@ function editarTipoCadastrado(id, nomeAtual) {
 
     window.abrirOuSalvarEdicaoProduto = abrirOuSalvarEdicaoProduto;
     window.abrirModalEditarProduto = function(btn) {
-        var id = btn && btn.getAttribute('data-id');
-        abrirOuSalvarEdicaoProduto(id, null, btn);
+        var id = btn && btn.getAttribute ? btn.getAttribute('data-id') : btn;
+        abrirOuSalvarEdicaoProduto(id, null, (btn && btn.getAttribute) ? btn : null);
+    };
+    var _editProdutoLock = 0;
+    window.abrirModalEdicaoProduto = async function(id, btn) {
+        var botao = btn || null;
+        if (id && typeof id === 'object' && id.getAttribute) {
+            botao = id;
+            id = botao.getAttribute('data-id');
+        }
+        if (!botao && id) {
+            botao = document.querySelector('.btn-editar-produto[data-id="' + id + '"]');
+        }
+        var agora = Date.now();
+        if (agora - _editProdutoLock < 400) return;
+        _editProdutoLock = agora;
+        return abrirOuSalvarEdicaoProduto(id, null, botao);
     };
 
+    document.addEventListener('click', function(e) {
+        var btn = e.target && e.target.closest ? e.target.closest('.btn-editar-produto') : null;
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        window.abrirModalEdicaoProduto(btn.getAttribute('data-id'), btn);
+    });
+
     function fecharModalEditarProduto() {
-        if (wrap) wrap.classList.add('hidden');
+        wrap = elWrap();
+        if (wrap) {
+            wrap.classList.add('hidden');
+            wrap.setAttribute('aria-hidden', 'true');
+        }
         if (typeof liberarFundo === 'function') liberarFundo();
     }
+    window.fecharModalEditarProduto = fecharModalEditarProduto;
 
     if (overlay) overlay.addEventListener('click', fecharModalEditarProduto);
     btnsFechar.forEach(function(b) { b.addEventListener('click', fecharModalEditarProduto); });

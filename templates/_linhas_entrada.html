@@ -55,7 +55,7 @@
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ produto.marca }}</td>
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ produto.caminhoneiro }}</td>
     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium w-24">
-        <button type="button" class="btn-editar-produto text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 mr-4 inline-flex items-center cursor-pointer bg-transparent border-none p-0"
+        <button type="button" class="btn-editar-produto relative z-10 text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 mr-4 inline-flex items-center cursor-pointer bg-transparent border-none p-0"
                 data-id="{{ produto.id }}"
                 data-preco-custo="{{ produto.preco_custo }}"
                 data-quantidade-entrada="0"
@@ -67,7 +67,7 @@
                 data-marca="{{ (produto.marca or '')|replace('\n', ' ')|e }}"
                 data-caminhoneiro="{{ (produto.caminhoneiro or '')|replace('\n', ' ')|e }}"
                 data-estoque-atual="{{ produto.estoque_atual }}"
-                onclick="abrirModalEditarProduto(this)"
+                onclick="event.stopPropagation(); abrirModalEdicaoProduto({{ produto.id }}, this);"
                 title="Editar produto">
             <i data-lucide="pencil" class="w-4 h-4"></i>
         </button>
