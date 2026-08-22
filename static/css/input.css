@@ -57,7 +57,16 @@
   cursor: grab;
 }
 
+/* Linhas de pedido: clique abre accordion — cursor pointer tem prioridade */
+tr.pedido-resumo.ios-draggable-item {
+  cursor: pointer;
+}
+
 .ios-draggable-item:active {
+  cursor: grabbing;
+}
+
+tr.pedido-resumo.ios-draggable-item:active {
   cursor: grabbing;
 }
 

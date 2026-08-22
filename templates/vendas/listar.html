@@ -1125,12 +1125,12 @@
     </div>
 </div>
 
-<!-- Modal Editar Venda -->
-<div id="modal-editar-venda-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
-    <div class="fixed inset-0 bg-black/50" id="modal-editar-venda-overlay"></div>
-    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-xl shadow-sm dark:shadow-none border border-gray-200 dark:border-gray-700 z-50" onclick="event.stopPropagation()">
+<!-- Modal Editar Venda (z-[9999] + move para body no JS — evita clip do main com transform/overflow) -->
+<div id="modal-editar-venda-wrap" class="fixed inset-0 z-[9999] hidden" aria-hidden="true">
+    <div class="fixed inset-0 bg-black/60" id="modal-editar-venda-overlay"></div>
+    <div class="fixed left-1/2 top-1/2 z-[10000] -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white dark:bg-slate-900 rounded-xl shadow-sm dark:shadow-none border border-gray-200 dark:border-slate-700 text-gray-900 dark:text-slate-100" onclick="event.stopPropagation()" role="dialog" aria-modal="true" aria-labelledby="modal-editar-venda-titulo">
         <div class="sticky top-0 flex justify-between items-center px-8 py-5 bg-emerald-700 text-white rounded-t-xl z-10">
-            <h3 class="text-xl font-bold flex items-center">
+            <h3 id="modal-editar-venda-titulo" class="text-xl font-bold flex items-center">
                 <i data-lucide="pencil" class="w-5 h-5 mr-2"></i>Editar Venda
             </h3>
             <button type="button" class="modal-editar-venda-fechar w-10 h-10 flex items-center justify-center rounded-full hover:bg-emerald-600 text-white font-bold transition" title="Fechar">
@@ -1143,8 +1143,8 @@
                 <input type="hidden" name="tipo_operacao" id="edit_tipo_operacao" value="VENDA"/>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="mb-4">
-                        <label for="edit_cliente_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Cliente <span class="text-red-500">*</span></label>
-                        <select id="edit_cliente_id" name="cliente_id" required class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
+                        <label for="edit_cliente_id" class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Cliente <span class="text-red-500">*</span></label>
+                        <select id="edit_cliente_id" name="cliente_id" required class="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100">
                             <option value="">Selecione...</option>
                             {% for c in todos_clientes %}
                             <option value="{{ c.id }}">{{ c.nome_cliente }}</option>
@@ -1152,8 +1152,8 @@
                         </select>
                     </div>
                     <div class="mb-4">
-                        <label for="edit_produto_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Produto <span class="text-red-500">*</span></label>
-                        <select id="edit_produto_id" name="produto_id" required class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
+                        <label for="edit_produto_id" class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Produto <span class="text-red-500">*</span></label>
+                        <select id="edit_produto_id" name="produto_id" required class="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100">
                             <option value="">Selecione...</option>
                             {% for p in todos_produtos %}
                             {% set nome_lower = p.nome_produto|lower %}
@@ -1163,28 +1163,28 @@
                         </select>
                     </div>
                     <div class="mb-4">
-                        <label for="edit_quantidade_venda" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Quantidade <span class="text-red-500">*</span></label>
-                        <input type="number" id="edit_quantidade_venda" name="quantidade_venda" min="1" required inputmode="decimal" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
+                        <label for="edit_quantidade_venda" class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Quantidade <span class="text-red-500">*</span></label>
+                        <input type="number" id="edit_quantidade_venda" name="quantidade_venda" min="1" required inputmode="decimal" class="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100">
                     </div>
                     <div class="mb-4">
-                        <label for="edit_preco_venda" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Preço de Venda <span class="text-red-500">*</span></label>
-                        <input type="text" id="edit_preco_venda" name="preco_venda" required placeholder="0,00" inputmode="decimal" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100" oninput="mascaraMoeda(this)" autocomplete="off">
+                        <label for="edit_preco_venda" class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Preço de Venda <span class="text-red-500">*</span></label>
+                        <input type="text" id="edit_preco_venda" name="preco_venda" required placeholder="0,00" inputmode="decimal" class="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100" oninput="mascaraMoeda(this)" autocomplete="off">
                     </div>
                     <div class="mb-4">
-                        <label for="edit_lucro_percentual" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Lucro (%) Opcional</label>
-                        <input type="number" name="lucro_percentual" id="edit_lucro_percentual" step="0.01" min="0" placeholder="Ex: 5" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
+                        <label for="edit_lucro_percentual" class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Lucro (%) Opcional</label>
+                        <input type="number" name="lucro_percentual" id="edit_lucro_percentual" step="0.01" min="0" placeholder="Ex: 5" class="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100">
                     </div>
                     <div class="mb-4">
-                        <label for="edit_nf" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Nota Fiscal</label>
-                        <input type="text" id="edit_nf" name="nf" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
+                        <label for="edit_nf" class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Nota Fiscal</label>
+                        <input type="text" id="edit_nf" name="nf" class="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100">
                     </div>
                     <div class="mb-4">
-                        <label for="edit_data_venda" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Data da Venda</label>
-                        <input type="date" id="edit_data_venda" name="data_venda" class="w-full text-xs md:text-sm px-2 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 appearance-none text-center md:text-left">
+                        <label for="edit_data_venda" class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Data da Venda</label>
+                        <input type="date" id="edit_data_venda" name="data_venda" class="w-full text-xs md:text-sm px-2 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 shadow-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 appearance-none text-center md:text-left">
                     </div>
                     <div class="mb-4">
-                        <label for="edit_empresa_faturadora" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Empresa Faturadora <span class="text-red-500">*</span></label>
-                        <select id="edit_empresa_faturadora" name="empresa_faturadora" required class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
+                        <label for="edit_empresa_faturadora" class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Empresa Faturadora <span class="text-red-500">*</span></label>
+                        <select id="edit_empresa_faturadora" name="empresa_faturadora" required class="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100">
                             <option value="">Selecione...</option>
                             <option value="DESTAK">DESTAK</option>
                             <option value="PATY">PATY</option>
@@ -1193,16 +1193,16 @@
                         </select>
                     </div>
                     <div class="mb-4">
-                        <label for="edit_situacao" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Situação <span class="text-red-500">*</span></label>
-                        <select id="edit_situacao" name="situacao" required class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
+                        <label for="edit_situacao" class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Situação <span class="text-red-500">*</span></label>
+                        <select id="edit_situacao" name="situacao" required class="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100">
                             <option value="PENDENTE">⏳ Pendente</option>
                             <option value="PARCIAL">🔄 Parcial</option>
                             <option value="PAGO">✅ Pago</option>
                         </select>
                     </div>
                     <div class="mb-4">
-                        <label for="edit_forma_pagamento" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Forma de Pagto</label>
-                        <select id="edit_forma_pagamento" name="forma_pagamento" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
+                        <label for="edit_forma_pagamento" class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Forma de Pagto</label>
+                        <select id="edit_forma_pagamento" name="forma_pagamento" class="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100">
                             <option value="">Selecione...</option>
                             <option value="BOLETO">📄 Boleto</option>
                             <option value="DINHEIRO">💵 Dinheiro</option>
@@ -1212,15 +1212,15 @@
                         </select>
                     </div>
                     <div class="mb-4">
-                        <label for="edit_prazo_dias" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Prazo (Dias)</label>
-                        <input type="number" id="edit_prazo_dias" name="prazo_dias" min="0" max="3650" step="1" inputmode="numeric" placeholder="Ex: 30" value="" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
+                        <label for="edit_prazo_dias" class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Prazo (Dias)</label>
+                        <input type="number" id="edit_prazo_dias" name="prazo_dias" min="0" max="3650" step="1" inputmode="numeric" placeholder="Ex: 30" value="" class="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100">
                     </div>
                 </div>
                 <div class="flex gap-4 mt-6">
                     <button type="submit" class="bg-emerald-700 text-white px-6 py-2.5 rounded-xl hover:bg-emerald-600 transition flex items-center font-medium" id="btn-salvar-editar-venda">
                         <i data-lucide="check" class="w-4 h-4 mr-2"></i>Salvar
                     </button>
-                    <button type="button" class="modal-editar-venda-fechar bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-6 py-2.5 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 transition flex items-center font-medium">
+                    <button type="button" class="modal-editar-venda-fechar bg-gray-200 dark:bg-slate-800 text-gray-700 dark:text-slate-200 border border-transparent dark:border-slate-700 px-6 py-2.5 rounded-xl hover:bg-gray-300 dark:hover:bg-slate-700 transition flex items-center font-medium">
                         <i data-lucide="x" class="w-4 h-4 mr-2"></i>Cancelar
                     </button>
                 </div>
@@ -1688,47 +1688,47 @@
         }
     });
     
-    // Accordion: Expandir/Colapsar pedidos
+    // Accordion: Expandir/Colapsar pedidos (delegação — funciona com scroll infinito e DnD)
+    function togglePedidoAccordion(linha) {
+        if (!linha) return;
+        var pedidoId = linha.getAttribute('data-pedido-id');
+        if (!pedidoId) return;
+        var detalhes = document.querySelector('tr.pedido-detalhes[data-pedido-id="' + pedidoId + '"]');
+        var chevron = linha.querySelector('.pedido-chevron');
+        if (!detalhes) return;
+
+        var isHidden = detalhes.classList.contains('hidden');
+        if (isHidden) {
+            detalhes.classList.remove('hidden');
+            if (chevron) chevron.style.transform = 'rotate(180deg)';
+        } else {
+            detalhes.classList.add('hidden');
+            if (chevron) chevron.style.transform = 'rotate(0deg)';
+        }
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+
+    window.togglePedidoAccordion = togglePedidoAccordion;
+    window.abrirDetalhesPedido = function(pedidoId) {
+        var id = String(pedidoId || '');
+        if (id && id.indexOf('pedido-') !== 0) id = 'pedido-' + id;
+        var linha = document.querySelector('tr.pedido-resumo[data-pedido-id="' + id + '"]');
+        togglePedidoAccordion(linha);
+    };
+
     function initAccordion() {
-        var linhasResumo = document.querySelectorAll('.pedido-resumo');
-        linhasResumo.forEach(function(linha) {
-            // Verificar se já tem listener para evitar duplicação
-            if (linha.hasAttribute('data-accordion-initialized')) return;
-            linha.setAttribute('data-accordion-initialized', 'true');
-            
-            linha.addEventListener('click', function(e) {
-                // Não expandir se clicar em ações, formulários ou checkbox de bulk
-                if (e.target.closest('a, button, form, input')) {
-                    return;
-                }
-                
-                var pedidoId = linha.getAttribute('data-pedido-id');
-                var detalhes = document.querySelector('.pedido-detalhes[data-pedido-id="' + pedidoId + '"]');
-                var chevron = linha.querySelector('.pedido-chevron');
-                
-                if (detalhes) {
-                    var isHidden = detalhes.classList.contains('hidden');
-                    
-                    if (isHidden) {
-                        // Expandir
-                        detalhes.classList.remove('hidden');
-                        if (chevron) {
-                            chevron.style.transform = 'rotate(180deg)';
-                        }
-                    } else {
-                        // Colapsar
-                        detalhes.classList.add('hidden');
-                        if (chevron) {
-                            chevron.style.transform = 'rotate(0deg)';
-                        }
-                    }
-                    
-                    // Atualizar ícones Lucide após mudança
-                    if (typeof lucide !== 'undefined') {
-                        lucide.createIcons();
-                    }
-                }
-            });
+        var tbodyAcc = document.getElementById('vendas-tbody');
+        if (!tbodyAcc || tbodyAcc.hasAttribute('data-accordion-delegated')) return;
+        tbodyAcc.setAttribute('data-accordion-delegated', 'true');
+
+        tbodyAcc.addEventListener('click', function(e) {
+            // Após um drag real o DnD marca a flag — ignora o click fantasma
+            if (window._iosDnDJustDragged) return;
+            if (e.target.closest('a, button, form, input, label, select, textarea, .no-drag')) return;
+
+            var linha = e.target.closest('tr.pedido-resumo');
+            if (!linha || !tbodyAcc.contains(linha)) return;
+            togglePedidoAccordion(linha);
         });
     }
     
@@ -1892,91 +1892,162 @@ function loadingBotaoEditarVenda(formElement) {
     return true;
 }
 
-// Modal Editar Venda: abrir ao clicar no lápis, preencher com data-* e confirmar antes de enviar
+// Modal Editar Venda: escopo global, popula inputs ANTES de abrir, ancora no body
 (function() {
-    var wrap = document.getElementById('modal-editar-venda-wrap');
-    var form = document.getElementById('form-editar-venda');
-    var overlay = document.getElementById('modal-editar-venda-overlay');
-    var btnsFechar = document.querySelectorAll('.modal-editar-venda-fechar');
-    var actionBase = form && form.getAttribute('data-action-base');
-    if (!actionBase) actionBase = '';
+    function limparValor(v) {
+        var s = String(v == null ? '' : v).trim();
+        return (s && s !== 'None' && s.toLowerCase() !== 'null' && s.toLowerCase() !== 'undefined') ? s : '';
+    }
 
-    function abrirModalEditarVenda(btn) {
-        function limparValor(v) {
-            var s = String(v == null ? '' : v).trim();
-            return (s && s !== 'None' && s.toLowerCase() !== 'null' && s.toLowerCase() !== 'undefined') ? s : '';
+    function swalErroEditarVenda(mensagem) {
+        var dark = document.documentElement.classList.contains('dark');
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                icon: 'error',
+                title: 'Erro ao editar',
+                text: mensagem || 'Não foi possível abrir o formulário de edição.',
+                confirmButtonColor: '#059669',
+                background: dark ? '#0f172a' : '#FFFFFF',
+                color: dark ? '#F9FAFB' : '#111827'
+            });
+        } else {
+            alert(mensagem || 'Não foi possível abrir o formulário de edição.');
         }
-        var id = btn.getAttribute('data-id');
-        var clienteId = limparValor(btn.getAttribute('data-cliente-id'));
-        var produtoId = limparValor(btn.getAttribute('data-produto-id'));
-        var qtd = limparValor(btn.getAttribute('data-qtd')) || '1';
-        var preco = limparValor(btn.getAttribute('data-preco'));
-        var nf = limparValor(btn.getAttribute('data-nf'));
-        var data = limparValor(btn.getAttribute('data-data'));
-        var empresa = limparValor(btn.getAttribute('data-empresa'));
-        var situacao = limparValor(btn.getAttribute('data-situacao')) || 'PENDENTE';
-        var formaPagamento = limparValor(btn.getAttribute('data-forma-pagamento'));
-        var prazoDias = limparValor(btn.getAttribute('data-prazo-dias'));
-        var lucroPerc = limparValor(btn.getAttribute('data-lucro-perc'));
-        var tipoOperacao = (limparValor(btn.getAttribute('data-tipo-operacao')) || 'VENDA').toUpperCase();
-
-        form.action = actionBase.replace(/\/0$/, '/') + id;
-        document.getElementById('edit_cliente_id').value = clienteId;
-        document.getElementById('edit_produto_id').value = produtoId;
-        document.getElementById('edit_quantidade_venda').value = qtd;
-        document.getElementById('edit_preco_venda').value = (typeof formatarMoedaParaExibir === 'function' ? formatarMoedaParaExibir(preco) : preco) || preco;
-        document.getElementById('edit_nf').value = nf;
-        document.getElementById('edit_data_venda').value = data;
-        document.getElementById('edit_empresa_faturadora').value = empresa;
-        document.getElementById('edit_situacao').value = situacao;
-        var inputLucroPerc = document.getElementById('edit_lucro_percentual');
-        if (inputLucroPerc) {
-            inputLucroPerc.value = (lucroPerc && lucroPerc !== 'None') ? lucroPerc : '';
-        }
-        var editTipoOp = document.getElementById('edit_tipo_operacao');
-        if (editTipoOp) editTipoOp.value = tipoOperacao;
-        var editFormaPag = document.getElementById('edit_forma_pagamento');
-        if (editFormaPag) {
-            if (tipoOperacao === 'PERDA') {
-                editFormaPag.value = '';
-                editFormaPag.disabled = true;
-                editFormaPag.removeAttribute('required');
-                editFormaPag.classList.add('opacity-50', 'cursor-not-allowed');
-            } else {
-                editFormaPag.value = formaPagamento;
-                editFormaPag.disabled = false;
-                editFormaPag.classList.remove('opacity-50', 'cursor-not-allowed');
-            }
-        }
-        var editPrazo = document.getElementById('edit_prazo_dias');
-        if (editPrazo) {
-            if (tipoOperacao === 'PERDA') {
-                editPrazo.value = '';
-                editPrazo.disabled = true;
-                editPrazo.classList.add('opacity-50', 'cursor-not-allowed');
-            } else {
-                editPrazo.value = prazoDias;
-                editPrazo.disabled = false;
-                editPrazo.classList.remove('opacity-50', 'cursor-not-allowed');
-            }
-        }
-
-        wrap.classList.remove('hidden');
-        travarFundo();
-        if (typeof lucide !== 'undefined') lucide.createIcons();
     }
 
     function fecharModalEditarVenda() {
-        wrap.classList.add('hidden');
-        liberarFundo();
+        var wrap = document.getElementById('modal-editar-venda-wrap');
+        if (wrap) {
+            wrap.classList.add('hidden');
+            wrap.setAttribute('aria-hidden', 'true');
+        }
+        if (typeof liberarFundo === 'function') liberarFundo();
     }
 
-    document.querySelectorAll('.btn-editar-venda').forEach(function(btn) {
-        btn.addEventListener('click', function() { abrirModalEditarVenda(btn); });
-    });
-    if (overlay) overlay.addEventListener('click', fecharModalEditarVenda);
-    btnsFechar.forEach(function(b) { b.addEventListener('click', fecharModalEditarVenda); });
+    function abrirModalEditarVenda(btn) {
+        try {
+            if (!btn) throw new Error('Botão de edição inválido.');
 
+            var wrap = document.getElementById('modal-editar-venda-wrap');
+            var form = document.getElementById('form-editar-venda');
+            if (!wrap || !form) throw new Error('Modal de edição não encontrado no DOM.');
+
+            // Escapa o <main> (transform/overflow clipam position:fixed)
+            if (wrap.parentElement !== document.body) {
+                document.body.appendChild(wrap);
+            }
+
+            var actionBase = form.getAttribute('data-action-base') || '';
+            var id = limparValor(btn.getAttribute('data-id'));
+            if (!id) throw new Error('ID da venda não encontrado.');
+
+            var clienteId = limparValor(btn.getAttribute('data-cliente-id'));
+            var produtoId = limparValor(btn.getAttribute('data-produto-id'));
+            var qtd = limparValor(btn.getAttribute('data-qtd')) || '1';
+            var preco = limparValor(btn.getAttribute('data-preco'));
+            var nf = limparValor(btn.getAttribute('data-nf'));
+            var data = limparValor(btn.getAttribute('data-data'));
+            var empresa = limparValor(btn.getAttribute('data-empresa'));
+            var situacao = limparValor(btn.getAttribute('data-situacao')) || 'PENDENTE';
+            var formaPagamento = limparValor(btn.getAttribute('data-forma-pagamento'));
+            var prazoDias = limparValor(btn.getAttribute('data-prazo-dias'));
+            var lucroPerc = limparValor(btn.getAttribute('data-lucro-perc'));
+            var tipoOperacao = (limparValor(btn.getAttribute('data-tipo-operacao')) || 'VENDA').toUpperCase();
+
+            form.action = actionBase.replace(/\/0$/, '/') + id;
+
+            var elCliente = document.getElementById('edit_cliente_id');
+            var elProduto = document.getElementById('edit_produto_id');
+            var elQtd = document.getElementById('edit_quantidade_venda');
+            var elPreco = document.getElementById('edit_preco_venda');
+            var elNf = document.getElementById('edit_nf');
+            var elData = document.getElementById('edit_data_venda');
+            var elEmpresa = document.getElementById('edit_empresa_faturadora');
+            var elSituacao = document.getElementById('edit_situacao');
+            if (!elCliente || !elProduto || !elQtd || !elPreco) {
+                throw new Error('Campos do formulário de edição incompletos.');
+            }
+
+            elCliente.value = clienteId;
+            elProduto.value = produtoId;
+            elQtd.value = qtd;
+            elPreco.value = (typeof formatarMoedaParaExibir === 'function' ? formatarMoedaParaExibir(preco) : preco) || preco;
+            if (elNf) elNf.value = nf;
+            if (elData) elData.value = data;
+            if (elEmpresa) elEmpresa.value = empresa;
+            if (elSituacao) elSituacao.value = situacao;
+
+            var inputLucroPerc = document.getElementById('edit_lucro_percentual');
+            if (inputLucroPerc) {
+                inputLucroPerc.value = (lucroPerc && lucroPerc !== 'None') ? lucroPerc : '';
+            }
+            var editTipoOp = document.getElementById('edit_tipo_operacao');
+            if (editTipoOp) editTipoOp.value = tipoOperacao;
+
+            var editFormaPag = document.getElementById('edit_forma_pagamento');
+            if (editFormaPag) {
+                if (tipoOperacao === 'PERDA') {
+                    editFormaPag.value = '';
+                    editFormaPag.disabled = true;
+                    editFormaPag.removeAttribute('required');
+                    editFormaPag.classList.add('opacity-50', 'cursor-not-allowed');
+                } else {
+                    editFormaPag.value = formaPagamento;
+                    editFormaPag.disabled = false;
+                    editFormaPag.classList.remove('opacity-50', 'cursor-not-allowed');
+                }
+            }
+            var editPrazo = document.getElementById('edit_prazo_dias');
+            if (editPrazo) {
+                if (tipoOperacao === 'PERDA') {
+                    editPrazo.value = '';
+                    editPrazo.disabled = true;
+                    editPrazo.classList.add('opacity-50', 'cursor-not-allowed');
+                } else {
+                    editPrazo.value = prazoDias;
+                    editPrazo.disabled = false;
+                    editPrazo.classList.remove('opacity-50', 'cursor-not-allowed');
+                }
+            }
+
+            // Só remove hidden depois do formulário populado
+            wrap.classList.remove('hidden');
+            wrap.setAttribute('aria-hidden', 'false');
+            if (typeof travarFundo === 'function') travarFundo();
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        } catch (err) {
+            console.error('abrirModalEditarVenda falhou:', err);
+            var wrapErr = document.getElementById('modal-editar-venda-wrap');
+            if (wrapErr) {
+                wrapErr.classList.add('hidden');
+                wrapErr.setAttribute('aria-hidden', 'true');
+            }
+            if (typeof liberarFundo === 'function') liberarFundo();
+            swalErroEditarVenda(err && err.message ? err.message : 'Falha ao abrir a edição da venda.');
+        }
+    }
+
+    window.abrirModalEditarVenda = abrirModalEditarVenda;
+    window.fecharModalEditarVenda = fecharModalEditarVenda;
+
+    // Delegação em capture: funciona mesmo se algum handler filho der stopPropagation
+    document.addEventListener('click', function(e) {
+        var btn = e.target && e.target.closest ? e.target.closest('.btn-editar-venda') : null;
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        abrirModalEditarVenda(btn);
+    }, true);
+
+    document.addEventListener('click', function(e) {
+        var t = e.target;
+        if (!t || !t.closest) return;
+        if (t.id === 'modal-editar-venda-overlay' || t.closest('.modal-editar-venda-fechar')) {
+            fecharModalEditarVenda();
+        }
+    });
+
+    var form = document.getElementById('form-editar-venda');
     if (form) {
         form.addEventListener('submit', function(e) {
             if (form.getAttribute('data-submitting') === '1') {
@@ -1985,7 +2056,6 @@ function loadingBotaoEditarVenda(formElement) {
             }
             e.preventDefault();
 
-            // Fallback defensivo se SweetAlert2 não carregar por algum motivo.
             if (typeof Swal === 'undefined') {
                 if (!confirm('Tem certeza que deseja salvar as alterações desta venda?')) return;
                 loadingBotaoEditarVenda(form);
@@ -2004,7 +2074,7 @@ function loadingBotaoEditarVenda(formElement) {
                 cancelButtonColor: '#6B7280',
                 confirmButtonText: 'Sim, salvar!',
                 cancelButtonText: 'Cancelar',
-                background: dark ? '#1F2937' : '#FFFFFF',
+                background: dark ? '#0f172a' : '#FFFFFF',
                 color: dark ? '#F9FAFB' : '#111827'
             }).then(function(result) {
                 if (!result.isConfirmed) return;
@@ -3669,17 +3739,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (cardsHtml && viewGrade) {
                 var emptyDiv = viewGrade.querySelector('.col-span-full');
                 if (emptyDiv) emptyDiv.remove();
-                var cardsAntes = viewGrade.querySelectorAll('.btn-editar-venda').length;
                 viewGrade.insertAdjacentHTML('beforeend', cardsHtml);
-                var todosCardsBtn = viewGrade.querySelectorAll('.btn-editar-venda');
-                Array.from(todosCardsBtn).slice(cardsAntes).forEach(function(btn) {
-                    if (!btn.hasAttribute('data-pagination-initialized')) {
-                        btn.setAttribute('data-pagination-initialized', 'true');
-                        btn.addEventListener('click', function() {
-                            abrirModalEditarVenda(btn);
-                        });
-                    }
-                });
             }
             
             var linhasDepois = tbody.querySelectorAll('tr.pedido-resumo').length;
@@ -3707,23 +3767,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             initAccordion();
-            
-            var todasLinhas = tbody.querySelectorAll('tr.pedido-resumo');
-            Array.from(todasLinhas).slice(linhasAntes).forEach(function(linhaResumo) {
-                var linhaDetalhes = tbody.querySelector('tr.pedido-detalhes[data-pedido-id="' + linhaResumo.getAttribute('data-pedido-id') + '"]');
-                if (linhaDetalhes) {
-                    var botoesEditar = linhaDetalhes.querySelectorAll('.btn-editar-venda');
-                    botoesEditar.forEach(function(btn) {
-                        if (!btn.hasAttribute('data-pagination-initialized')) {
-                            btn.setAttribute('data-pagination-initialized', 'true');
-                            btn.addEventListener('click', function() {
-                                abrirModalEditarVenda(btn);
-                            });
-                        }
-                    });
-                }
-            });
-            
+
             if (pedidosCarregados < 40) {
                 pararScroll();
             }
@@ -3795,7 +3839,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             title: 'Erro',
                             text: 'Não foi possível carregar todas as vendas. Tente novamente.',
                             confirmButtonColor: '#059669',
-                            background: dark ? '#1F2937' : '#FFFFFF',
+                            background: dark ? '#0f172a' : '#FFFFFF',
                             color: dark ? '#F9FAFB' : '#111827'
                         });
                     } else {
@@ -3817,119 +3861,21 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     observer.observe(sentinela);
     
-    // Função para inicializar accordion (reutilizar a função existente)
+    // Accordion já usa delegação em #vendas-tbody (initAccordion no script anterior)
     function initAccordion() {
-        var linhasResumo = document.querySelectorAll('.pedido-resumo');
-        linhasResumo.forEach(function(linha) {
-            // Verificar se já tem listener
-            if (linha.hasAttribute('data-accordion-initialized')) return;
-            linha.setAttribute('data-accordion-initialized', 'true');
-            
-            linha.addEventListener('click', function(e) {
-                // Não expandir se clicar em ações, formulários ou checkbox de bulk
-                if (e.target.closest('a, button, form, input')) {
-                    return;
-                }
-                
-                var pedidoId = linha.getAttribute('data-pedido-id');
-                var detalhes = document.querySelector('.pedido-detalhes[data-pedido-id="' + pedidoId + '"]');
-                var chevron = linha.querySelector('.pedido-chevron');
-                
-                if (detalhes) {
-                    var isHidden = detalhes.classList.contains('hidden');
-                    
-                    if (isHidden) {
-                        // Expandir
-                        detalhes.classList.remove('hidden');
-                        if (chevron) {
-                            chevron.style.transform = 'rotate(180deg)';
-                        }
-                    } else {
-                        // Colapsar
-                        detalhes.classList.add('hidden');
-                        if (chevron) {
-                            chevron.style.transform = 'rotate(0deg)';
-                        }
-                    }
-                    
-                    // Atualizar ícones Lucide após mudança
-                    if (typeof lucide !== 'undefined') {
-                        lucide.createIcons();
-                    }
-                }
-            });
-        });
-    }
-    
-    // Função para abrir modal de editar venda (reutilizar a função existente)
-    function abrirModalEditarVenda(btn) {
-        function limparValor(v) {
-            var s = String(v == null ? '' : v).trim();
-            return (s && s !== 'None' && s.toLowerCase() !== 'null' && s.toLowerCase() !== 'undefined') ? s : '';
-        }
-        var wrap = document.getElementById('modal-editar-venda-wrap');
-        var form = document.getElementById('form-editar-venda');
-        if (!wrap || !form) return;
-        
-        var actionBase = form.getAttribute('data-action-base') || '';
-        var id = btn.getAttribute('data-id');
-        var clienteId = limparValor(btn.getAttribute('data-cliente-id'));
-        var produtoId = limparValor(btn.getAttribute('data-produto-id'));
-        var qtd = limparValor(btn.getAttribute('data-qtd')) || '1';
-        var preco = limparValor(btn.getAttribute('data-preco'));
-        var nf = limparValor(btn.getAttribute('data-nf'));
-        var data = limparValor(btn.getAttribute('data-data'));
-        var empresa = limparValor(btn.getAttribute('data-empresa'));
-        var situacao = limparValor(btn.getAttribute('data-situacao')) || 'PENDENTE';
-        var formaPagamento = limparValor(btn.getAttribute('data-forma-pagamento'));
-        var prazoDias = limparValor(btn.getAttribute('data-prazo-dias'));
-        var lucroPerc = limparValor(btn.getAttribute('data-lucro-perc'));
-        var tipoOperacao = (limparValor(btn.getAttribute('data-tipo-operacao')) || 'VENDA').toUpperCase();
-
-        form.action = actionBase.replace(/\/0$/, '/') + id;
-        document.getElementById('edit_cliente_id').value = clienteId;
-        document.getElementById('edit_produto_id').value = produtoId;
-        document.getElementById('edit_quantidade_venda').value = qtd;
-        document.getElementById('edit_preco_venda').value = (typeof formatarMoedaParaExibir === 'function' ? formatarMoedaParaExibir(preco) : preco) || preco;
-        document.getElementById('edit_nf').value = nf;
-        document.getElementById('edit_data_venda').value = data;
-        document.getElementById('edit_empresa_faturadora').value = empresa;
-        document.getElementById('edit_situacao').value = situacao;
-        var inputLucroPerc = document.getElementById('edit_lucro_percentual');
-        if (inputLucroPerc) {
-            inputLucroPerc.value = (lucroPerc && lucroPerc !== 'None') ? lucroPerc : '';
-        }
-        var editTipoOp = document.getElementById('edit_tipo_operacao');
-        if (editTipoOp) editTipoOp.value = tipoOperacao;
-        var editFormaPag = document.getElementById('edit_forma_pagamento');
-        if (editFormaPag) {
-            if (tipoOperacao === 'PERDA') {
-                editFormaPag.value = '';
-                editFormaPag.disabled = true;
-                editFormaPag.removeAttribute('required');
-                editFormaPag.classList.add('opacity-50', 'cursor-not-allowed');
-            } else {
-                editFormaPag.value = formaPagamento;
-                editFormaPag.disabled = false;
-                editFormaPag.classList.remove('opacity-50', 'cursor-not-allowed');
+        if (typeof window.togglePedidoAccordion === 'function') {
+            var tbodyAcc = document.getElementById('vendas-tbody');
+            if (tbodyAcc && !tbodyAcc.hasAttribute('data-accordion-delegated')) {
+                tbodyAcc.setAttribute('data-accordion-delegated', 'true');
+                tbodyAcc.addEventListener('click', function(e) {
+                    if (window._iosDnDJustDragged) return;
+                    if (e.target.closest('a, button, form, input, label, select, textarea, .no-drag')) return;
+                    var linha = e.target.closest('tr.pedido-resumo');
+                    if (!linha || !tbodyAcc.contains(linha)) return;
+                    window.togglePedidoAccordion(linha);
+                });
             }
         }
-        var editPrazo = document.getElementById('edit_prazo_dias');
-        if (editPrazo) {
-            if (tipoOperacao === 'PERDA') {
-                editPrazo.value = '';
-                editPrazo.disabled = true;
-                editPrazo.classList.add('opacity-50', 'cursor-not-allowed');
-            } else {
-                editPrazo.value = prazoDias;
-                editPrazo.disabled = false;
-                editPrazo.classList.remove('opacity-50', 'cursor-not-allowed');
-            }
-        }
-
-        wrap.classList.remove('hidden');
-        travarFundo();
-        if (typeof lucide !== 'undefined') lucide.createIcons();
     }
 })();
 </script>
@@ -7006,7 +6952,7 @@ async function executarExclusaoDocumentosMassa(ids) {
         }, {
             itemSelector: '.ios-draggable-item',
             idAttribute: 'data-id',
-            pressDelay: 150,
+            pressDelay: 450,
             filterSelector: 'input, button, a, select, textarea, label, .no-drag, .btn-editar-venda, .badge-baixa-entrega'
         });
 
@@ -7016,7 +6962,7 @@ async function executarExclusaoDocumentosMassa(ids) {
         }, {
             itemSelector: 'tr.pedido-resumo.ios-draggable-item',
             idAttribute: 'data-id',
-            pressDelay: 150,
+            pressDelay: 450,
             filterSelector: 'input, button, a, select, textarea, label, .no-drag, .bulk-row-check, .badge-baixa-entrega'
         });
 

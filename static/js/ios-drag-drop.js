@@ -5,9 +5,17 @@
 (function (global) {
     'use strict';
 
-    var PRESS_DELAY_MS = 150;
+    var PRESS_DELAY_MS = 450;
     var MOVE_CANCEL_PX = 10;
     var ACTIVE_INSTANCES = [];
+
+    /** Flag global: true por ~80ms após um drag real — evita click fantasma (accordion). */
+    function markJustDragged() {
+        global._iosDnDJustDragged = true;
+        setTimeout(function () {
+            global._iosDnDJustDragged = false;
+        }, 80);
+    }
 
     function isCapacitorNative() {
         try {
@@ -292,6 +300,13 @@
             item.style.zIndex = '1000';
             item.style.pointerEvents = 'none';
 
+            // Capture só quando o drag de fato começa — senão engole o click
+            try {
+                if (state.pointerId != null && container.setPointerCapture) {
+                    container.setPointerCapture(state.pointerId);
+                }
+            } catch (err) { /* ignore */ }
+
             dispararHapticFeedback('medium');
         }
 
@@ -324,9 +339,7 @@
             state.pointerId = e.pointerId;
             state._lastY = e.clientY;
 
-            try {
-                container.setPointerCapture && container.setPointerCapture(e.pointerId);
-            } catch (err) { /* ignore */ }
+            // NÃO setPointerCapture aqui — preserva click/accordion em toques curtos
 
             clearDelay();
             state.delayTimer = setTimeout(function () {
@@ -403,6 +416,7 @@
             state.pointerId = null;
 
             dispararHapticFeedback('light');
+            markJustDragged();
 
             var novaOrdem = collectOrder(container, itemSelector, idAttr);
             if (typeof onReorderCallback === 'function') {
