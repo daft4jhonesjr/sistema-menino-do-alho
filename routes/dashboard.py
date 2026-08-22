@@ -861,8 +861,8 @@ def dashboard():
     _perda_expr = _custo * _qtd
     _row_lucro_mes = db.session.query(
         func.coalesce(func.sum(case(
-            (_tipo_op != 'PERDA', _lucro_venda_expr),
-            else_=0,
+            (_tipo_op == 'PERDA', 0),
+            else_=_lucro_venda_expr,
         )), 0).label('lucro_vendas'),
         func.coalesce(func.sum(case(
             (_tipo_op == 'PERDA', _perda_expr),
