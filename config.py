@@ -36,3 +36,7 @@ class Config:
     CLOUDINARY_CLOUD_NAME = os.environ.get('CLOUDINARY_CLOUD_NAME', '')
     CLOUDINARY_API_KEY = os.environ.get('CLOUDINARY_API_KEY', '')
     CLOUDINARY_API_SECRET = os.environ.get('CLOUDINARY_API_SECRET', '')
+    # OneSignal (push em background — boletos, radar, avisos operacionais)
+    ONESIGNAL_APP_ID = os.environ.get('ONESIGNAL_APP_ID', '')
+    ONESIGNAL_REST_API_KEY = os.environ.get('ONESIGNAL_REST_API_KEY', '')
+    ONESIGNAL_SAFARI_WEB_ID = os.environ.get('ONESIGNAL_SAFARI_WEB_ID', '')

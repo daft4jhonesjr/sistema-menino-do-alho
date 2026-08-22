@@ -117,6 +117,8 @@ class Usuario(UserMixin, db.Model):
         nullable=True,
         default=lambda: str(uuid.uuid4()),
     )
+    # Subscription/player ID do OneSignal (último dispositivo registrado).
+    onesignal_player_id = db.Column(db.String(255), nullable=True)
     # Lista JSON de módulos permitidos (ex.: ["dashboard", "vendas", "caixa"]).
     # Armazenada como TEXT para compatibilidade SQLite/PostgreSQL na migração inline.
     permissoes = db.Column(db.Text, nullable=True)
@@ -304,6 +306,9 @@ class Cliente(db.Model):
     cep = db.Column(db.String(20), nullable=True)
     rua = db.Column(db.String(150), nullable=True)
     numero = db.Column(db.String(20), nullable=True)
+    # Coordenadas cacheadas (Nominatim) para otimização de rotas OSRM na logística
+    latitude = db.Column(db.Float, nullable=True)
+    longitude = db.Column(db.Float, nullable=True)
     ativo = db.Column(db.Boolean, default=True, nullable=False, server_default='1', index=True)
 
     empresa = db.relationship('Empresa', backref=db.backref('clientes', lazy='dynamic'))

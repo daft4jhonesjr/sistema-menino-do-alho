@@ -4047,6 +4047,13 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
         except Exception as e:
             db.session.rollback()
             app.logger.error(f"Migração horários notificação (usuarios) falhou: {e}")
+        # --- MIGRACAO: OneSignal player/subscription ID ---
+        try:
+            if _adicionar_coluna_se_ausente('usuarios', 'onesignal_player_id', 'VARCHAR(255)'):
+                app.logger.info('Migração: coluna onesignal_player_id adicionada em usuarios.')
+        except Exception as e:
+            db.session.rollback()
+            app.logger.error(f"Migração onesignal_player_id (usuarios) falhou: {e}")
         # Migração: permissoes granulares por módulo (JSON em TEXT)
         try:
             import json as _json_perm
@@ -4336,6 +4343,15 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
                 _adicionar_coluna_se_ausente('clientes', _col_contato, _ddl_contato)
             except (OperationalError, Exception):
                 db.session.rollback()
+        # Migração: latitude/longitude em clientes (cache de geocoding para OSRM)
+        try:
+            _adicionar_coluna_se_ausente('clientes', 'latitude', 'FLOAT')
+        except (OperationalError, Exception):
+            db.session.rollback()
+        try:
+            _adicionar_coluna_se_ausente('clientes', 'longitude', 'FLOAT')
+        except (OperationalError, Exception):
+            db.session.rollback()
         # Migração: soft-completion de lembretes do calendário
         try:
             _adicionar_coluna_se_ausente('lembretes', 'concluido', 'BOOLEAN NOT NULL DEFAULT FALSE')

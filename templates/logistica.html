@@ -44,6 +44,10 @@
                 <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
                 <span class="whitespace-nowrap">Entregar Selecionados</span>
             </button>
+            <button type="button" onclick="otimizarRotaEntregas()" class="w-full sm:w-auto justify-center flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition shadow">
+                <span aria-hidden="true">🛣️</span>
+                <span class="whitespace-nowrap">Otimizar Rota</span>
+            </button>
             <button type="button" onclick="gerarRotaMaps()" class="w-full sm:w-auto justify-center bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-lg shadow-emerald-500/30 flex items-center gap-2 transition-colors">
                 <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path></svg>
                 <span class="whitespace-nowrap">Rota no Maps</span>
@@ -74,6 +78,20 @@
     </div>
 </div>
 
+<div id="card-rota-otimizada" class="hidden mb-4 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 px-4 py-3 shadow-sm">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div class="min-w-0">
+            <p class="text-sm font-semibold text-blue-900 dark:text-blue-100">Rota otimizada</p>
+            <p id="card-rota-otimizada-resumo" class="text-sm text-blue-800/90 dark:text-blue-200/90 mt-0.5"></p>
+            <p id="card-rota-otimizada-avisos" class="text-xs text-amber-700 dark:text-amber-300 mt-1 hidden"></p>
+        </div>
+        <a id="btn-abrir-trajeto-maps" href="#" target="_blank" rel="noopener noreferrer"
+           class="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition shadow shrink-0">
+            Abrir Trajeto Completo no Maps
+        </a>
+    </div>
+</div>
+
 <div id="container-lista" class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-hidden">
     <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -97,7 +115,12 @@
                         <input type="checkbox" class="check-entrega rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" value="{{ e.ids[0] }}" data-ids="{{ e.ids|join(',') }}" data-endereco="{{ e.endereco }}" data-cliente="{{ e.cliente_nome }}" data-produtos="{{ e.produtos|join(' || ') }}" data-total="{{ e.total | formato_moeda }}">
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">{{ e.data }}</td>
-                    <td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">{{ e.cliente_nome }}</td>
+                    <td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">
+                        <span class="inline-flex items-center gap-2 flex-wrap">
+                            <span class="badge-parada hidden inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold bg-blue-600 text-white shadow-sm"></span>
+                            <span class="nome-cliente-entrega">{{ e.cliente_nome }}</span>
+                        </span>
+                    </td>
                     <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{{ e.endereco or '—' }}</td>
                     <td class="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
                         <ul class="space-y-1">
@@ -154,7 +177,10 @@
                 <span class="text-xs text-gray-500 dark:text-gray-400">{{ e.data }}</span>
             </div>
             <div class="flex-1 min-w-0 space-y-2">
-                <h3 class="font-bold text-lg text-gray-900 dark:text-white truncate" title="{{ e.cliente_nome }}">{{ e.cliente_nome }}</h3>
+                <h3 class="font-bold text-lg text-gray-900 dark:text-white truncate flex items-center gap-2" title="{{ e.cliente_nome }}">
+                    <span class="badge-parada hidden inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold bg-blue-600 text-white shadow-sm shrink-0"></span>
+                    <span class="nome-cliente-entrega truncate">{{ e.cliente_nome }}</span>
+                </h3>
                 <p class="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
                     <span class="text-gray-400 dark:text-gray-500">📍</span> {{ e.endereco or 'Endereço não informado' }}
                 </p>
@@ -398,7 +424,12 @@ document.addEventListener('DOMContentLoaded', function() {
         tr.innerHTML = ''
             + '<td class="px-4 py-4"><input type="checkbox" ' + attrsCheckboxEntrega(e, idsRaw, vendaRef, produtosLista) + '></td>'
             + '<td class="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">' + escapeHtml(e.data) + '</td>'
-            + '<td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">' + escapeHtml(e.cliente_nome) + '</td>'
+            + '<td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">'
+            + '  <span class="inline-flex items-center gap-2 flex-wrap">'
+            + '    <span class="badge-parada hidden inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold bg-blue-600 text-white shadow-sm"></span>'
+            + '    <span class="nome-cliente-entrega">' + escapeHtml(e.cliente_nome) + '</span>'
+            + '  </span>'
+            + '</td>'
             + '<td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">' + escapeHtml(e.endereco || '—') + '</td>'
             + '<td class="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">' + produtosHtml + '</td>'
             + '<td class="px-6 py-4 text-sm font-semibold text-emerald-600 dark:text-emerald-400 text-right">' + formatMoeda(e.total) + '</td>'
@@ -442,7 +473,10 @@ document.addEventListener('DOMContentLoaded', function() {
             + '  <span class="text-xs text-gray-500 dark:text-gray-400">' + escapeHtml(e.data) + '</span>'
             + '</div>'
             + '<div class="flex-1 min-w-0 space-y-2">'
-            + '  <h3 class="font-bold text-lg text-gray-900 dark:text-white truncate" title="' + escapeHtml(e.cliente_nome || '') + '">' + escapeHtml(e.cliente_nome) + '</h3>'
+            + '  <h3 class="font-bold text-lg text-gray-900 dark:text-white truncate flex items-center gap-2" title="' + escapeHtml(e.cliente_nome || '') + '">'
+            + '    <span class="badge-parada hidden inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold bg-blue-600 text-white shadow-sm shrink-0"></span>'
+            + '    <span class="nome-cliente-entrega truncate">' + escapeHtml(e.cliente_nome) + '</span>'
+            + '  </h3>'
             + '  <p class="text-sm text-gray-600 dark:text-gray-400 line-clamp-2"><span class="text-gray-400 dark:text-gray-500">📍</span> ' + escapeHtml(e.endereco || 'Endereço não informado') + '</p>'
             + '  <ul class="space-y-1 text-sm text-gray-700 dark:text-gray-300 border-t border-b border-gray-100 dark:border-slate-700 py-2">' + produtosHtml + '</ul>'
             + '</div>'
@@ -763,6 +797,188 @@ function gerarRotaMaps() {
         url += '&waypoints=' + enderecos.join('%7C');
     }
     window.open(url, '_blank');
+}
+
+/* ── Otimizar rota (OSRM + Nominatim) ─────────────────────────────────── */
+function _ordinalParadaPt(n) {
+    return String(n) + 'ª Parada';
+}
+
+function _encontrarItemEntregaPorPedidoId(pedidoId) {
+    var idStr = String(pedidoId);
+    var row = null;
+    var card = null;
+    document.querySelectorAll('.check-entrega').forEach(function(el) {
+        var match = String(el.value) === idStr;
+        if (!match) {
+            var ids = (el.getAttribute('data-ids') || '').split(',');
+            match = ids.indexOf(idStr) !== -1;
+        }
+        if (!match) return;
+        var tr = el.closest('#tbody-entregas tr.ios-draggable-item');
+        var cardEl = el.closest('#grid-cards-entregas .ios-draggable-item');
+        if (tr) row = tr;
+        if (cardEl) card = cardEl;
+    });
+    return { row: row, card: card };
+}
+
+function _aplicarBadgeParada(el, numero) {
+    if (!el) return;
+    var badge = el.querySelector('.badge-parada');
+    if (!badge) return;
+    badge.textContent = _ordinalParadaPt(numero);
+    badge.classList.remove('hidden');
+}
+
+function _limparBadgesParada() {
+    document.querySelectorAll('.badge-parada').forEach(function(b) {
+        b.textContent = '';
+        b.classList.add('hidden');
+    });
+}
+
+function _mostrarCardRotaOtimizada(data) {
+    var card = document.getElementById('card-rota-otimizada');
+    var resumo = document.getElementById('card-rota-otimizada-resumo');
+    var avisosEl = document.getElementById('card-rota-otimizada-avisos');
+    var btnMaps = document.getElementById('btn-abrir-trajeto-maps');
+    if (!card || !resumo || !btnMaps) return;
+
+    var n = (data.pedidos && data.pedidos.length) || 0;
+    resumo.textContent = n + ' parada(s) · ' + (data.distancia_km != null ? data.distancia_km : '—')
+        + ' km · ~' + (data.duracao_min != null ? data.duracao_min : '—') + ' min';
+
+    if (data.maps_url) {
+        btnMaps.href = data.maps_url;
+        btnMaps.classList.remove('pointer-events-none', 'opacity-50');
+    } else {
+        btnMaps.href = '#';
+        btnMaps.classList.add('pointer-events-none', 'opacity-50');
+    }
+
+    if (avisosEl) {
+        if (data.avisos && data.avisos.length) {
+            avisosEl.textContent = data.avisos.join(' ');
+            avisosEl.classList.remove('hidden');
+        } else {
+            avisosEl.textContent = '';
+            avisosEl.classList.add('hidden');
+        }
+    }
+
+    card.classList.remove('hidden');
+    try { card.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (e) { /* ignore */ }
+}
+
+function otimizarRotaEntregas() {
+    var selecionados = _checksEntregaSelecionadosUnicos();
+    if (selecionados.length < 2) {
+        _swalAviso('Selecione pelo menos 2 entregas para otimizar a rota.');
+        return;
+    }
+
+    var pedidoIds = [];
+    var vistos = {};
+    selecionados.forEach(function(cb) {
+        var id = parseInt(cb.value, 10);
+        if (!isNaN(id) && !vistos[id]) {
+            vistos[id] = true;
+            pedidoIds.push(id);
+        }
+    });
+
+    if (pedidoIds.length < 2) {
+        _swalAviso('Selecione pelo menos 2 entregas distintas para otimizar a rota.');
+        return;
+    }
+
+    Swal.fire(Object.assign(_swalBase(), {
+        title: 'Otimizando rota',
+        text: 'Calculando trajeto mais econômico...',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: function() { Swal.showLoading(); },
+    }));
+
+    fetch('/api/logistica/otimizar-rota', {
+        method: 'POST',
+        headers: Object.assign(
+            { 'Content-Type': 'application/json' },
+            window.getCsrfHeaders ? window.getCsrfHeaders() : {}
+        ),
+        body: JSON.stringify({ pedido_ids: pedidoIds }),
+    })
+    .then(function(r) {
+        return r.json().then(function(data) {
+            return { ok: r.ok, status: r.status, data: data };
+        });
+    })
+    .then(function(res) {
+        var data = res.data || {};
+        if (!res.ok || !data.success) {
+            Swal.close();
+            var msg = data.message || 'Não foi possível otimizar a rota.';
+            if (data.avisos && data.avisos.length) {
+                msg += ' ' + data.avisos.slice(0, 3).join(' ');
+            }
+            _swalErro(msg);
+            return;
+        }
+
+        _limparBadgesParada();
+
+        var tbody = document.getElementById('tbody-entregas');
+        var grid = document.getElementById('grid-cards-entregas');
+        var ordemDataIds = [];
+
+        (data.pedidos || []).forEach(function(p) {
+            var itens = _encontrarItemEntregaPorPedidoId(p.pedido_id);
+            if (itens.row && tbody) {
+                tbody.appendChild(itens.row);
+                _aplicarBadgeParada(itens.row, p.parada);
+                var did = itens.row.getAttribute('data-id');
+                if (did) ordemDataIds.push(did);
+            }
+            if (itens.card && grid) {
+                grid.appendChild(itens.card);
+                _aplicarBadgeParada(itens.card, p.parada);
+            }
+        });
+
+        if (ordemDataIds.length) {
+            try {
+                localStorage.setItem('logistica_ordem_' + '{{ filtro_status }}', JSON.stringify(ordemDataIds));
+            } catch (err) { /* ignore */ }
+            fetch('/logistica/ordem', {
+                method: 'POST',
+                headers: Object.assign(
+                    { 'Content-Type': 'application/json' },
+                    window.getCsrfHeaders ? window.getCsrfHeaders() : {}
+                ),
+                body: JSON.stringify({ ids: ordemDataIds }),
+            }).catch(function() { /* silencioso */ });
+        }
+
+        _mostrarCardRotaOtimizada(data);
+
+        var detalhe = (data.distancia_km != null ? data.distancia_km + ' km' : '')
+            + (data.duracao_min != null ? ' · ~' + data.duracao_min + ' min' : '');
+        Swal.fire(Object.assign(_swalBase(), {
+            icon: 'success',
+            title: 'Rota otimizada!',
+            text: (data.pedidos || []).length + ' paradas reordenadas'
+                + (detalhe ? ' (' + detalhe + ')' : '')
+                + '.',
+            confirmButtonText: 'Ok',
+            timer: 2800,
+            timerProgressBar: true,
+        }));
+    })
+    .catch(function() {
+        Swal.close();
+        _swalErro('Erro de conexão ao otimizar a rota. Tente novamente.');
+    });
 }
 
 /* ── Romaneio para WhatsApp ───────────────────────────────────────────── */

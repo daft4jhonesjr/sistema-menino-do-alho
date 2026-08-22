@@ -6,6 +6,7 @@ Rotas extraídas do legado ``app.py`` (Fase 3 da refatoração):
     * GET  /logistica                               logistica
     * POST /logistica/toggle/<venda_id>             toggle_entrega
     * POST /logistica/bulk_update                   logistica_bulk_update
+    * POST /api/logistica/otimizar-rota             otimizar_rota_logistica
     * GET/POST /vendas/novo                         nova_venda
     * POST /add_venda                               add_venda             (alias AJAX)
     * POST /processar_carrinho                      processar_carrinho
@@ -40,8 +41,13 @@ from decimal import Decimal
 from math import ceil
 import csv
 import io
+import json
 import os
 import re
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
 
 from flask import (
     Blueprint, render_template, request, redirect, url_for,
@@ -102,6 +108,8 @@ _ENDPOINTS_LOGISTICA = frozenset({
     'vendas.marcar_entregue_rapido',
     'vendas.logistica_bulk_update',
     'vendas.logistica_remanejo',
+    'vendas.salvar_ordem_logistica',
+    'vendas.otimizar_rota_logistica',
 })
 
 
@@ -290,6 +298,288 @@ def salvar_ordem_logistica():
     session['logistica_ordem'] = [str(x) for x in ids if x is not None and str(x).strip()]
     session.modified = True
     return jsonify({'ok': True, 'count': len(session['logistica_ordem'])})
+
+
+# Coordenadas padrão do galpão (Petrolina/PE — região Petrolina/Juazeiro).
+# Sobrescrevíveis via env GALPAO_LAT / GALPAO_LON.
+_GALPAO_LAT_DEFAULT = -9.3891
+_GALPAO_LON_DEFAULT = -40.5030
+_NOMINATIM_USER_AGENT = 'SistemaMeninoDoAlho/1.0 (logistica-rota; contato@meninodoalho.local)'
+
+
+def _coords_galpao():
+    """Ponto de partida da rota (galpão). Retorna (lat, lon)."""
+    try:
+        lat = float(os.environ.get('GALPAO_LAT', _GALPAO_LAT_DEFAULT))
+        lon = float(os.environ.get('GALPAO_LON', _GALPAO_LON_DEFAULT))
+        return lat, lon
+    except (TypeError, ValueError):
+        return _GALPAO_LAT_DEFAULT, _GALPAO_LON_DEFAULT
+
+
+def _geocodificar_nominatim(endereco):
+    """Consulta Nominatim e retorna (lat, lon) ou (None, None). Timeout 2s."""
+    endereco = (endereco or '').strip()
+    if not endereco:
+        return None, None
+    q = urllib.parse.quote(endereco)
+    url = (
+        'https://nominatim.openstreetmap.org/search'
+        f'?format=json&q={q}&limit=1&countrycodes=br'
+    )
+    req = urllib.request.Request(
+        url,
+        headers={'User-Agent': _NOMINATIM_USER_AGENT, 'Accept': 'application/json'},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=2) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+        if not data:
+            return None, None
+        return float(data[0]['lat']), float(data[0]['lon'])
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError,
+            ValueError, KeyError, TypeError, json.JSONDecodeError):
+        return None, None
+
+
+def _resolver_coords_cliente(cliente):
+    """Usa lat/lon cacheados ou geocodifica e persiste no cliente.
+
+    Returns:
+        tuple: (lat, lon, endereco_usado) ou (None, None, endereco_ou_vazio).
+    """
+    if not cliente:
+        return None, None, ''
+
+    endereco = (getattr(cliente, 'endereco_para_mapa', None) or cliente.endereco or '').strip()
+
+    if cliente.latitude is not None and cliente.longitude is not None:
+        try:
+            return float(cliente.latitude), float(cliente.longitude), endereco
+        except (TypeError, ValueError):
+            pass
+
+    if not endereco:
+        return None, None, ''
+
+    lat, lon = _geocodificar_nominatim(endereco)
+    if lat is None or lon is None:
+        return None, None, endereco
+
+    cliente.latitude = lat
+    cliente.longitude = lon
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        # Coordenadas ainda são válidas para esta requisição mesmo se o save falhar
+    return lat, lon, endereco
+
+
+def _chamar_osrm_trip(coords_lon_lat):
+    """Chama OSRM Trip Service. coords_lon_lat: lista de (lon, lat).
+
+    Returns:
+        dict com distance_m, duration_s, waypoint_indices (ordem dos índices de entrada)
+        ou None em falha.
+    """
+    if len(coords_lon_lat) < 2:
+        return None
+    coords_fmt = ';'.join(f'{lon:.6f},{lat:.6f}' for lon, lat in coords_lon_lat)
+    url = (
+        f'https://router.project-osrm.org/trip/v1/driving/{coords_fmt}'
+        '?source=first&roundtrip=false&overview=false'
+    )
+    req = urllib.request.Request(
+        url,
+        headers={'User-Agent': _NOMINATIM_USER_AGENT, 'Accept': 'application/json'},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError,
+            ValueError, json.JSONDecodeError):
+        return None
+
+    if not data or data.get('code') != 'Ok':
+        return None
+    trips = data.get('trips') or []
+    waypoints = data.get('waypoints') or []
+    if not trips or len(waypoints) != len(coords_lon_lat):
+        return None
+
+    trip = trips[0]
+    # waypoints na ordem de entrada; waypoint_index = posição na viagem otimizada
+    order_by_trip = sorted(
+        range(len(waypoints)),
+        key=lambda i: int(waypoints[i].get('waypoint_index', i)),
+    )
+    return {
+        'distance_m': float(trip.get('distance') or 0),
+        'duration_s': float(trip.get('duration') or 0),
+        'order_by_trip': order_by_trip,
+    }
+
+
+@vendas_bp.route('/api/logistica/otimizar-rota', methods=['POST'])
+def otimizar_rota_logistica():
+    """Otimiza a ordem de entrega dos pedidos selecionados via OSRM Trip + Nominatim."""
+    payload = request.get_json(silent=True) or {}
+    pedido_ids_raw = payload.get('pedido_ids') or payload.get('ids') or []
+
+    if not isinstance(pedido_ids_raw, list) or len(pedido_ids_raw) < 2:
+        return jsonify({
+            'success': False,
+            'message': 'Selecione pelo menos 2 entregas para otimizar a rota.',
+        }), 400
+
+    try:
+        pedido_ids = []
+        vistos = set()
+        for x in pedido_ids_raw:
+            pid = int(x)
+            if pid not in vistos:
+                vistos.add(pid)
+                pedido_ids.append(pid)
+    except (ValueError, TypeError):
+        return jsonify({'success': False, 'message': 'IDs de pedido inválidos.'}), 400
+
+    if len(pedido_ids) < 2:
+        return jsonify({
+            'success': False,
+            'message': 'Selecione pelo menos 2 entregas distintas.',
+        }), 400
+
+    vendas = (
+        query_tenant(Venda)
+        .filter(Venda.id.in_(pedido_ids))
+        .options(joinedload(Venda.cliente))
+        .all()
+    )
+    vendas_por_id = {v.id: v for v in vendas}
+
+    pontos = []  # dicts com pedido_id, cliente, lat, lon, endereco...
+    avisos = []
+    geocode_feitos = 0
+
+    for pid in pedido_ids:
+        venda = vendas_por_id.get(pid)
+        if not venda:
+            avisos.append(f'Pedido #{pid} não encontrado neste tenant.')
+            continue
+        cliente = venda.cliente
+        if not cliente:
+            avisos.append(f'Pedido #{pid} sem cliente vinculado.')
+            continue
+
+        precisa_geocode = cliente.latitude is None or cliente.longitude is None
+        if precisa_geocode and geocode_feitos > 0:
+            # Nominatim: no máximo 1 req/s
+            time.sleep(1.1)
+
+        lat, lon, endereco = _resolver_coords_cliente(cliente)
+        if precisa_geocode:
+            geocode_feitos += 1
+
+        if lat is None or lon is None:
+            nome = cliente.nome_cliente or f'#{cliente.id}'
+            avisos.append(
+                f'Endereço não localizado para "{nome}"'
+                + (f' ({endereco})' if endereco else ' — endereço vazio')
+                + '.'
+            )
+            continue
+
+        pontos.append({
+            'pedido_id': pid,
+            'cliente_id': cliente.id,
+            'cliente_nome': cliente.nome_cliente or 'Sem Nome',
+            'endereco': endereco,
+            'latitude': lat,
+            'longitude': lon,
+        })
+
+    if len(pontos) < 2:
+        return jsonify({
+            'success': False,
+            'message': (
+                'Não foi possível geocodificar pelo menos 2 endereços. '
+                'Verifique os cadastros dos clientes.'
+            ),
+            'avisos': avisos,
+        }), 422
+
+    galpao_lat, galpao_lon = _coords_galpao()
+    # OSRM usa lon,lat; primeiro ponto = partida fixa (source=first)
+    coords = [(galpao_lon, galpao_lat)] + [
+        (p['longitude'], p['latitude']) for p in pontos
+    ]
+
+    resultado = _chamar_osrm_trip(coords)
+    if not resultado:
+        return jsonify({
+            'success': False,
+            'message': 'Falha ao calcular a rota no OSRM. Tente novamente em instantes.',
+            'avisos': avisos,
+        }), 502
+
+    # order_by_trip inclui o galpão (índice 0 em coords). Entregas começam em 1.
+    ordem_otima = [
+        i for i in resultado['order_by_trip']
+        if i >= 1
+    ]
+    pedidos_ordenados = []
+    for trip_pos, coord_idx in enumerate(ordem_otima, start=1):
+        ponto = pontos[coord_idx - 1]
+        pedidos_ordenados.append({
+            'parada': trip_pos,
+            'pedido_id': ponto['pedido_id'],
+            'cliente_id': ponto['cliente_id'],
+            'cliente_nome': ponto['cliente_nome'],
+            'endereco': ponto['endereco'],
+            'latitude': ponto['latitude'],
+            'longitude': ponto['longitude'],
+        })
+
+    distancia_km = round(resultado['distance_m'] / 1000.0, 1)
+    duracao_min = max(1, int(round(resultado['duration_s'] / 60.0)))
+
+    # URL Google Maps com origem no galpão e paradas na ordem otimizada
+    maps_parts = [f'{galpao_lat},{galpao_lon}']
+    for p in pedidos_ordenados:
+        maps_parts.append(f"{p['latitude']},{p['longitude']}")
+    if len(maps_parts) >= 2:
+        origin = maps_parts[0]
+        destination = maps_parts[-1]
+        waypoints = maps_parts[1:-1]
+        maps_url = (
+            'https://www.google.com/maps/dir/?api=1'
+            f'&origin={urllib.parse.quote(origin)}'
+            f'&destination={urllib.parse.quote(destination)}'
+            '&travelmode=driving'
+        )
+        if waypoints:
+            maps_url += '&waypoints=' + urllib.parse.quote('|'.join(waypoints))
+    else:
+        maps_url = None
+
+    # Persiste a nova ordem na sessão (chaves como na listagem: pode ser só o id)
+    session['logistica_ordem'] = [str(p['pedido_id']) for p in pedidos_ordenados]
+    session.modified = True
+
+    return jsonify({
+        'success': True,
+        'pedidos': pedidos_ordenados,
+        'distancia_km': distancia_km,
+        'duracao_min': duracao_min,
+        'origem': {
+            'nome': 'Galpão (Petrolina/Juazeiro)',
+            'latitude': galpao_lat,
+            'longitude': galpao_lon,
+        },
+        'maps_url': maps_url,
+        'avisos': avisos,
+    })
 
 
 @vendas_bp.route('/vendas/ordem', methods=['POST'])
@@ -1634,7 +1924,7 @@ def logistica():
                 'venda_id': v.id,
                 'data': _formatar_data_com_dia_semana(v.data_venda),
                 'cliente_nome': cliente.nome_cliente or 'Sem Nome',
-                'endereco': cliente.endereco or '',
+                'endereco': (cliente.endereco_para_mapa or cliente.endereco or ''),
                 'produtos': [],
                 'total': 0.0,
                 'status_entrega': v.status_entrega or 'PENDENTE',
