@@ -3,6 +3,33 @@
 {% block title %}Histórico de Ações — Menino do Alho{% endblock %}
 
 {% block content %}
+{% set modulo_cores = {
+  'VENDAS':   'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
+  'CLIENTES': 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',
+  'PRODUTOS': 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300',
+  'USUARIOS': 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
+  'BACKUP':   'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300',
+} %}
+{% set acao_cores = {
+  'CRIAR':    'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
+  'EDITAR':   'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
+  'EXCLUIR':  'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
+  'PAGAR':    'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300',
+  'INATIVAR': 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300',
+  'ATIVAR':   'bg-lime-100 text-lime-800 dark:bg-lime-900/40 dark:text-lime-300',
+  'BACKUP':   'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300',
+  'WHATSAPP': 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
+} %}
+{% set acao_icones = {
+  'CRIAR':    '＋',
+  'EDITAR':   '✎',
+  'EXCLUIR':  '✕',
+  'PAGAR':    '✓',
+  'INATIVAR': '⊘',
+  'ATIVAR':   '⊙',
+  'BACKUP':   '⬇',
+  'WHATSAPP': '✉',
+} %}
 <div class="w-full px-4 sm:px-6 lg:px-8 py-6">
 
   <!-- Cabeçalho -->
@@ -23,14 +50,14 @@
   </div>
 
   <!-- Filtros -->
-  <form method="GET" action="{{ url_for('historico_atividades') }}"
+  <form id="form-filtros-historico" method="GET" action="{{ url_for('historico_atividades') }}"
         class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-4 mb-6">
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
 
       <!-- Módulo -->
       <div>
         <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Módulo</label>
-        <select name="modulo"
+        <select id="filtro-modulo" name="modulo"
                 class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm px-3 py-2 focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
           <option value="">Todos</option>
           {% for m in ['VENDAS', 'CLIENTES', 'PRODUTOS', 'USUARIOS', 'BACKUP'] %}
@@ -42,7 +69,7 @@
       <!-- Ação -->
       <div>
         <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Ação</label>
-        <select name="acao"
+        <select id="filtro-acao" name="acao"
                 class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm px-3 py-2 focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
           <option value="">Todas</option>
           {% for a in ['CRIAR', 'EDITAR', 'EXCLUIR', 'PAGAR', 'INATIVAR', 'ATIVAR', 'BACKUP', 'WHATSAPP'] %}
@@ -54,7 +81,7 @@
       <!-- Usuário -->
       <div>
         <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Usuário</label>
-        <select name="usuario_id"
+        <select id="filtro-usuario" name="usuario_id"
                 class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm px-3 py-2 focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
           <option value="">Todos</option>
           {% for u in todos_usuarios %}
@@ -65,27 +92,30 @@
 
       <!-- Botões -->
       <div class="flex items-end gap-2">
-        <button type="submit"
+        <button type="submit" id="btn-filtrar-historico"
                 class="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg transition-colors flex items-center justify-center gap-2">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z"/>
           </svg>
           Filtrar
         </button>
-        <a href="{{ url_for('historico_atividades') }}"
-           class="px-3 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 text-sm font-medium rounded-lg transition-colors flex items-center justify-center"
-           title="Limpar filtros">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-          </svg>
-        </a>
+        <button type="button" onclick="limparFiltrosHistorico()"
+                class="px-3 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 text-sm font-medium rounded-lg transition-colors flex items-center justify-center"
+                title="Limpar filtros">
+          X
+        </button>
       </div>
 
     </div>
   </form>
 
+  <div class="flex gap-2 mb-4">
+    <button type="button" onclick="mudarVisualizacaoHistorico('lista')" id="btn-view-lista" class="px-3 py-1 bg-green-700 text-white rounded transition-colors">Lista</button>
+    <button type="button" onclick="mudarVisualizacaoHistorico('grade')" id="btn-view-grade" class="px-3 py-1 bg-gray-700 text-gray-300 rounded transition-colors">Grande</button>
+  </div>
+
   <!-- Tabela -->
-  <div class="w-full overflow-x-auto overflow-y-hidden shadow-sm rounded-xl border border-gray-200 dark:border-gray-700">
+  <div id="container-lista" class="w-full overflow-x-auto overflow-y-hidden shadow-sm rounded-xl border border-gray-200 dark:border-gray-700">
     <table class="w-full text-sm text-left bg-white dark:bg-gray-800">
       <thead class="bg-gray-50 dark:bg-gray-900 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
         <tr>
@@ -123,13 +153,6 @@
 
             <!-- Módulo -->
             <td class="px-4 py-3 whitespace-nowrap">
-              {% set modulo_cores = {
-                'VENDAS':   'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
-                'CLIENTES': 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',
-                'PRODUTOS': 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300',
-                'USUARIOS': 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
-                'BACKUP':   'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300',
-              } %}
               <span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold tracking-wide
                            {{ modulo_cores.get(log.modulo, 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300') }}">
                 {{ log.modulo }}
@@ -138,26 +161,6 @@
 
             <!-- Ação -->
             <td class="px-4 py-3 whitespace-nowrap">
-              {% set acao_cores = {
-                'CRIAR':    'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
-                'EDITAR':   'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
-                'EXCLUIR':  'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
-                'PAGAR':    'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300',
-                'INATIVAR': 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300',
-                'ATIVAR':   'bg-lime-100 text-lime-800 dark:bg-lime-900/40 dark:text-lime-300',
-                'BACKUP':   'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300',
-                'WHATSAPP': 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
-              } %}
-              {% set acao_icones = {
-                'CRIAR':    '＋',
-                'EDITAR':   '✎',
-                'EXCLUIR':  '✕',
-                'PAGAR':    '✓',
-                'INATIVAR': '⊘',
-                'ATIVAR':   '⊙',
-                'BACKUP':   '⬇',
-                'WHATSAPP': '✉',
-              } %}
               <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold
                            {{ acao_cores.get(log.acao, 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300') }}">
                 {{ acao_icones.get(log.acao, '') }} {{ log.acao }}
@@ -207,6 +210,49 @@
     </table>
   </div>
 
+  <div id="container-grade" class="hidden grid grid-cols-1 md:grid-cols-2 gap-4">
+    {% if logs %}
+      {% for log in logs %}
+      <div class="p-4 bg-gray-800 rounded-lg border border-gray-700">
+        <div class="flex items-start justify-between gap-3 mb-3">
+          <p class="font-mono text-xs text-gray-400">{{ log.data_hora.strftime('%d/%m/%Y %H:%M') }}</p>
+          {% if log.usuario_id and log.usuario_id in mapa_usuarios %}
+            <span class="text-sm text-gray-200 font-medium">{{ mapa_usuarios[log.usuario_id] }}</span>
+          {% else %}
+            <span class="text-gray-500 italic text-xs">Sistema</span>
+          {% endif %}
+        </div>
+        <div class="flex flex-wrap items-center gap-2 mb-3">
+          <span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold tracking-wide
+                       {{ modulo_cores.get(log.modulo, 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300') }}">
+            {{ log.modulo }}
+          </span>
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold
+                       {{ acao_cores.get(log.acao, 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300') }}">
+            {{ acao_icones.get(log.acao, '') }} {{ log.acao }}
+          </span>
+        </div>
+        <p class="text-sm text-gray-300" title="{{ log.descricao }}">{{ log.descricao }}</p>
+        {% if log.arquivo_anexo %}
+        {% set eh_zip = ('.zip' in (log.arquivo_anexo|lower)) or log.acao == 'BACKUP' %}
+        <a href="{{ url_for('baixar_backup_historico', log_id=log.id) }}"
+           class="inline-flex items-center gap-1 mt-3 px-2.5 py-1 rounded-lg text-xs font-semibold bg-cyan-600 hover:bg-cyan-500 text-white transition-colors">
+          {{ 'Baixar ZIP' if eh_zip else 'Baixar arquivo' }}
+        </a>
+        {% endif %}
+        {% if log.ip_address %}
+        <p class="mt-2 font-mono text-xs text-gray-500">IP: {{ log.ip_address }}</p>
+        {% endif %}
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="md:col-span-2 p-8 text-center text-gray-400">
+        <p class="text-base font-medium">Nenhum registro de atividade encontrado.</p>
+        <p class="text-sm mt-1">As ações serão registradas automaticamente a partir de agora.</p>
+      </div>
+    {% endif %}
+  </div>
+
   <!-- Paginação -->
   {% if total_paginas > 1 %}
   <div class="mt-5 flex flex-col sm:flex-row items-center justify-between gap-3">
@@ -246,4 +292,52 @@
   {% endif %}
 
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    window.mudarVisualizacaoHistorico = function(tipo) {
+        const contLista = document.getElementById('container-lista');
+        const contGrade = document.getElementById('container-grade');
+        const btnLista = document.getElementById('btn-view-lista');
+        const btnGrade = document.getElementById('btn-view-grade');
+
+        if (!contLista || !contGrade) return;
+
+        if (tipo === 'lista') {
+            contLista.classList.remove('hidden');
+            contGrade.classList.add('hidden');
+            btnLista.classList.replace('bg-gray-700', 'bg-green-700');
+            btnLista.classList.replace('text-gray-300', 'text-white');
+            btnGrade.classList.replace('bg-green-700', 'bg-gray-700');
+            btnGrade.classList.replace('text-white', 'text-gray-300');
+            localStorage.setItem('historicoView', 'lista');
+        } else {
+            contLista.classList.add('hidden');
+            contGrade.classList.remove('hidden');
+            btnGrade.classList.replace('bg-gray-700', 'bg-green-700');
+            btnGrade.classList.replace('text-gray-300', 'text-white');
+            btnLista.classList.replace('bg-green-700', 'bg-gray-700');
+            btnLista.classList.replace('text-white', 'text-gray-300');
+            localStorage.setItem('historicoView', 'grade');
+        }
+    };
+
+    window.limparFiltrosHistorico = function() {
+        const modulo = document.getElementById('filtro-modulo');
+        const acao = document.getElementById('filtro-acao');
+        const usuario = document.getElementById('filtro-usuario');
+        if (modulo) modulo.value = '';
+        if (acao) acao.value = '';
+        if (usuario) usuario.value = '';
+
+        const form = document.getElementById('form-filtros-historico');
+        if (form) form.submit();
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const savedView = localStorage.getItem('historicoView') || 'lista';
+        mudarVisualizacaoHistorico(savedView);
+    });
+</script>
 {% endblock %}
