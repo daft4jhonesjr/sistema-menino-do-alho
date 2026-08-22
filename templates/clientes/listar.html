@@ -1166,23 +1166,79 @@ window.padronizarClientesMaiusculo = function() {
             var id = btn.getAttribute('data-id');
             var ativo = btn.getAttribute('data-ativo') === 'true';
             var acao = ativo ? 'inativar' : 'reativar';
-            if (!confirm('Deseja ' + acao + ' este cliente?')) return;
-            fetch('/cliente/' + id + '/toggle_ativo', {
-                method: 'POST',
-                headers: Object.assign(
-                    { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json' },
-                    window.getCsrfHeaders ? window.getCsrfHeaders() : {}
-                )
-            })
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                if (data.ok) {
-                    window.location.reload();
-                } else {
-                    alert(data.mensagem || 'Erro ao alterar status.');
+            var titulo = ativo ? 'Inativar Cliente?' : 'Reativar Cliente?';
+            var texto = ativo
+                ? 'Deseja realmente inativar este cliente?'
+                : 'Deseja realmente reativar este cliente?';
+            var btnConfirm = ativo ? 'Sim, inativar' : 'Sim, reativar';
+
+            function executarToggle() {
+                fetch('/cliente/' + id + '/toggle_ativo', {
+                    method: 'POST',
+                    headers: Object.assign(
+                        { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json' },
+                        window.getCsrfHeaders ? window.getCsrfHeaders() : {}
+                    )
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.ok) {
+                        window.location.reload();
+                    } else {
+                        var msg = data.mensagem || 'Erro ao alterar status.';
+                        if (typeof showToast === 'function') showToast(msg, 'error');
+                        else if (typeof Swal !== 'undefined') {
+                            Swal.fire({
+                                title: 'Erro!',
+                                text: msg,
+                                icon: 'error',
+                                background: '#1e293b',
+                                color: '#f8fafc'
+                            });
+                        } else {
+                            alert(msg);
+                        }
+                    }
+                })
+                .catch(function() {
+                    var msg = 'Erro de conexão. Tente novamente.';
+                    if (typeof showToast === 'function') showToast(msg, 'error');
+                    else if (typeof Swal !== 'undefined') {
+                        Swal.fire({
+                            title: 'Erro!',
+                            text: msg,
+                            icon: 'error',
+                            background: '#1e293b',
+                            color: '#f8fafc'
+                        });
+                    } else {
+                        alert(msg);
+                    }
+                });
+            }
+
+            if (typeof Swal === 'undefined') {
+                if (!confirm('Deseja ' + acao + ' este cliente?')) return;
+                executarToggle();
+                return;
+            }
+
+            Swal.fire({
+                title: titulo,
+                text: texto,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#10b981',
+                cancelButtonColor: '#64748b',
+                confirmButtonText: btnConfirm,
+                cancelButtonText: 'Cancelar',
+                background: '#1e293b',
+                color: '#f8fafc'
+            }).then(function(result) {
+                if (result.isConfirmed) {
+                    executarToggle();
                 }
-            })
-            .catch(function() { alert('Erro de conexão. Tente novamente.'); });
+            });
         });
     });
 })();
