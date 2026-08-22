@@ -1125,10 +1125,10 @@
     </div>
 </div>
 
-<!-- Modal Editar Venda (z-[9999] + move para body no JS — evita clip do main com transform/overflow) -->
-<div id="modal-editar-venda-wrap" class="fixed inset-0 z-[9999] hidden" aria-hidden="true">
-    <div class="fixed inset-0 bg-black/60" id="modal-editar-venda-overlay" onclick="fecharModalEdicaoVenda()"></div>
-    <div class="fixed left-1/2 top-1/2 z-[10000] -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white dark:bg-slate-900 rounded-xl shadow-sm dark:shadow-none border border-gray-200 dark:border-slate-700 text-gray-900 dark:text-slate-100" onclick="event.stopPropagation()" role="dialog" aria-modal="true" aria-labelledby="modal-editar-venda-titulo">
+<!-- Modal Editar Venda (z-50 + move para body no JS — evita clip do main; Swal fica em z-99999) -->
+<div id="modal-editar-venda-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
+    <div class="fixed inset-0 bg-black/60 z-50" id="modal-editar-venda-overlay" onclick="fecharModalEdicaoVenda()"></div>
+    <div class="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white dark:bg-slate-900 rounded-xl shadow-sm dark:shadow-none border border-gray-200 dark:border-slate-700 text-gray-900 dark:text-slate-100" onclick="event.stopPropagation()" role="dialog" aria-modal="true" aria-labelledby="modal-editar-venda-titulo">
         <div class="sticky top-0 flex justify-between items-center px-8 py-5 bg-emerald-700 text-white rounded-t-xl z-10">
             <h3 id="modal-editar-venda-titulo" class="text-xl font-bold flex items-center">
                 <i data-lucide="pencil" class="w-5 h-5 mr-2"></i>Editar Venda
@@ -1908,7 +1908,9 @@ function loadingBotaoEditarVenda(formElement) {
                 text: mensagem || 'Não foi possível abrir o formulário de edição.',
                 confirmButtonColor: '#059669',
                 background: dark ? '#0f172a' : '#FFFFFF',
-                color: dark ? '#F9FAFB' : '#111827'
+                color: dark ? '#F9FAFB' : '#111827',
+                heightAuto: false,
+                customClass: { container: 'z-[9999]' }
             });
         } else {
             alert(mensagem || 'Não foi possível abrir o formulário de edição.');
@@ -2078,6 +2080,9 @@ function loadingBotaoEditarVenda(formElement) {
 
             if (typeof Swal === 'undefined') {
                 if (!confirm('Tem certeza que deseja salvar as alterações desta venda?')) return;
+                if (typeof fecharModalEdicaoVenda === 'function') {
+                    fecharModalEdicaoVenda();
+                }
                 loadingBotaoEditarVenda(form);
                 form.setAttribute('data-submitting', '1');
                 form.submit();
@@ -2095,9 +2100,14 @@ function loadingBotaoEditarVenda(formElement) {
                 confirmButtonText: 'Sim, salvar!',
                 cancelButtonText: 'Cancelar',
                 background: dark ? '#0f172a' : '#FFFFFF',
-                color: dark ? '#F9FAFB' : '#111827'
+                color: dark ? '#F9FAFB' : '#111827',
+                heightAuto: false,
+                customClass: { container: 'z-[9999]' }
             }).then(function(result) {
                 if (!result.isConfirmed) return;
+                if (typeof fecharModalEdicaoVenda === 'function') {
+                    fecharModalEdicaoVenda();
+                }
                 loadingBotaoEditarVenda(form);
                 form.setAttribute('data-submitting', '1');
                 form.submit();
