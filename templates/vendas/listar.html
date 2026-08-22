@@ -1127,13 +1127,13 @@
 
 <!-- Modal Editar Venda (z-[9999] + move para body no JS — evita clip do main com transform/overflow) -->
 <div id="modal-editar-venda-wrap" class="fixed inset-0 z-[9999] hidden" aria-hidden="true">
-    <div class="fixed inset-0 bg-black/60" id="modal-editar-venda-overlay"></div>
+    <div class="fixed inset-0 bg-black/60" id="modal-editar-venda-overlay" onclick="fecharModalEdicaoVenda()"></div>
     <div class="fixed left-1/2 top-1/2 z-[10000] -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white dark:bg-slate-900 rounded-xl shadow-sm dark:shadow-none border border-gray-200 dark:border-slate-700 text-gray-900 dark:text-slate-100" onclick="event.stopPropagation()" role="dialog" aria-modal="true" aria-labelledby="modal-editar-venda-titulo">
         <div class="sticky top-0 flex justify-between items-center px-8 py-5 bg-emerald-700 text-white rounded-t-xl z-10">
             <h3 id="modal-editar-venda-titulo" class="text-xl font-bold flex items-center">
                 <i data-lucide="pencil" class="w-5 h-5 mr-2"></i>Editar Venda
             </h3>
-            <button type="button" class="modal-editar-venda-fechar w-10 h-10 flex items-center justify-center rounded-full hover:bg-emerald-600 text-white font-bold transition" title="Fechar">
+            <button type="button" onclick="fecharModalEdicaoVenda()" class="modal-editar-venda-fechar w-10 h-10 flex items-center justify-center rounded-full hover:bg-emerald-600 text-white font-bold transition" title="Fechar" aria-label="Fechar">
                 <i data-lucide="x" class="w-5 h-5"></i>
             </button>
         </div>
@@ -1220,7 +1220,7 @@
                     <button type="submit" class="bg-emerald-700 text-white px-6 py-2.5 rounded-xl hover:bg-emerald-600 transition flex items-center font-medium" id="btn-salvar-editar-venda">
                         <i data-lucide="check" class="w-4 h-4 mr-2"></i>Salvar
                     </button>
-                    <button type="button" class="modal-editar-venda-fechar bg-gray-200 dark:bg-slate-800 text-gray-700 dark:text-slate-200 border border-transparent dark:border-slate-700 px-6 py-2.5 rounded-xl hover:bg-gray-300 dark:hover:bg-slate-700 transition flex items-center font-medium">
+                    <button type="button" onclick="fecharModalEdicaoVenda()" class="modal-editar-venda-fechar bg-gray-200 dark:bg-slate-800 text-gray-700 dark:text-slate-200 border border-transparent dark:border-slate-700 px-6 py-2.5 rounded-xl hover:bg-gray-300 dark:hover:bg-slate-700 transition flex items-center font-medium">
                         <i data-lucide="x" class="w-4 h-4 mr-2"></i>Cancelar
                     </button>
                 </div>
@@ -1915,13 +1915,20 @@ function loadingBotaoEditarVenda(formElement) {
         }
     }
 
-    function fecharModalEditarVenda() {
-        var wrap = document.getElementById('modal-editar-venda-wrap');
-        if (wrap) {
-            wrap.classList.add('hidden');
-            wrap.setAttribute('aria-hidden', 'true');
+    function fecharModalEdicaoVenda() {
+        var modal = document.getElementById('modal-editar-venda-wrap')
+            || document.getElementById('modalEditarVenda')
+            || document.getElementById('drawer-editar-venda');
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.setAttribute('aria-hidden', 'true');
         }
         if (typeof liberarFundo === 'function') liberarFundo();
+    }
+
+    // Alias legado (código antigo / handlers anteriores)
+    function fecharModalEditarVenda() {
+        fecharModalEdicaoVenda();
     }
 
     function abrirModalEditarVenda(btn) {
@@ -2028,6 +2035,7 @@ function loadingBotaoEditarVenda(formElement) {
     }
 
     window.abrirModalEditarVenda = abrirModalEditarVenda;
+    window.fecharModalEdicaoVenda = fecharModalEdicaoVenda;
     window.fecharModalEditarVenda = fecharModalEditarVenda;
 
     // Delegação em capture: funciona mesmo se algum handler filho der stopPropagation
@@ -2039,11 +2047,23 @@ function loadingBotaoEditarVenda(formElement) {
         abrirModalEditarVenda(btn);
     }, true);
 
+    // Fechar: X, Cancelar, backdrop — capture evita bloqueio do stopPropagation do dialog
     document.addEventListener('click', function(e) {
         var t = e.target;
         if (!t || !t.closest) return;
-        if (t.id === 'modal-editar-venda-overlay' || t.closest('.modal-editar-venda-fechar')) {
-            fecharModalEditarVenda();
+        var wrap = document.getElementById('modal-editar-venda-wrap');
+        if (!wrap || wrap.classList.contains('hidden')) return;
+        if (t.id === 'modal-editar-venda-overlay' || t === wrap || t.closest('.modal-editar-venda-fechar')) {
+            fecharModalEdicaoVenda();
+        }
+    }, true);
+
+    // Fechar com tecla Escape
+    document.addEventListener('keydown', function(e) {
+        if (e.key !== 'Escape') return;
+        var wrap = document.getElementById('modal-editar-venda-wrap');
+        if (wrap && !wrap.classList.contains('hidden')) {
+            fecharModalEdicaoVenda();
         }
     });
 
