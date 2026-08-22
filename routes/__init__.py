@@ -58,7 +58,10 @@ Estado atual:
     * ``financeiro_bp``  → /api/balanco/dados-atuais, /api/balanco/exportar-csv
     * ``push_bp``        → /api/push/subscribe, /api/push/unsubscribe,
                            /api/push/vapid-public-key, /api/vapid-public-key (legado),
-                           /api/push/status, /api/notificacoes/verificar_pendencias
+                           /api/push/status, /api/notificacoes/verificar_pendencias,
+                           /api/notificacoes/onesignal-app-id,
+                           /api/notificacoes/registrar-dispositivo,
+                           /api/notificacoes/testar-onesignal
 
 Convenção (Fase 5 finalizada):
     Cada blueprint expõe uma única variável module-level ``<nome>_bp`` que

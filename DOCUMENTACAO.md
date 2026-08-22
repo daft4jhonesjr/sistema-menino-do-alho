@@ -459,6 +459,11 @@ REDIS_URL=
 VAPID_PRIVATE_KEY=
 VAPID_PUBLIC_KEY=
 VAPID_CLAIM_EMAIL=mailto:admin@exemplo.com
+
+# OneSignal (opcional — push em background)
+ONESIGNAL_APP_ID=
+ONESIGNAL_REST_API_KEY=
+ONESIGNAL_SAFARI_WEB_ID=
 ```
 
 **5. Inicializar o banco de dados**
@@ -523,6 +528,9 @@ RESET_USERNAME="<nome>" RESET_PASSWORD="<nova_senha_forte>" \
 | `VAPID_PRIVATE_KEY` | Não | Chave privada VAPID para Web Push |
 | `VAPID_PUBLIC_KEY` | Não | Chave pública VAPID para Web Push |
 | `VAPID_CLAIM_EMAIL` | Não | Email de contato para notificações push |
+| `ONESIGNAL_APP_ID` | Não | App ID público do OneSignal |
+| `ONESIGNAL_REST_API_KEY` | Não | REST API Key do OneSignal (somente servidor) |
+| `ONESIGNAL_SAFARI_WEB_ID` | Não | Safari Web ID do OneSignal (Web Push no Safari) |
 | `ENABLE_DEBUG_ROUTES` | Não | Se `1`, registra os endpoints `/debug/*` (off por padrão em produção) |
 | `SKIP_DB_BOOTSTRAP` | Não | Se `1`, pula a inicialização do banco no startup |
 | `CONFIRMO_DROP_PROD` | Não | `YES_I_KNOW` libera scripts destrutivos em `scripts_seed/` fora de `localhost` |

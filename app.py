@@ -3328,6 +3328,19 @@ def inject_permissoes_usuario():
 
 
 @app.context_processor
+def inject_onesignal_config():
+    """Expõe App ID / Safari Web ID do OneSignal nos templates (nunca a REST key)."""
+    return {
+        'onesignal_app_id': (app.config.get('ONESIGNAL_APP_ID') or os.environ.get('ONESIGNAL_APP_ID') or '').strip(),
+        'onesignal_safari_web_id': (
+            app.config.get('ONESIGNAL_SAFARI_WEB_ID')
+            or os.environ.get('ONESIGNAL_SAFARI_WEB_ID')
+            or ''
+        ).strip(),
+    }
+
+
+@app.context_processor
 def injetar_alertas():
     """Disponibiliza alertas_sistema em todos os templates.
 

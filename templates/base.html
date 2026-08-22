@@ -78,6 +78,56 @@
     
     <!-- Theme color para navegadores (barra de status Safari/PWA) -->
     <meta name="theme-color" content="#10b981" media="(prefers-color-scheme: light)">
+    {% if current_user.is_authenticated and onesignal_app_id %}
+    <meta name="onesignal-app-id" content="{{ onesignal_app_id }}">
+    {% if onesignal_safari_web_id %}
+    <meta name="onesignal-safari-web-id" content="{{ onesignal_safari_web_id }}">
+    {% endif %}
+    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+    <script>
+    window.OneSignalDeferred = window.OneSignalDeferred || [];
+    OneSignalDeferred.push(async function(OneSignal) {
+      var appIdMeta = document.querySelector('meta[name="onesignal-app-id"]');
+      var safariMeta = document.querySelector('meta[name="onesignal-safari-web-id"]');
+      var appId = appIdMeta ? appIdMeta.getAttribute('content') : '';
+      if (!appId) return;
+
+      var initOpts = {
+        appId: appId,
+        notifyButton: { enable: false }
+      };
+      var safariId = safariMeta ? safariMeta.getAttribute('content') : '';
+      if (safariId) initOpts.safari_web_id = safariId;
+
+      await OneSignal.init(initOpts);
+
+      async function registrarPlayerId(playerId) {
+        if (!playerId) return;
+        try {
+          await fetch('/api/notificacoes/registrar-dispositivo', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ player_id: playerId })
+          });
+        } catch (err) {
+          console.warn('[OneSignal] Falha ao registrar dispositivo:', err);
+        }
+      }
+
+      var sub = OneSignal.User.PushSubscription;
+      if (sub && sub.token && sub.id) {
+        await registrarPlayerId(sub.id);
+      }
+
+      OneSignal.User.PushSubscription.addEventListener('change', async function(event) {
+        if (event.current && event.current.token && event.current.id) {
+          await registrarPlayerId(event.current.id);
+        }
+      });
+    });
+    </script>
+    {% endif %}
     <meta name="theme-color" content="#1f2937" media="(prefers-color-scheme: dark)">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
