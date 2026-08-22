@@ -535,9 +535,9 @@
 </div>
 
 <!-- Modal Editar Cliente -->
-<div id="modal-editar-cliente-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
+<div id="modal-editar-cliente-wrap" class="fixed inset-0 z-[60] hidden" aria-hidden="true">
     <div class="fixed inset-0 bg-black/50" id="modal-editar-cliente-overlay"></div>
-    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-xl shadow-sm dark:shadow-none border border-gray-200 dark:border-gray-700 z-50" onclick="event.stopPropagation()">
+    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-xl shadow-sm dark:shadow-none border border-gray-200 dark:border-gray-700 z-[60]" onclick="event.stopPropagation()">
         <div class="sticky top-0 flex justify-between items-center px-8 py-5 bg-emerald-700 text-white rounded-t-xl z-10">
             <h3 class="text-xl font-bold flex items-center">
                 <i data-lucide="pencil" class="w-5 h-5 mr-2"></i>Editar Cliente
@@ -893,22 +893,35 @@ window.padronizarClientesMaiusculo = function() {
     var actionBase = form && form.getAttribute('data-action-base');
     if (!actionBase) actionBase = '';
 
-    function abrirModal(btn) {
-        var id = btn.getAttribute('data-id');
-        var nome = btn.getAttribute('data-nome') || '';
-        var telefone = btn.getAttribute('data-telefone') || '';
-        var nomeContato = btn.getAttribute('data-nome-contato') || '';
-        var telefoneSecundario = btn.getAttribute('data-telefone-secundario') || '';
-        var nomeContatoSecundario = btn.getAttribute('data-nome-contato-secundario') || '';
-        var razao = btn.getAttribute('data-razao') || '';
-        var cnpj = btn.getAttribute('data-cnpj') || '';
-        var inscricaoEstadual = btn.getAttribute('data-inscricao-estadual') || '';
-        var cidade = btn.getAttribute('data-cidade') || '';
-        var estado = btn.getAttribute('data-estado') || '';
-        var cep = btn.getAttribute('data-cep') || '';
-        var rua = btn.getAttribute('data-rua') || '';
-        var numero = btn.getAttribute('data-numero') || '';
-        var bairro = btn.getAttribute('data-bairro') || '';
+    function swalErroCarregarCliente() {
+        if (typeof Swal === 'undefined') {
+            alert('Não foi possível carregar os dados deste cliente. Tente novamente.');
+            return;
+        }
+        Swal.fire({
+            title: 'Erro!',
+            text: 'Não foi possível carregar os dados deste cliente. Tente novamente.',
+            icon: 'error',
+            background: '#1e293b',
+            color: '#f8fafc'
+        });
+    }
+
+    function preencherFormularioEdicao(id, c) {
+        var nome = c.nome_cliente || '';
+        var telefone = c.telefone || '';
+        var nomeContato = c.nome_contato || '';
+        var telefoneSecundario = c.telefone_secundario || '';
+        var nomeContatoSecundario = c.nome_contato_secundario || '';
+        var razao = c.razao_social || '';
+        var cnpj = c.cnpj || '';
+        var inscricaoEstadual = c.inscricao_estadual || '';
+        var cidade = c.cidade || '';
+        var estado = c.estado || '';
+        var cep = c.cep || '';
+        var rua = c.rua || '';
+        var numero = c.numero || '';
+        var bairro = c.bairro || '';
         form.action = actionBase.replace(/\/0$/, '/') + id;
         document.getElementById('edit_nome').value = nome;
         document.getElementById('edit_telefone').value = telefone;
@@ -935,9 +948,53 @@ window.padronizarClientesMaiusculo = function() {
         if (typeof window.marcarCnpjClienteJaConsultado === 'function') {
             window.marcarCnpjClienteJaConsultado('edit', cnpj);
         }
-        wrap.classList.remove('hidden');
-        travarFundo();
-        if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+
+    async function abrirModal(btn) {
+        var id = btn.getAttribute('data-id');
+        if (!id || !form || !wrap) return;
+        wrap.classList.add('hidden');
+
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                title: 'Buscando dados...',
+                allowOutsideClick: false,
+                didOpen: function() {
+                    Swal.showLoading();
+                },
+                background: document.documentElement.classList.contains('dark') ? '#1e293b' : '#ffffff',
+                color: document.documentElement.classList.contains('dark') ? '#f8fafc' : '#1e293b'
+            });
+        }
+
+        try {
+            var url = actionBase.replace(/\/0$/, '/') + id;
+            var resp = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                },
+                credentials: 'same-origin'
+            });
+            if (!resp.ok) {
+                throw new Error('HTTP ' + resp.status);
+            }
+            var data = await resp.json();
+            var cliente = data && data.cliente;
+            if (!cliente) {
+                throw new Error('Cliente sem dados para edição.');
+            }
+            preencherFormularioEdicao(id, cliente);
+            if (typeof Swal !== 'undefined') Swal.close();
+            wrap.classList.remove('hidden');
+            travarFundo();
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        } catch (err) {
+            console.error('abrirModal edição de cliente falhou:', err);
+            if (typeof Swal !== 'undefined') Swal.close();
+            swalErroCarregarCliente();
+        }
     }
     function fecharModal() {
         wrap.classList.add('hidden');

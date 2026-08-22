@@ -783,6 +783,24 @@ def editar_cliente(id):
             flash('Cliente atualizado com sucesso!', 'success')
             return redirect(url_for('clientes.listar_clientes'))
 
+        if _is_ajax() or request.is_json:
+            return jsonify(ok=True, cliente={
+                'id': cliente.id,
+                'nome_cliente': cliente.nome_cliente or '',
+                'telefone': cliente.telefone or '',
+                'nome_contato': cliente.nome_contato or '',
+                'telefone_secundario': cliente.telefone_secundario or '',
+                'nome_contato_secundario': cliente.nome_contato_secundario or '',
+                'razao_social': cliente.razao_social or '',
+                'cnpj': cliente.cnpj or '',
+                'inscricao_estadual': cliente.inscricao_estadual or '',
+                'cidade': cliente.cidade or '',
+                'estado': cliente.estado or '',
+                'cep': cliente.cep or '',
+                'rua': cliente.rua or '',
+                'numero': cliente.numero or '',
+                'bairro': cliente.bairro or '',
+            })
         return render_template('clientes/formulario.html', cliente=cliente)
 
     except IntegrityError:
@@ -798,6 +816,8 @@ def editar_cliente(id):
         # crua estourar e reencadear novas queries no handler global de erro.
         db.session.rollback()
         current_app.logger.warning(f'editar_cliente:{id} — banco ocupado: {e}')
+        if _is_ajax() or request.is_json:
+            return jsonify(ok=False, mensagem='O banco de dados está ocupado, tente novamente em alguns instantes.'), 503
         flash('O banco de dados está ocupado, tente novamente em alguns instantes.', 'warning')
         return redirect(url_for('clientes.listar_clientes'))
     except HTTPException:
@@ -806,6 +826,8 @@ def editar_cliente(id):
         raise
     except Exception as e:
         db.session.rollback()
+        if _is_ajax() or request.is_json:
+            return jsonify(ok=False, mensagem='Erro interno ao processar cliente. Tente novamente.'), 500
         erro_flash(e, 'Erro interno ao processar cliente. Tente novamente.', contexto=f'editar_cliente:{id}')
         return redirect(url_for('clientes.listar_clientes'))
 

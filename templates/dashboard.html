@@ -91,15 +91,14 @@
         </div>
     </div>
 
-    <div data-id="card-lucro" class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-6 border-l-4 {% if total_lucro >= 0 %}border-emerald-500{% else %}border-red-500{% endif %}">
+    <div data-id="card-lucro" class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-6 border-l-4 {% if total_lucro >= 0 %}border-emerald-500{% else %}border-red-500{% endif %} cursor-pointer hover:bg-emerald-50 dark:hover:bg-gray-700 transition-all" onclick="abrirDetalhesCard('lucro_mensal')" title="Ver detalhamento do lucro mensal">
         <div class="flex items-center justify-between">
             <div>
                 <p class="text-gray-600 dark:text-gray-400 text-sm font-medium">Lucro Total do Período</p>
                 <p class="text-3xl font-bold mt-2 valor-financeiro {% if total_lucro >= 0 %}text-emerald-600{% else %}text-red-600{% endif %}">{{ total_lucro|formato_moeda }}</p>
                 <div class="mt-2 flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
-                    <span>Média mensal:</span>
-                    <span class="font-semibold valor-financeiro {% if media_lucro_mensal >= 0 %}text-emerald-600 dark:text-emerald-400{% else %}text-red-500 dark:text-red-400{% endif %}">{{ media_lucro_mensal|formato_moeda }}</span>
-                    <span class="text-gray-400 dark:text-gray-500">/ mês</span>
+                    <span>Lucro Mensal:</span>
+                    <span class="font-semibold valor-financeiro {% if lucro_mensal >= 0 %}text-emerald-600 dark:text-emerald-400{% else %}text-red-500 dark:text-red-400{% endif %}">{{ lucro_mensal|formato_moeda }}</span>
                 </div>
             </div>
             <i data-lucide="trending-up" class="w-10 h-10 {% if total_lucro >= 0 %}text-emerald-500{% else %}text-red-500{% endif %}"></i>
@@ -790,9 +789,12 @@
 })();
 </script>
 
+{% endblock %}
+
+{% block modals %}
 <!-- Modal: Detalhes Mensais -->
-<div id="modal-detalhes-mes-overlay" class="fixed inset-0 bg-black/50 z-50 hidden" onclick="fecharModalDetalhesMes()"></div>
-<div id="modal-detalhes-mes" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden pointer-events-none">
+<div id="modal-detalhes-mes-overlay" class="fixed inset-0 bg-black/60 z-[70] hidden" onclick="fecharModalDetalhesMes()" role="presentation"></div>
+<div id="modal-detalhes-mes" class="fixed inset-0 z-[80] flex items-center justify-center p-4 hidden pointer-events-none" role="dialog" aria-modal="true">
     <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl dark:shadow-none border border-gray-200 dark:border-gray-700 max-w-6xl w-full max-h-[90vh] flex flex-col pointer-events-auto overflow-hidden">
         <!-- Cabeçalho -->
         <div class="bg-emerald-700 text-white rounded-t-xl">
@@ -890,7 +892,7 @@
 </div>
 
 <!-- Modal Detalhes por Filtro (Pendente, Pago, PATY, DESTAK, Avulsas) -->
-<div id="modal-dashboard-detalhes-overlay" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 hidden" onclick="fecharModalDashboard()">
+<div id="modal-dashboard-detalhes-overlay" class="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-4 hidden" onclick="fecharModalDashboard()" role="dialog" aria-modal="true">
     <div id="modal-dashboard-detalhes" class="bg-white dark:bg-gray-800 rounded-xl shadow-xl dark:shadow-none border border-gray-200 dark:border-gray-700 max-w-4xl w-full max-h-[85vh] overflow-hidden flex flex-col" onclick="event.stopPropagation()">
         <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between flex-shrink-0">
             <h3 id="modal-dashboard-detalhes-titulo" class="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center">
@@ -940,7 +942,7 @@
 </div>
 
 <!-- Modal Prejuízo (Perdas) -->
-<div id="modalPrejuizo" class="fixed inset-0 z-50 hidden bg-black bg-opacity-60 flex items-center justify-center p-4" onclick="fecharModalPrejuizo()">
+<div id="modalPrejuizo" class="fixed inset-0 z-[70] hidden bg-black/60 flex items-center justify-center p-4" onclick="fecharModalPrejuizo()" role="dialog" aria-modal="true">
     <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-4xl overflow-hidden transform transition-all" onclick="event.stopPropagation()">
         <div class="flex justify-between items-center p-5 border-b border-gray-200 dark:border-gray-700 bg-red-50 dark:bg-red-900/20">
             <h3 class="text-xl font-bold text-red-700 dark:text-red-400 flex items-center gap-2">
@@ -1167,114 +1169,170 @@
     });
 })();
 
-// Modal de Detalhes Mensais
-function abrirDetalhesMes(ano, mes) {
+window._lucroMensalRef = {
+    ano: {{ lucro_mensal_ano|default(0)|int }},
+    mes: {{ lucro_mensal_mes|default(0)|int }}
+};
+
+function _alertaErroDashboard(mensagem) {
+    var texto = mensagem || 'Não foi possível carregar os detalhes. Tente novamente.';
+    if (typeof Swal !== 'undefined') {
+        Swal.fire({
+            icon: 'error',
+            title: 'Falha ao abrir detalhes',
+            text: texto,
+            confirmButtonColor: '#047857',
+            background: '#1f2937',
+            color: '#e5e7eb'
+        });
+    } else {
+        alert(texto);
+    }
+}
+
+function _lerJsonResposta(response) {
+    return response.text().then(function(text) {
+        var data = {};
+        try { data = text ? JSON.parse(text) : {}; } catch (e) {
+            throw new Error('Resposta inválida do servidor.');
+        }
+        if (!response.ok) {
+            throw new Error(data.erro || data.mensagem || 'Falha ao carregar os detalhes.');
+        }
+        return data;
+    });
+}
+
+window.abrirDetalhesCard = function(tipo) {
+    try {
+        if (tipo === 'lucro_mensal' || tipo === 'lucro') {
+            var ref = window._lucroMensalRef || {};
+            var agora = new Date();
+            var ano = parseInt(ref.ano, 10) || agora.getFullYear();
+            var mes = parseInt(ref.mes, 10) || (agora.getMonth() + 1);
+            window.abrirDetalhesMes(ano, mes);
+            return;
+        }
+        var titulos = {
+            pendente: 'Detalhamento: Pendentes',
+            pago: 'Detalhamento: Pagos',
+            avulsa: 'Detalhamento: Vendas Avulsas'
+        };
+        window.abrirModalDashboard(tipo, titulos[tipo] || ('Detalhamento: ' + tipo));
+    } catch (err) {
+        _alertaErroDashboard(err && err.message);
+    }
+};
+window.abrirDetalhes = window.abrirDetalhesCard;
+
+window.abrirDetalhesMes = function(ano, mes) {
     var overlay = document.getElementById('modal-detalhes-mes-overlay');
     var modal = document.getElementById('modal-detalhes-mes');
     var loading = document.getElementById('modal-detalhes-mes-loading');
     var conteudo = document.getElementById('modal-detalhes-mes-conteudo');
     var titulo = document.getElementById('modal-detalhes-mes-titulo');
-    
-    // Mostrar modal e loading
-    travarFundo();
-    overlay.classList.remove('hidden');
-    modal.classList.remove('hidden');
-    loading.classList.remove('hidden');
-    conteudo.classList.add('hidden');
-    
-    // Limpar conteúdo anterior
-    document.getElementById('modal-mes-top-clientes-tbody').innerHTML = '';
-    document.getElementById('modal-mes-vendas-tbody').innerHTML = '';
-    
-    // Buscar dados do mês
-    fetch('/api/dashboard/detalhes_mes/' + ano + '/' + mes)
-        .then(function(response) { return response.json(); })
-        .then(function(data) {
-            loading.classList.add('hidden');
-            conteudo.classList.remove('hidden');
-            
-            if (data.erro) {
-                titulo.innerHTML = '<i data-lucide="alert-circle" class="w-6 h-6 mr-2"></i>Erro';
-                document.getElementById('modal-mes-vendas-vazio').textContent = data.erro;
-                document.getElementById('modal-mes-vendas-vazio').classList.remove('hidden');
-                document.getElementById('modal-mes-vendas-wrapper').classList.add('hidden');
-                if (typeof lucide !== 'undefined') lucide.createIcons();
-                return;
-            }
-            
-            // Atualizar título
-            titulo.innerHTML = '<i data-lucide="calendar" class="w-6 h-6 mr-2"></i>Relatório de ' + data.mes_nome + '/' + data.ano;
-            
-            // Atualizar totais
-            document.getElementById('modal-mes-total-lucro').textContent = formatoMoeda(data.totais.total_lucro || 0);
-            document.getElementById('modal-mes-total-vendido').textContent = formatoMoeda(data.totais.total_vendido || 0);
-            
-            // Preencher Top Clientes
-            var tbodyClientes = document.getElementById('modal-mes-top-clientes-tbody');
-            if (data.top_clientes && data.top_clientes.length > 0) {
-                data.top_clientes.forEach(function(cliente, index) {
-                    var tr = document.createElement('tr');
-                    tr.className = (index % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-700');
-                    tr.innerHTML =
-                        '<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">' + cliente.nome + '</td>' +
-                        '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 text-center">' + cliente.qtd_compras + '</td>' +
-                        '<td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 dark:text-gray-100 text-right valor-financeiro">' + formatoMoeda(cliente.total_gasto) + '</td>';
-                    tbodyClientes.appendChild(tr);
-                });
-            } else {
-                tbodyClientes.innerHTML = '<tr><td colspan="3" class="px-6 py-4 text-center text-gray-500 dark:text-gray-400">Nenhum cliente encontrado</td></tr>';
-            }
-            
-            // Preencher Vendas
-            var tbodyVendas = document.getElementById('modal-mes-vendas-tbody');
-            var wrapperVendas = document.getElementById('modal-mes-vendas-wrapper');
-            var vazioVendas = document.getElementById('modal-mes-vendas-vazio');
-            
-            if (data.vendas && data.vendas.length > 0) {
-                wrapperVendas.classList.remove('hidden');
-                vazioVendas.classList.add('hidden');
-                
-                data.vendas.forEach(function(venda, index) {
-                    var tr = document.createElement('tr');
-                    tr.className = (index % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-700') + ' hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition';
-                    
-                    var lucroClass = venda.lucro >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400';
-                    var sitClass = venda.situacao === 'PAGO' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800';
-                    
-                    tr.innerHTML =
-                        '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">' + venda.data + '</td>' +
-                        '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">' + venda.cliente + '</td>' +
-                        '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">' + venda.produto + '</td>' +
-                        '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 text-right">' + venda.quantidade + '</td>' +
-                        '<td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100 text-right valor-financeiro">' + formatoMoeda(venda.valor_total) + '</td>' +
-                        '<td class="px-4 py-3 text-sm font-medium text-right valor-financeiro ' + lucroClass + '">' + formatoMoeda(venda.lucro) + '</td>' +
-                        '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">' + venda.nf + '</td>' +
-                        '<td class="px-4 py-3"><span class="px-3 py-1 text-xs font-semibold rounded-full ' + sitClass + '">' + venda.situacao + '</span></td>';
-                    tbodyVendas.appendChild(tr);
-                });
-            } else {
-                wrapperVendas.classList.add('hidden');
-                vazioVendas.classList.remove('hidden');
-            }
-            
-            if (typeof lucide !== 'undefined') lucide.createIcons();
-        })
-        .catch(function(error) {
-            loading.classList.add('hidden');
-            conteudo.classList.remove('hidden');
-            titulo.innerHTML = '<i data-lucide="alert-circle" class="w-6 h-6 mr-2"></i>Erro';
-            document.getElementById('modal-mes-vendas-vazio').textContent = 'Erro ao carregar detalhes do mês. Tente novamente.';
-            document.getElementById('modal-mes-vendas-vazio').classList.remove('hidden');
-            document.getElementById('modal-mes-vendas-wrapper').classList.add('hidden');
-            if (typeof lucide !== 'undefined') lucide.createIcons();
-        });
-}
 
-function fecharModalDetalhesMes() {
-    document.getElementById('modal-detalhes-mes-overlay').classList.add('hidden');
-    document.getElementById('modal-detalhes-mes').classList.add('hidden');
-    liberarFundo();
-}
+    if (!overlay || !modal || !loading || !conteudo || !titulo) {
+        _alertaErroDashboard('O painel de detalhes do mês não está disponível.');
+        return;
+    }
+
+    try {
+        travarFundo();
+        overlay.classList.remove('hidden');
+        modal.classList.remove('hidden');
+        loading.classList.remove('hidden');
+        conteudo.classList.add('hidden');
+
+        document.getElementById('modal-mes-top-clientes-tbody').innerHTML = '';
+        document.getElementById('modal-mes-vendas-tbody').innerHTML = '';
+
+        fetch('/api/dashboard/detalhes_mes/' + ano + '/' + mes)
+            .then(_lerJsonResposta)
+            .then(function(data) {
+                loading.classList.add('hidden');
+                conteudo.classList.remove('hidden');
+
+                if (data.erro && !(data.vendas && data.vendas.length)) {
+                    titulo.innerHTML = '<i data-lucide="calendar" class="w-6 h-6 mr-2"></i>Relatório Mensal';
+                    document.getElementById('modal-mes-vendas-vazio').textContent = data.erro;
+                    document.getElementById('modal-mes-vendas-vazio').classList.remove('hidden');
+                    document.getElementById('modal-mes-vendas-wrapper').classList.add('hidden');
+                    if (data.totais) {
+                        document.getElementById('modal-mes-total-lucro').textContent = formatoMoeda(data.totais.total_lucro || 0);
+                        document.getElementById('modal-mes-total-vendido').textContent = formatoMoeda(data.totais.total_vendido || 0);
+                    }
+                    if (typeof lucide !== 'undefined') lucide.createIcons();
+                    return;
+                }
+
+                titulo.innerHTML = '<i data-lucide="calendar" class="w-6 h-6 mr-2"></i>Relatório de ' + data.mes_nome + '/' + data.ano;
+                document.getElementById('modal-mes-total-lucro').textContent = formatoMoeda((data.totais && data.totais.total_lucro) || 0);
+                document.getElementById('modal-mes-total-vendido').textContent = formatoMoeda((data.totais && data.totais.total_vendido) || 0);
+
+                var tbodyClientes = document.getElementById('modal-mes-top-clientes-tbody');
+                if (data.top_clientes && data.top_clientes.length > 0) {
+                    data.top_clientes.forEach(function(cliente, index) {
+                        var tr = document.createElement('tr');
+                        tr.className = (index % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-700');
+                        tr.innerHTML =
+                            '<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">' + cliente.nome + '</td>' +
+                            '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 text-center">' + cliente.qtd_compras + '</td>' +
+                            '<td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 dark:text-gray-100 text-right valor-financeiro">' + formatoMoeda(cliente.total_gasto) + '</td>';
+                        tbodyClientes.appendChild(tr);
+                    });
+                } else {
+                    tbodyClientes.innerHTML = '<tr><td colspan="3" class="px-6 py-4 text-center text-gray-500 dark:text-gray-400">Nenhum cliente encontrado</td></tr>';
+                }
+
+                var tbodyVendas = document.getElementById('modal-mes-vendas-tbody');
+                var wrapperVendas = document.getElementById('modal-mes-vendas-wrapper');
+                var vazioVendas = document.getElementById('modal-mes-vendas-vazio');
+
+                if (data.vendas && data.vendas.length > 0) {
+                    wrapperVendas.classList.remove('hidden');
+                    vazioVendas.classList.add('hidden');
+
+                    data.vendas.forEach(function(venda, index) {
+                        var tr = document.createElement('tr');
+                        tr.className = (index % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-700') + ' hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition';
+                        var lucroClass = venda.lucro >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400';
+                        var sitClass = venda.situacao === 'PAGO' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800';
+                        tr.innerHTML =
+                            '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">' + venda.data + '</td>' +
+                            '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">' + venda.cliente + '</td>' +
+                            '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">' + venda.produto + '</td>' +
+                            '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 text-right">' + venda.quantidade + '</td>' +
+                            '<td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100 text-right valor-financeiro">' + formatoMoeda(venda.valor_total) + '</td>' +
+                            '<td class="px-4 py-3 text-sm font-medium text-right valor-financeiro ' + lucroClass + '">' + formatoMoeda(venda.lucro) + '</td>' +
+                            '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">' + venda.nf + '</td>' +
+                            '<td class="px-4 py-3"><span class="px-3 py-1 text-xs font-semibold rounded-full ' + sitClass + '">' + venda.situacao + '</span></td>';
+                        tbodyVendas.appendChild(tr);
+                    });
+                } else {
+                    wrapperVendas.classList.add('hidden');
+                    vazioVendas.classList.remove('hidden');
+                }
+
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+            })
+            .catch(function(error) {
+                window.fecharModalDetalhesMes();
+                _alertaErroDashboard(error && error.message);
+            });
+    } catch (err) {
+        window.fecharModalDetalhesMes();
+        _alertaErroDashboard(err && err.message);
+    }
+};
+
+window.fecharModalDetalhesMes = function() {
+    var overlay = document.getElementById('modal-detalhes-mes-overlay');
+    var modal = document.getElementById('modal-detalhes-mes');
+    if (overlay) overlay.classList.add('hidden');
+    if (modal) modal.classList.add('hidden');
+    if (typeof liberarFundo === 'function') liberarFundo();
+};
 
 var _detalhesSortState = { col: null, dir: 'asc' };
 
@@ -1346,75 +1404,85 @@ function ordenarTabelaDetalhes(colIndex, tipo) {
     _atualizarIndicadoresSortDetalhes(colIndex, dir);
     inicializarScrollInfinito('tabela-detalhes-body', 'sentinela-detalhes', 'scroll-container-detalhes');
 }
+window.ordenarTabelaDetalhes = ordenarTabelaDetalhes;
 
-function abrirModalDashboard(filtro, titulo) {
+window.abrirModalDashboard = function(filtro, titulo) {
     var overlay = document.getElementById('modal-dashboard-detalhes-overlay');
     var tituloEl = document.getElementById('modal-dashboard-detalhes-titulo');
     var tbody = document.getElementById('tabela-detalhes-body');
     var loading = document.getElementById('modal-dashboard-detalhes-loading');
     var conteudo = document.getElementById('modal-dashboard-detalhes-conteudo');
 
-    _detalhesSortState = { col: null, dir: 'asc' };
-    _atualizarIndicadoresSortDetalhes(null, 'asc');
-
-    tituloEl.innerHTML = '<i data-lucide="list" class="w-5 h-5 mr-2"></i>' + titulo;
-    tbody.innerHTML = '';
-    var sentinela = document.getElementById('sentinela-detalhes');
-    if (sentinela) sentinela.classList.add('hidden');
-    if (_observersAtivos['sentinela-detalhes']) {
-        _observersAtivos['sentinela-detalhes'].disconnect();
-        delete _observersAtivos['sentinela-detalhes'];
+    if (!overlay || !tituloEl || !tbody || !loading || !conteudo) {
+        _alertaErroDashboard('O painel de detalhes não está disponível.');
+        return;
     }
-    loading.classList.remove('hidden');
-    conteudo.classList.add('hidden');
-    overlay.classList.remove('hidden');
-    travarFundo();
 
-    fetch('/api/dashboard/detalhes/' + filtro)
-        .then(function(response) { return response.json(); })
-        .then(function(data) {
-            loading.classList.add('hidden');
-            conteudo.classList.remove('hidden');
+    try {
+        _detalhesSortState = { col: null, dir: 'asc' };
+        _atualizarIndicadoresSortDetalhes(null, 'asc');
 
-            if (data.erro) {
-                tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">' + data.erro + '</td></tr>';
+        tituloEl.innerHTML = '<i data-lucide="list" class="w-5 h-5 mr-2"></i>' + titulo;
+        tbody.innerHTML = '';
+        var sentinela = document.getElementById('sentinela-detalhes');
+        if (sentinela) sentinela.classList.add('hidden');
+        if (_observersAtivos['sentinela-detalhes']) {
+            _observersAtivos['sentinela-detalhes'].disconnect();
+            delete _observersAtivos['sentinela-detalhes'];
+        }
+        loading.classList.remove('hidden');
+        conteudo.classList.add('hidden');
+        overlay.classList.remove('hidden');
+        travarFundo();
+
+        fetch('/api/dashboard/detalhes/' + encodeURIComponent(filtro))
+            .then(_lerJsonResposta)
+            .then(function(data) {
+                loading.classList.add('hidden');
+                conteudo.classList.remove('hidden');
+
+                if (data.erro) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">' + data.erro + '</td></tr>';
+                    if (typeof lucide !== 'undefined') lucide.createIcons();
+                    return;
+                }
+
+                var vendas = data.vendas || [];
+                if (vendas.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">Nenhuma venda encontrada para este filtro.</td></tr>';
+                } else {
+                    vendas.forEach(function(venda, index) {
+                        var tr = document.createElement('tr');
+                        tr.className = (index % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-700');
+                        var sitClass = venda.status === 'PAGO' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300';
+                        tr.innerHTML =
+                            '<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">' + venda.id + '</td>' +
+                            '<td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">' + (venda.cliente || '-') + '</td>' +
+                            '<td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">' + (venda.descricao || '-') + '</td>' +
+                            '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">' + (venda.data || '-') + '</td>' +
+                            '<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100 text-right valor-financeiro">' + formatoMoeda(venda.valor) + '</td>' +
+                            '<td class="px-6 py-4 whitespace-nowrap"><span class="px-3 py-1 text-xs font-semibold rounded-full ' + sitClass + '">' + (venda.status || '-') + '</span></td>';
+                        tbody.appendChild(tr);
+                    });
+                }
+                inicializarScrollInfinito('tabela-detalhes-body', 'sentinela-detalhes', 'scroll-container-detalhes');
                 if (typeof lucide !== 'undefined') lucide.createIcons();
-                return;
-            }
+            })
+            .catch(function(error) {
+                window.fecharModalDashboard();
+                _alertaErroDashboard(error && error.message);
+            });
+    } catch (err) {
+        window.fecharModalDashboard();
+        _alertaErroDashboard(err && err.message);
+    }
+};
 
-            var vendas = data.vendas || [];
-            if (vendas.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">Nenhuma venda encontrada para este filtro.</td></tr>';
-            } else {
-                vendas.forEach(function(venda, index) {
-                    var tr = document.createElement('tr');
-                    tr.className = (index % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-700');
-                    var sitClass = venda.status === 'PAGO' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300';
-                    tr.innerHTML =
-                        '<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">' + venda.id + '</td>' +
-                        '<td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">' + (venda.cliente || '-') + '</td>' +
-                        '<td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">' + (venda.descricao || '-') + '</td>' +
-                        '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">' + (venda.data || '-') + '</td>' +
-                        '<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100 text-right valor-financeiro">' + formatoMoeda(venda.valor) + '</td>' +
-                        '<td class="px-6 py-4 whitespace-nowrap"><span class="px-3 py-1 text-xs font-semibold rounded-full ' + sitClass + '">' + (venda.status || '-') + '</span></td>';
-                    tbody.appendChild(tr);
-                });
-            }
-            inicializarScrollInfinito('tabela-detalhes-body', 'sentinela-detalhes', 'scroll-container-detalhes');
-            if (typeof lucide !== 'undefined') lucide.createIcons();
-        })
-        .catch(function(error) {
-            loading.classList.add('hidden');
-            conteudo.classList.remove('hidden');
-            tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-red-500 dark:text-red-400">Erro ao carregar dados. Tente novamente.</td></tr>';
-            if (typeof lucide !== 'undefined') lucide.createIcons();
-        });
-}
-
-function fecharModalDashboard() {
-    document.getElementById('modal-dashboard-detalhes-overlay').classList.add('hidden');
-    liberarFundo();
-}
+window.fecharModalDashboard = function() {
+    var overlay = document.getElementById('modal-dashboard-detalhes-overlay');
+    if (overlay) overlay.classList.add('hidden');
+    if (typeof liberarFundo === 'function') liberarFundo();
+};
 
 var ITENS_POR_PAGINA = 20;
 var _observersAtivos = {};
@@ -1470,15 +1538,31 @@ function inicializarScrollInfinito(tbodyId, sentinelaId, scrollContainerId) {
     _observersAtivos[sentinelaId] = observer;
 }
 
-function abrirModalPrejuizo() {
-    document.getElementById('modalPrejuizo').classList.remove('hidden');
+window.abrirModalPrejuizo = function() {
+    var modal = document.getElementById('modalPrejuizo');
+    if (!modal) {
+        _alertaErroDashboard('O painel de prejuízo não está disponível.');
+        return;
+    }
+    modal.classList.remove('hidden');
     travarFundo();
     inicializarScrollInfinito('tbody-prejuizo', 'sentinela-prejuizo', 'scroll-container-prejuizo');
-}
-function fecharModalPrejuizo() {
-    document.getElementById('modalPrejuizo').classList.add('hidden');
-    liberarFundo();
-}
+};
+window.fecharModalPrejuizo = function() {
+    var modal = document.getElementById('modalPrejuizo');
+    if (modal) modal.classList.add('hidden');
+    if (typeof liberarFundo === 'function') liberarFundo();
+};
+
+document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Escape') return;
+    var mes = document.getElementById('modal-detalhes-mes');
+    var dash = document.getElementById('modal-dashboard-detalhes-overlay');
+    var prej = document.getElementById('modalPrejuizo');
+    if (mes && !mes.classList.contains('hidden')) { window.fecharModalDetalhesMes(); return; }
+    if (dash && !dash.classList.contains('hidden')) { window.fecharModalDashboard(); return; }
+    if (prej && !prej.classList.contains('hidden')) { window.fecharModalPrejuizo(); }
+});
 
 // Função helper para formatar moeda (reutilizar se já existir)
 function formatoMoeda(valor) {

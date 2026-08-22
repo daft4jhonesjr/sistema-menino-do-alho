@@ -34,7 +34,7 @@ Cache:
     para ``services/`` na próxima onda).
 """
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 import csv
 import io
@@ -66,6 +66,37 @@ from services.config_helpers import get_hoje_brasil, registrar_log, _EXTERNAL_TI
 
 
 dashboard_bp = Blueprint('dashboard', __name__)
+
+
+def _expr_lucro_liquido():
+    """Lucro líquido SQL: vendas menos perdas (PERDA = −custo × qtd)."""
+    tipo_op = func.upper(func.coalesce(Venda.tipo_operacao, 'VENDA'))
+    qtd = func.coalesce(Venda.quantidade_venda, 0)
+    custo = func.coalesce(Produto.preco_custo, 0)
+    preco = func.coalesce(Venda.preco_venda, 0)
+    return case(
+        (tipo_op == 'PERDA', -(custo * qtd)),
+        else_=(preco - custo) * qtd,
+    )
+
+
+def _intervalo_mes(ano, mes):
+    """Retorna (inicio, fim_exclusivo) do mês civil."""
+    inicio = date(int(ano), int(mes), 1)
+    if int(mes) == 12:
+        return inicio, date(int(ano) + 1, 1, 1)
+    return inicio, date(int(ano), int(mes) + 1, 1)
+
+
+def _ano_mes_lucro_mensal(ano_ativo):
+    """Mês/ano do KPI Lucro Mensal: mês civil atual no ano do dashboard."""
+    agora = datetime.now()
+    ano = int(ano_ativo)
+    if ano == agora.year:
+        return ano, agora.month
+    if ano < agora.year:
+        return ano, agora.month
+    return ano, 1
 
 
 # Endpoints isentos de tenant_required (raiz que apenas redireciona).
@@ -819,6 +850,33 @@ def dashboard():
         _meses_divisao = 1
     media_lucro_mensal = float(total_lucro) / _meses_divisao if _meses_divisao > 0 else 0
 
+    # KPI 8c: Lucro Mensal (mês civil atual, descontando PERDA).
+    lucro_mensal_ano, lucro_mensal_mes = _ano_mes_lucro_mensal(ano_ativo)
+    _mes_ini, _mes_fim = _intervalo_mes(lucro_mensal_ano, lucro_mensal_mes)
+    _tipo_op = func.upper(func.coalesce(Venda.tipo_operacao, 'VENDA'))
+    _qtd = func.coalesce(Venda.quantidade_venda, 0)
+    _custo = func.coalesce(Produto.preco_custo, 0)
+    _preco = func.coalesce(Venda.preco_venda, 0)
+    _lucro_venda_expr = (_preco - _custo) * _qtd
+    _perda_expr = _custo * _qtd
+    _row_lucro_mes = db.session.query(
+        func.coalesce(func.sum(case(
+            (_tipo_op != 'PERDA', _lucro_venda_expr),
+            else_=0,
+        )), 0).label('lucro_vendas'),
+        func.coalesce(func.sum(case(
+            (_tipo_op == 'PERDA', _perda_expr),
+            else_=0,
+        )), 0).label('perdas'),
+    ).select_from(Venda).join(Produto, Venda.produto_id == Produto.id).filter(
+        filtro_tenant_venda,
+        Venda.data_venda >= _mes_ini,
+        Venda.data_venda < _mes_fim,
+        filtro_sem_bacalhau_tipo,
+        filtro_sem_bacalhau_nome,
+    ).one()
+    lucro_mensal = float(_row_lucro_mes.lucro_vendas or 0) - float(_row_lucro_mes.perdas or 0)
+
     # KPI 10: Ticket Médio (total_pedidos já consolidado acima)
     ticket_medio = (float(total_vendas) / float(total_pedidos)) if total_pedidos and total_pedidos > 0 else 0
 
@@ -834,8 +892,8 @@ def dashboard():
     qtd_sacola = func.sum(case((Produto.nome_produto.ilike('%sacola%'), Venda.quantidade_venda), else_=0))
     evolucao_mensal = db.session.query(
         coluna_mes.label('mes_ano'),
-        func.sum((Venda.preco_venda - Produto.preco_custo) * Venda.quantidade_venda).label('lucro_mensal'),
-        func.sum(Venda.preco_venda * Venda.quantidade_venda).label('faturamento_mensal'),
+        func.coalesce(func.sum(_expr_lucro_liquido()), 0).label('lucro_mensal'),
+        func.coalesce(func.sum(Venda.preco_venda * Venda.quantidade_venda), 0).label('faturamento_mensal'),
         func.sum(Venda.quantidade_venda).label('quantidade_mensal'),
         qtd_alho.label('qtd_alho'),
         qtd_cafe.label('qtd_cafe'),
@@ -904,6 +962,9 @@ def dashboard():
         total_pago=float(total_pago),
         total_lucro=float(total_lucro),
         media_lucro_mensal=float(media_lucro_mensal),
+        lucro_mensal=float(lucro_mensal),
+        lucro_mensal_ano=int(lucro_mensal_ano),
+        lucro_mensal_mes=int(lucro_mensal_mes),
         total_prejuizo=float(total_prejuizo),
         qtd_caixas_prejuizo=int(qtd_caixas_prejuizo),
         detalhes_prejuizo=detalhes_prejuizo,
@@ -1107,6 +1168,10 @@ def api_dashboard_detalhes(filtro):
             # a venda também conta como pagamento (parcial) — coerente
             # com o KPI 'Financeiro - Pago'.
             query = query.filter(Venda.situacao.in_(['PAGO', 'PARCIAL']))
+        elif filtro_lower in ('lucro_mensal', 'lucro'):
+            _ano_lm, _mes_lm = _ano_mes_lucro_mensal(ano_ativo)
+            _ini_lm, _fim_lm = _intervalo_mes(_ano_lm, _mes_lm)
+            query = query.filter(Venda.data_venda >= _ini_lm, Venda.data_venda < _fim_lm)
         elif filtro_lower == 'avulsa':
             query = query.filter(
                 or_(
@@ -1466,19 +1531,9 @@ def api_detalhes_mes(ano, mes):
         if mes < 1 or mes > 12:
             return jsonify({'erro': 'Mês inválido. Use valores de 1 a 12.'}), 400
 
-        # Range fixo do mês — preserva uso do índice em data_venda
-        # (extract('year') + extract('month') aplicariam função sobre a
-        # coluna e quebrariam o lookup pelo índice composto).
-        from datetime import date as _date
-        mes_ini = _date(int(ano), int(mes), 1)
-        if int(mes) == 12:
-            mes_fim = _date(int(ano) + 1, 1, 1)
-        else:
-            mes_fim = _date(int(ano), int(mes) + 1, 1)
-        # Totais agregados em SQL (1 round-trip) em vez de iterar
-        # `vendas_mes` em Python.
+        mes_ini, mes_fim = _intervalo_mes(ano, mes)
         valor_venda_expr = Venda.preco_venda * Venda.quantidade_venda
-        lucro_expr = (Venda.preco_venda - Produto.preco_custo) * Venda.quantidade_venda
+        lucro_expr = _expr_lucro_liquido()
         agg = db.session.query(
             func.coalesce(func.sum(valor_venda_expr), 0),
             func.coalesce(func.sum(lucro_expr), 0),
