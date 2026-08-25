@@ -409,23 +409,25 @@
 <div id="venda-erro" class="hidden mb-4 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl text-red-800 dark:text-red-300 text-sm shadow-sm"></div>
 
 <div id="container-nova-venda"
-     class="hidden fixed inset-0 z-50"
+     class="hidden fixed inset-0 z-[100]"
      role="dialog" aria-modal="true" aria-label="Nova Venda">
     <!-- Backdrop: click fora fecha o drawer -->
-    <div class="fixed inset-0 bg-black/60" id="nova-venda-backdrop"></div>
+    <div class="fixed inset-0 bg-black/60 z-0" id="nova-venda-backdrop" onclick="fecharModalNovaVenda()"></div>
     <!-- Drawer lateral direito -->
-    <div class="fixed right-0 top-0 h-full w-full max-w-3xl flex flex-col bg-white dark:bg-gray-900 shadow-2xl border-l border-gray-200 dark:border-gray-700" style="z-index:10">
-        <div class="flex items-center justify-between px-6 py-4 bg-emerald-700 text-white flex-shrink-0">
-            <h2 class="text-xl font-bold flex items-center gap-2">
+    <div class="fixed right-0 top-0 h-full w-full max-w-3xl flex flex-col bg-white dark:bg-gray-900 shadow-2xl border-l border-gray-200 dark:border-gray-700 z-10">
+        <div class="relative z-[9999] flex items-center justify-between px-6 py-4 bg-emerald-700 text-white flex-shrink-0">
+            <h2 class="text-xl font-bold flex items-center gap-2 pointer-events-none">
                 <i data-lucide="shopping-cart" class="w-5 h-5"></i> Nova Venda
             </h2>
             <button type="button" id="btn-fechar-nova-venda"
-                    class="w-9 h-9 flex items-center justify-center rounded-full hover:bg-emerald-600 transition"
-                    title="Fechar (Esc)">
-                <i data-lucide="x" class="w-5 h-5"></i>
+                    onclick="fecharModalNovaVenda()"
+                    class="p-3 relative z-[9999] cursor-pointer min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full hover:bg-emerald-600 active:bg-emerald-800 transition touch-manipulation"
+                    title="Fechar (Esc)"
+                    aria-label="Fechar">
+                <i data-lucide="x" class="w-5 h-5 pointer-events-none"></i>
             </button>
         </div>
-        <div class="flex-1 overflow-y-auto p-5 space-y-4">
+        <div class="flex-1 overflow-y-auto p-5 space-y-4 relative z-0">
 
 <!-- Linha de inserção: campos alinhados com a tabela -->
 <div id="container-formulario-venda" class="mb-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-visible">
@@ -581,6 +583,15 @@
         </div>
     </div>
 </div>
+            <!-- Rodapé sticky: Cancelar (mobile) -->
+            <div class="sticky bottom-0 mt-4 pt-3 pb-1 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3 relative z-[9999]">
+                <button type="button"
+                        id="btn-cancelar-nova-venda"
+                        onclick="fecharModalNovaVenda()"
+                        class="p-3 relative z-[9999] cursor-pointer min-h-[44px] px-5 rounded-xl border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 active:bg-gray-100 transition touch-manipulation font-medium">
+                    Cancelar
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -5017,6 +5028,27 @@ function ordenarVendasTabela(colIndex, tipo) {
 </script>
 
 <script>
+// Escopo global: onclick inline no mobile precisa enxergar a função no window
+window.fecharModalNovaVenda = function() {
+    var modal = document.getElementById('container-nova-venda');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    document.body.style.overflow = '';
+    if (typeof liberarFundo === 'function') {
+        try { liberarFundo(); } catch (_) {}
+    }
+};
+window.abrirModalNovaVenda = function() {
+    var modal = document.getElementById('container-nova-venda');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    if (typeof travarFundo === 'function') {
+        try { travarFundo(); } catch (_) {}
+    }
+    if (typeof lucide !== 'undefined') { try { lucide.createIcons(); } catch(_) {} }
+};
+
 document.addEventListener('DOMContentLoaded', function() {
     const btnToggleForm = document.getElementById('btn-toggle-nova-venda');
     const btnDropdownSeta = document.getElementById('btn-dropdown-vendas');
@@ -5025,21 +5057,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const btnMenuRelatorio = document.getElementById('btn-menu-relatorio');
     const containerVenda = document.getElementById('container-nova-venda');
 
-    // --- Funções de abertura/fechamento do drawer Nova Venda ---
-    function abrirModalNovaVenda() {
-        if (!containerVenda) return;
-        containerVenda.classList.remove('hidden');
-        document.body.style.overflow = 'hidden';
-        if (typeof lucide !== 'undefined') { try { lucide.createIcons(); } catch(_) {} }
-    }
-    function fecharModalNovaVenda() {
-        if (!containerVenda) return;
-        containerVenda.classList.add('hidden');
-        document.body.style.overflow = '';
-    }
-    // Expõe globalmente para o backdrop (onclick inline)
-    window.fecharModalNovaVenda = fecharModalNovaVenda;
-    window.abrirModalNovaVenda  = abrirModalNovaVenda;
+    function abrirModalNovaVenda() { window.abrirModalNovaVenda(); }
+    function fecharModalNovaVenda() { window.fecharModalNovaVenda(); }
 
     // 1) Botão principal "Nova Venda"
     if (btnToggleForm) {
@@ -5052,13 +5071,22 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Botão X dentro do drawer
-    const btnFecharDrawer = document.getElementById('btn-fechar-nova-venda');
-    if (btnFecharDrawer) btnFecharDrawer.addEventListener('click', fecharModalNovaVenda);
-
-    // Backdrop do drawer
-    const backdropDrawer = document.getElementById('nova-venda-backdrop');
-    if (backdropDrawer) backdropDrawer.addEventListener('click', fecharModalNovaVenda);
+    // Capture: X / Cancelar / backdrop — evita bloqueio por stopPropagation no mobile
+    document.addEventListener('click', function(e) {
+        var t = e.target;
+        if (!t || !t.closest) return;
+        if (!containerVenda || containerVenda.classList.contains('hidden')) return;
+        if (
+            t.id === 'btn-fechar-nova-venda' ||
+            t.id === 'btn-cancelar-nova-venda' ||
+            t.id === 'nova-venda-backdrop' ||
+            t.closest('#btn-fechar-nova-venda') ||
+            t.closest('#btn-cancelar-nova-venda')
+        ) {
+            e.preventDefault();
+            fecharModalNovaVenda();
+        }
+    }, true);
 
     // ESC fecha o drawer
     document.addEventListener('keydown', function(e) {
