@@ -198,11 +198,13 @@
     function showLoginError(message) {
         if (typeof Swal === 'undefined') {
             alert(message);
+            var elFallback = document.getElementById('password');
+            if (elFallback) { elFallback.value = ''; elFallback.focus(); }
             return;
         }
         Swal.fire({
             title: 'Falha no Acesso',
-            text: message || 'Não foi possível conectar ao servidor. Deseja tentar novamente?',
+            text: message || 'Credenciais inválidas ou falha de autenticação.',
             icon: 'error',
             background: '#1e293b',
             color: '#f8fafc',
@@ -210,8 +212,13 @@
             confirmButtonText: 'Tentar Novamente',
             showCancelButton: false
         }).then(function() {
-            var el = document.getElementById('username');
-            if (el) el.focus();
+            var formLogin = document.getElementById('form-login');
+            var passwordInput = document.getElementById('password')
+                || (formLogin && formLogin.querySelector('input[type="password"]'));
+            if (passwordInput) {
+                passwordInput.value = '';
+                passwordInput.focus();
+            }
         });
     }
 
@@ -403,7 +410,22 @@
         if (!formLogin) return;
 
         var enviando = false;
+        // Referências fixas capturadas uma vez — acessíveis pelo pageshow e pelo submit
+        var btnSubmit = formLogin.querySelector('button[type="submit"]');
+        var textoOriginalBtn = btnSubmit ? btnSubmit.innerHTML : '<i data-lucide="log-in" class="w-4 h-4 mr-2"></i>Entrar';
+
+        function destravFormulario() {
+            enviando = false;
+            resetarBotaoLogin(btnSubmit, textoOriginalBtn);
+        }
+
         checarBiometriaDisponivel();
+
+        // Camada 1 — bfcache: se o navegador restaurar a página do cache de
+        // navegação (Voltar/Avançar), o estado JS pode estar com botão travado.
+        window.addEventListener('pageshow', function(ev) {
+            if (ev.persisted) destravFormulario();
+        });
 
         var btnFace = document.getElementById('btn-faceid');
         if (btnFace) {
@@ -415,10 +437,11 @@
 
         formLogin.addEventListener('submit', async function(e) {
             e.preventDefault();
+            e.stopPropagation();
             if (enviando) return;
 
-            var btnSubmit = formLogin.querySelector('button[type="submit"]');
-            var textoOriginal = btnSubmit ? btnSubmit.innerHTML : 'Entrar';
+            // Recopilar textoOriginal a cada submit para refletir estado atual dos ícones
+            var textoOriginal = btnSubmit ? btnSubmit.innerHTML : textoOriginalBtn;
             var username = (document.getElementById('username') || {}).value || '';
             var password = (document.getElementById('password') || {}).value || '';
 
@@ -433,9 +456,42 @@
                 await salvarCredenciaisBiometria(username, password);
                 redirecionarAposLogin(data);
             } catch (error) {
+                // Camada 2 — destravar ANTES do Swal, não depois: garante que o
+                // formulário fica livre independentemente de qualquer comportamento
+                // do modal (iOS WKWebView, foco, etc.)
+                enviando = false;
+                resetarBotaoLogin(btnSubmit, textoOriginal);
+
                 console.error('Erro no login:', error);
-                showLoginError(mensagemErroLogin(error));
+
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        title: 'Falha no Acesso',
+                        text: mensagemErroLogin(error) || 'Credenciais inválidas ou falha de autenticação.',
+                        icon: 'error',
+                        background: '#1e293b',
+                        color: '#f8fafc',
+                        confirmButtonColor: '#10b981',
+                        confirmButtonText: 'Tentar Novamente',
+                        showCancelButton: false,
+                        allowOutsideClick: true,
+                        allowEscapeKey: true
+                    }).then(function() {
+                        var pwdField = document.getElementById('password')
+                            || formLogin.querySelector('input[type="password"]');
+                        if (pwdField) {
+                            pwdField.value = '';
+                            pwdField.focus();
+                        }
+                    });
+                } else {
+                    alert(mensagemErroLogin(error) || 'Credenciais inválidas ou falha de autenticação.');
+                    var pwdFallback = document.getElementById('password');
+                    if (pwdFallback) { pwdFallback.value = ''; pwdFallback.focus(); }
+                }
             } finally {
+                // Camada 3 — segurança absoluta: executa sempre, mesmo que o
+                // catch lance uma exceção inesperada
                 enviando = false;
                 resetarBotaoLogin(btnSubmit, textoOriginal);
             }
