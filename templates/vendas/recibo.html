@@ -49,15 +49,15 @@
                 </tr>
             </thead>
             <tbody>
-                {% for v in vendas %}
+                {% for item in itens_pedido %}
                 <tr>
-                    <td>{{ v.produto.nome_produto if v.produto else '-' }}</td>
-                    <td class="text-center">{{ v.quantidade_venda }}</td>
+                    <td>{{ item.produto.nome_produto if item.produto else '-' }}</td>
+                    <td class="text-center">{{ item.quantidade_venda }}</td>
                     <td class="text-center">
-                        R$ {{ ("{:,.2f}".format(v.calcular_total() / v.quantidade_venda if v.quantidade_venda > 0 else 0)).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                        R$ {{ ("{:,.2f}".format(item.calcular_total() / item.quantidade_venda if item.quantidade_venda > 0 else 0)).replace(',', 'X').replace('.', ',').replace('X', '.') }}
                     </td>
                     <td class="text-right">
-                        R$ {{ ("{:,.2f}".format(v.calcular_total())).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                        R$ {{ ("{:,.2f}".format(item.calcular_total())).replace(',', 'X').replace('.', ',').replace('X', '.') }}
                     </td>
                 </tr>
                 {% endfor %}

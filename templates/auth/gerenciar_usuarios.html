@@ -20,7 +20,7 @@
             <i data-lucide="building-2" class="w-5 h-5 mr-2 shrink-0"></i>Cadastrar Nova Empresa (SaaS)
         </h3>
         <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">Crie uma nova empresa (tenant) e o usuário Dono correspondente.</p>
-        <form method="POST" action="{{ url_for('auth.gerenciar_usuarios') }}" class="space-y-4 flex-1 flex flex-col">
+        <form id="formCadastrarEmpresa" method="POST" action="{{ url_for('auth.gerenciar_usuarios') }}" class="space-y-4 flex-1 flex flex-col">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <input type="hidden" name="acao" value="cadastrar_empresa"/>
             <div class="space-y-4 flex-1">
@@ -43,7 +43,7 @@
                            placeholder="Mínimo 6 caracteres">
                 </div>
             </div>
-            <button type="submit" class="bg-indigo-700 text-white px-5 py-2.5 rounded-xl hover:bg-indigo-600 transition font-medium flex items-center w-full sm:w-auto justify-center">
+            <button id="btnCadastrarEmpresa" type="submit" class="bg-indigo-700 text-white px-5 py-2.5 rounded-xl hover:bg-indigo-600 transition font-medium flex items-center w-full sm:w-auto justify-center">
                 <i data-lucide="plus-circle" class="w-4 h-4 mr-2"></i>Cadastrar Empresa e Dono
             </button>
         </form>
@@ -428,6 +428,85 @@
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
+/* ── Cadastro Assíncrono de Empresa (SaaS) ─────────────────────────────── */
+(function () {
+    var form = document.getElementById('formCadastrarEmpresa');
+    if (!form) return;
+
+    form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+
+        var btn = document.getElementById('btnCadastrarEmpresa');
+        btn.disabled = true;
+
+        var _dark = document.documentElement.classList.contains('dark');
+        var _swalBase = {
+            background: '#1e293b',
+            color: '#f8fafc',
+            customClass: { popup: 'rounded-2xl' }
+        };
+
+        Swal.fire(Object.assign({}, _swalBase, {
+            title: 'Criando estrutura da empresa...',
+            text: 'Aguarde um momento.',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            didOpen: function () { Swal.showLoading(); }
+        }));
+
+        var formData = new FormData(form);
+
+        try {
+            var resp = await fetch(form.action, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                },
+                body: formData
+            });
+
+            var data = {};
+            try { data = await resp.json(); } catch (_) {}
+
+            if (resp.ok && data.success) {
+                await Swal.fire(Object.assign({}, _swalBase, {
+                    icon: 'success',
+                    title: 'Empresa criada!',
+                    text: data.message || 'Empresa e Dono cadastrados com sucesso.',
+                    confirmButtonColor: '#10b981',
+                    confirmButtonText: 'Ótimo!'
+                }));
+                form.reset();
+            } else {
+                var msgErro = (data && data.error)
+                    ? data.error
+                    : 'Tivemos um problema ao registrar a empresa. Tente novamente.';
+                await Swal.fire(Object.assign({}, _swalBase, {
+                    icon: 'error',
+                    title: 'Erro ao cadastrar',
+                    text: msgErro,
+                    confirmButtonColor: '#ef4444',
+                    confirmButtonText: 'Tentar Novamente'
+                }));
+            }
+        } catch (err) {
+            console.error('Erro de rede ao cadastrar empresa:', err);
+            await Swal.fire(Object.assign({}, _swalBase, {
+                icon: 'error',
+                title: 'Falha de conexão',
+                text: 'Não foi possível contatar o servidor. Verifique sua conexão e tente novamente.',
+                confirmButtonColor: '#ef4444',
+                confirmButtonText: 'Tentar Novamente'
+            }));
+        } finally {
+            btn.disabled = false;
+        }
+    });
+})();
+/* ── fim Cadastro Assíncrono de Empresa ────────────────────────────────── */
+
 const CURRENT_USER_ID = {{ current_user.id|int }};
 
 function _swalLogoutTheme() {

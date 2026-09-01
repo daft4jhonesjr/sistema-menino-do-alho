@@ -3379,25 +3379,37 @@ def atualizar_situacao_rapida(id):
 @vendas_bp.route('/venda/recibo/<int:id>')
 def recibo_venda(id):
     """Gera recibo de venda em formato de impressão (uma página A4).
-    Agrupa itens da mesma compra (cliente, data, NF)."""
-    venda_base = query_tenant(Venda).options(joinedload(Venda.cliente)).filter_by(id=id).first_or_404()
+    Agrupa todos os itens do mesmo pedido (mesma lógica de _vendas_do_pedido)."""
+    venda_base = query_tenant(Venda).options(
+        joinedload(Venda.cliente),
+        joinedload(Venda.produto),
+    ).filter_by(id=id).first_or_404()
     cliente = venda_base.cliente
 
-    vendas_agrupadas = query_tenant(Venda).filter_by(
-        cliente_id=venda_base.cliente_id,
-        data_venda=venda_base.data_venda,
-        nf=venda_base.nf,
-    ).options(joinedload(Venda.produto)).order_by(Venda.id).all()
+    vendas_pedido = _vendas_do_pedido(venda_base)
+    vendas_ids = [v.id for v in vendas_pedido]
+    if vendas_ids:
+        itens_pedido = (
+            query_tenant(Venda)
+            .options(joinedload(Venda.produto))
+            .filter(Venda.id.in_(vendas_ids))
+            .order_by(Venda.id)
+            .all()
+        )
+    else:
+        itens_pedido = [venda_base]
 
-    total_recibo = sum(float(v.calcular_total()) for v in vendas_agrupadas)
+    total_recibo = sum(float(v.calcular_total()) for v in itens_pedido)
+    qtd_total = sum(int(v.quantidade_venda or 0) for v in itens_pedido)
     data_emissao = date.today()
 
     return render_template(
         'vendas/recibo.html',
         cliente=cliente,
         venda_base=venda_base,
-        vendas=vendas_agrupadas,
+        itens_pedido=itens_pedido,
         total_recibo=total_recibo,
+        qtd_total=qtd_total,
         data_emissao=data_emissao,
     )
 

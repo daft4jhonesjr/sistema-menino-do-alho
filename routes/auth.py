@@ -792,7 +792,17 @@ def gerenciar_usuarios():
 
         # POST: cadastro de nova Empresa + Dono. Apenas Jhones ou MASTER.
         if request.method == 'POST' and request.form.get('acao') == 'cadastrar_empresa':
+            _is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
+            def _json_err(msg, status=400):
+                return jsonify({'success': False, 'error': msg}), status
+
+            def _json_ok(msg):
+                return jsonify({'success': True, 'message': msg}), 200
+
             if not (current_user.username == 'Jhones' or current_user.perfil == PERFIL_MASTER):
+                if _is_ajax:
+                    return _json_err('Acesso negado: apenas o administrador principal pode cadastrar empresas.', 403)
                 flash('Acesso negado: apenas o administrador principal pode cadastrar empresas.', 'error')
                 return redirect(url_for('auth.gerenciar_usuarios'))
 
@@ -801,18 +811,28 @@ def gerenciar_usuarios():
             senha_provisoria = request.form.get('senha_provisoria') or ''
 
             if not nome_fantasia:
+                if _is_ajax:
+                    return _json_err('Informe o Nome Fantasia da empresa.')
                 flash('Informe o Nome Fantasia da empresa.', 'error')
                 return redirect(url_for('auth.gerenciar_usuarios'))
             if not username_dono:
+                if _is_ajax:
+                    return _json_err('Informe o Username do Dono.')
                 flash('Informe o Username do Dono.', 'error')
                 return redirect(url_for('auth.gerenciar_usuarios'))
             if len(senha_provisoria) < 6:
+                if _is_ajax:
+                    return _json_err('A senha provisória deve ter no mínimo 6 caracteres.')
                 flash('A senha provisória deve ter no mínimo 6 caracteres.', 'error')
                 return redirect(url_for('auth.gerenciar_usuarios'))
             if Usuario.query.filter_by(username=username_dono).first():
+                if _is_ajax:
+                    return _json_err(f'O usuário "{username_dono}" já está em uso.')
                 flash(f'O usuário "{username_dono}" já está em uso.', 'error')
                 return redirect(url_for('auth.gerenciar_usuarios'))
             if Empresa.query.filter(func.lower(Empresa.nome_fantasia) == nome_fantasia.lower()).first():
+                if _is_ajax:
+                    return _json_err(f'Já existe uma empresa cadastrada com o nome "{nome_fantasia}".')
                 flash(f'Já existe uma empresa cadastrada com o nome "{nome_fantasia}".', 'error')
                 return redirect(url_for('auth.gerenciar_usuarios'))
 
@@ -835,17 +855,22 @@ def gerenciar_usuarios():
                 db.session.add(novo_dono)
                 ok, err = _safe_db_commit()
                 if not ok:
+                    db.session.rollback()
+                    if _is_ajax:
+                        return _json_err(err or 'Tivemos um problema ao registrar a empresa. Pode haver um dado duplicado ou instabilidade.', 500)
                     flash(err or 'Erro ao cadastrar empresa.', 'error')
                     return redirect(url_for('auth.gerenciar_usuarios'))
             except Exception as e:
                 db.session.rollback()
+                if _is_ajax:
+                    return _json_err('Tivemos um problema ao registrar a empresa. Pode haver um dado duplicado ou instabilidade.', 500)
                 flash(f'Erro ao cadastrar empresa: {e}', 'error')
                 return redirect(url_for('auth.gerenciar_usuarios'))
 
-            flash(
-                f'Empresa "{nome_fantasia}" e Dono "{username_dono}" criados com sucesso.',
-                'success',
-            )
+            msg_ok = f'Empresa "{nome_fantasia}" e Dono "{username_dono}" criados com sucesso.'
+            if _is_ajax:
+                return _json_ok(msg_ok)
+            flash(msg_ok, 'success')
             return redirect(url_for('auth.gerenciar_usuarios'))
 
         # GET: lista usuários do tenant atual com empresa em eager loading.
