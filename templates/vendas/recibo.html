@@ -270,62 +270,66 @@
         }
         
         @media print {
+            /* ── Página A4 com margens confortáveis ── */
             @page {
                 size: A4 portrait;
-                margin: 0mm;
+                margin: 8mm;
             }
 
+            /* ── Reset base: sem height fixo, sem overflow:hidden ── */
             html, body {
-                height: auto;
-                width: 100% !important;
+                background: white !important;
                 margin: 0 !important;
                 padding: 0 !important;
-                overflow: visible;
-                font-size: 9pt;
-                line-height: 1.25;
+                width: 100% !important;
+                height: auto !important;
+                overflow: visible !important;
+                font-size: 9pt !important;
+                line-height: 1.25 !important;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
-                background: white !important;
             }
 
-            .recibo-a4-sheet *,
-            .recibo-a4-sheet *::before,
-            .recibo-a4-sheet *::after {
-                page-break-inside: avoid !important;
-                page-break-after: avoid !important;
-                page-break-before: avoid !important;
-            }
-
-            button, .no-print, .print-hidden {
+            /* ── Ocultar botão e elementos de tela ── */
+            button,
+            .no-print,
+            .print-hidden {
                 display: none !important;
             }
 
-            .recibo-a4-sheet.container {
-                display: flex;
-                flex-direction: column;
-                justify-content: space-between;
+            /* ── Container principal: bloco simples, sem flex nem altura fixa ──
+               A altura fixa + flex + min-height:0 colapsa o conteúdo no Safari. */
+            .container.recibo-a4-sheet {
+                display: block !important;
                 width: 100% !important;
                 max-width: none !important;
-                height: 297mm;
-                max-height: 297mm;
                 margin: 0 !important;
-                padding: 8mm !important;
-                box-sizing: border-box;
-                overflow: visible;
-            }
-
-            .via-recibo {
-                flex: 1 1 0;
-                min-height: 0;
-                width: 100% !important;
-                display: flex;
-                flex-direction: column;
-                justify-content: flex-start;
-                margin-bottom: 0 !important;
                 padding: 0 !important;
-                overflow: visible;
             }
 
+            /* ── Cada via: bloco normal, sem page-break forçado ── */
+            .via-recibo {
+                display: block !important;
+                width: 100% !important;
+                margin-bottom: 0 !important;
+                padding: 4mm 0 !important;
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+
+            /* ── Linha de corte ── */
+            .linha-corte,
+            .linha-de-corte {
+                margin: 3mm 0 !important;
+                padding: 0 !important;
+            }
+
+            .linha-corte .texto {
+                font-size: 7pt !important;
+                margin: 0 8px !important;
+            }
+
+            /* ── Tipografia e espaçamentos compactos para A4 ── */
             .via-header {
                 margin-bottom: 4px !important;
             }
@@ -402,18 +406,6 @@
                 margin-top: 10px !important;
                 padding-top: 2px !important;
             }
-
-            .linha-corte,
-            .linha-de-corte {
-                flex-shrink: 0;
-                margin: 2mm 0 !important;
-                padding: 0 !important;
-            }
-
-            .linha-corte .texto {
-                font-size: 7pt !important;
-                margin: 0 8px !important;
-            }
         }
         
         @media screen {
@@ -461,11 +453,5 @@
         {{ render_via('2ª Via - Estabelecimento (Canhoto)') }}
     </div>
     
-    <script>
-        // Auto-print quando carregar (opcional - pode remover se não quiser)
-        // window.onload = function() {
-        //     window.print();
-        // }
-    </script>
 </body>
 </html>
