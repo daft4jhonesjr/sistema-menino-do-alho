@@ -1180,10 +1180,16 @@ def receber_lote_cliente(id):
     try:
         valor_recebido = Decimal(valor_str) if valor_str else Decimal('0.00')
     except (InvalidOperation, ValueError):
-        flash('Valor recebido inválido. Use o formato 1.000,00.', 'error')
+        msg = 'Valor recebido inválido. Use o formato 1.000,00.'
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.is_json:
+            return jsonify({'success': False, 'error': msg}), 400
+        flash(msg, 'error')
         return redirect(url_for('clientes.listar_clientes'))
     if valor_recebido <= Decimal('0.00'):
-        flash('Informe um valor recebido maior que zero.', 'error')
+        msg = 'Informe um valor recebido maior que zero.'
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.is_json:
+            return jsonify({'success': False, 'error': msg}), 400
+        flash(msg, 'error')
         return redirect(url_for('clientes.listar_clientes'))
     forma_pgto = request.form.get('forma_pagamento', 'Dinheiro')
 
@@ -1197,7 +1203,10 @@ def receber_lote_cliente(id):
     repassar_fornecedor = (request.form.get('repassar_fornecedor') or '').strip() in ('1', 'on', 'true')
     fornecedor_repasse = (request.form.get('fornecedor_repasse') or '').strip()
     if repassar_fornecedor and not fornecedor_repasse:
-        flash('Informe o nome do fornecedor para o repasse direto.', 'error')
+        msg = 'Informe o nome do fornecedor para o repasse direto.'
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.is_json:
+            return jsonify({'success': False, 'error': msg}), 400
+        flash(msg, 'error')
         return redirect(url_for('clientes.listar_clientes'))
 
     # Data do pagamento (retroativa): permite lançamentos de valores que entraram no caixa em datas anteriores.
@@ -1206,7 +1215,10 @@ def receber_lote_cliente(id):
         try:
             data_pagamento = date.fromisoformat(data_pagamento_raw)
         except ValueError:
-            flash('Data do pagamento inválida. Use o formato AAAA-MM-DD.', 'error')
+            msg = 'Data do pagamento inválida. Use o formato AAAA-MM-DD.'
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.is_json:
+                return jsonify({'success': False, 'error': msg}), 400
+            flash(msg, 'error')
             return redirect(url_for('clientes.listar_clientes'))
     else:
         data_pagamento = date.today()
@@ -1327,15 +1339,20 @@ def receber_lote_cliente(id):
     except Exception as exc:
         db.session.rollback()
         current_app.logger.exception('Falha em receber_lote_cliente')
+        msg_erro = f'Não foi possível processar o abatimento: {exc}'
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.is_json:
+            return jsonify({'success': False, 'error': msg_erro}), 500
         flash(f'Erro ao processar abatimento: {exc}', 'error')
         return redirect(url_for('clientes.listar_clientes'))
 
     if not vendas_afetadas:
-        flash(
+        msg_vazio = (
             f'Nenhuma venda em aberto encontrada para {cliente.nome_cliente}. '
-            'Nenhum lançamento foi criado.',
-            'warning',
+            'Nenhum lançamento foi criado.'
         )
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.is_json:
+            return jsonify({'success': False, 'error': msg_vazio}), 200
+        flash(msg_vazio, 'warning')
         return redirect(url_for('clientes.listar_clientes'))
 
     valor_aplicado = valor_recebido - valor_restante
@@ -1385,4 +1402,6 @@ def receber_lote_cliente(id):
         f"Sobra: R$ {valor_restante:.2f}.{log_repasse}",
     )
 
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.is_json:
+        return jsonify({'success': True, 'message': 'Abatimento processado com sucesso!'}), 200
     return redirect(url_for('clientes.listar_clientes'))

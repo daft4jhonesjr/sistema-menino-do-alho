@@ -1091,11 +1091,64 @@ window.padronizarClientesMaiusculo = function() {
         });
     }
     if (formAbater) {
-        formAbater.addEventListener('submit', function() {
-            if (!inputValorAbater) return;
+        formAbater.addEventListener('submit', async function(e) {
+            e.preventDefault();
+
             // Garante envio no formato esperado pelo backend (ex: 1.000,00),
             // que já normaliza para Decimal via replace('.', '').replace(',', '.').
-            inputValorAbater.value = formatarMoedaBRLInput(inputValorAbater.value);
+            if (inputValorAbater) {
+                inputValorAbater.value = formatarMoedaBRLInput(inputValorAbater.value);
+            }
+
+            var btnSubmit = formAbater.querySelector('button[type="submit"]');
+            var textoOriginal = btnSubmit ? btnSubmit.innerHTML : 'Processar Abatimento';
+
+            if (btnSubmit) {
+                btnSubmit.disabled = true;
+                btnSubmit.innerHTML = '<span class="animate-spin inline-block mr-2">🔄</span> Processando...';
+            }
+
+            try {
+                var response = await fetch(formAbater.action, {
+                    method: 'POST',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    body: new FormData(formAbater)
+                });
+
+                var data = {};
+                try { data = await response.json(); } catch(_) { data = {}; }
+
+                if (response.ok && data.success) {
+                    Swal.fire({
+                        title: 'Sucesso!',
+                        text: data.message || 'Abatimento processado com sucesso!',
+                        icon: 'success',
+                        background: '#1e293b',
+                        color: '#f8fafc',
+                        confirmButtonColor: '#10b981'
+                    }).then(function() {
+                        window.location.reload();
+                    });
+                } else {
+                    throw new Error(data.error || 'Ocorreu um problema ao processar o abatimento no servidor.');
+                }
+            } catch (error) {
+                console.error('Erro no abatimento:', error);
+                Swal.fire({
+                    title: 'Ops! Algo deu errado.',
+                    text: error.message || 'Tivemos um problema de comunicação com o servidor. Você pode tentar novamente.',
+                    icon: 'error',
+                    background: '#1e293b',
+                    color: '#f8fafc',
+                    confirmButtonColor: '#10b981',
+                    confirmButtonText: 'Tentar Novamente'
+                });
+            } finally {
+                if (btnSubmit) {
+                    btnSubmit.disabled = false;
+                    btnSubmit.innerHTML = textoOriginal;
+                }
+            }
         });
     }
     if (overlay) overlay.addEventListener('click', fecharModal);
