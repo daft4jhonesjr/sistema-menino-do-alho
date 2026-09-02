@@ -7,11 +7,30 @@
     <title>Extrato - {{ cliente.nome_cliente }}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/output.css') }}">
     <style>
-        /* Esconde tudo que não for o recibo na hora de imprimir/salvar PDF */
+        /* Esconde tudo que não for o extrato na hora de imprimir/salvar PDF */
         @media print {
-            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background-color: white !important; }
+            /* Neutraliza classes Tailwind do body (flex, bg-gray-100, p-8) */
+            body {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                background-color: white !important;
+                display: block !important;
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+            /* Oculta botões e elementos de ação */
             .no-print { display: none !important; }
-            .print-area { box-shadow: none !important; margin: 0 !important; padding: 0 !important; }
+            /* Área de impressão ocupa toda a folha */
+            .print-area {
+                box-shadow: none !important;
+                border: none !important;
+                border-radius: 0 !important;
+                margin: 0 !important;
+                padding: 1.5cm !important;
+                max-width: 100% !important;
+                width: 100% !important;
+                background: white !important;
+            }
         }
     </style>
 </head>
