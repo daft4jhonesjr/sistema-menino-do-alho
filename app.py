@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_file, Response, current_app
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_file, send_from_directory, Response, current_app
 from flask_login import login_user, logout_user, login_required, current_user
 from flask_wtf.csrf import generate_csrf
 from flask_compress import Compress
@@ -5008,6 +5008,23 @@ def _resincronizar_pagamento_venda_seguro(venda):
 def service_worker():
     """Serve o Service Worker com escopo na raiz (/) para Web Push em background."""
     return send_file('static/sw.js', mimetype='application/javascript')
+
+
+# ---------------------------------------------------------------------------
+# Ícones do Safari/WebKit — silencia os 404 que sobrecarregam o servidor
+# O WebKit (Safari, WKWebView) solicita automaticamente estes recursos em toda
+# página. Servimos o ícone principal diretamente da pasta static/images, sem
+# passar pela engine de rotas/banco, evitando erros 404 e requisições extras.
+# ---------------------------------------------------------------------------
+@app.route('/favicon.ico')
+@app.route('/apple-touch-icon.png')
+@app.route('/apple-touch-icon-precomposed.png')
+def static_icons_safari():
+    return send_from_directory(
+        os.path.join(app.root_path, 'static', 'images'),
+        'icon-192x192.png',
+        mimetype='image/png'
+    )
 
 
 @app.route('/.well-known/apple-app-site-association')

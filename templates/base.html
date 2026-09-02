@@ -1651,7 +1651,19 @@
             });
         }
 
+        // Throttle: intervalo mínimo entre chamadas ao backend (ms)
+        var _BADGE_INTERVAL_MS = 60000; // 60 segundos
+        var _badgeLastRun = 0;
+        var _badgeFetching = false;
+
         window.atualizarBadgeApp = async function atualizarBadgeApp() {
+            // Não faz fetch se a aba estiver em segundo plano (Safari fecha workers com abas ocultas)
+            if (document.hidden) return;
+            // Throttle: evita chamadas concorrentes ou muito próximas entre si
+            var agora = Date.now();
+            if (_badgeFetching || (agora - _badgeLastRun) < _BADGE_INTERVAL_MS) return;
+            _badgeFetching = true;
+            _badgeLastRun = agora;
             try {
                 var response = await fetch('/api/pendencias/contador', {
                     headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
@@ -1678,6 +1690,8 @@
                 }
             } catch (error) {
                 console.error('Erro ao buscar contador de pendências:', error);
+            } finally {
+                _badgeFetching = false;
             }
         };
 
@@ -1687,17 +1701,18 @@
             }
         }
 
+        // Dispara uma única vez após carregamento completo da página
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', agendarBadge);
         } else {
             agendarBadge();
         }
-        window.addEventListener('load', agendarBadge);
+        // Retoma polling ao voltar para a aba (visibilitychange já aplica o throttle interno)
         document.addEventListener('visibilitychange', function() {
             if (!document.hidden) agendarBadge();
         });
-        // Atualiza periodicamente enquanto o app PWA estiver aberto
-        setInterval(agendarBadge, 120000);
+        // Polling periódico: dispara a cada 60 s, mas só executa se a aba estiver visível
+        setInterval(agendarBadge, _BADGE_INTERVAL_MS);
     })();
     </script>
     <script>
