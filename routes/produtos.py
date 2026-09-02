@@ -221,11 +221,8 @@ def _validar_sacola(tipo, nacionalidade, marca, tamanho):
         return nacionalidade, marca, tam_clean
 
     if t == 'ALHO':
-        if nac not in ('ARGENTINO', 'NACIONAL', 'CHINES'):
-            raise ValueError('Nacionalidade deve ser ARGENTINO, NACIONAL ou CHINES.')
-        tamanhos_ok = ['4', '5', '6', '7', '8', '9', '10']
-        if tam not in tamanhos_ok:
-            raise ValueError('Tamanho deve ser 4, 5, 6, 7, 8, 9 ou 10.')
+        # Nacionalidade e tamanho agora são configuráveis via TipoProduto.
+        # A validação fica apenas no frontend (opções dinâmicas do select).
         return (nacionalidade or '').strip(), (marca or '').strip(), tam
 
     if nac in ('NA', 'N/A', ''):
@@ -243,6 +240,7 @@ def _extrair_config_atributos_form(form):
 
     return {
         'usa_nacionalidade': _bool('usa_nacionalidade'),
+        'nacionalidades_opcoes': str(form.get('nacionalidades_opcoes') or '').strip(),
         'usa_caminhoneiro': _bool('usa_caminhoneiro'),
         'usa_tamanho': _bool('usa_tamanho'),
         'tamanhos_opcoes': str(form.get('tamanhos_opcoes') or '').strip(),

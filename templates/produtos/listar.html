@@ -684,10 +684,6 @@
                         <input type="hidden" id="nacionalidade_hidden" value="N/A">
                         <select id="nacionalidade" name="nacionalidade" required class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                             <option value="">Selecione...</option>
-                            <option value="ARGENTINO">ARGENTINO</option>
-                            <option value="NACIONAL">NACIONAL</option>
-                            <option value="CHINES">CHINES</option>
-                            <option value="NA">N/A (Não se aplica)</option>
                         </select>
                         <p class="mt-1 text-sm text-gray-500 dark:text-gray-400 hidden" id="nacionalidade-na-msg">N/A para SACOLA</p>
                     </div>
@@ -795,13 +791,19 @@
             <fieldset class="border border-slate-200 dark:border-slate-700 rounded-lg p-4 space-y-3">
                 <legend class="text-xs font-semibold text-slate-600 dark:text-slate-400 px-2">Campos que este tipo pede</legend>
 
-                <label class="flex items-start gap-3 cursor-pointer">
-                    <input type="checkbox" name="usa_nacionalidade" id="cfg-usa-nacionalidade" value="1" class="mt-1 h-4 w-4 text-emerald-600 rounded focus:ring-emerald-500">
-                    <span class="text-sm text-slate-700 dark:text-slate-300">
-                        <strong>Pede Nacionalidade?</strong>
-                        <span class="block text-xs text-slate-500 dark:text-slate-400">Ex.: ALHO, CAFÉ, BACALHAU (nacional/importado).</span>
-                    </span>
-                </label>
+                <div>
+                    <label class="flex items-start gap-3 cursor-pointer">
+                        <input type="checkbox" name="usa_nacionalidade" id="cfg-usa-nacionalidade" value="1" class="mt-1 h-4 w-4 text-emerald-600 rounded focus:ring-emerald-500" onchange="toggleInputListaTipo('nacionalidades_opcoes')">
+                        <span class="text-sm text-slate-700 dark:text-slate-300">
+                            <strong>Pede Nacionalidade?</strong>
+                            <span class="block text-xs text-slate-500 dark:text-slate-400">Ex.: ALHO, CAFÉ, BACALHAU (nacional/importado).</span>
+                        </span>
+                    </label>
+                    <div id="wrap-nacionalidades_opcoes" class="mt-2 ml-7 hidden">
+                        <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Opções (separadas por vírgula) *</label>
+                        <input type="text" name="nacionalidades_opcoes" id="cfg-nacionalidades-opcoes" placeholder="Ex: ARGENTINO, NACIONAL, CHINES, EGÍPCIO" class="w-full rounded-md border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white px-3 py-2 text-sm focus:border-emerald-500">
+                    </div>
+                </div>
 
                 <label class="flex items-start gap-3 cursor-pointer">
                     <input type="checkbox" name="usa_caminhoneiro" id="cfg-usa-caminhoneiro" value="1" class="mt-1 h-4 w-4 text-emerald-600 rounded focus:ring-emerald-500">
@@ -928,8 +930,10 @@ function abrirModalTipo(modo, tipoId, tipoNome) {
     document.getElementById('cfg-usa-caminhoneiro').checked = false;
     document.getElementById('cfg-usa-tamanho').checked = false;
     document.getElementById('cfg-usa-marca').checked = false;
+    document.getElementById('cfg-nacionalidades-opcoes').value = '';
     document.getElementById('cfg-tamanhos-opcoes').value = '';
     document.getElementById('cfg-marcas-opcoes').value = '';
+    toggleInputListaTipo('nacionalidades_opcoes');
     toggleInputListaTipo('tamanhos_opcoes');
     toggleInputListaTipo('marcas_opcoes');
 
@@ -949,6 +953,7 @@ function abrirModalTipo(modo, tipoId, tipoNome) {
         document.getElementById('cfg-usa-caminhoneiro').checked = !!cfg.usa_caminhoneiro;
         document.getElementById('cfg-usa-tamanho').checked = !!cfg.usa_tamanho;
         document.getElementById('cfg-usa-marca').checked = !!cfg.usa_marca;
+        document.getElementById('cfg-nacionalidades-opcoes').value = (cfg.nacionalidades_opcoes || []).join(', ');
         document.getElementById('cfg-tamanhos-opcoes').value = (cfg.tamanhos_opcoes || []).join(', ');
         document.getElementById('cfg-marcas-opcoes').value = (cfg.marcas_opcoes || []).join(', ');
 
@@ -964,6 +969,7 @@ function abrirModalTipo(modo, tipoId, tipoNome) {
         inputNovoNome.value = '';
     }
 
+    toggleInputListaTipo('nacionalidades_opcoes');
     toggleInputListaTipo('tamanhos_opcoes');
     toggleInputListaTipo('marcas_opcoes');
 
@@ -1206,11 +1212,6 @@ function editarTipoCadastrado(id, nomeAtual) {
                         <label for="edit_nacionalidade" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Nacionalidade <span class="text-red-500" id="edit-nacionalidade-asterisco">*</span></label>
                         <select id="edit_nacionalidade" name="nacionalidade" required class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
                             <option value="">Selecione...</option>
-                            <option value="N/A">N/A (Não se aplica)</option>
-                            <option value="NA">NA (Não se aplica)</option>
-                            <option value="ARGENTINO">ARGENTINO</option>
-                            <option value="NACIONAL">NACIONAL</option>
-                            <option value="CHINES">CHINES</option>
                         </select>
                     </div>
                     <div class="mb-4" id="edit_container_tamanho">
@@ -1485,12 +1486,13 @@ function editarTipoCadastrado(id, nomeAtual) {
         cancelButtonColor: '#64748b'
     };
 
-    function aplicarRegrasEdicao(tamanhoAtual, marcaAtual) {
+    function aplicarRegrasEdicao(tamanhoAtual, marcaAtual, nacAtual) {
         var cfg = window.getTipoConfigPorSelect(editTipo);
         var usaNac = cfg ? !!cfg.usa_nacionalidade : false;
         var usaCam = cfg ? !!cfg.usa_caminhoneiro : false;
         var usaTam = cfg ? !!cfg.usa_tamanho : false;
         var usaMarca = cfg ? !!cfg.usa_marca : false;
+        var nacionalidadesOptsEdit = (cfg && cfg.nacionalidades_opcoes && cfg.nacionalidades_opcoes.length) ? cfg.nacionalidades_opcoes : [];
         var tamanhosOpts = (cfg && cfg.tamanhos_opcoes) ? cfg.tamanhos_opcoes : [];
         var marcasOpts = (cfg && cfg.marcas_opcoes) ? cfg.marcas_opcoes : [];
 
@@ -1498,6 +1500,18 @@ function editarTipoCadastrado(id, nomeAtual) {
         if (editNacionalidade) {
             editNacionalidade.required = usaNac;
             if (editNacAsterisco) editNacAsterisco.classList.toggle('hidden', !usaNac);
+            if (usaNac) {
+                var nacVal = (nacAtual != null && nacAtual !== '') ? nacAtual : editNacionalidade.value;
+                editNacionalidade.innerHTML = '<option value="">Selecione...</option>' +
+                    nacionalidadesOptsEdit.map(function(n) {
+                        return '<option value="' + n + '"' + (n === nacVal ? ' selected' : '') + '>' + n + '</option>';
+                    }).join('');
+                if (nacVal && nacionalidadesOptsEdit.indexOf(nacVal) < 0 && nacVal !== 'NA' && nacVal !== 'N/A') {
+                    var optNacLeg = document.createElement('option');
+                    optNacLeg.value = nacVal; optNacLeg.textContent = nacVal + ' (legado)'; optNacLeg.selected = true;
+                    editNacionalidade.appendChild(optNacLeg);
+                }
+            }
         }
 
         if (editContainerCam) editContainerCam.style.display = usaCam ? 'block' : 'none';
@@ -1559,7 +1573,7 @@ function editarTipoCadastrado(id, nomeAtual) {
         if (editMarca) editMarca.value = p.marca || '';
         if (editCaminhoneiro) editCaminhoneiro.value = p.caminhoneiro || '';
         if (editTipo) editTipo.value = p.tipo || '';
-        aplicarRegrasEdicao(p.tamanho || '', p.marca || '');
+        aplicarRegrasEdicao(p.tamanho || '', p.marca || '', p.nacionalidade || '');
 
         var fornecedor = p.fornecedor || '';
         var editFornecedor = document.getElementById('edit_fornecedor');
@@ -1874,6 +1888,7 @@ window.getTipoConfigPorSelect = function(selectEl) {
         var usaCam = cfg ? !!cfg.usa_caminhoneiro : false;
         var usaTam = cfg ? !!cfg.usa_tamanho : false;
         var usaMarca = cfg ? !!cfg.usa_marca : false;
+        var nacionalidadesOpts = (cfg && cfg.nacionalidades_opcoes && cfg.nacionalidades_opcoes.length) ? cfg.nacionalidades_opcoes : [];
         var tamanhosOpts = (cfg && cfg.tamanhos_opcoes) ? cfg.tamanhos_opcoes : [];
         var marcasOpts = (cfg && cfg.marcas_opcoes) ? cfg.marcas_opcoes : [];
 
@@ -1881,16 +1896,26 @@ window.getTipoConfigPorSelect = function(selectEl) {
         if (containerNac) containerNac.style.display = usaNac ? 'block' : 'none';
         if (nacionalidadeSelect) {
             if (usaNac) {
+                var initialNac = nacionalidadeSelect.getAttribute('data-initial') || nacionalidadeSelect.value || '';
+                var keepNac = nacionalidadesOpts.indexOf(initialNac) >= 0 ? initialNac : '';
+                nacionalidadeSelect.innerHTML = '<option value="">Selecione...</option>' +
+                    nacionalidadesOpts.map(function(n) {
+                        return '<option value="' + n + '"' + (n === keepNac ? ' selected' : '') + '>' + n + '</option>';
+                    }).join('');
+                // fallback se valor atual não está na lista (legado)
+                if (initialNac && nacionalidadesOpts.indexOf(initialNac) < 0 && initialNac !== 'NA' && initialNac !== 'N/A') {
+                    var optLeg = document.createElement('option');
+                    optLeg.value = initialNac; optLeg.textContent = initialNac + ' (legado)'; optLeg.selected = true;
+                    nacionalidadeSelect.appendChild(optLeg);
+                }
+                if (keepNac) nacionalidadeSelect.value = keepNac;
+                nacionalidadeSelect.removeAttribute('data-initial');
                 nacionalidadeSelect.disabled = false;
                 nacionalidadeSelect.required = true;
                 nacionalidadeSelect.setAttribute('name', 'nacionalidade');
                 if (nacionalidadeHidden) nacionalidadeHidden.removeAttribute('name');
                 if (nacionalidadeAsterisco) nacionalidadeAsterisco.classList.remove('hidden');
                 if (nacionalidadeNaMsg) nacionalidadeNaMsg.classList.add('hidden');
-                // Limpa 'NA' herdado
-                if (nacionalidadeSelect.value === 'NA' || nacionalidadeSelect.value === 'N/A') {
-                    nacionalidadeSelect.value = '';
-                }
             } else {
                 nacionalidadeSelect.required = false;
                 nacionalidadeSelect.disabled = true;

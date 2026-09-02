@@ -483,7 +483,8 @@ class TipoProduto(db.Model):
     nome = db.Column(db.String(100), nullable=False, index=True)
 
     # JSON serializado (Text para portabilidade SQLite/Postgres).
-    # Estrutura: {"usa_nacionalidade": bool, "usa_caminhoneiro": bool,
+    # Estrutura: {"usa_nacionalidade": bool, "nacionalidades_opcoes": [str, ...],
+    #             "usa_caminhoneiro": bool,
     #             "usa_tamanho": bool, "tamanhos_opcoes": [str, ...],
     #             "usa_marca": bool, "marcas_opcoes": [str, ...]}
     config_atributos = db.Column(db.Text, nullable=True)
@@ -492,12 +493,13 @@ class TipoProduto(db.Model):
 
     # Chaves aceitas em config_atributos (fonte de verdade)
     _FLAG_KEYS = ('usa_nacionalidade', 'usa_caminhoneiro', 'usa_tamanho', 'usa_marca')
-    _LIST_KEYS = ('tamanhos_opcoes', 'marcas_opcoes')
+    _LIST_KEYS = ('nacionalidades_opcoes', 'tamanhos_opcoes', 'marcas_opcoes')
 
     @classmethod
     def default_config(cls):
         return {
             'usa_nacionalidade': False,
+            'nacionalidades_opcoes': [],
             'usa_caminhoneiro': False,
             'usa_tamanho': False,
             'tamanhos_opcoes': [],
