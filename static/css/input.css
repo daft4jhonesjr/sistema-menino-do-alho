@@ -7,10 +7,26 @@
     box-sizing: border-box;
   }
 
-  input[type="date"] {
+  input[type="date"],
+  input[type="datetime-local"],
+  input[type="month"],
+  input[type="time"] {
     max-width: 100%;
     min-width: 0;
   }
+}
+
+/* =========================================================
+   DATE PICKER — Tema Dark + Verde Esmeralda
+   color-scheme: dark  →  browser renderiza o popup em modo escuro
+   accent-color: #10b981  →  dia selecionado/hoje fica em verde esmeralda
+   ========================================================= */
+.dark input[type="date"],
+.dark input[type="datetime-local"],
+.dark input[type="month"],
+.dark input[type="time"] {
+  color-scheme: dark;
+  accent-color: #10b981;
 }
 
 .modal-aberto {
