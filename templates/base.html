@@ -255,6 +255,12 @@
         .swal2-container {
             z-index: 99999 !important;
         }
+        /* Offset da Dynamic Island / notch nos toasts SweetAlert no topo */
+        .swal2-container.swal2-top,
+        .swal2-container.swal2-top-start,
+        .swal2-container.swal2-top-end {
+            padding-top: calc(env(safe-area-inset-top, 0px) + 1rem) !important;
+        }
     </style>
     <style>
         /* CSS para o Redimensionador de Tabelas (Responsivo) */
@@ -688,8 +694,8 @@
         </div>
     </footer>
 
-    <!-- Container de Toasts (Notificações Flutuantes) -->
-    <div id="toast-container" class="fixed top-5 right-5 z-[9999] flex flex-col gap-3 max-w-sm w-full"></div>
+    <!-- Container de Toasts (Notificações Flutuantes) — respeita Dynamic Island / safe area -->
+    <div id="toast-container" class="fixed top-[calc(env(safe-area-inset-top,0px)+1.25rem)] right-5 z-[9999] flex flex-col gap-3 max-w-sm w-full"></div>
 
     {% if current_user.is_authenticated %}
     <!-- Modal: Balanço Patrimonial Rápido -->
