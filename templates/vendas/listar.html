@@ -150,6 +150,9 @@
     .campo-preenchido { border-color: #28a745 !important; background-color: #e8f5e9 !important; transition: all 0.3s ease; }
     #cliente-select-wrap .ts-wrapper.campo-preenchido .ts-control { border-color: #28a745 !important; background-color: #e8f5e9 !important; }
     .dark #cliente-select-wrap .ts-wrapper.campo-preenchido .ts-control { border-color: #059669 !important; background-color: #064e3b !important; color: #f3f4f6 !important; }
+    /* Feedback visual: campo obrigatório em falta */
+    .campo-erro { border-color: #ef4444 !important; box-shadow: 0 0 0 1px #ef4444 !important; }
+    #cliente-select-wrap .ts-wrapper.campo-erro .ts-control { border-color: #ef4444 !important; box-shadow: 0 0 0 1px #ef4444 !important; }
 </style>
 <script>
 (function() {
@@ -2864,6 +2867,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function resetFormParaProximoItem() {
         if (!form) return;
         hideErro();
+        limparErrosCamposObrigatorios();
         if (estoqueInfo) { estoqueInfo.textContent = ''; estoqueInfo.className = 'mt-0.5 text-xs text-gray-500 dark:text-gray-400'; }
         if (produtoSelect) {
             produtoSelect.value = '';
@@ -3293,16 +3297,174 @@ document.addEventListener('DOMContentLoaded', function() {
         quantidadeInput.addEventListener('input', updateValorTotalDisplay);
     }
 
+    var CAMPO_ERRO_CLASSES = ['border-red-500', 'ring-1', 'ring-red-500', 'campo-erro'];
+
+    function alvoVisualCampo(el) {
+        if (!el) return null;
+        if (el === clienteSelect) {
+            return document.querySelector('#cliente-select-wrap .ts-wrapper') || el;
+        }
+        return el;
+    }
+
+    function marcarCampoErro(el) {
+        var alvo = alvoVisualCampo(el);
+        if (!alvo) return;
+        CAMPO_ERRO_CLASSES.forEach(function(c) { alvo.classList.add(c); });
+    }
+
+    function limparCampoErro(el) {
+        var alvo = alvoVisualCampo(el);
+        if (!alvo) return;
+        CAMPO_ERRO_CLASSES.forEach(function(c) { alvo.classList.remove(c); });
+    }
+
+    function limparErrosCamposObrigatorios() {
+        limparCampoErro(clienteSelect);
+        limparCampoErro(produtoSelect);
+        limparCampoErro(quantidadeInput);
+        limparCampoErro(precoInput);
+        limparCampoErro(empresaSelect);
+    }
+
+    function avisoCamposObrigatorios() {
+        var msg = 'Preencha os campos obrigatórios destacados em vermelho.';
+        if (typeof showToast === 'function') {
+            showToast(msg, 'warning');
+        } else if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                icon: 'warning',
+                title: msg,
+                background: '#1e293b',
+                color: '#f8fafc',
+                confirmButtonColor: '#10b981'
+            });
+        } else {
+            showErro(msg);
+        }
+    }
+
+    function validarCamposObrigatoriosVisuais() {
+        limparErrosCamposObrigatorios();
+        var tipoOperacao = (operacaoSelect && operacaoSelect.value ? operacaoSelect.value : 'VENDA').toUpperCase();
+        var cid = (clienteSelect && clienteSelect.value) ? clienteSelect.value.trim() : '';
+        var pid = (produtoSelect && produtoSelect.value) ? produtoSelect.value.trim() : '';
+        var qtd = parseInt(quantidadeInput && quantidadeInput.value ? quantidadeInput.value : '0', 10);
+        var preco = parsePreco(precoInput && precoInput.value ? precoInput.value : '') || 0;
+        var empresa = (empresaSelect && empresaSelect.value) ? empresaSelect.value.trim() : '';
+        var faltando = false;
+
+        if (!cid) { marcarCampoErro(clienteSelect); faltando = true; }
+        if (!pid) { marcarCampoErro(produtoSelect); faltando = true; }
+        if (isNaN(qtd) || qtd < 1) { marcarCampoErro(quantidadeInput); faltando = true; }
+        if (tipoOperacao === 'VENDA' && (isNaN(preco) || preco <= 0)) {
+            marcarCampoErro(precoInput);
+            faltando = true;
+        }
+        if (!empresa) { marcarCampoErro(empresaSelect); faltando = true; }
+
+        return !faltando;
+    }
+
+    function estoqueDisponivelProdutoSelecionado() {
+        if (!produtoSelect || produtoSelect.selectedIndex < 0) return 0;
+        var opt = produtoSelect.options[produtoSelect.selectedIndex];
+        if (!opt || !opt.value) return 0;
+        var est = parseInt(opt.getAttribute('data-estoque') || '0', 10);
+        return isNaN(est) ? 0 : est;
+    }
+
+    function quantidadeJaNoCarrinho(produtoId) {
+        var total = 0;
+        var pid = parseInt(produtoId, 10);
+        for (var i = 0; i < carrinho.length; i++) {
+            if (parseInt(carrinho[i].produto_id, 10) === pid) {
+                total += parseInt(carrinho[i].quantidade_venda, 10) || 0;
+            }
+        }
+        return total;
+    }
+
+    function alertaEstoqueInsuficiente(estoque) {
+        var msg = 'Estoque insuficiente! Temos apenas ' + estoque + ' caixas disponíveis deste lote.';
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Estoque insuficiente',
+                text: msg,
+                background: '#1e293b',
+                color: '#f8fafc',
+                confirmButtonColor: '#10b981',
+                confirmButtonText: 'Entendi'
+            });
+        } else if (typeof showToast === 'function') {
+            showToast(msg, 'warning');
+        } else {
+            showErro(msg);
+        }
+    }
+
     function adicionarItemAoCarrinho() {
         hideErro();
-        var it = buildItemFromForm();
-        if (!it) {
-            showErro('Preencha Cliente, Produto, Quantidade, Preço e Empresa.');
+        if (!validarCamposObrigatoriosVisuais()) {
+            avisoCamposObrigatorios();
             return;
         }
+
+        var qtd = parseInt(quantidadeInput && quantidadeInput.value ? quantidadeInput.value : '0', 10);
+        var estoque = estoqueDisponivelProdutoSelecionado();
+        var pid = produtoSelect && produtoSelect.value ? produtoSelect.value.trim() : '';
+        var qtdNoCarrinho = quantidadeJaNoCarrinho(pid);
+        var disponivel = Math.max(0, estoque - qtdNoCarrinho);
+
+        if (qtd > disponivel) {
+            marcarCampoErro(quantidadeInput);
+            alertaEstoqueInsuficiente(disponivel);
+            if (estoqueInfo) {
+                estoqueInfo.textContent = 'Est. insuficiente! Disp.: ' + disponivel;
+                estoqueInfo.className = 'mt-0.5 text-xs text-red-600 dark:text-red-400 font-semibold';
+            }
+            return;
+        }
+
+        var it = buildItemFromForm();
+        if (!it) {
+            validarCamposObrigatoriosVisuais();
+            avisoCamposObrigatorios();
+            return;
+        }
+        limparErrosCamposObrigatorios();
         carrinho.push(it);
         resetFormParaProximoItem();
         renderCart();
+    }
+
+    // Remove destaque de erro assim que o usuário preenche o campo
+    if (clienteSelect) {
+        clienteSelect.addEventListener('change', function() {
+            if ((clienteSelect.value || '').trim()) limparCampoErro(clienteSelect);
+        });
+    }
+    if (produtoSelect) {
+        produtoSelect.addEventListener('change', function() {
+            if ((produtoSelect.value || '').trim()) limparCampoErro(produtoSelect);
+        });
+    }
+    if (quantidadeInput) {
+        quantidadeInput.addEventListener('input', function() {
+            var q = parseInt(this.value || '0', 10);
+            if (!isNaN(q) && q >= 1) limparCampoErro(quantidadeInput);
+        });
+    }
+    if (precoInput) {
+        precoInput.addEventListener('input', function() {
+            if (parsePreco(this.value || '') > 0) limparCampoErro(precoInput);
+        });
+    }
+    if (empresaSelect) {
+        empresaSelect.addEventListener('change', function() {
+            if ((empresaSelect.value || '').trim()) limparCampoErro(empresaSelect);
+        });
     }
 
     if (btnAdicionar) {
