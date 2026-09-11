@@ -3,7 +3,7 @@
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 
-from extensions import csrf, limiter
+from extensions import cache, csrf, limiter
 from services.notificacoes_pendencias import resumo_pendencias_usuario
 from services.onesignal_service import (
     enviar_push,
@@ -19,6 +19,17 @@ from services.push_service import (
 )
 
 push_bp = Blueprint('push', __name__)
+
+
+def _pendencias_cache_key() -> str:
+    """Chave de cache de pendências segmentada por usuário.
+
+    TTL de 270 s (4,5 min) — fica abaixo do cooldown de 5 min do
+    cliente, portanto o navegador nunca recebe dado mais velho que
+    o que ele próprio já estaria reutilizando via localStorage.
+    """
+    uid = getattr(current_user, 'id', 'anon')
+    return f"pendencias:u:{uid}"
 
 
 @push_bp.route('/api/push/vapid-public-key', methods=['GET'])
@@ -72,6 +83,7 @@ def push_status():
 @push_bp.route('/api/notificacoes/verificar_pendencias', methods=['GET'])
 @login_required
 @limiter.limit('30 per minute')
+@cache.cached(timeout=270, key_prefix=_pendencias_cache_key)
 def verificar_pendencias():
     """Resumo de alertas (boletos / radar / logística) conforme toggles do usuário.
 

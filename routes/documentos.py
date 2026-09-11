@@ -46,6 +46,7 @@ import html
 import io
 import os
 import re
+import threading
 import urllib.parse
 import urllib.request
 
@@ -462,40 +463,72 @@ def upload_documento():
     else:
         return jsonify({'mensagem': "Campo 'tipo' inválido. Use 'boleto' ou 'nfe'."}), 400
 
+    # ── 1. Salva arquivo em disco (síncrono, rápido) ─────────────────────
     try:
         base_dir = os.path.join(current_app.root_path, 'documentos_entrada')
         caminho_final = os.path.join(base_dir, subpasta)
         os.makedirs(caminho_final, exist_ok=True)
         caminho_completo = os.path.join(caminho_final, nome_arquivo)
         arquivo.save(caminho_completo)
-
-        uid = current_user.id if current_user.is_authenticated else None
-        _processar_documento(caminho_completo, user_id_forcado=uid)
-        limpar_cache_dashboard()
-        caminho_relativo = os.path.join('documentos_entrada', subpasta, nome_arquivo).replace('\\', '/')
-        doc_criado = Documento.query.filter_by(caminho_arquivo=caminho_relativo).order_by(Documento.id.desc()).first()
-        if not doc_criado:
-            tipo_doc = 'BOLETO' if subpasta == 'boletos' else 'NOTA_FISCAL'
-            doc_criado = Documento(
-                caminho_arquivo=caminho_relativo,
-                tipo=tipo_doc,
-                usuario_id=uid,
-                empresa_id=_empresa_id_para_documento(fallback_user_id=uid),
-                venda_id=None,
-                data_processamento=date.today(),
-            )
-            db.session.add(doc_criado)
-            db.session.commit()
-            limpar_cache_dashboard()
-        return jsonify({'mensagem': 'Sucesso'}), 200
     except Exception as e:
         db.session.rollback()
         return erro_json(
             e,
             'Falha ao guardar arquivo. Verifique os logs do servidor.',
             chave_mensagem='mensagem',
-            contexto=f'upload_documento({subpasta})',
+            contexto=f'upload_documento({subpasta}):salvar',
         )
+
+    # ── 2. Captura contexto de request ANTES de sair da thread principal ─
+    uid = current_user.id if current_user.is_authenticated else None
+    app_obj = current_app._get_current_object()
+    _subpasta = subpasta
+    _nome = nome_arquivo
+
+    # ── 3. OCR e criação do Documento rodam em background ────────────────
+    def _processar_bg(caminho, user_id, subpasta_nome, nome):
+        with app_obj.app_context():
+            try:
+                _processar_documento(caminho, user_id_forcado=user_id)
+                caminho_rel = os.path.join(
+                    'documentos_entrada', subpasta_nome, nome
+                ).replace('\\', '/')
+                doc = (
+                    Documento.query
+                    .filter_by(caminho_arquivo=caminho_rel)
+                    .order_by(Documento.id.desc())
+                    .first()
+                )
+                if not doc:
+                    tipo_doc = 'BOLETO' if subpasta_nome == 'boletos' else 'NOTA_FISCAL'
+                    doc = Documento(
+                        caminho_arquivo=caminho_rel,
+                        tipo=tipo_doc,
+                        usuario_id=user_id,
+                        empresa_id=_empresa_id_para_documento(fallback_user_id=user_id),
+                        venda_id=None,
+                        data_processamento=date.today(),
+                    )
+                    db.session.add(doc)
+                    db.session.commit()
+                limpar_cache_dashboard()
+            except Exception as err:
+                try:
+                    db.session.rollback()
+                except Exception:
+                    pass
+                app_obj.logger.error(
+                    '[OCR-BG] upload_documento(%s): %s', subpasta_nome, err,
+                    exc_info=True,
+                )
+
+    threading.Thread(
+        target=_processar_bg,
+        args=(caminho_completo, uid, _subpasta, _nome),
+        daemon=True,
+    ).start()
+
+    return jsonify({'mensagem': 'Documento recebido. Processamento em segundo plano.'}), 200
 
 
 @documentos_bp.route('/api/receber_automatico', methods=['POST'])
@@ -543,32 +576,15 @@ def api_receber_automatico():
                 if primeiro_user:
                     user_id = primeiro_user.id
 
-            url_arquivo = None
-            public_id = None
-            if os.environ.get('CLOUDINARY_URL') or current_app.config.get('CLOUDINARY_URL'):
-                try:
-                    arquivo.stream.seek(0)
-                    resultado_nuvem = cloudinary.uploader.upload(arquivo, resource_type='raw', timeout=_EXTERNAL_TIMEOUT)
-                    url_arquivo = resultado_nuvem.get('secure_url')
-                    public_id = resultado_nuvem.get('public_id')
-                except Exception as e:
-                    return erro_json(
-                        e,
-                        'Falha no upload do arquivo para o Cloudinary.',
-                        extras={'status': 'erro'},
-                        chave_mensagem='mensagem',
-                        contexto='api_receber_automatico:cloudinary',
-                    )
+            # ── 1. Salva em disco sempre (síncrono, rápido) ──────────────
+            pasta = current_app.config['UPLOAD_FOLDER']
+            os.makedirs(pasta, exist_ok=True)
+            caminho_local = os.path.join(pasta, filename)
+            arquivo.stream.seek(0)
+            arquivo.save(caminho_local)
+            caminho_relativo = os.path.relpath(caminho_local, current_app.root_path)
 
-            caminho_relativo = None
-            if not url_arquivo:
-                pasta = current_app.config['UPLOAD_FOLDER']
-                os.makedirs(pasta, exist_ok=True)
-                caminho = os.path.join(pasta, filename)
-                arquivo.stream.seek(0)
-                arquivo.save(caminho)
-                caminho_relativo = os.path.relpath(caminho, current_app.root_path)
-
+            # ── 2. Processa valor do formulário ───────────────────────────
             valor_raw = (
                 request.form.get('valor')
                 or request.form.get('valor_boleto')
@@ -586,9 +602,10 @@ def api_receber_automatico():
                     except Exception:
                         valor_doc = None
 
+            # ── 3. Cria Documento imediatamente (sem esperar Cloudinary) ─
             novo_documento = Documento(
-                url_arquivo=url_arquivo,
-                public_id=public_id,
+                url_arquivo=None,      # preenchido pela thread de Cloudinary
+                public_id=None,
                 caminho_arquivo=caminho_relativo,
                 tipo=tipo_documento,
                 numero_nf=(request.form.get('numero_nf') or request.form.get('nf') or None),
@@ -601,12 +618,62 @@ def api_receber_automatico():
             )
             db.session.add(novo_documento)
             db.session.commit()
+            doc_id = novo_documento.id
             limpar_cache_dashboard()
+
+            # ── 4. Upload Cloudinary em background (não bloqueia o worker) ─
+            tem_cloudinary = bool(
+                os.environ.get('CLOUDINARY_URL') or current_app.config.get('CLOUDINARY_URL')
+            )
+            if tem_cloudinary:
+                app_obj = current_app._get_current_object()
+                _caminho_local = caminho_local
+                _doc_id = doc_id
+
+                def _upload_cloudinary_bg(caminho, documento_id):
+                    with app_obj.app_context():
+                        try:
+                            with open(caminho, 'rb') as f:
+                                resultado_nuvem = cloudinary.uploader.upload(
+                                    f, resource_type='raw', timeout=_EXTERNAL_TIMEOUT,
+                                )
+                            url_nuvem = resultado_nuvem.get('secure_url')
+                            pub_id = resultado_nuvem.get('public_id')
+                            if url_nuvem:
+                                doc = (
+                                    Documento.query
+                                    .filter_by(id=documento_id)
+                                    .first()
+                                )
+                                if doc:
+                                    doc.url_arquivo = url_nuvem
+                                    doc.public_id = pub_id
+                                    db.session.commit()
+                                    app_obj.logger.info(
+                                        '[CLOUDINARY-BG] api_receber_automatico:'
+                                        ' doc_id=%s → %s', documento_id, url_nuvem,
+                                    )
+                        except Exception as err:
+                            try:
+                                db.session.rollback()
+                            except Exception:
+                                pass
+                            app_obj.logger.error(
+                                '[CLOUDINARY-BG] api_receber_automatico: %s',
+                                err, exc_info=True,
+                            )
+
+                threading.Thread(
+                    target=_upload_cloudinary_bg,
+                    args=(_caminho_local, _doc_id),
+                    daemon=True,
+                ).start()
+
             return jsonify({
                 'status': 'success',
                 'mensagem': 'Arquivo recebido',
-                'documento_id': novo_documento.id,
-                'url_arquivo': novo_documento.url_arquivo,
+                'documento_id': doc_id,
+                'url_arquivo': None,   # Cloudinary populará em background
             }), 200
         except Exception as e:
             db.session.rollback()
@@ -710,6 +777,7 @@ def api_bot_upload():
             nome_arquivo, subpasta, user_id,
         )
 
+        # ── 1. Salva arquivo em disco (síncrono, rápido) ─────────────────
         try:
             base_dir = os.path.join(current_app.root_path, 'documentos_entrada')
             caminho_final = os.path.join(base_dir, subpasta)
@@ -719,57 +787,80 @@ def api_bot_upload():
             arquivo.stream.seek(0)
             arquivo.save(caminho_completo)
             current_app.logger.info("[api_bot_upload] ✅ Arquivo salvo em: %s", caminho_completo)
-
-            _processar_documento(caminho_completo, user_id_forcado=user_id)
-            limpar_cache_dashboard()
-
-            caminho_relativo = os.path.join('documentos_entrada', subpasta, nome_arquivo).replace('\\', '/')
-            doc_criado = Documento.query.filter_by(caminho_arquivo=caminho_relativo).order_by(Documento.id.desc()).first()
-            if not doc_criado:
-                current_app.logger.warning(
-                    "[api_bot_upload] _processar_documento não criou registro — criando manualmente."
-                )
-                tipo_doc = 'BOLETO' if subpasta == 'boletos' else 'NOTA_FISCAL'
-                doc_criado = Documento(
-                    caminho_arquivo=caminho_relativo,
-                    tipo=tipo_doc,
-                    usuario_id=user_id,
-                    empresa_id=_empresa_id_para_documento(fallback_user_id=user_id),
-                    venda_id=None,
-                    data_processamento=date.today(),
-                )
-                db.session.add(doc_criado)
-                db.session.commit()
-                current_app.logger.info(
-                    "[api_bot_upload] ✅ Documento criado manualmente no banco. ID: %s",
-                    doc_criado.id,
-                )
-            else:
-                current_app.logger.info(
-                    "[api_bot_upload] ✅ Documento encontrado no banco. ID: %s | empresa_id: %s",
-                    doc_criado.id, doc_criado.empresa_id,
-                )
-
-            resposta_payload = {
-                'status': 'success',
-                'mensagem': 'Arquivo recebido e processado com sucesso.',
-                'documento_id': doc_criado.id if doc_criado else None,
-                'tipo': doc_criado.tipo if doc_criado else ('BOLETO' if subpasta == 'boletos' else 'NOTA_FISCAL'),
-                'numero_nf': getattr(doc_criado, 'numero_nf', None),
-                'cnpj': getattr(doc_criado, 'cnpj', None),
-                'data_vencimento': doc_criado.data_vencimento.strftime('%Y-%m-%d') if getattr(doc_criado, 'data_vencimento', None) else None,
-                'url_arquivo': getattr(doc_criado, 'url_arquivo', None),
-            }
-            current_app.logger.info("[api_bot_upload] ✅ Upload concluído com sucesso. Resposta: %s", resposta_payload)
-            return jsonify(resposta_payload), 200
-
         except Exception as e:
-            db.session.rollback()
             current_app.logger.error(
-                "[api_bot_upload] ❌ EXCEÇÃO ao processar upload: %s",
-                str(e), exc_info=True,
+                "[api_bot_upload] ❌ EXCEÇÃO ao salvar arquivo: %s", str(e), exc_info=True,
             )
-            return erro_json(e, 'Falha ao processar upload do bot.', contexto='api_bot_upload')
+            return erro_json(e, 'Falha ao salvar arquivo do bot.', contexto='api_bot_upload:salvar')
+
+        # ── 2. Captura contexto de request ANTES de sair da thread principal
+        app_obj = current_app._get_current_object()
+        _user_id = user_id
+        _subpasta = subpasta
+        _nome = nome_arquivo
+
+        # ── 3. OCR e criação do Documento rodam em background ────────────
+        def _processar_bg_bot(caminho, uid, subpasta_nome, nome):
+            with app_obj.app_context():
+                try:
+                    _processar_documento(caminho, user_id_forcado=uid)
+                    caminho_rel = os.path.join(
+                        'documentos_entrada', subpasta_nome, nome
+                    ).replace('\\', '/')
+                    doc = (
+                        Documento.query
+                        .filter_by(caminho_arquivo=caminho_rel)
+                        .order_by(Documento.id.desc())
+                        .first()
+                    )
+                    if not doc:
+                        app_obj.logger.warning(
+                            '[OCR-BG] api_bot_upload: _processar_documento não criou registro'
+                            ' — criando manualmente.',
+                        )
+                        tipo_doc = 'BOLETO' if subpasta_nome == 'boletos' else 'NOTA_FISCAL'
+                        doc = Documento(
+                            caminho_arquivo=caminho_rel,
+                            tipo=tipo_doc,
+                            usuario_id=uid,
+                            empresa_id=_empresa_id_para_documento(fallback_user_id=uid),
+                            venda_id=None,
+                            data_processamento=date.today(),
+                        )
+                        db.session.add(doc)
+                        db.session.commit()
+                        app_obj.logger.info(
+                            '[OCR-BG] api_bot_upload: Documento criado. ID: %s', doc.id,
+                        )
+                    else:
+                        app_obj.logger.info(
+                            '[OCR-BG] api_bot_upload: Documento encontrado. ID: %s'
+                            ' | empresa_id: %s', doc.id, doc.empresa_id,
+                        )
+                    limpar_cache_dashboard()
+                except Exception as err:
+                    try:
+                        db.session.rollback()
+                    except Exception:
+                        pass
+                    app_obj.logger.error(
+                        '[OCR-BG] api_bot_upload: %s', err, exc_info=True,
+                    )
+
+        threading.Thread(
+            target=_processar_bg_bot,
+            args=(caminho_completo, _user_id, _subpasta, _nome),
+            daemon=True,
+        ).start()
+
+        current_app.logger.info(
+            "[api_bot_upload] ✅ Arquivo '%s' recebido — OCR despachado para background.",
+            nome_arquivo,
+        )
+        return jsonify({
+            'status': 'success',
+            'mensagem': 'Documento recebido. Processamento OCR em segundo plano.',
+        }), 200
 
     return _impl()
 
@@ -1155,6 +1246,21 @@ def vincular_documento_venda(id):
         return redirect(url_for('dashboard.dashboard'))
 
     c = venda.cliente
+    if c is None:
+        # Cliente removido ou vínculo órfão: responde com sucesso genérico
+        # em vez de quebrar com AttributeError no acesso a c.nome_cliente.
+        current_app.logger.warning(
+            '[vincular_documento_venda] venda_id=%s não tem cliente vinculado '
+            '— respondendo com mensagem genérica.',
+            venda_id,
+        )
+        tipo_doc = (documento.tipo or '').upper()
+        msg = 'Boleto vinculado ao pedido.' if tipo_doc == 'BOLETO' else 'Documento vinculado ao pedido.'
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify(ok=True, sucesso=True, mensagem=msg, doc_id=documento.id)
+        flash(msg, 'success')
+        return redirect(url_for('dashboard.dashboard'))
+
     rs = (c.razao_social or '').strip()
     label_cliente = f"{c.nome_cliente} ({rs})" if rs else c.nome_cliente
     tipo_doc = (documento.tipo or '').upper()
@@ -1465,28 +1571,81 @@ def limpar_vinculos_quebrados():
             limpos_nf = 0
             limpos_docs = 0
 
+            # ── Boletos: batch query em vez de N+1 ──────────────────────────────
+            # Carrega todos os caminhos de boleto em uma query; depois resolve
+            # quais existem no banco com um único IN(...) sobre Documento.
             vendas_com_boleto = Venda.query.filter(Venda.caminho_boleto.isnot(None)).all()
+            caminhos_boleto = {
+                (v.caminho_boleto or '').strip()
+                for v in vendas_com_boleto
+                if (v.caminho_boleto or '').strip()
+            }
+            if caminhos_boleto:
+                docs_boleto = Documento.query.filter(
+                    or_(
+                        Documento.caminho_arquivo.in_(caminhos_boleto),
+                        Documento.url_arquivo.in_(caminhos_boleto),
+                    )
+                ).with_entities(Documento.caminho_arquivo, Documento.url_arquivo).all()
+                caminhos_boleto_com_doc = set()
+                for cam, url in docs_boleto:
+                    if cam:
+                        caminhos_boleto_com_doc.add(cam.strip())
+                    if url:
+                        caminhos_boleto_com_doc.add(url.strip())
+            else:
+                caminhos_boleto_com_doc = set()
+
             for v in vendas_com_boleto:
                 caminho = (v.caminho_boleto or '').strip()
-                if caminho:
-                    doc = Documento.query.filter(or_(Documento.caminho_arquivo == caminho, Documento.url_arquivo == caminho)).first()
-                    if not doc:
-                        v.caminho_boleto = None
-                        limpos_boleto += 1
+                if caminho and caminho not in caminhos_boleto_com_doc:
+                    v.caminho_boleto = None
+                    limpos_boleto += 1
 
+            # ── NFs: mesma abordagem batch ────────────────────────────────────
             vendas_com_nf = Venda.query.filter(Venda.caminho_nf.isnot(None)).all()
+            caminhos_nf = {
+                (v.caminho_nf or '').strip()
+                for v in vendas_com_nf
+                if (v.caminho_nf or '').strip()
+            }
+            if caminhos_nf:
+                docs_nf = Documento.query.filter(
+                    or_(
+                        Documento.caminho_arquivo.in_(caminhos_nf),
+                        Documento.url_arquivo.in_(caminhos_nf),
+                    )
+                ).with_entities(Documento.caminho_arquivo, Documento.url_arquivo).all()
+                caminhos_nf_com_doc = set()
+                for cam, url in docs_nf:
+                    if cam:
+                        caminhos_nf_com_doc.add(cam.strip())
+                    if url:
+                        caminhos_nf_com_doc.add(url.strip())
+            else:
+                caminhos_nf_com_doc = set()
+
             for v in vendas_com_nf:
                 caminho = (v.caminho_nf or '').strip()
-                if caminho:
-                    doc = Documento.query.filter(or_(Documento.caminho_arquivo == caminho, Documento.url_arquivo == caminho)).first()
-                    if not doc:
-                        v.caminho_nf = None
-                        limpos_nf += 1
+                if caminho and caminho not in caminhos_nf_com_doc:
+                    v.caminho_nf = None
+                    limpos_nf += 1
 
+            # ── Documentos órfãos: batch query para checar venda_ids ─────────
+            # Carrega todos os venda_id referenciados em Documento e verifica
+            # quais ainda existem em Venda com um único IN(...).
             documentos_com_venda = Documento.query.filter(Documento.venda_id.isnot(None)).all()
+            venda_ids_usados = {doc.venda_id for doc in documentos_com_venda if doc.venda_id is not None}
+            if venda_ids_usados:
+                vendas_existentes_ids = {
+                    vid for (vid,) in
+                    Venda.query.filter(Venda.id.in_(venda_ids_usados)).with_entities(Venda.id).all()
+                }
+            else:
+                vendas_existentes_ids = set()
+
             for doc in documentos_com_venda:
-                venda = Venda.query.get(doc.venda_id)
-                if not venda:
+                if doc.venda_id is not None and doc.venda_id not in vendas_existentes_ids:
                     doc.venda_id = None
                     limpos_docs += 1
 

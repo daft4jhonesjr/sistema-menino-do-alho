@@ -1269,7 +1269,25 @@ def api_dashboard_documentos_pendentes_resumo():
         return jsonify({'ok': False, 'mensagem': 'Falha ao consultar documentos pendentes.'}), 500
 
 
+def _badge_contador_cache_key() -> str:
+    """Chave de cache do badge de pendências, segmentada por tenant.
+
+    TTL de 50 s — fica abaixo dos 60 s do intervalo de polling, então
+    cada tenant recebe no máximo um conjunto de queries por minuto
+    mesmo que várias abas ou usuários do mesmo tenant estejam ativos
+    simultaneamente.
+    """
+    try:
+        emp = empresa_id_atual()
+    except Exception:
+        emp = None
+    if emp:
+        return f"badge_contador:emp:{emp}"
+    return f"badge_contador:u:{getattr(current_user, 'id', 'anon')}"
+
+
 @dashboard_bp.route('/api/pendencias/contador', methods=['GET'])
+@cache.cached(timeout=50, key_prefix=_badge_contador_cache_key)
 def api_pendencias_contador():
     """Contador rápido de pendências para o badge do ícone PWA (App Badging API).
 
