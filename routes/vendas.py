@@ -301,9 +301,10 @@ def salvar_ordem_logistica():
 
 
 # Coordenadas padrão do galpão (Petrolina/PE — região Petrolina/Juazeiro).
-# Sobrescrevíveis via env GALPAO_LAT / GALPAO_LON.
+# Sobrescrevíveis via env GALPAO_LAT / GALPAO_LON / GALPAO_ENDERECO.
 _GALPAO_LAT_DEFAULT = -9.3891
 _GALPAO_LON_DEFAULT = -40.5030
+_GALPAO_ENDERECO_DEFAULT = 'Galpão Menino do Alho, Petrolina, PE'
 _NOMINATIM_USER_AGENT = 'SistemaMeninoDoAlho/1.0 (logistica-rota; contato@meninodoalho.local)'
 
 
@@ -315,6 +316,11 @@ def _coords_galpao():
         return lat, lon
     except (TypeError, ValueError):
         return _GALPAO_LAT_DEFAULT, _GALPAO_LON_DEFAULT
+
+
+def _endereco_galpao():
+    """Endereço textual do galpão para Google Maps Directions (geocoding do Google)."""
+    return (os.environ.get('GALPAO_ENDERECO') or _GALPAO_ENDERECO_DEFAULT).strip()
 
 
 def _geocodificar_nominatim(endereco):
@@ -495,6 +501,12 @@ def otimizar_rota_logistica():
             'cliente_id': cliente.id,
             'cliente_nome': cliente.nome_cliente or 'Sem Nome',
             'endereco': endereco,
+            'rua': (cliente.rua or '').strip() or None,
+            'numero': (cliente.numero or '').strip() or None,
+            'bairro': (cliente.bairro or '').strip() or None,
+            'cidade': (cliente.cidade or '').strip() or None,
+            'estado': (cliente.estado or '').strip() or None,
+            'cep': (cliente.cep or '').strip() or None,
             'latitude': lat,
             'longitude': lon,
         })
@@ -537,6 +549,12 @@ def otimizar_rota_logistica():
             'cliente_id': ponto['cliente_id'],
             'cliente_nome': ponto['cliente_nome'],
             'endereco': ponto['endereco'],
+            'rua': ponto.get('rua'),
+            'numero': ponto.get('numero'),
+            'bairro': ponto.get('bairro'),
+            'cidade': ponto.get('cidade'),
+            'estado': ponto.get('estado'),
+            'cep': ponto.get('cep'),
             'latitude': ponto['latitude'],
             'longitude': ponto['longitude'],
         })
@@ -544,17 +562,19 @@ def otimizar_rota_logistica():
     distancia_km = round(resultado['distance_m'] / 1000.0, 1)
     duracao_min = max(1, int(round(resultado['duration_s'] / 60.0)))
 
-    # URL Google Maps com origem no galpão e paradas na ordem otimizada
-    maps_parts = [f'{galpao_lat},{galpao_lon}']
-    for p in pedidos_ordenados:
-        maps_parts.append(f"{p['latitude']},{p['longitude']}")
-    if len(maps_parts) >= 2:
-        origin = maps_parts[0]
-        destination = maps_parts[-1]
-        waypoints = maps_parts[1:-1]
+    # URL Google Maps com endereços em texto (geocoding do Google, não Nominatim).
+    galpao_end = _endereco_galpao()
+    enderecos_txt = [
+        (p.get('endereco') or '').strip()
+        for p in pedidos_ordenados
+        if (p.get('endereco') or '').strip()
+    ]
+    if len(enderecos_txt) >= 1:
+        destination = enderecos_txt[-1]
+        waypoints = enderecos_txt[:-1]
         maps_url = (
             'https://www.google.com/maps/dir/?api=1'
-            f'&origin={urllib.parse.quote(origin)}'
+            f'&origin={urllib.parse.quote(galpao_end)}'
             f'&destination={urllib.parse.quote(destination)}'
             '&travelmode=driving'
         )
@@ -574,6 +594,7 @@ def otimizar_rota_logistica():
         'duracao_min': duracao_min,
         'origem': {
             'nome': 'Galpão (Petrolina/Juazeiro)',
+            'endereco': galpao_end,
             'latitude': galpao_lat,
             'longitude': galpao_lon,
         },

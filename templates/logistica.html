@@ -942,6 +942,7 @@ function _salvarRotaOtimizadaAtiva(data) {
             duracao_min: data.duracao_min != null ? data.duracao_min : null,
             avisos: data.avisos || [],
             pedidos: pedidos,
+            origem: data.origem || null,
             paradas: data.paradas != null ? data.paradas : pedidos.length
         };
         sessionStorage.setItem('rota_otimizada_ativa', JSON.stringify(payload));
@@ -995,9 +996,20 @@ function _atualizarParadasBannerAposEntrega(idsEntregues) {
     }
 
     rotaAtiva.paradas = novasParadas;
+    // Recalcula URL do Maps com endereços restantes (texto, não lat/lon).
+    var origemTxt = (rotaAtiva.origem && (rotaAtiva.origem.endereco || rotaAtiva.origem.nome))
+        || 'Galpão Menino do Alho, Petrolina, PE';
+    var novaUrl = _montarUrlGoogleMapsDirecoes(origemTxt, rotaAtiva.pedidos || []);
+    if (novaUrl) rotaAtiva.maps_url = novaUrl;
     try {
         sessionStorage.setItem('rota_otimizada_ativa', JSON.stringify(rotaAtiva));
     } catch (err) { /* ignore */ }
+
+    var btnMaps = document.getElementById('btn-abrir-trajeto-maps');
+    if (btnMaps && novaUrl) {
+        btnMaps.href = novaUrl;
+        btnMaps.classList.remove('pointer-events-none', 'opacity-50');
+    }
 
     var el = document.getElementById('banner-qtd-paradas');
     if (el) {
@@ -1144,6 +1156,62 @@ function _ordinalParadaPt(n) {
     return String(n) + 'ª Parada';
 }
 
+/** Monta endereço textual a partir dos campos do pedido (ou fallback em endereco). */
+function _enderecoTextoPedido(p) {
+    if (!p) return '';
+    var partes = [];
+    var rua = (p.rua || '').trim();
+    var numero = (p.numero || '').trim();
+    var bairro = (p.bairro || '').trim();
+    var cidade = (p.cidade || '').trim();
+    var estado = (p.estado || '').trim();
+    var cep = (p.cep || '').trim();
+    if (rua) {
+        partes.push(numero ? (rua + ', ' + numero) : rua);
+    } else if (numero) {
+        partes.push(numero);
+    }
+    if (bairro) partes.push(bairro);
+    if (cidade) partes.push(cidade);
+    if (estado) partes.push(estado);
+    if (cep) partes.push(cep);
+    if (partes.length) return partes.join(', ');
+    return ((p.endereco || '') + '').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * URL oficial do Google Maps Directions com endereços em texto
+ * (força geocoding preciso do Google — evita pinos errados de lat/lon Nominatim).
+ * Formato: /dir/?api=1&origin=...&destination=...&waypoints=end2|end3...
+ */
+function _montarUrlGoogleMapsDirecoes(origemTxt, pedidosOrdenados) {
+    var enderecos = [];
+    var vistos = {};
+    (pedidosOrdenados || []).forEach(function(p) {
+        var end = _enderecoTextoPedido(p);
+        if (!end || vistos[end]) return;
+        vistos[end] = true;
+        enderecos.push(end);
+    });
+    if (enderecos.length === 0) return null;
+
+    var origin = encodeURIComponent(
+        ((origemTxt || '') + '').trim() || 'Galpão Menino do Alho, Petrolina, PE'
+    );
+    var destination = encodeURIComponent(enderecos[enderecos.length - 1]);
+    var url = 'https://www.google.com/maps/dir/?api=1'
+        + '&origin=' + origin
+        + '&destination=' + destination
+        + '&travelmode=driving';
+    if (enderecos.length > 1) {
+        var waypoints = enderecos.slice(0, -1).map(function(e) {
+            return encodeURIComponent(e);
+        });
+        url += '&waypoints=' + waypoints.join('%7C');
+    }
+    return url;
+}
+
 function _encontrarItemEntregaPorPedidoId(pedidoId) {
     var idStr = String(pedidoId);
     var row = null;
@@ -1194,8 +1262,15 @@ function _mostrarCardRotaOtimizada(data, opts) {
     resumo.innerHTML = '<span id="banner-qtd-paradas">' + n + '</span> parada(s) · '
         + km + ' km · ~' + min + ' min';
 
-    if (data.maps_url) {
-        btnMaps.href = data.maps_url;
+    // Preferir URL com endereços em texto (geocoding do Google), não lat/lon Nominatim.
+    var origemTxt = (data.origem && (data.origem.endereco || data.origem.nome))
+        || 'Galpão Menino do Alho, Petrolina, PE';
+    var mapsUrl = _montarUrlGoogleMapsDirecoes(origemTxt, data.pedidos || [])
+        || data.maps_url
+        || null;
+    if (mapsUrl) {
+        data.maps_url = mapsUrl;
+        btnMaps.href = mapsUrl;
         btnMaps.classList.remove('pointer-events-none', 'opacity-50');
     } else {
         btnMaps.href = '#';
