@@ -48,10 +48,6 @@
                 <span aria-hidden="true">🛣️</span>
                 <span class="whitespace-nowrap">Otimizar Rota</span>
             </button>
-            <button type="button" id="btn-iniciar-live-activity" onclick="iniciarLiveActivityRota()" title="Inicia acompanhamento na Dynamic Island (iOS)" class="w-full sm:w-auto justify-center bg-slate-800 hover:bg-slate-700 text-white px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center gap-2 transition-colors">
-                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-                <span class="whitespace-nowrap">Iniciar Rota (Island)</span>
-            </button>
             <button type="button" id="btn-finalizar-live-activity" onclick="finalizarLiveActivityCarga()" title="Finaliza a Live Activity na Dynamic Island" class="w-full sm:w-auto justify-center bg-white hover:bg-gray-50 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-100 border border-gray-200 dark:border-gray-600 px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center gap-2 transition-colors">
                 <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
                 <span class="whitespace-nowrap">Finalizar Carga</span>
@@ -81,10 +77,16 @@
             <p id="card-rota-otimizada-resumo" class="text-sm text-blue-800/90 dark:text-blue-200/90 mt-0.5"></p>
             <p id="card-rota-otimizada-avisos" class="text-xs text-amber-700 dark:text-amber-300 mt-1 hidden"></p>
         </div>
-        <a id="btn-abrir-trajeto-maps" href="#" target="_blank" rel="noopener noreferrer"
-           class="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition shadow shrink-0">
-            Abrir Trajeto Completo no Maps
-        </a>
+        <div class="flex flex-wrap items-center gap-2 shrink-0">
+            <a id="btn-abrir-trajeto-maps" href="#" target="_blank" rel="noopener noreferrer"
+               class="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition shadow">
+                Abrir Trajeto Completo no Maps
+            </a>
+            <button type="button" onclick="cancelarRotaOtimizada()"
+                    class="bg-red-500 hover:bg-red-400 text-white px-3 py-1.5 rounded text-sm transition font-medium">
+                Cancelar Rota
+            </button>
+        </div>
     </div>
 </div>
 
@@ -632,54 +634,167 @@ function _coletarClientesSelecionados() {
     return nomes;
 }
 
-async function iniciarLiveActivityRota() {
+function _salvarIslandEstado(estado) {
+    window.__LOGISTICA_ISLAND_ESTADO__ = estado || null;
+    try {
+        if (estado) {
+            sessionStorage.setItem('logistica_island_estado', JSON.stringify(estado));
+        } else {
+            sessionStorage.removeItem('logistica_island_estado');
+        }
+    } catch (err) { /* ignore */ }
+}
+
+function _lerIslandEstado() {
+    if (window.__LOGISTICA_ISLAND_ESTADO__) return window.__LOGISTICA_ISLAND_ESTADO__;
+    try {
+        var raw = sessionStorage.getItem('logistica_island_estado');
+        if (raw) {
+            window.__LOGISTICA_ISLAND_ESTADO__ = JSON.parse(raw);
+            return window.__LOGISTICA_ISLAND_ESTADO__;
+        }
+    } catch (err) { /* ignore */ }
+    return null;
+}
+
+function _limparIslandEstado() {
+    _salvarIslandEstado(null);
+}
+
+function _contarPendentesRestantesApos(idsEntregues) {
+    var idSet = {};
+    (idsEntregues || []).forEach(function(id) { idSet[String(id)] = true; });
+    var restantes = 0;
+    _checksEntregaUnicos().forEach(function(cb) {
+        var raw = cb.getAttribute('data-ids') || cb.value || '';
+        var ids = raw.split(',').map(function(s) { return String(s || '').trim(); }).filter(Boolean);
+        if (!ids.length) return;
+        var sendoEntregue = ids.some(function(id) { return !!idSet[id]; });
+        if (!sendoEntregue) restantes++;
+    });
+    return restantes;
+}
+
+async function _encerrarIslandSilencioso(opts) {
+    opts = opts || {};
+    var DI = window.MeninoAlhoDynamicIsland;
+    try {
+        if (typeof encerrarLiveActivity === 'function') {
+            await encerrarLiveActivity();
+        } else if (DI && typeof DI.stopDeliveryActivity === 'function') {
+            await DI.stopDeliveryActivity({
+                status: opts.status || 'Concluído',
+                caixasEntregues: opts.caixasEntregues,
+                totalCaixas: opts.totalCaixas,
+                dismissalSeconds: opts.dismissalSeconds != null ? opts.dismissalSeconds : 5
+            });
+        }
+    } catch (err) {
+        console.warn('[DynamicIsland] encerrar falhou:', err);
+    }
+    _limparIslandEstado();
+}
+
+async function iniciarLiveActivityRota(opcoes) {
+    opcoes = opcoes || {};
+    var silencioso = !!opcoes.silencioso;
     var DI = window.MeninoAlhoDynamicIsland;
     if (!DI) return;
 
-    var clientes = _coletarClientesSelecionados();
+    var clientes = [];
+    if (opcoes.pedidos && opcoes.pedidos.length) {
+        var vistos = {};
+        opcoes.pedidos.forEach(function(p) {
+            var nome = ((p && p.cliente_nome) || '').trim();
+            if (nome && !vistos[nome]) {
+                vistos[nome] = true;
+                clientes.push(nome);
+            }
+        });
+    } else {
+        clientes = _coletarClientesSelecionados();
+    }
+
     if (!clientes.length) {
-        _swalAviso('Selecione pelo menos um pedido para iniciar a rota na Dynamic Island.');
+        if (!silencioso) {
+            _swalAviso('Selecione pelo menos um pedido para iniciar a rota na Dynamic Island.');
+        }
         return;
     }
 
-    var totalCaixas = Number(window.__LOGISTICA_TOTAL_CAIXAS__ || clientes.length || 0);
+    var totalCaixas = Number(
+        opcoes.totalCaixas != null
+            ? opcoes.totalCaixas
+            : (window.__LOGISTICA_TOTAL_CAIXAS__ || clientes.length || 0)
+    );
+    var numeroCarga = (DI.gerarNumeroCarga && DI.gerarNumeroCarga()) || ('CG-' + Date.now());
+    var proximoCliente = clientes[0];
+
     try {
         var result = await DI.startDeliveryActivity({
-            numeroCarga: DI.gerarNumeroCarga(),
+            numeroCarga: numeroCarga,
             placaVeiculo: '',
-            proximoCliente: clientes[0],
+            proximoCliente: proximoCliente,
             totalCaixas: totalCaixas,
             caixasEntregues: 0,
             status: 'Em rota'
         });
         if (result && result.skipped) {
-            _swalAviso('Dynamic Island disponível apenas no app iOS (Capacitor).');
+            if (!silencioso) {
+                _swalAviso('Dynamic Island disponível apenas no app iOS (Capacitor).');
+            }
             return;
         }
-        Swal.fire(Object.assign(_swalBase(), {
-            icon: 'success',
-            title: 'Rota iniciada',
-            text: 'Acompanhe a carga na Dynamic Island / Tela de Bloqueio.',
-            timer: 2200,
-            showConfirmButton: false
-        }));
+        _salvarIslandEstado({
+            ativo: true,
+            numeroCarga: numeroCarga,
+            caixasEntregues: 0,
+            totalCaixas: totalCaixas,
+            proximoCliente: proximoCliente,
+            paradas: clientes.length,
+            clientes: clientes
+        });
+        if (!silencioso) {
+            Swal.fire(Object.assign(_swalBase(), {
+                icon: 'success',
+                title: 'Rota iniciada',
+                text: 'Acompanhe a carga na Dynamic Island / Tela de Bloqueio.',
+                timer: 2200,
+                showConfirmButton: false
+            }));
+        }
     } catch (err) {
         console.error(err);
-        _swalErro((err && err.message) || 'Não foi possível iniciar a Live Activity.');
+        if (!silencioso) {
+            _swalErro((err && err.message) || 'Não foi possível iniciar a Live Activity.');
+        }
     }
 }
 
-async function atualizarLiveActivityAposEntrega(clienteEntregue, qtdIncremento) {
+async function atualizarLiveActivityAposEntrega(clienteEntregue, qtdIncremento, idsEntregues) {
     var DI = window.MeninoAlhoDynamicIsland;
-    if (!DI || typeof DI.isAvailable !== 'function' || !DI.isAvailable()) return;
+    var estado = _lerIslandEstado();
+    var pendentesRestantes = idsEntregues
+        ? _contarPendentesRestantesApos(idsEntregues)
+        : null;
 
-    var estado = DI.lerEstado ? DI.lerEstado() : null;
-    if (!estado) return;
+    if (pendentesRestantes === 0) {
+        await _encerrarIslandSilencioso({
+            status: 'Finalizado',
+            caixasEntregues: estado ? Number(estado.totalCaixas || 0) : undefined,
+            totalCaixas: estado ? Number(estado.totalCaixas || 0) : undefined,
+            dismissalSeconds: 5
+        });
+        return;
+    }
+
+    if (!DI || typeof DI.isAvailable !== 'function' || !DI.isAvailable()) return;
+    if (!estado || !estado.ativo) return;
 
     var entregues = Number(estado.caixasEntregues || 0) + Number(qtdIncremento || 1);
     var total = Number(estado.totalCaixas || window.__LOGISTICA_TOTAL_CAIXAS__ || 0);
     var proximo = _proximoClientePendente(clienteEntregue);
-    var status = entregues >= total && total > 0 ? 'Chegando' : 'Em rota';
+    var status = (entregues >= total && total > 0) ? 'Chegando' : 'Em rota';
 
     try {
         await DI.updateDeliveryActivity({
@@ -688,8 +803,14 @@ async function atualizarLiveActivityAposEntrega(clienteEntregue, qtdIncremento) 
             proximoCliente: proximo,
             status: status
         });
+        _salvarIslandEstado(Object.assign({}, estado, {
+            caixasEntregues: entregues,
+            totalCaixas: total,
+            proximoCliente: proximo,
+            status: status
+        }));
         if (entregues >= total && total > 0) {
-            await DI.stopDeliveryActivity({
+            await _encerrarIslandSilencioso({
                 status: 'Finalizado',
                 caixasEntregues: entregues,
                 totalCaixas: total,
@@ -701,17 +822,32 @@ async function atualizarLiveActivityAposEntrega(clienteEntregue, qtdIncremento) 
     }
 }
 
+async function cancelarRotaOtimizada() {
+    var card = document.getElementById('card-rota-otimizada');
+    if (card) card.classList.add('hidden');
+    _limparBadgesParada();
+
+    var btnMaps = document.getElementById('btn-abrir-trajeto-maps');
+    if (btnMaps) {
+        btnMaps.href = '#';
+        btnMaps.classList.add('pointer-events-none', 'opacity-50');
+    }
+
+    await _encerrarIslandSilencioso({ status: 'Cancelado', dismissalSeconds: 2 });
+}
+
 async function finalizarLiveActivityCarga() {
     var DI = window.MeninoAlhoDynamicIsland;
     if (!DI) return;
     try {
-        var estado = DI.lerEstado ? DI.lerEstado() : null;
+        var estado = _lerIslandEstado();
         var result = await DI.stopDeliveryActivity({
             status: 'Finalizado',
             caixasEntregues: estado ? estado.caixasEntregues : undefined,
             totalCaixas: estado ? estado.totalCaixas : undefined,
             dismissalSeconds: 5
         });
+        _limparIslandEstado();
         if (result && result.skipped) {
             _swalAviso('Dynamic Island disponível apenas no app iOS (Capacitor).');
             return;
@@ -754,7 +890,16 @@ document.addEventListener('submit', function(e) {
                     || (row && row.querySelector('.check-entrega') && row.querySelector('.check-entrega').dataset.cliente)
                     || (card && card.querySelector('.check-entrega') && card.querySelector('.check-entrega').dataset.cliente)
                     || '';
-                atualizarLiveActivityAposEntrega(cliente, 1);
+                var idsEntrega = [];
+                var checkEl = (row && row.querySelector('.check-entrega'))
+                    || (card && card.querySelector('.check-entrega'))
+                    || null;
+                var rawIds = (form.dataset.ids || (checkEl && (checkEl.getAttribute('data-ids') || checkEl.value)) || '').trim();
+                rawIds.split(',').forEach(function(idTxt) {
+                    var id = parseInt((idTxt || '').trim(), 10);
+                    if (!isNaN(id)) idsEntrega.push(id);
+                });
+                atualizarLiveActivityAposEntrega(cliente, 1, idsEntrega);
             }
             form.dataset.swalConfirmed = '1';
             form.submit();
@@ -958,6 +1103,13 @@ function otimizarRotaEntregas() {
 
         _mostrarCardRotaOtimizada(data);
 
+        // Liga a Dynamic Island automaticamente com os dados da rota otimizada.
+        iniciarLiveActivityRota({
+            silencioso: true,
+            pedidos: data.pedidos || [],
+            totalCaixas: Number(window.__LOGISTICA_TOTAL_CAIXAS__ || (data.pedidos || []).length || 0)
+        }).catch(function() { /* silencioso na web */ });
+
         var detalhe = (data.distancia_km != null ? data.distancia_km + ' km' : '')
             + (data.duracao_min != null ? ' · ~' + data.duracao_min + ' min' : '');
         Swal.fire(Object.assign(_swalBase(), {
@@ -1129,7 +1281,7 @@ function atualizarStatusMassa(novoStatus) {
         .then(async function(data) {
             if (data.success) {
                 if (ehEntrega) {
-                    await atualizarLiveActivityAposEntrega(clientes[0] || '', ids.length);
+                    await atualizarLiveActivityAposEntrega(clientes[0] || '', ids.length, ids);
                 }
                 window.location.reload();
             } else {
