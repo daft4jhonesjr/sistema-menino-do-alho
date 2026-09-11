@@ -224,7 +224,7 @@
 </div>
 
 <div id="conteudo-pendentes" class="{% if filtro_status == 'ENTREGUE' %}hidden{% endif %}">
-    {{ bloco_lista_cards(entregas_pendentes, 'PENDENTE', 'pendentes', has_next_pendentes) }}
+    {{ bloco_lista_cards(lista_entregas_pendentes, 'PENDENTE', 'pendentes', has_next_pendentes) }}
 </div>
 
 <div id="conteudo-entregues" class="{% if filtro_status == 'ENTREGUE' %}{% else %}hidden{% endif %}">

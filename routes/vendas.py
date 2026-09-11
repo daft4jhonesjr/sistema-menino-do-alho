@@ -2173,7 +2173,7 @@ def logistica():
     return render_template(
         'logistica.html',
         entregas=entregas_pendentes,
-        entregas_pendentes=entregas_pendentes,
+        lista_entregas_pendentes=entregas_pendentes,
         entregas_concluidas=entregas_concluidas,
         filtro_status=filtro_status,
         has_next_logistica=has_next_pendentes,
