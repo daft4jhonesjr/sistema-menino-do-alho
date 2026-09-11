@@ -25,7 +25,7 @@ Estado atual:
                            /venda/adicionar_item, /api/vendas/item/trocar, /venda/recibo,
                            /processar_carrinho, /add_venda, /api/pedidos,
                            /vendas/deletar_massa, /logistica, /logistica/toggle,
-                           /logistica/bulk_update
+                           /logistica/bulk_update, /api/calendario/feed.ics (Webcal)
     * ``documentos_bp``  → /upload, /processar_documentos, /reprocessar_boletos,
                            /documento/visualizar, /documento/<id>/vincular,
                            /arquivo/<id>/deletar, /arquivos/deletar_em_massa,
@@ -89,7 +89,8 @@ Proteção de tenant:
     via ``before_request``, eliminando o risco de esquecer o decorator em rotas
     novas. ``dashboard_bp`` aplica também, mas exempta apenas a raiz ``/``
     (que apenas redireciona). ``documentos_bp`` mantém endpoints públicos
-    token-based em uma allowlist explícita (bot externo).
+    token-based em uma allowlist explícita (bot externo). ``vendas_bp``
+    exempta ``/api/calendario/feed.ics`` (token HMAC por tenant para Webcal).
 """
 
 from .auth import auth_bp

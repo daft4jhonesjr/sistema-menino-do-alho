@@ -234,9 +234,19 @@
 
 {# Split Calendar: calendário mensal (esq.) + painel de detalhes do dia (dir.).
    data-detalhes-pendentes: mapa YYYY-MM-DD -> [{cliente, itens, valor}, ...] #}
-<div class="flex items-center gap-2 mb-4 text-emerald-700 dark:text-emerald-400">
-    <i data-lucide="calendar-days" class="w-5 h-5"></i>
-    <h2 class="text-xl font-bold tracking-wide mb-0">Calendário de Entregas</h2>
+<div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
+    <div class="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
+        <i data-lucide="calendar-days" class="w-5 h-5"></i>
+        <h2 class="text-xl font-bold tracking-wide mb-0">Calendário de Entregas</h2>
+    </div>
+    {% if webcal_url %}
+    <a href="{{ webcal_url }}"
+       class="inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-emerald-700 dark:hover:text-emerald-400 border border-gray-200 dark:border-gray-600 hover:border-emerald-300 dark:hover:border-emerald-600 rounded-lg px-2.5 py-1.5 transition-colors bg-white/60 dark:bg-gray-900/40"
+       title="Assinar este calendário no Apple Calendar (iPhone/Mac)">
+        <span aria-hidden="true">🗓️</span>
+        <span>Sincronizar com Apple</span>
+    </a>
+    {% endif %}
 </div>
 <div class="grid grid-cols-1 md:grid-cols-12 gap-6 mb-8 w-full items-start"
      id="calendario-split-wrap"

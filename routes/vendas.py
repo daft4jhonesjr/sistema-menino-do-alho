@@ -29,8 +29,10 @@ Endpoints novos: prefixo ``vendas.`` (ex.: ``vendas.listar_vendas``).
 Proteção automática de tenant
 -----------------------------
 Toda rota deste blueprint exige ``login_required`` + ``tenant_required``,
-aplicados via ``before_request``. Rotas que precisam de privilégio extra
-(ex.: ``importar_vendas``) mantêm o ``@admin_required`` no handler.
+aplicados via ``before_request``, exceto o feed público
+``/api/calendario/feed.ics`` (autenticado por token HMAC na query).
+Rotas que precisam de privilégio extra (ex.: ``importar_vendas``)
+mantêm o ``@admin_required`` no handler.
 
 Helpers compartilhados (``_vendas_do_pedido``, ``_apagar_lancamentos_caixa_por_vendas``)
 permanecem em ``app.py`` e são importados via late import porque são usados
@@ -101,6 +103,11 @@ vendas_bp = Blueprint('vendas', __name__)
 # ============================================================
 # Proteção automática de tenant para todo o blueprint
 # ============================================================
+# Feed ICS: Apple/Google Calendar sincronizam sem cookie de sessão.
+_ENDPOINTS_PUBLICOS = frozenset({
+    'vendas.calendario_feed_ics',
+})
+
 # Endpoints de logística exigem permissão 'logistica'; demais rotas exigem 'vendas'.
 _ENDPOINTS_LOGISTICA = frozenset({
     'vendas.logistica',
@@ -117,6 +124,9 @@ _ENDPOINTS_LOGISTICA = frozenset({
 def _exigir_tenant_em_todas_rotas():
     """Aplica ``@login_required`` + ``@tenant_required`` em todas as rotas
     deste blueprint via hook centralizado."""
+    if request.endpoint in _ENDPOINTS_PUBLICOS:
+        return None
+
     @tenant_required
     def _ok():
         return None
@@ -126,6 +136,65 @@ def _exigir_tenant_em_todas_rotas():
         return resp
     modulo = 'logistica' if request.endpoint in _ENDPOINTS_LOGISTICA else 'vendas'
     return _checar_permissao_ou_redirecionar(modulo)
+
+
+# ============================================================
+# Feed Webcal / ICS (Apple Calendar, Google Calendar, etc.)
+# ============================================================
+@vendas_bp.route('/api/calendario/feed.ics', methods=['GET'])
+def calendario_feed_ics():
+    """Exporta entregas, boletos e lembretes (mês atual + futuro) em ICS.
+
+    Autenticação: ``?token={empresa_id}.{hmac}`` — o cliente de calendário
+    não envia cookies Flask-Login.
+    """
+    from services.calendario_ics import (
+        validar_token_calendario,
+        montar_feed_ics,
+    )
+
+    empresa_id = validar_token_calendario(request.args.get('token'))
+    if empresa_id is None:
+        return Response(
+            'Token inválido ou ausente.',
+            status=401,
+            mimetype='text/plain',
+        )
+
+    try:
+        hoje = get_hoje_brasil()
+        inicio = date(hoje.year, hoje.month, 1)
+        payload = montar_feed_ics(empresa_id, inicio=inicio)
+    except Exception:
+        current_app.logger.exception('Falha ao gerar feed ICS do calendário')
+        db.session.rollback()
+        return Response(
+            'Erro ao gerar calendário.',
+            status=500,
+            mimetype='text/plain',
+        )
+
+    return Response(
+        payload,
+        mimetype='text/calendar',
+        headers={
+            'Content-Disposition': 'inline; filename=feed.ics',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+        },
+    )
+
+
+def _webcal_url_calendario():
+    """Monta ``webcal://host/api/calendario/feed.ics?token=...`` do tenant atual."""
+    eid = empresa_id_atual()
+    if not eid:
+        return None
+    from services.calendario_ics import gerar_token_calendario
+
+    token = gerar_token_calendario(eid)
+    path = url_for('vendas.calendario_feed_ics', token=token)
+    # Protocolo webcal força o SO a abrir o app nativo de calendário.
+    return f'webcal://{request.host}{path}'
 
 
 # ============================================================
@@ -1712,6 +1781,7 @@ def listar_vendas():
         detalhes_entrega_pendente=detalhes_entrega_pendente,
         vencimentos_por_data=vencimentos_por_data,
         lembretes_por_data=lembretes_por_data,
+        webcal_url=_webcal_url_calendario(),
         frase_do_dia=frase_do_dia(),
         todas_frases=[{"texto": t, "autor": a} for t, a in FRASES],
     )
