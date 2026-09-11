@@ -1497,40 +1497,75 @@ def bulk_delete_produtos():
     ids = data.get('ids', [])
     if not ids:
         return jsonify({'ok': False, 'mensagem': '❌ Nenhum produto selecionado para exclusão.'}), 400
+
+    # 1 query: busca todos os produtos do tenant de uma vez
+    produtos = query_tenant(Produto).filter(Produto.id.in_(ids)).all()
+    produtos_por_id = {p.id: p for p in produtos}
+
+    # 1 query: identifica quais IDs têm vendas vinculadas (FK constraint)
+    ids_com_venda = {
+        pid for (pid,) in
+        query_tenant(Venda)
+        .filter(Venda.produto_id.in_(ids))
+        .with_entities(Venda.produto_id)
+        .distinct()
+        .all()
+    }
+
+    ids_erro = [id_ for id_ in ids if id_ in ids_com_venda]
+    ids_para_excluir = [
+        id_ for id_ in ids
+        if id_ in produtos_por_id and id_ not in ids_com_venda
+    ]
+
+    # Limpeza Cloudinary + enfileiramento para deleção em lote
+    for id_ in ids_para_excluir:
+        produto = produtos_por_id[id_]
+        for foto in list(getattr(produto, 'fotos', []) or []):
+            _deletar_cloudinary_seguro(
+                public_id=getattr(foto, 'public_id', None),
+                url=getattr(foto, 'arquivo', None),
+                resource_type='image',
+            )
+        db.session.delete(produto)
+
     excluidos = 0
-    ids_erro = []
-    for id_ in ids:
-        produto = query_tenant(Produto).filter_by(id=id_).first()
-        if not produto:
-            continue
+    if ids_para_excluir:
         try:
-            for foto in list(getattr(produto, 'fotos', []) or []):
-                _deletar_cloudinary_seguro(
-                    public_id=getattr(foto, 'public_id', None),
-                    url=getattr(foto, 'arquivo', None),
-                    resource_type='image'
-                )
-            db.session.delete(produto)
-            db.session.commit()
-            excluidos += 1
+            db.session.commit()           # 1 único commit para todos
+            excluidos = len(ids_para_excluir)
+            limpar_cache_dashboard()
         except IntegrityError:
+            # Fallback raro: algum produto ganhou venda entre a checagem e o commit.
+            # Tenta individualmente para mapear quais falharam.
             db.session.rollback()
-            ids_erro.append(id_)
-    if excluidos > 0:
-        limpar_cache_dashboard()
+            for id_ in ids_para_excluir:
+                produto = produtos_por_id.get(id_)
+                if not produto:
+                    continue
+                try:
+                    db.session.delete(produto)
+                    db.session.commit()
+                    excluidos += 1
+                except IntegrityError:
+                    db.session.rollback()
+                    ids_erro.append(id_)
+            if excluidos > 0:
+                limpar_cache_dashboard()
+
     if ids_erro and not excluidos:
         return jsonify({
             'ok': False,
             'mensagem': f'❌ Nenhum produto excluído. Os IDs {ids_erro} possuem vendas vinculadas e não podem ser removidos.',
             'excluidos': 0,
-            'ids_erro': ids_erro
+            'ids_erro': ids_erro,
         })
     if ids_erro:
         return jsonify({
             'ok': True,
             'mensagem': f'⚠️ {excluidos} produto(s) excluído(s), mas os IDs {ids_erro} não puderam ser removidos (vendas vinculadas).',
             'excluidos': excluidos,
-            'ids_erro': ids_erro
+            'ids_erro': ids_erro,
         })
     return jsonify({'ok': True, 'mensagem': f'🗑️ {excluidos} produto(s) excluído(s) com sucesso!', 'excluidos': excluidos})
 

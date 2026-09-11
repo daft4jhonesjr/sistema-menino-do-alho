@@ -2758,6 +2758,28 @@ def rastrear_ultimo_acesso():
         db.session.rollback()
 
 
+@app.before_request
+def _auditar_entrada_requisicao():
+    """Log estruturado de cada requisição recebida.
+
+    Ignora arquivos estáticos e ícones para não poluir os logs com
+    centenas de entradas de assets. O IP real é extraído do cabeçalho
+    ``X-Forwarded-For`` (definido pelo proxy/Render) com fallback para
+    ``remote_addr``.
+    """
+    path = request.path
+    if (
+        path.startswith('/static')
+        or path in ('/favicon.ico', '/apple-touch-icon.png',
+                    '/apple-touch-icon-precomposed.png', '/robots.txt')
+    ):
+        return
+    ip_raw = request.headers.get('X-Forwarded-For', request.remote_addr) or '-'
+    # X-Forwarded-For pode ser lista "client, proxy1, proxy2" — pega o primeiro
+    ip = ip_raw.split(',')[0].strip()
+    app.logger.info('--> [%s] %s | IP: %s', request.method, path, ip)
+
+
 @app.teardown_appcontext
 def shutdown_session(exception=None):
     """
@@ -4677,6 +4699,12 @@ def handle_exception(e):
     if isinstance(e, HTTPException):
         return e
 
+    # Garante que a sessão do banco não fique suja (transação pendente/quebrada)
+    try:
+        db.session.rollback()
+    except Exception:
+        pass
+
     try:
         user_info = current_user.username if current_user.is_authenticated else 'Anonimo'
     except Exception:
@@ -4685,13 +4713,24 @@ def handle_exception(e):
     try:
         url_info = request.url
         method_info = request.method
+        # Captura parâmetros para diagnóstico sem expor corpos muito grandes
+        args_info = dict(request.args) if request.args else {}
+        try:
+            form_info = request.get_json(silent=True) or request.form.to_dict()
+        except Exception:
+            form_info = {}
     except Exception:
         url_info = '(sem contexto de requisição)'
         method_info = ''
+        args_info = {}
+        form_info = {}
 
     app.logger.error(
-        f"ERRO 500 | Usuário: {user_info} | {method_info} {url_info}\n"
-        f"{traceback.format_exc()}",
+        "❌ [FALHA CRÍTICA] Usuário: %s | %s %s\n"
+        "Parâmetros: %s | Form/JSON: %s\n%s",
+        user_info, method_info, url_info,
+        args_info, form_info,
+        traceback.format_exc(),
         exc_info=False,
     )
 

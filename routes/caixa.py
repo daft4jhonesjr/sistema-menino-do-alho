@@ -1640,6 +1640,36 @@ def importar_caixa():
             # várias vezes quando o CSV traz N parcelas da mesma.
             venda_ids_para_ressync = set()
 
+            # ── Pré-carrega chaves de lançamentos existentes em memória ──
+            # Uma única query (com apenas 6 colunas leves) substitui a
+            # verificação "1 SELECT por linha" dentro do loop, reduzindo
+            # de O(N) queries para O(1) de lookup por dict/set.
+            _rows_existentes = (
+                query_tenant(LancamentoCaixa)
+                .filter(LancamentoCaixa.usuario_id == current_user.id)
+                .with_entities(
+                    LancamentoCaixa.data,
+                    LancamentoCaixa.descricao,
+                    LancamentoCaixa.tipo,
+                    LancamentoCaixa.categoria,
+                    LancamentoCaixa.forma_pagamento,
+                    LancamentoCaixa.valor,
+                )
+                .all()
+            )
+            lancamentos_existentes = {
+                (
+                    row.data,
+                    row.descricao,
+                    row.tipo,
+                    row.categoria,
+                    row.forma_pagamento,
+                    float(round(float(row.valor or 0), 2)),
+                )
+                for row in _rows_existentes
+            }
+            del _rows_existentes  # libera memória imediatamente
+
             for i, linha in enumerate(leitor, start=1):
                 total_lidas = i
                 if not linha or all(c.strip() == '' for c in linha):
@@ -1681,15 +1711,14 @@ def importar_caixa():
                             v_str = v_str.replace('.', '')
                     valor = float(v_str) if v_str else 0.0
 
-                    ja_existe = query_tenant(LancamentoCaixa).filter_by(
-                        data=data_lanc,
-                        descricao=descricao,
-                        tipo=tipo_lancamento,
-                        categoria=categoria,
-                        forma_pagamento=forma_pagamento,
-                        valor=abs(valor),
-                        usuario_id=current_user.id,
-                    ).first()
+                    ja_existe = (
+                        data_lanc,
+                        descricao,
+                        tipo_lancamento,
+                        categoria,
+                        forma_pagamento,
+                        float(round(abs(valor), 2)),
+                    ) in lancamentos_existentes
 
                     if ja_existe:
                         linhas_duplicadas += 1
@@ -1706,6 +1735,13 @@ def importar_caixa():
                         empresa_id=empresa_id_atual(),
                     )
                     db.session.add(novo_lancamento)
+                    # Registra no set para bloquear duplicatas dentro do
+                    # próprio CSV (linhas idênticas no mesmo arquivo).
+                    lancamentos_existentes.add((
+                        data_lanc, descricao, tipo_lancamento,
+                        categoria, forma_pagamento,
+                        float(round(abs(valor), 2)),
+                    ))
                     linhas_sucesso += 1
                     adicionados_no_batch += 1
 

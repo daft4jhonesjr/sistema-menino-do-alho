@@ -1304,6 +1304,9 @@ def excluir_usuario(id):
             db.session.commit()
             flash(f'Usuário "{nome}" excluído com sucesso.', 'success')
         except Exception:
+            current_app.logger.error(
+                'Erro ao excluir usuário id=%s', id, exc_info=True,
+            )
             db.session.rollback()
             flash('Erro ao excluir usuário.', 'error')
         return redirect(url_for('auth.gerenciar_usuarios'))

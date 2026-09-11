@@ -1215,6 +1215,11 @@ def listar_vendas():
         try:
             db.session.commit()
         except Exception:
+            current_app.logger.error(
+                '[listar_vendas] Falha ao persistir herança de boleto'
+                ' em vendas de transferência',
+                exc_info=True,
+            )
             db.session.rollback()
 
     # Sem `db.session.commit()` aqui para o restante: esta é uma rota GET de listagem
