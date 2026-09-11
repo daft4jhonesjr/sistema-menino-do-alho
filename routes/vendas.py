@@ -2115,17 +2115,18 @@ def logistica():
     has_next_pendentes = len(pedidos_pendentes) > per_page
     has_next_entregues = len(pedidos_entregues) > per_page
 
-    # Resumo da semana: entregas concluídas de segunda a domingo (ordem crescente).
+    # Resumo das últimas 3 semanas + semana atual (segunda a domingo, ordem crescente).
     hoje = get_hoje_brasil()
-    inicio_semana = hoje - timedelta(days=hoje.weekday())
-    fim_semana = inicio_semana + timedelta(days=6)
+    segunda_atual = hoje - timedelta(days=hoje.weekday())
+    inicio_periodo = segunda_atual - timedelta(weeks=3)
+    domingo_atual = hoje + timedelta(days=6 - hoje.weekday())
 
     vendas_semana = (
         query_tenant(Venda)
         .filter(
             Venda.status_entrega == 'ENTREGUE',
-            Venda.data_venda >= inicio_semana,
-            Venda.data_venda <= fim_semana,
+            Venda.data_venda >= inicio_periodo,
+            Venda.data_venda <= domingo_atual,
         )
         .options(
             joinedload(Venda.cliente),
@@ -2182,8 +2183,8 @@ def logistica():
         total_caixas_pendentes=total_caixas_pendentes,
         entregues_semana=entregues_semana,
         total_semana=total_semana,
-        inicio_semana=inicio_semana,
-        fim_semana=fim_semana,
+        inicio_semana=inicio_periodo,
+        fim_semana=domingo_atual,
     )
 
 

@@ -238,7 +238,7 @@
         <div>
             <h3 id="titulo-resumo-semana" class="text-xl font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
                 <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                Resumo da Semana (Entregues)
+                Resumo de Entregas (Últimas Semanas)
             </h3>
             <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 {{ inicio_semana.strftime('%d/%m/%Y') }} — {{ fim_semana.strftime('%d/%m/%Y') }}
@@ -249,7 +249,7 @@
         </div>
         {% if entregues_semana %}
         <p class="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
-            Total da semana: {{ total_semana | formato_moeda }}
+            Total do período: {{ total_semana | formato_moeda }}
         </p>
         {% endif %}
     </div>
@@ -285,7 +285,7 @@
     </div>
     {% else %}
     <div class="bg-white dark:bg-gray-800 rounded-xl border border-dashed border-gray-300 dark:border-gray-600 px-6 py-10 text-center">
-        <p class="text-gray-500 dark:text-gray-400">Nenhuma entrega concluída nesta semana ainda.</p>
+        <p class="text-gray-500 dark:text-gray-400">Nenhuma entrega concluída neste período ainda.</p>
     </div>
     {% endif %}
 </section>
