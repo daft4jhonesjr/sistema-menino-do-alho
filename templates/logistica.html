@@ -48,10 +48,6 @@
                 <span aria-hidden="true">🛣️</span>
                 <span class="whitespace-nowrap">Otimizar Rota</span>
             </button>
-            <button type="button" id="btn-finalizar-live-activity" onclick="finalizarLiveActivityCarga()" title="Finaliza a Live Activity na Dynamic Island" class="w-full sm:w-auto justify-center bg-white hover:bg-gray-50 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-100 border border-gray-200 dark:border-gray-600 px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center gap-2 transition-colors">
-                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-                <span class="whitespace-nowrap">Finalizar Carga</span>
-            </button>
             <button type="button" id="btn-copiar-whatsapp" onclick="copiarRomaneioWhatsApp()" title="Copiar romaneio formatado para enviar ao entregador via WhatsApp" class="w-full sm:w-auto justify-center bg-white hover:bg-emerald-50 dark:bg-gray-800 dark:hover:bg-gray-700/80 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center gap-2 transition-colors">
                 <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
                 <span class="whitespace-nowrap" id="btn-copiar-whatsapp-label">Copiar p/ WhatsApp</span>
@@ -834,35 +830,6 @@ async function cancelarRotaOtimizada() {
     }
 
     await _encerrarIslandSilencioso({ status: 'Cancelado', dismissalSeconds: 2 });
-}
-
-async function finalizarLiveActivityCarga() {
-    var DI = window.MeninoAlhoDynamicIsland;
-    if (!DI) return;
-    try {
-        var estado = _lerIslandEstado();
-        var result = await DI.stopDeliveryActivity({
-            status: 'Finalizado',
-            caixasEntregues: estado ? estado.caixasEntregues : undefined,
-            totalCaixas: estado ? estado.totalCaixas : undefined,
-            dismissalSeconds: 5
-        });
-        _limparIslandEstado();
-        if (result && result.skipped) {
-            _swalAviso('Dynamic Island disponível apenas no app iOS (Capacitor).');
-            return;
-        }
-        Swal.fire(Object.assign(_swalBase(), {
-            icon: 'success',
-            title: 'Carga finalizada',
-            text: 'Live Activity encerrada na Dynamic Island.',
-            timer: 2000,
-            showConfirmButton: false
-        }));
-    } catch (err) {
-        console.error(err);
-        _swalErro((err && err.message) || 'Não foi possível finalizar a Live Activity.');
-    }
 }
 
 /* ── Handler delegado para forms com class="form-swal-confirm" ────────── */
