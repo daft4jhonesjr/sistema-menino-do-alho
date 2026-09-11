@@ -539,7 +539,7 @@
                     </label>
                 </div>
                 <div>
-                    <button type="submit" id="btn-adicionar-carrinho" class="w-full h-[42px] flex items-center justify-center gap-2 bg-emerald-700 hover:bg-emerald-600 text-white font-medium text-sm rounded-xl shadow transition-colors whitespace-nowrap">
+                    <button type="button" id="btn-adicionar-carrinho" class="w-full h-[42px] flex items-center justify-center gap-2 bg-emerald-700 hover:bg-emerald-600 text-white font-medium text-sm rounded-xl shadow transition-colors whitespace-nowrap">
                         <i data-lucide="shopping-cart" class="w-4 h-4"></i>Adicionar
                     </button>
                 </div>
@@ -3193,6 +3193,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.error('Erro ao buscar prazo padrão:', err);
                     if (typeof showToast === 'function') showToast('Não foi possível carregar o prazo padrão do cliente.', 'warning');
                 });
+        }
+        clienteSelect.addEventListener('change', preencherPrazoPadraoDoCliente);
+        preencherPrazoPadraoDoCliente();
     }
 
     if (produtoSelect) {
@@ -3290,18 +3293,29 @@ document.addEventListener('DOMContentLoaded', function() {
         quantidadeInput.addEventListener('input', updateValorTotalDisplay);
     }
 
+    function adicionarItemAoCarrinho() {
+        hideErro();
+        var it = buildItemFromForm();
+        if (!it) {
+            showErro('Preencha Cliente, Produto, Quantidade, Preço e Empresa.');
+            return;
+        }
+        carrinho.push(it);
+        resetFormParaProximoItem();
+        renderCart();
+    }
+
+    if (btnAdicionar) {
+        btnAdicionar.addEventListener('click', function(e) {
+            e.preventDefault();
+            adicionarItemAoCarrinho();
+        });
+    }
+
     if (form) {
         form.addEventListener('submit', function(e) {
             e.preventDefault();
-            hideErro();
-            var it = buildItemFromForm();
-            if (!it) {
-                showErro('Preencha Cliente, Produto, Quantidade, Preço e Empresa.');
-                return;
-            }
-            carrinho.push(it);
-            resetFormParaProximoItem();
-            renderCart();
+            adicionarItemAoCarrinho();
         });
     }
 
@@ -3720,9 +3734,7 @@ document.addEventListener('DOMContentLoaded', function() {
         precoInput.addEventListener('keydown', function(e) {
             if (e.key === 'Enter') {
                 e.preventDefault();
-                if (form && btnAdicionar) {
-                    form.requestSubmit(btnAdicionar);
-                }
+                if (btnAdicionar) btnAdicionar.click();
             }
         });
     }

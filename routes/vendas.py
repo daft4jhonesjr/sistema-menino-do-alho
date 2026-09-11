@@ -2427,7 +2427,7 @@ def processar_carrinho():
                 return jsonify(ok=False, mensagem='Quantidade deve ser maior que zero.'), 400
             if tipo_operacao not in ('VENDA', 'PERDA'):
                 tipo_operacao = 'VENDA'
-            if not empresa_faturadora or empresa_faturadora not in ('DESTAK', 'PATY', 'NENHUM', 'ARMAZEM LACERDA'):
+            if not empresa_faturadora or empresa_faturadora not in ('DESTAK', 'PATY', 'NENHUM', 'ARMAZEM LACERDA', 'SERVE BEM'):
                 return jsonify(ok=False, mensagem='Empresa faturadora inválida.'), 400
 
             produto = query_tenant(Produto).filter_by(id=produto_id).first()
