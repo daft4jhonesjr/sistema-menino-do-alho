@@ -3667,16 +3667,17 @@ def clonar_documentos_por_nf(id):
     if not cn_fonte and not cb_fonte:
         return jsonify({
             'ok': False,
+            'success': False,
             'status': 'warning',
             'mensagem': (
-                f'Não encontramos nenhum arquivo de NF ou Boleto disponível '
-                f'em outros pedidos com a nota {nf_raw}.'
+                f'Nenhum arquivo de NF ou Boleto encontrado para a nota {nf_raw!r}. '
+                f'Verifique se outro pedido com esta NF já possui documentos anexados.'
             ),
             'error': (
-                f'Não encontramos nenhum arquivo de NF ou Boleto disponível '
-                f'em outros pedidos com a nota {nf_raw}.'
+                f'Nenhum arquivo de NF ou Boleto encontrado para a nota {nf_raw!r}. '
+                f'Verifique se outro pedido com esta NF já possui documentos anexados.'
             ),
-        }), 404
+        }), 400
 
     alvos = list(_vendas_do_pedido(venda_atual) or [])
     ids_alvos = {getattr(a, 'id', None) for a in alvos}
@@ -3709,16 +3710,17 @@ def clonar_documentos_por_nf(id):
     if arquivos_copiados <= 0:
         return jsonify({
             'ok': False,
+            'success': False,
             'status': 'warning',
             'mensagem': (
-                f'Não encontramos nenhum arquivo de NF ou Boleto disponível '
-                f'em outros pedidos com a nota {nf_raw}.'
+                f'Documento(s) localizado(s) para a NF {nf_raw!r}, mas esta venda '
+                f'já possui todos os campos preenchidos — nenhuma cópia foi necessária.'
             ),
             'error': (
-                f'Não encontramos nenhum arquivo de NF ou Boleto disponível '
-                f'em outros pedidos com a nota {nf_raw}.'
+                f'Documento(s) localizado(s) para a NF {nf_raw!r}, mas esta venda '
+                f'já possui todos os campos preenchidos — nenhuma cópia foi necessária.'
             ),
-        }), 404
+        }), 400
 
     db.session.commit()
     limpar_cache_dashboard()

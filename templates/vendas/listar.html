@@ -5482,7 +5482,14 @@ window.buscarDocumentoExistente = async function(id, nf) {
             data = {};
         }
 
-        if (response.ok && (data.ok || data.status === 'success')) {
+        // Propaga erro HTTP como exceção para o bloco catch centralizado,
+        // carregando a mensagem exata retornada pelo backend.
+        if (!response.ok) {
+            var apiErr = data.error || data.mensagem || data.message || ('Erro HTTP ' + response.status);
+            throw new Error(apiErr);
+        }
+
+        if (data.ok || data.status === 'success') {
             var okMsg = data.mensagem || data.message || 'Documento vinculado com sucesso.';
             if (typeof Swal !== 'undefined') {
                 await Swal.fire(Object.assign(window._swalInboxTheme(), {
@@ -5499,28 +5506,32 @@ window.buscarDocumentoExistente = async function(id, nf) {
             return;
         }
 
+        // Resposta 2xx mas sem sucesso confirmado (ex.: status 'warning').
         var errMsg = data.mensagem || data.error || data.message || 'Documento não encontrado.';
         if (typeof Swal !== 'undefined') {
             Swal.fire(Object.assign(window._swalInboxTheme(), {
-                icon: response.status === 404 ? 'info' : 'error',
-                title: 'Ops...',
+                icon: 'warning',
+                title: 'Atenção',
                 text: errMsg
             }));
         } else if (typeof showToast === 'function') {
-            showToast(errMsg, 'error');
+            showToast(errMsg, 'warning');
         } else {
             alert(errMsg);
         }
     } catch (error) {
-        console.error(error);
+        console.error('[buscarDocumentoExistente]', error);
+        var msgErro = (error && error.message) ? error.message : 'Ocorreu um erro ao buscar o documento.';
         if (typeof Swal !== 'undefined') {
             Swal.fire(Object.assign(window._swalInboxTheme(), {
                 icon: 'error',
-                title: 'Erro',
-                text: 'Ocorreu um erro ao buscar o documento.'
+                title: 'Ops...',
+                text: msgErro
             }));
+        } else if (typeof showToast === 'function') {
+            showToast(msgErro, 'error');
         } else {
-            alert('Ocorreu um erro ao buscar o documento.');
+            alert(msgErro);
         }
     }
 };

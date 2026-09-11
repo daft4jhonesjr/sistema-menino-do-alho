@@ -458,6 +458,12 @@
         return alvo;
     }
 
+    // Cooldown mínimo entre chamadas reais a /api/notificacoes/verificar_pendencias.
+    // Compartilhado entre abas via localStorage: se outra aba já consultou há menos
+    // de _NOTIF_COOLDOWN_MS, esta aba não repete a requisição ao servidor.
+    var _NOTIF_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutos
+    var _NOTIF_LS_KEY = 'menino_alho_notif_ultima_consulta';
+
     /**
      * Agenda notificações locais no Capacitor para os horários escolhidos.
      *
@@ -473,6 +479,22 @@
         if (global.localStorage.getItem('menino_alho_device_notif') !== 'true') {
             return { ok: false, motivo: 'dispositivo_inativo' };
         }
+
+        // Throttle cross-page/cross-tabs: não consulta o backend se outra aba
+        // (ou esta mesma página em reload) já consultou dentro do janela de cooldown.
+        if (!document.hidden) {
+            var ultimaConsulta = parseInt(global.localStorage.getItem(_NOTIF_LS_KEY) || '0', 10);
+            if (Date.now() - ultimaConsulta < _NOTIF_COOLDOWN_MS) {
+                console.log('[Push] verificar_pendencias ignorado — cooldown de 5 min ativo.');
+                return { ok: false, motivo: 'cooldown_ativo' };
+            }
+        } else {
+            // Aba em segundo plano: nunca consulta (Safari mata workers de abas ocultas)
+            return { ok: false, motivo: 'aba_em_background' };
+        }
+
+        // Registra timestamp antes do fetch para que abas concorrentes também bloqueiem
+        global.localStorage.setItem(_NOTIF_LS_KEY, String(Date.now()));
 
         var resp = await fetch('/api/notificacoes/verificar_pendencias', {
             credentials: 'same-origin',

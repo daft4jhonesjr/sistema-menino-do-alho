@@ -72,6 +72,33 @@ def _nivel_hierarquia(usuario):
     return 1
 
 
+def _checar_pode_gerir_admin_json(usuario_alvo):
+    """Guard atômico para rotas JSON/API: impede que usuários comuns
+    alterem Administradores (DONO, MASTER ou role='admin').
+
+    Deve ser chamado ANTES de qualquer query de atualização nas rotas API.
+    Retorna ``(ok, (response, status_code))`` — quando ``ok`` é False,
+    retorne imediatamente o response ao cliente.
+
+    Formato de erro compatível com o padrão ``{success, error}`` do frontend.
+    """
+    if usuario_alvo is None:
+        return False, (jsonify(success=False, error='Usuário não encontrado.'), 404)
+
+    nivel_alvo = _nivel_hierarquia(usuario_alvo)
+    nivel_atual = _nivel_hierarquia(current_user)
+
+    # Regra de negócio: Admin/DONO/MASTER (nível ≥ 2) só pode ser gerenciado
+    # por alguém com nível igual ou superior — jamais por um usuário comum.
+    if nivel_alvo >= 2 and nivel_atual < nivel_alvo:
+        return False, (jsonify(
+            success=False,
+            error='Acesso negado: Você não possui privilégios para alterar o perfil de um Administrador.',
+        ), 403)
+
+    return True, None
+
+
 def _checar_gestao_usuario_permitida(usuario_alvo):
     """Garante tenant + hierarquia na gestão de usuários.
 
@@ -1033,6 +1060,12 @@ def api_reset_senha_usuario(usuario_id):
     @admin_required
     def _reset():
         u = Usuario.query.get_or_404(usuario_id)
+
+        # ── Trava de hierarquia: usuário comum nunca reseta senha de Admin ──
+        ok_admin, err_admin = _checar_pode_gerir_admin_json(u)
+        if not ok_admin:
+            return err_admin
+
         ok_perm, _resp = _checar_gestao_usuario_permitida(u)
         if not ok_perm:
             return jsonify(ok=False, mensagem='Acesso negado: você não pode redefinir a senha deste usuário.'), 403
@@ -1089,6 +1122,11 @@ def api_forcar_logout_usuario(id):
     usuario = Usuario.query.get(id)
     if usuario is None:
         return jsonify(ok=False, mensagem='Usuário não encontrado.'), 404
+
+    # ── Trava de hierarquia: usuário comum nunca desconecta um Admin ──
+    ok_admin, err_admin = _checar_pode_gerir_admin_json(usuario)
+    if not ok_admin:
+        return err_admin
 
     eh_self = current_user.is_authenticated and current_user.id == usuario.id
     if not eh_self:

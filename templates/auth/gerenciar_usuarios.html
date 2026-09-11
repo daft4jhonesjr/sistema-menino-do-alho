@@ -180,7 +180,17 @@
                         {% endif %}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap">
+                        {#
+                          Hierarquia visual — regra de negócio:
+                            current_user Admin  → vê botões para qualquer linha
+                            current_user comum  → vê botões APENAS nas linhas de não-admins
+                          O backend aplica a mesma regra via _checar_pode_gerir_admin_json().
+                        #}
+                        {% set _pode_gerir = current_user.is_admin() or not u.is_admin() %}
                         <div class="flex items-center justify-center gap-2">
+
+                            {# ── Botões de ação (ocultos se o alvo for Admin e o gestor não for Admin) ── #}
+                            {% if _pode_gerir %}
                             <button type="button"
                                     onclick="abrirModalUsuario(this.dataset.id, this.dataset.username, this.dataset.role)"
                                     class="btn-editar-usuario p-1.5 rounded-full transition-colors hover:bg-gray-100 dark:hover:bg-gray-700/50 text-blue-400 hover:text-blue-300 inline-flex items-center justify-center"
@@ -190,6 +200,7 @@
                                     title="Editar">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
                             </button>
+
                             {% if u.role == 'user' %}
                             <button type="button"
                                     class="btn-permissoes p-1.5 rounded-full transition-colors hover:bg-gray-100 dark:hover:bg-gray-700/50 text-indigo-400 hover:text-indigo-300 inline-flex items-center justify-center"
@@ -200,6 +211,7 @@
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
                             </button>
                             {% endif %}
+
                             <button type="button"
                                     class="btn-reset-senha p-1.5 rounded-full transition-colors hover:bg-gray-100 dark:hover:bg-gray-700/50 text-yellow-500 hover:text-yellow-400 inline-flex items-center justify-center"
                                     data-id="{{ u.id }}"
@@ -208,6 +220,7 @@
                                     title="Resetar Senha">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
                             </button>
+
                             <button type="button"
                                     class="btn-forcar-logout p-1.5 rounded-full transition-colors hover:bg-gray-100 dark:hover:bg-gray-700/50 text-orange-400 hover:text-orange-300 inline-flex items-center justify-center"
                                     data-id="{{ u.id }}"
@@ -216,6 +229,9 @@
                                     title="Desconectar">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
                             </button>
+                            {% endif %}{# /if _pode_gerir #}
+
+                            {# Histórico: sempre visível (leitura, sem risco de modificação) #}
                             <button type="button"
                                     class="btn-historico-login p-1.5 rounded-full transition-colors hover:bg-gray-100 dark:hover:bg-gray-700/50 text-gray-400 hover:text-gray-300 inline-flex items-center justify-center"
                                     data-id="{{ u.id }}"
@@ -224,7 +240,9 @@
                                     title="Histórico">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                             </button>
-                            {% if u.id != current_user.id and u.username != 'Jhones' %}
+
+                            {# Excluir: apenas se _pode_gerir E não é a própria conta E não é Jhones #}
+                            {% if _pode_gerir and u.id != current_user.id and u.username != 'Jhones' %}
                             <form action="{{ url_for('auth.excluir_usuario', id=u.id) }}" method="POST" class="inline-flex" onsubmit="return confirm('Tem certeza que deseja EXCLUIR o usuário &quot;{{ u.username|e }}&quot;? Esta ação não pode ser desfeita.');">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                 <button type="submit"
@@ -235,9 +253,13 @@
                             </form>
                             {% elif u.id == current_user.id %}
                             <span class="text-xs text-gray-500 italic">Você</span>
+                            {% elif not _pode_gerir %}
+                            {# Linha de Admin — current_user não tem privilégio: exibe lacuna silenciosa #}
+                            <span class="text-xs text-gray-400 italic" title="Sem permissão para gerir este administrador">—</span>
                             {% else %}
                             <span class="text-xs text-gray-500 italic">Protegido</span>
                             {% endif %}
+
                         </div>
                     </td>
                 </tr>

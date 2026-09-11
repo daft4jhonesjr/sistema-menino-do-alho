@@ -623,7 +623,7 @@ def api_receber_automatico():
 
 @documentos_bp.route('/api/bot/upload', methods=['POST'])
 def api_bot_upload():
-    """Rota dedicada para o bot externo (Node.js) enviar boletos/NFes.
+    """Rota dedicada para o bot externo (Node.js / entregador.py) enviar boletos/NFes.
 
     Autenticação via header X-API-KEY validado contra a variável de ambiente
     API_BOT_TOKEN. Aceita campos: file/arquivo/documento (arquivo),
@@ -631,14 +631,35 @@ def api_bot_upload():
     """
     @limiter.limit("10 per minute")
     def _impl():
+        # ── LOG DE RASTREABILIDADE ────────────────────────────────────────────
+        current_app.logger.info(
+            "[api_bot_upload] ► Requisição POST recebida do Bot. "
+            "IP: %s | Content-Type: %s | Content-Length: %s",
+            request.remote_addr,
+            request.content_type,
+            request.content_length,
+        )
+        # ─────────────────────────────────────────────────────────────────────
+
         token_enviado = request.headers.get('X-API-KEY')
         token_verdadeiro = os.environ.get('API_BOT_TOKEN')
 
-        if not token_verdadeiro or token_enviado != token_verdadeiro:
+        if not token_verdadeiro:
+            current_app.logger.error(
+                "[api_bot_upload] ❌ API_BOT_TOKEN não está configurado no ambiente do Render!"
+            )
+            return jsonify({'erro': 'Servidor mal configurado: API_BOT_TOKEN ausente.'}), 503
+
+        if token_enviado != token_verdadeiro:
+            current_app.logger.warning(
+                "[api_bot_upload] ❌ Token inválido recebido. Token enviado: '%s...'",
+                (token_enviado or '')[:8],
+            )
             return jsonify({'erro': 'Acesso negado. Token inválido ou ausente.'}), 403
 
         arquivo = request.files.get('file') or request.files.get('arquivo') or request.files.get('documento')
         if not arquivo or not arquivo.filename:
+            current_app.logger.warning("[api_bot_upload] ❌ Nenhum arquivo recebido na requisição.")
             return jsonify({'erro': 'Nenhum arquivo enviado.'}), 400
 
         nome_arquivo = secure_filename(arquivo.filename or '')
@@ -647,12 +668,30 @@ def api_bot_upload():
 
         extensao = os.path.splitext(nome_arquivo)[1].lower()
         extensoes_permitidas = {'.pdf', '.png', '.jpg', '.jpeg'}
-        mimes_permitidos = {'application/pdf', 'image/png', 'image/jpeg'}
-        mime = (getattr(arquivo, 'mimetype', '') or '').lower()
+        # MIME types permitidos — inclui 'application/octet-stream' para compatibilidade
+        # com clientes que não definem o Content-Type explicitamente no FormData.
+        mimes_permitidos = {
+            'application/pdf',
+            'application/octet-stream',
+            'binary/octet-stream',
+            'image/png',
+            'image/jpeg',
+        }
+        mime = (getattr(arquivo, 'mimetype', '') or '').lower().strip()
+
+        current_app.logger.info(
+            "[api_bot_upload] Arquivo: '%s' | Extensão: '%s' | MIME: '%s'",
+            nome_arquivo, extensao, mime,
+        )
+
         if extensao not in extensoes_permitidas:
-            return jsonify({'erro': 'Extensão de arquivo não permitida.'}), 400
-        if mime not in mimes_permitidos:
-            return jsonify({'erro': 'Tipo MIME inválido para upload.'}), 400
+            current_app.logger.warning("[api_bot_upload] ❌ Extensão não permitida: '%s'", extensao)
+            return jsonify({'erro': f"Extensão '{extensao}' não permitida. Use .pdf"}), 400
+
+        # Se a extensão é .pdf mas o MIME veio como octet-stream, aceita (bot sem MIME explícito)
+        if mime and mime not in mimes_permitidos:
+            current_app.logger.warning("[api_bot_upload] ❌ MIME inválido: '%s'", mime)
+            return jsonify({'erro': f"Tipo MIME '{mime}' inválido para upload."}), 400
 
         tipo = (request.form.get('tipo') or request.form.get('type') or '').strip().lower()
         if tipo == 'boleto':
@@ -660,10 +699,16 @@ def api_bot_upload():
         elif tipo == 'nfe':
             subpasta = 'notas_fiscais'
         else:
+            current_app.logger.warning("[api_bot_upload] ❌ Campo 'tipo' inválido: '%s'", tipo)
             return jsonify({'erro': "Campo 'tipo' inválido. Use 'boleto' ou 'nfe'."}), 400
 
         primeiro_user = Usuario.query.first()
         user_id = primeiro_user.id if primeiro_user else None
+
+        current_app.logger.info(
+            "[api_bot_upload] Processando: arquivo='%s' | subpasta='%s' | user_id=%s",
+            nome_arquivo, subpasta, user_id,
+        )
 
         try:
             base_dir = os.path.join(current_app.root_path, 'documentos_entrada')
@@ -673,12 +718,17 @@ def api_bot_upload():
 
             arquivo.stream.seek(0)
             arquivo.save(caminho_completo)
+            current_app.logger.info("[api_bot_upload] ✅ Arquivo salvo em: %s", caminho_completo)
+
             _processar_documento(caminho_completo, user_id_forcado=user_id)
             limpar_cache_dashboard()
 
             caminho_relativo = os.path.join('documentos_entrada', subpasta, nome_arquivo).replace('\\', '/')
             doc_criado = Documento.query.filter_by(caminho_arquivo=caminho_relativo).order_by(Documento.id.desc()).first()
             if not doc_criado:
+                current_app.logger.warning(
+                    "[api_bot_upload] _processar_documento não criou registro — criando manualmente."
+                )
                 tipo_doc = 'BOLETO' if subpasta == 'boletos' else 'NOTA_FISCAL'
                 doc_criado = Documento(
                     caminho_arquivo=caminho_relativo,
@@ -690,8 +740,17 @@ def api_bot_upload():
                 )
                 db.session.add(doc_criado)
                 db.session.commit()
+                current_app.logger.info(
+                    "[api_bot_upload] ✅ Documento criado manualmente no banco. ID: %s",
+                    doc_criado.id,
+                )
+            else:
+                current_app.logger.info(
+                    "[api_bot_upload] ✅ Documento encontrado no banco. ID: %s | empresa_id: %s",
+                    doc_criado.id, doc_criado.empresa_id,
+                )
 
-            return jsonify({
+            resposta_payload = {
                 'status': 'success',
                 'mensagem': 'Arquivo recebido e processado com sucesso.',
                 'documento_id': doc_criado.id if doc_criado else None,
@@ -700,10 +759,16 @@ def api_bot_upload():
                 'cnpj': getattr(doc_criado, 'cnpj', None),
                 'data_vencimento': doc_criado.data_vencimento.strftime('%Y-%m-%d') if getattr(doc_criado, 'data_vencimento', None) else None,
                 'url_arquivo': getattr(doc_criado, 'url_arquivo', None),
-            }), 200
+            }
+            current_app.logger.info("[api_bot_upload] ✅ Upload concluído com sucesso. Resposta: %s", resposta_payload)
+            return jsonify(resposta_payload), 200
 
         except Exception as e:
             db.session.rollback()
+            current_app.logger.error(
+                "[api_bot_upload] ❌ EXCEÇÃO ao processar upload: %s",
+                str(e), exc_info=True,
+            )
             return erro_json(e, 'Falha ao processar upload do bot.', contexto='api_bot_upload')
 
     return _impl()

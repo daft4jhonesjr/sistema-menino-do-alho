@@ -1952,7 +1952,12 @@
             if (!window.MeninoAlhoPush || typeof window.MeninoAlhoPush.agendarNotificacoesLocais !== 'function') {
                 return;
             }
+            // Não agenda se a aba já estiver em segundo plano ao carregar
+            // (ex.: abertura de link em background no Safari).
+            if (document.hidden) return;
             setTimeout(function() {
+                // Segunda verificação: o usuário pode ter trocado de aba durante o delay
+                if (document.hidden) return;
                 window.MeninoAlhoPush.agendarNotificacoesLocais()
                     .catch(function(err) {
                         console.warn('[Notif] agendarNotificacoesLocais:', err);
