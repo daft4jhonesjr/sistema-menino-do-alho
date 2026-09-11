@@ -1997,25 +1997,8 @@ def _formatar_data_com_dia_semana(data_venda):
     return f"{data_venda.strftime('%d/%m/%Y')} ({dia_semana})"
 
 
-@vendas_bp.route('/logistica')
-def logistica():
-    """Roteirizador de Entregas: lista cada venda individualmente por status de entrega."""
-    filtro_status = request.args.get('status', 'PENDENTE')
-    if filtro_status not in ('PENDENTE', 'ENTREGUE'):
-        filtro_status = 'PENDENTE'
-
-    page = request.args.get('page', 1, type=int)
-    per_page = 20
-    is_ajax = (
-        request.args.get('ajax') == '1'
-        or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
-    )
-
-    vendas = query_tenant(Venda).filter_by(status_entrega=filtro_status).options(
-        joinedload(Venda.cliente),
-        joinedload(Venda.produto),
-    ).order_by(Venda.data_venda.desc()).all()
-
+def _agrupar_pedidos_logistica(vendas, ordem_log=None):
+    """Agrupa vendas em pedidos (cliente/NF/data) e aplica ordem customizada da sessão."""
     pedidos_dict = {}
     pedidos_ordenados_keys = []
 
@@ -2056,35 +2039,66 @@ def logistica():
 
     pedidos_agrupados = [pedidos_dict[k] for k in pedidos_ordenados_keys]
 
-    # Aplica ordem customizada salva via drag & drop (sessão)
-    _ordem_log = session.get('logistica_ordem') or []
+    _ordem_log = ordem_log if ordem_log is not None else (session.get('logistica_ordem') or [])
     if _ordem_log and pedidos_agrupados:
         _idx = {','.join(str(i) for i in e['ids']): n for n, e in enumerate(pedidos_agrupados)}
+
         def _sort_key(e):
             key = ','.join(str(i) for i in e['ids'])
             try:
                 return (_ordem_log.index(key), _idx.get(key, 0))
             except ValueError:
                 return (len(_ordem_log) + _idx.get(key, 0), _idx.get(key, 0))
+
         pedidos_agrupados = sorted(pedidos_agrupados, key=_sort_key)
 
+    return pedidos_agrupados
+
+
+@vendas_bp.route('/logistica')
+def logistica():
+    """Roteirizador de Entregas: lista pedidos pendentes e concluídos na mesma página."""
+    filtro_status = request.args.get('status', 'PENDENTE')
+    if filtro_status not in ('PENDENTE', 'ENTREGUE'):
+        filtro_status = 'PENDENTE'
+
+    page = request.args.get('page', 1, type=int)
+    per_page = 20
+    is_ajax = (
+        request.args.get('ajax') == '1'
+        or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    )
+
+    vendas = query_tenant(Venda).filter(
+        Venda.status_entrega.in_(('PENDENTE', 'ENTREGUE'))
+    ).options(
+        joinedload(Venda.cliente),
+        joinedload(Venda.produto),
+    ).order_by(Venda.data_venda.desc()).all()
+
+    vendas_pendentes = [
+        v for v in vendas if (v.status_entrega or 'PENDENTE') == 'PENDENTE'
+    ]
+    vendas_entregues = [
+        v for v in vendas if (v.status_entrega or '') == 'ENTREGUE'
+    ]
+
+    _ordem_log = session.get('logistica_ordem') or []
+    pedidos_pendentes = _agrupar_pedidos_logistica(vendas_pendentes, _ordem_log)
+    pedidos_entregues = _agrupar_pedidos_logistica(vendas_entregues, _ordem_log)
+
+    pedidos_agrupados = (
+        pedidos_pendentes if filtro_status == 'PENDENTE' else pedidos_entregues
+    )
     total_pedidos = len(pedidos_agrupados)
     start_idx = (page - 1) * per_page
     end_idx = start_idx + per_page
     entregas = pedidos_agrupados[start_idx:end_idx]
     has_next = end_idx < total_pedidos
 
-    # Volume a carregar: soma de quantidades ainda PENDENTES (sempre, independente da aba).
-    if filtro_status == 'PENDENTE':
-        total_caixas_pendentes = sum(int(getattr(v, 'quantidade_venda', 0) or 0) for v in vendas)
-    else:
-        total_caixas_pendentes = int(
-            query_tenant(Venda)
-            .with_entities(func.coalesce(func.sum(Venda.quantidade_venda), 0))
-            .filter(Venda.status_entrega == 'PENDENTE')
-            .scalar()
-            or 0
-        )
+    total_caixas_pendentes = sum(
+        int(getattr(v, 'quantidade_venda', 0) or 0) for v in vendas_pendentes
+    )
 
     if is_ajax:
         return jsonify({
@@ -2095,6 +2109,11 @@ def logistica():
             'status': filtro_status,
             'total_caixas_pendentes': total_caixas_pendentes,
         })
+
+    entregas_pendentes = pedidos_pendentes[:per_page]
+    entregas_concluidas = pedidos_entregues[:per_page]
+    has_next_pendentes = len(pedidos_pendentes) > per_page
+    has_next_entregues = len(pedidos_entregues) > per_page
 
     # Resumo da semana: entregas concluídas de segunda a domingo (ordem crescente).
     hoje = get_hoje_brasil()
@@ -2153,9 +2172,13 @@ def logistica():
 
     return render_template(
         'logistica.html',
-        entregas=entregas,
+        entregas=entregas_pendentes,
+        entregas_pendentes=entregas_pendentes,
+        entregas_concluidas=entregas_concluidas,
         filtro_status=filtro_status,
-        has_next_logistica=has_next,
+        has_next_logistica=has_next_pendentes,
+        has_next_pendentes=has_next_pendentes,
+        has_next_entregues=has_next_entregues,
         total_caixas_pendentes=total_caixas_pendentes,
         entregues_semana=entregues_semana,
         total_semana=total_semana,
@@ -2185,7 +2208,6 @@ def toggle_entrega(venda_id):
     if not _e_admin_tenant() and not _usuario_pode_gerenciar_venda(venda_ref):
         flash('Você não tem permissão para alterar o status desta venda.', 'error')
         return redirect(url_for('vendas.logistica'))
-    status = request.form.get('status', request.args.get('status', 'PENDENTE'))
     try:
         novo_status = 'ENTREGUE' if (venda_ref.status_entrega or 'PENDENTE') == 'PENDENTE' else 'PENDENTE'
         query_tenant(Venda).filter(Venda.id.in_(ids)).update({'status_entrega': novo_status}, synchronize_session=False)
@@ -2194,7 +2216,7 @@ def toggle_entrega(venda_id):
     except Exception:
         db.session.rollback()
         flash('Erro ao atualizar status de entrega. Tente novamente.', 'error')
-    return redirect(url_for('vendas.logistica', status=status))
+    return redirect(url_for('vendas.logistica'))
 
 
 @vendas_bp.route('/vendas/<int:id>/marcar_entregue', methods=['POST'])

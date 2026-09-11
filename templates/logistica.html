@@ -9,6 +9,142 @@
 {% endblock %}
 
 {% block content %}
+{% macro bloco_lista_cards(entregas, status, aba_id, has_next) %}
+{# status: PENDENTE|ENTREGUE  ·  aba_id: pendentes|entregues #}
+<div class="container-lista-logistica bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-hidden" data-aba="{{ aba_id }}">
+    <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead class="bg-gray-50 dark:bg-gray-900/50">
+                <tr>
+                    <th class="px-4 py-3 text-left w-12">
+                        <input type="checkbox" id="check-all-entregas-{{ aba_id }}" class="check-all-entregas rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" title="Selecionar todos">
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Data</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cliente</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Endereço</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Produto</th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Total</th>
+                    <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Ações</th>
+                </tr>
+            </thead>
+            <tbody id="tbody-entregas-{{ aba_id }}" class="tbody-entregas bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                {% for e in entregas %}
+                <tr class="hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition ios-draggable-item" data-id="{{ e.ids|join(',') }}">
+                    <td class="px-4 py-4">
+                        <input type="checkbox" class="check-entrega rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" value="{{ e.ids[0] }}" data-ids="{{ e.ids|join(',') }}" data-caixas="{{ e.quantidade or 0 }}" data-endereco="{{ e.endereco }}" data-cliente="{{ e.cliente_nome }}" data-produtos="{{ e.produtos|join(' || ') }}" data-total="{{ e.total | formato_moeda }}">
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">{{ e.data }}</td>
+                    <td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">
+                        <span class="inline-flex items-center gap-2 flex-wrap">
+                            <span class="badge-parada hidden inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold bg-blue-600 text-white shadow-sm"></span>
+                            <span class="nome-cliente-entrega">{{ e.cliente_nome }}</span>
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{{ e.endereco or '—' }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
+                        <ul class="space-y-1">
+                            {% for item_produto in e.produtos %}
+                            <li>{{ item_produto }}</li>
+                            {% endfor %}
+                        </ul>
+                    </td>
+                    <td class="px-6 py-4 text-sm font-semibold text-emerald-600 dark:text-emerald-400 text-right">{{ e.total | formato_moeda }}</td>
+                    <td class="px-6 py-4 text-center">
+                        <form method="post" action="{{ url_for('vendas.toggle_entrega', venda_id=e.ids[0], status=status) }}" class="inline form-swal-confirm"
+                              data-title="{% if status == 'PENDENTE' %}Confirmar Entrega{% else %}Desfazer Entrega{% endif %}"
+                              data-message="{% if status == 'PENDENTE' %}Deseja marcar este pedido como ENTREGUE?{% else %}Deseja reverter este pedido para PENDENTE?{% endif %}"
+                              data-confirm-text="{% if status == 'PENDENTE' %}Sim, marcar como entregue{% else %}Sim, reverter{% endif %}"
+                              data-cliente="{{ e.cliente_nome }}"
+                              data-caixas="{{ e.quantidade or 0 }}"
+                              data-ids="{{ e.ids|join(',') }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                            <input type="hidden" name="ids" value="{{ e.ids|join(',') }}"/>
+                            {% if status == 'PENDENTE' %}
+                            <button type="submit" class="text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 text-sm font-medium">Marcar como Entregue</button>
+                            {% else %}
+                            <button type="submit" class="text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300 text-sm font-medium">Reverter</button>
+                            {% endif %}
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr id="row-sem-entregas-{{ aba_id }}" class="row-sem-entregas">
+                    <td colspan="7" class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                        {% if status == 'PENDENTE' %}
+                        Nenhum pedido pendente de entrega.
+                        {% else %}
+                        Nenhum pedido entregue.
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="container-cards-logistica hidden" data-aba="{{ aba_id }}">
+    {% if entregas %}
+    <div class="mb-3 flex items-center gap-2 px-1">
+        <input type="checkbox" id="check-all-entregas-cards-{{ aba_id }}" class="check-all-entregas-cards rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" title="Selecionar todos">
+        <label for="check-all-entregas-cards-{{ aba_id }}" class="text-sm text-gray-600 dark:text-gray-400 cursor-pointer">Selecionar todos</label>
+    </div>
+    {% endif %}
+    <div id="grid-cards-entregas-{{ aba_id }}" class="grid-cards-entregas grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {% for e in entregas %}
+        <div class="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-4 shadow-sm dark:shadow-lg flex flex-col gap-3 ios-draggable-item" data-id="{{ e.ids|join(',') }}" data-ids="{{ e.ids|join(',') }}">
+            <div class="flex items-center justify-between gap-3">
+                <input type="checkbox" class="check-entrega check-entrega-card rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" value="{{ e.ids[0] }}" data-ids="{{ e.ids|join(',') }}" data-caixas="{{ e.quantidade or 0 }}" data-endereco="{{ e.endereco }}" data-cliente="{{ e.cliente_nome }}" data-produtos="{{ e.produtos|join(' || ') }}" data-total="{{ e.total | formato_moeda }}">
+                <span class="text-xs text-gray-500 dark:text-gray-400">{{ e.data }}</span>
+            </div>
+            <div class="flex-1 min-w-0 space-y-2">
+                <h3 class="font-bold text-lg text-gray-900 dark:text-white truncate flex items-center gap-2" title="{{ e.cliente_nome }}">
+                    <span class="badge-parada hidden inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold bg-blue-600 text-white shadow-sm shrink-0"></span>
+                    <span class="nome-cliente-entrega truncate">{{ e.cliente_nome }}</span>
+                </h3>
+                <p class="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
+                    <span class="text-gray-400 dark:text-gray-500">📍</span> {{ e.endereco or 'Endereço não informado' }}
+                </p>
+                <ul class="space-y-1 text-sm text-gray-700 dark:text-gray-300 border-t border-b border-gray-100 dark:border-slate-700 py-2">
+                    {% for item_produto in e.produtos %}
+                    <li class="truncate">{{ item_produto }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            <div class="flex items-center justify-between gap-3 pt-1">
+                <span class="text-base font-bold text-emerald-600 dark:text-emerald-400">{{ e.total | formato_moeda }}</span>
+                <form method="post" action="{{ url_for('vendas.toggle_entrega', venda_id=e.ids[0], status=status) }}" class="inline form-swal-confirm"
+                      data-title="{% if status == 'PENDENTE' %}Confirmar Entrega{% else %}Desfazer Entrega{% endif %}"
+                      data-message="{% if status == 'PENDENTE' %}Deseja marcar este pedido como ENTREGUE?{% else %}Deseja reverter este pedido para PENDENTE?{% endif %}"
+                      data-confirm-text="{% if status == 'PENDENTE' %}Sim, marcar como entregue{% else %}Sim, reverter{% endif %}"
+                      data-cliente="{{ e.cliente_nome }}"
+                      data-caixas="{{ e.quantidade or 0 }}"
+                      data-ids="{{ e.ids|join(',') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <input type="hidden" name="ids" value="{{ e.ids|join(',') }}"/>
+                    {% if status == 'PENDENTE' %}
+                    <button type="submit" class="px-3 py-1.5 rounded-lg text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors">Marcar como Entregue</button>
+                    {% else %}
+                    <button type="submit" class="px-3 py-1.5 rounded-lg text-sm font-semibold bg-amber-600 hover:bg-amber-700 text-white transition-colors">Reverter</button>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+        {% else %}
+        <div id="card-sem-entregas-{{ aba_id }}" class="card-sem-entregas col-span-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-12 text-center text-gray-500 dark:text-gray-400">
+            {% if status == 'PENDENTE' %}
+            Nenhum pedido pendente de entrega.
+            {% else %}
+            Nenhum pedido entregue.
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<div id="sentinela-loading-{{ aba_id }}" class="sentinela-loading text-center p-4 text-sm text-gray-500 dark:text-gray-400 {% if not has_next %}hidden{% endif %}">⏳ Carregando mais entregas...</div>
+{% endmacro %}
+
 <div class="w-full px-4 sm:px-6 lg:px-8 pb-6">
 
 <div class="mb-6 flex flex-col md:flex-row md:justify-between md:items-end gap-4">
@@ -25,8 +161,8 @@
     <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
 
         <div class="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1 border border-gray-200 dark:border-gray-700 w-full sm:w-auto justify-center">
-            <a href="{{ url_for('vendas.logistica', status='PENDENTE') }}" class="flex-1 text-center px-4 py-2 rounded-md text-sm font-medium transition-colors {% if filtro_status == 'PENDENTE' %}bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm{% else %}text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200{% endif %}">Pendentes</a>
-            <a href="{{ url_for('vendas.logistica', status='ENTREGUE') }}" class="flex-1 text-center px-4 py-2 rounded-md text-sm font-medium transition-colors {% if filtro_status == 'ENTREGUE' %}bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm{% else %}text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200{% endif %}">Já Entregues</a>
+            <button type="button" id="btn-aba-pendentes" onclick="alternarAbaLogistica('pendentes')" class="flex-1 text-center px-4 py-2 rounded-md text-sm font-medium transition-colors {% if filtro_status != 'ENTREGUE' %}bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm{% else %}text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200{% endif %}">Pendentes</button>
+            <button type="button" id="btn-aba-entregues" onclick="alternarAbaLogistica('entregues')" class="flex-1 text-center px-4 py-2 rounded-md text-sm font-medium transition-colors {% if filtro_status == 'ENTREGUE' %}bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm{% else %}text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200{% endif %}">Já Entregues</button>
         </div>
 
         <div class="flex items-center bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md p-1 gap-1 self-center" title="Alternar visualização">
@@ -39,7 +175,7 @@
         </div>
 
         <div id="barra-acoes-lote" class="hidden flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto mt-1 sm:mt-0">
-            {% if filtro_status == 'PENDENTE' %}
+            <div id="acoes-aba-pendentes" class="{% if filtro_status == 'ENTREGUE' %}hidden{% else %}contents{% endif %}">
             <button type="button" id="btn-entregar-selecionados" onclick="atualizarStatusMassa('ENTREGUE')" class="hidden w-full sm:w-auto justify-center bg-emerald-100 hover:bg-emerald-200 text-emerald-800 dark:bg-emerald-900/40 dark:hover:bg-emerald-900/60 dark:text-emerald-300 px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm items-center gap-2 transition-colors">
                 <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
                 <span class="whitespace-nowrap">Entregar Selecionados</span>
@@ -56,12 +192,13 @@
                 <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
                 <span class="whitespace-nowrap">Gerar Remanejo</span>
             </button>
-            {% else %}
+            </div>
+            <div id="acoes-aba-entregues" class="{% if filtro_status == 'ENTREGUE' %}contents{% else %}hidden{% endif %}">
             <button type="button" onclick="atualizarStatusMassa('PENDENTE')" class="w-full sm:w-auto justify-center bg-gray-200 hover:bg-gray-300 text-gray-800 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200 px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center gap-2 transition-colors">
                 <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
                 <span class="whitespace-nowrap">Desfazer Selecionados</span>
             </button>
-            {% endif %}
+            </div>
         </div>
     </div>
 </div>
@@ -86,138 +223,13 @@
     </div>
 </div>
 
-<div id="container-lista" class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-hidden">
-    <div class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-            <thead class="bg-gray-50 dark:bg-gray-900/50">
-                <tr>
-                    <th class="px-4 py-3 text-left w-12">
-                        <input type="checkbox" id="check-all-entregas" class="rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" title="Selecionar todos">
-                    </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Data</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cliente</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Endereço</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Produto</th>
-                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Total</th>
-                    <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Ações</th>
-                </tr>
-            </thead>
-            <tbody id="tbody-entregas" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {% for e in entregas %}
-                <tr class="hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition ios-draggable-item" data-id="{{ e.ids|join(',') }}">
-                    <td class="px-4 py-4">
-                        <input type="checkbox" class="check-entrega rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" value="{{ e.ids[0] }}" data-ids="{{ e.ids|join(',') }}" data-caixas="{{ e.quantidade or 0 }}" data-endereco="{{ e.endereco }}" data-cliente="{{ e.cliente_nome }}" data-produtos="{{ e.produtos|join(' || ') }}" data-total="{{ e.total | formato_moeda }}">
-                    </td>
-                    <td class="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">{{ e.data }}</td>
-                    <td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">
-                        <span class="inline-flex items-center gap-2 flex-wrap">
-                            <span class="badge-parada hidden inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold bg-blue-600 text-white shadow-sm"></span>
-                            <span class="nome-cliente-entrega">{{ e.cliente_nome }}</span>
-                        </span>
-                    </td>
-                    <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{{ e.endereco or '—' }}</td>
-                    <td class="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
-                        <ul class="space-y-1">
-                            {% for item_produto in e.produtos %}
-                            <li>{{ item_produto }}</li>
-                            {% endfor %}
-                        </ul>
-                    </td>
-                    <td class="px-6 py-4 text-sm font-semibold text-emerald-600 dark:text-emerald-400 text-right">{{ e.total | formato_moeda }}</td>
-                    <td class="px-6 py-4 text-center">
-                        <form method="post" action="{{ url_for('vendas.toggle_entrega', venda_id=e.ids[0], status=filtro_status) }}" class="inline form-swal-confirm"
-                              data-title="{% if filtro_status == 'PENDENTE' %}Confirmar Entrega{% else %}Desfazer Entrega{% endif %}"
-                              data-message="{% if filtro_status == 'PENDENTE' %}Deseja marcar este pedido como ENTREGUE?{% else %}Deseja reverter este pedido para PENDENTE?{% endif %}"
-                              data-confirm-text="{% if filtro_status == 'PENDENTE' %}Sim, marcar como entregue{% else %}Sim, reverter{% endif %}"
-                              data-cliente="{{ e.cliente_nome }}"
-                              data-caixas="{{ e.quantidade or 0 }}"
-                              data-ids="{{ e.ids|join(',') }}">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                            <input type="hidden" name="ids" value="{{ e.ids|join(',') }}"/>
-                            {% if filtro_status == 'PENDENTE' %}
-                            <button type="submit" class="text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 text-sm font-medium">Marcar como Entregue</button>
-                            {% else %}
-                            <button type="submit" class="text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300 text-sm font-medium">Reverter</button>
-                            {% endif %}
-                        </form>
-                    </td>
-                </tr>
-                {% else %}
-                <tr id="row-sem-entregas">
-                    <td colspan="7" class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
-                        {% if filtro_status == 'PENDENTE' %}
-                        Nenhum pedido pendente de entrega.
-                        {% else %}
-                        Nenhum pedido entregue.
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+<div id="conteudo-pendentes" class="{% if filtro_status == 'ENTREGUE' %}hidden{% endif %}">
+    {{ bloco_lista_cards(entregas_pendentes, 'PENDENTE', 'pendentes', has_next_pendentes) }}
 </div>
 
-<div id="container-cards" class="hidden">
-    {% if entregas %}
-    <div class="mb-3 flex items-center gap-2 px-1">
-        <input type="checkbox" id="check-all-entregas-cards" class="rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" title="Selecionar todos">
-        <label for="check-all-entregas-cards" class="text-sm text-gray-600 dark:text-gray-400 cursor-pointer">Selecionar todos</label>
-    </div>
-    {% endif %}
-    <div id="grid-cards-entregas" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {% for e in entregas %}
-        <div class="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-4 shadow-sm dark:shadow-lg flex flex-col gap-3 ios-draggable-item" data-id="{{ e.ids|join(',') }}" data-ids="{{ e.ids|join(',') }}">
-            <div class="flex items-center justify-between gap-3">
-                <input type="checkbox" class="check-entrega check-entrega-card rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" value="{{ e.ids[0] }}" data-ids="{{ e.ids|join(',') }}" data-caixas="{{ e.quantidade or 0 }}" data-endereco="{{ e.endereco }}" data-cliente="{{ e.cliente_nome }}" data-produtos="{{ e.produtos|join(' || ') }}" data-total="{{ e.total | formato_moeda }}">
-                <span class="text-xs text-gray-500 dark:text-gray-400">{{ e.data }}</span>
-            </div>
-            <div class="flex-1 min-w-0 space-y-2">
-                <h3 class="font-bold text-lg text-gray-900 dark:text-white truncate flex items-center gap-2" title="{{ e.cliente_nome }}">
-                    <span class="badge-parada hidden inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold bg-blue-600 text-white shadow-sm shrink-0"></span>
-                    <span class="nome-cliente-entrega truncate">{{ e.cliente_nome }}</span>
-                </h3>
-                <p class="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
-                    <span class="text-gray-400 dark:text-gray-500">📍</span> {{ e.endereco or 'Endereço não informado' }}
-                </p>
-                <ul class="space-y-1 text-sm text-gray-700 dark:text-gray-300 border-t border-b border-gray-100 dark:border-slate-700 py-2">
-                    {% for item_produto in e.produtos %}
-                    <li class="truncate">{{ item_produto }}</li>
-                    {% endfor %}
-                </ul>
-            </div>
-            <div class="flex items-center justify-between gap-3 pt-1">
-                <span class="text-base font-bold text-emerald-600 dark:text-emerald-400">{{ e.total | formato_moeda }}</span>
-                <form method="post" action="{{ url_for('vendas.toggle_entrega', venda_id=e.ids[0], status=filtro_status) }}" class="inline form-swal-confirm"
-                      data-title="{% if filtro_status == 'PENDENTE' %}Confirmar Entrega{% else %}Desfazer Entrega{% endif %}"
-                      data-message="{% if filtro_status == 'PENDENTE' %}Deseja marcar este pedido como ENTREGUE?{% else %}Deseja reverter este pedido para PENDENTE?{% endif %}"
-                      data-confirm-text="{% if filtro_status == 'PENDENTE' %}Sim, marcar como entregue{% else %}Sim, reverter{% endif %}"
-                      data-cliente="{{ e.cliente_nome }}"
-                      data-caixas="{{ e.quantidade or 0 }}"
-                      data-ids="{{ e.ids|join(',') }}">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                    <input type="hidden" name="ids" value="{{ e.ids|join(',') }}"/>
-                    {% if filtro_status == 'PENDENTE' %}
-                    <button type="submit" class="px-3 py-1.5 rounded-lg text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors">Marcar como Entregue</button>
-                    {% else %}
-                    <button type="submit" class="px-3 py-1.5 rounded-lg text-sm font-semibold bg-amber-600 hover:bg-amber-700 text-white transition-colors">Reverter</button>
-                    {% endif %}
-                </form>
-            </div>
-        </div>
-        {% else %}
-        <div id="card-sem-entregas" class="col-span-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-12 text-center text-gray-500 dark:text-gray-400">
-            {% if filtro_status == 'PENDENTE' %}
-            Nenhum pedido pendente de entrega.
-            {% else %}
-            Nenhum pedido entregue.
-            {% endif %}
-        </div>
-        {% endfor %}
-    </div>
+<div id="conteudo-entregues" class="{% if filtro_status == 'ENTREGUE' %}{% else %}hidden{% endif %}">
+    {{ bloco_lista_cards(entregas_concluidas, 'ENTREGUE', 'entregues', has_next_entregues) }}
 </div>
-
-<div id="sentinela-loading" class="text-center p-4 text-sm text-gray-500 dark:text-gray-400 {% if not has_next_logistica %}hidden{% endif %}">⏳ Carregando mais entregas...</div>
 
 <hr class="my-8 border-gray-200 dark:border-gray-700">
 
@@ -281,12 +293,98 @@
 </div><!-- /wrapper px-4 -->
 
 <script>
+document.addEventListener('DOMContentLoaded', () => {
+    if (window.location.search.includes('status=')) {
+        const urlLimpa = window.location.protocol + "//" + window.location.host + window.location.pathname;
+        window.history.replaceState({path: urlLimpa}, '', urlLimpa);
+    }
+});
+
+window.__LOGISTICA_ABA__ = '{{ "entregues" if filtro_status == "ENTREGUE" else "pendentes" }}';
+
+var _ABA_ATIVA_CLS = ['bg-white', 'dark:bg-gray-700', 'text-gray-900', 'dark:text-gray-100', 'shadow-sm'];
+var _ABA_INATIVA_CLS = ['text-gray-500', 'dark:text-gray-400', 'hover:text-gray-700', 'dark:hover:text-gray-200'];
+
+function _logisticaRootAba(aba) {
+    aba = aba || window.__LOGISTICA_ABA__ || 'pendentes';
+    return document.getElementById('conteudo-' + aba) || document;
+}
+
+function _statusDaAba(aba) {
+    return (aba || window.__LOGISTICA_ABA__) === 'entregues' ? 'ENTREGUE' : 'PENDENTE';
+}
+
+function alternarAbaLogistica(aba) {
+    if (aba !== 'pendentes' && aba !== 'entregues') aba = 'pendentes';
+
+    var divPendentes = document.getElementById('conteudo-pendentes');
+    var divEntregues = document.getElementById('conteudo-entregues');
+    var btnPendentes = document.getElementById('btn-aba-pendentes');
+    var btnEntregues = document.getElementById('btn-aba-entregues');
+    var acoesPendentes = document.getElementById('acoes-aba-pendentes');
+    var acoesEntregues = document.getElementById('acoes-aba-entregues');
+
+    if (divPendentes) divPendentes.classList.add('hidden');
+    if (divEntregues) divEntregues.classList.add('hidden');
+
+    var alvo = aba === 'entregues' ? divEntregues : divPendentes;
+    if (alvo) alvo.classList.remove('hidden');
+
+    function ativarBtn(btn) {
+        if (!btn) return;
+        _ABA_INATIVA_CLS.forEach(function(c) { btn.classList.remove(c); });
+        _ABA_ATIVA_CLS.forEach(function(c) { btn.classList.add(c); });
+    }
+    function desativarBtn(btn) {
+        if (!btn) return;
+        _ABA_ATIVA_CLS.forEach(function(c) { btn.classList.remove(c); });
+        _ABA_INATIVA_CLS.forEach(function(c) { btn.classList.add(c); });
+    }
+
+    if (aba === 'entregues') {
+        ativarBtn(btnEntregues);
+        desativarBtn(btnPendentes);
+        if (acoesPendentes) {
+            acoesPendentes.classList.add('hidden');
+            acoesPendentes.classList.remove('contents');
+        }
+        if (acoesEntregues) {
+            acoesEntregues.classList.remove('hidden');
+            acoesEntregues.classList.add('contents');
+        }
+    } else {
+        ativarBtn(btnPendentes);
+        desativarBtn(btnEntregues);
+        if (acoesEntregues) {
+            acoesEntregues.classList.add('hidden');
+            acoesEntregues.classList.remove('contents');
+        }
+        if (acoesPendentes) {
+            acoesPendentes.classList.remove('hidden');
+            acoesPendentes.classList.add('contents');
+        }
+    }
+
+    window.__LOGISTICA_ABA__ = aba;
+    window.__LOGISTICA_FILTRO_STATUS__ = _statusDaAba(aba);
+
+    document.querySelectorAll('.check-entrega').forEach(function(cb) { cb.checked = false; });
+    document.querySelectorAll('.check-all-entregas, .check-all-entregas-cards').forEach(function(cb) { cb.checked = false; });
+
+    if (typeof verificarExibicaoBotaoEntregar === 'function') verificarExibicaoBotaoEntregar();
+    if (typeof atualizarVisibilidadeBarraAcoes === 'function') atualizarVisibilidadeBarraAcoes();
+    if (typeof window.__logisticaRebindScroll === 'function') window.__logisticaRebindScroll();
+
+    var viewSalva = localStorage.getItem('visualizacao_logistica') || 'lista';
+    mudarVisualizacaoLogistica(viewSalva);
+}
+
 function mudarVisualizacaoLogistica(tipo) {
-    var containerLista = document.getElementById('container-lista');
-    var containerCards = document.getElementById('container-cards');
     var btnLista = document.getElementById('btn-view-lista');
     var btnCards = document.getElementById('btn-view-cards');
-    if (!containerLista || !containerCards) return;
+    var listas = document.querySelectorAll('.container-lista-logistica');
+    var cards = document.querySelectorAll('.container-cards-logistica');
+    if (!listas.length || !cards.length) return;
 
     var activeClasses = ['bg-white', 'dark:bg-gray-700', 'text-emerald-600', 'dark:text-emerald-400', 'shadow'];
     var inactiveClasses = ['text-gray-500', 'dark:text-gray-400'];
@@ -303,13 +401,13 @@ function mudarVisualizacaoLogistica(tipo) {
     }
 
     if (tipo === 'cards') {
-        containerLista.classList.add('hidden');
-        containerCards.classList.remove('hidden');
+        listas.forEach(function(el) { el.classList.add('hidden'); });
+        cards.forEach(function(el) { el.classList.remove('hidden'); });
         ativar(btnCards);
         desativar(btnLista);
     } else {
-        containerCards.classList.add('hidden');
-        containerLista.classList.remove('hidden');
+        cards.forEach(function(el) { el.classList.add('hidden'); });
+        listas.forEach(function(el) { el.classList.remove('hidden'); });
         ativar(btnLista);
         desativar(btnCards);
         tipo = 'lista';
@@ -320,36 +418,80 @@ function mudarVisualizacaoLogistica(tipo) {
 document.addEventListener('DOMContentLoaded', function() {
     var salva = localStorage.getItem('visualizacao_logistica') || 'lista';
     mudarVisualizacaoLogistica(salva);
+    if (window.__LOGISTICA_ABA__ === 'entregues') {
+        alternarAbaLogistica('entregues');
+    }
 });
 
 (function() {
-    var filtroStatusAtual = '{{ filtro_status }}';
-    var paginaAtual = 1;
-    var carregando = false;
-    var fimDasEntregas = {{ 'false' if has_next_logistica else 'true' }};
+    var estadoPorAba = {
+        pendentes: {
+            status: 'PENDENTE',
+            pagina: 1,
+            fim: {{ 'false' if has_next_pendentes else 'true' }},
+            carregando: false
+        },
+        entregues: {
+            status: 'ENTREGUE',
+            pagina: 1,
+            fim: {{ 'false' if has_next_entregues else 'true' }},
+            carregando: false
+        }
+    };
+    window.__LOGISTICA_FILTRO_STATUS__ = _statusDaAba(window.__LOGISTICA_ABA__);
     var csrfToken = '{{ csrf_token() }}';
     var totalCaixasPendentes = {{ total_caixas_pendentes or 0 }};
-    var tbodyEntregas = document.getElementById('tbody-entregas');
-    var gridCards = document.getElementById('grid-cards-entregas');
-    var sentinela = document.getElementById('sentinela-loading');
-    var checkAll = document.getElementById('check-all-entregas');
-    var checkAllCards = document.getElementById('check-all-entregas-cards');
+    var observer = null;
+
+    function abaAtual() {
+        return window.__LOGISTICA_ABA__ || 'pendentes';
+    }
+
+    function estadoAtual() {
+        return estadoPorAba[abaAtual()] || estadoPorAba.pendentes;
+    }
+
+    function tbodyDaAba(aba) {
+        return document.getElementById('tbody-entregas-' + (aba || abaAtual()));
+    }
+
+    function gridDaAba(aba) {
+        return document.getElementById('grid-cards-entregas-' + (aba || abaAtual()));
+    }
+
+    function sentinelaDaAba(aba) {
+        return document.getElementById('sentinela-loading-' + (aba || abaAtual()));
+    }
+
+    function filtroStatusAtual() {
+        return estadoAtual().status;
+    }
+
+    function rootChecks(origem) {
+        if (origem) {
+            var root = origem.closest('#conteudo-pendentes, #conteudo-entregues');
+            if (root) return root;
+        }
+        return _logisticaRootAba();
+    }
 
     function sincronizarChecksPorIds(origem) {
         var ids = origem.getAttribute('data-ids') || origem.value || '';
-        document.querySelectorAll('.check-entrega').forEach(function(cb) {
+        rootChecks(origem).querySelectorAll('.check-entrega').forEach(function(cb) {
             if (cb === origem) return;
             var cbIds = cb.getAttribute('data-ids') || cb.value || '';
             if (cbIds === ids) cb.checked = origem.checked;
         });
     }
 
-    function aplicarSelecaoTodos(marcado) {
-        document.querySelectorAll('.check-entrega').forEach(function(cb) {
+    function aplicarSelecaoTodos(marcado, origem) {
+        var root = rootChecks(origem);
+        root.querySelectorAll('.check-entrega').forEach(function(cb) {
             cb.checked = marcado;
         });
-        if (checkAll) checkAll.checked = marcado;
-        if (checkAllCards) checkAllCards.checked = marcado;
+        root.querySelectorAll('.check-all-entregas, .check-all-entregas-cards').forEach(function(cb) {
+            cb.checked = marcado;
+        });
         if (typeof verificarExibicaoBotaoEntregar === 'function') {
             verificarExibicaoBotaoEntregar();
         }
@@ -358,20 +500,15 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    if (checkAll) {
-        checkAll.addEventListener('change', function() {
-            aplicarSelecaoTodos(checkAll.checked);
-        });
-    }
-    if (checkAllCards) {
-        checkAllCards.addEventListener('change', function() {
-            aplicarSelecaoTodos(checkAllCards.checked);
-        });
-    }
-
     document.addEventListener('change', function(e) {
-        if (!e.target || !e.target.classList || !e.target.classList.contains('check-entrega')) return;
-        sincronizarChecksPorIds(e.target);
+        var t = e.target;
+        if (!t || !t.classList) return;
+        if (t.classList.contains('check-all-entregas') || t.classList.contains('check-all-entregas-cards')) {
+            aplicarSelecaoTodos(t.checked, t);
+            return;
+        }
+        if (!t.classList.contains('check-entrega')) return;
+        sincronizarChecksPorIds(t);
         if (typeof verificarExibicaoBotaoEntregar === 'function') {
             verificarExibicaoBotaoEntregar();
         }
@@ -382,10 +519,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     window.__LOGISTICA_TOTAL_CAIXAS__ = totalCaixasPendentes;
 
-    function esconderSentinela() {
-        fimDasEntregas = true;
+    function esconderSentinela(aba) {
+        var est = estadoPorAba[aba || abaAtual()];
+        if (est) est.fim = true;
+        var sentinela = sentinelaDaAba(aba);
         if (sentinela) sentinela.classList.add('hidden');
-        if (observer) observer.disconnect();
     }
 
     function escapeHtml(str) {
@@ -417,19 +555,20 @@ document.addEventListener('DOMContentLoaded', function() {
         return 'class="' + cls + '" value="' + escapeHtml(vendaRef) + '" data-ids="' + escapeHtml(idsRaw) + '" data-caixas="' + escapeHtml(caixas) + '" data-endereco="' + escapeHtml(e.endereco || '') + '" data-cliente="' + escapeHtml(e.cliente_nome || '') + '" data-produtos="' + escapeHtml(produtosAttr) + '" data-total="' + escapeHtml(formatMoeda(e.total)) + '"';
     }
 
-    function criarLinhaEntrega(e) {
+    function criarLinhaEntrega(e, status) {
+        status = status || filtroStatusAtual();
         var tr = document.createElement('tr');
         tr.className = 'hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition ios-draggable-item';
 
-        var acaoTexto = filtroStatusAtual === 'PENDENTE' ? 'Marcar como Entregue' : 'Reverter';
-        var acaoClasse = filtroStatusAtual === 'PENDENTE'
+        var acaoTexto = status === 'PENDENTE' ? 'Marcar como Entregue' : 'Reverter';
+        var acaoClasse = status === 'PENDENTE'
             ? 'text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300'
             : 'text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300';
-        var confirmarTitle = filtroStatusAtual === 'PENDENTE' ? 'Confirmar Entrega' : 'Desfazer Entrega';
-        var confirmarMsg   = filtroStatusAtual === 'PENDENTE'
+        var confirmarTitle = status === 'PENDENTE' ? 'Confirmar Entrega' : 'Desfazer Entrega';
+        var confirmarMsg   = status === 'PENDENTE'
             ? 'Deseja marcar este pedido como ENTREGUE?'
             : 'Deseja reverter este pedido para PENDENTE?';
-        var confirmarBtnTxt = filtroStatusAtual === 'PENDENTE' ? 'Sim, marcar como entregue' : 'Sim, reverter';
+        var confirmarBtnTxt = status === 'PENDENTE' ? 'Sim, marcar como entregue' : 'Sim, reverter';
 
         var idsLista = Array.isArray(e.ids) ? e.ids : [];
         var idsRaw = idsLista.map(function(v) { return String(v); }).join(',');
@@ -454,7 +593,7 @@ document.addEventListener('DOMContentLoaded', function() {
             + '<td class="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">' + produtosHtml + '</td>'
             + '<td class="px-6 py-4 text-sm font-semibold text-emerald-600 dark:text-emerald-400 text-right">' + formatMoeda(e.total) + '</td>'
             + '<td class="px-6 py-4 text-center">'
-            + '  <form method="post" action="/logistica/toggle/' + encodeURIComponent(vendaRef) + '?status=' + encodeURIComponent(filtroStatusAtual) + '" class="inline form-swal-confirm" data-title="' + escapeHtml(confirmarTitle) + '" data-message="' + escapeHtml(confirmarMsg) + '" data-confirm-text="' + escapeHtml(confirmarBtnTxt) + '" data-cliente="' + escapeHtml(e.cliente_nome || '') + '" data-caixas="' + escapeHtml(caixasPedido) + '" data-ids="' + escapeHtml(idsRaw) + '">'
+            + '  <form method="post" action="/logistica/toggle/' + encodeURIComponent(vendaRef) + '?status=' + encodeURIComponent(status) + '" class="inline form-swal-confirm" data-title="' + escapeHtml(confirmarTitle) + '" data-message="' + escapeHtml(confirmarMsg) + '" data-confirm-text="' + escapeHtml(confirmarBtnTxt) + '" data-cliente="' + escapeHtml(e.cliente_nome || '') + '" data-caixas="' + escapeHtml(caixasPedido) + '" data-ids="' + escapeHtml(idsRaw) + '">'
             + '    <input type="hidden" name="csrf_token" value="' + escapeHtml(csrfToken) + '"/>'
             + '    <input type="hidden" name="ids" value="' + escapeHtml(idsRaw) + '"/>'
             + '    <button type="submit" class="' + acaoClasse + ' text-sm font-medium">' + acaoTexto + '</button>'
@@ -463,7 +602,8 @@ document.addEventListener('DOMContentLoaded', function() {
         return tr;
     }
 
-    function criarCardEntrega(e) {
+    function criarCardEntrega(e, status) {
+        status = status || filtroStatusAtual();
         var card = document.createElement('div');
         card.className = 'bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-4 shadow-sm dark:shadow-lg flex flex-col gap-3 ios-draggable-item';
 
@@ -478,12 +618,12 @@ document.addEventListener('DOMContentLoaded', function() {
             return '<li class="truncate">' + escapeHtml(p) + '</li>';
         }).join('');
 
-        var confirmarTitle = filtroStatusAtual === 'PENDENTE' ? 'Confirmar Entrega' : 'Desfazer Entrega';
-        var confirmarMsg   = filtroStatusAtual === 'PENDENTE'
+        var confirmarTitle = status === 'PENDENTE' ? 'Confirmar Entrega' : 'Desfazer Entrega';
+        var confirmarMsg   = status === 'PENDENTE'
             ? 'Deseja marcar este pedido como ENTREGUE?'
             : 'Deseja reverter este pedido para PENDENTE?';
-        var confirmarBtnTxt = filtroStatusAtual === 'PENDENTE' ? 'Sim, marcar como entregue' : 'Sim, reverter';
-        var btnAcaoHtml = filtroStatusAtual === 'PENDENTE'
+        var confirmarBtnTxt = status === 'PENDENTE' ? 'Sim, marcar como entregue' : 'Sim, reverter';
+        var btnAcaoHtml = status === 'PENDENTE'
             ? '<button type="submit" class="px-3 py-1.5 rounded-lg text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors">Marcar como Entregue</button>'
             : '<button type="submit" class="px-3 py-1.5 rounded-lg text-sm font-semibold bg-amber-600 hover:bg-amber-700 text-white transition-colors">Reverter</button>';
 
@@ -503,7 +643,7 @@ document.addEventListener('DOMContentLoaded', function() {
             + '</div>'
             + '<div class="flex items-center justify-between gap-3 pt-1">'
             + '  <span class="text-base font-bold text-emerald-600 dark:text-emerald-400">' + formatMoeda(e.total) + '</span>'
-            + '  <form method="post" action="/logistica/toggle/' + encodeURIComponent(vendaRef) + '?status=' + encodeURIComponent(filtroStatusAtual) + '" class="inline form-swal-confirm" data-title="' + escapeHtml(confirmarTitle) + '" data-message="' + escapeHtml(confirmarMsg) + '" data-confirm-text="' + escapeHtml(confirmarBtnTxt) + '" data-cliente="' + escapeHtml(e.cliente_nome || '') + '" data-caixas="' + escapeHtml(caixasPedido) + '" data-ids="' + escapeHtml(idsRaw) + '">'
+            + '  <form method="post" action="/logistica/toggle/' + encodeURIComponent(vendaRef) + '?status=' + encodeURIComponent(status) + '" class="inline form-swal-confirm" data-title="' + escapeHtml(confirmarTitle) + '" data-message="' + escapeHtml(confirmarMsg) + '" data-confirm-text="' + escapeHtml(confirmarBtnTxt) + '" data-cliente="' + escapeHtml(e.cliente_nome || '') + '" data-caixas="' + escapeHtml(caixasPedido) + '" data-ids="' + escapeHtml(idsRaw) + '">'
             + '    <input type="hidden" name="csrf_token" value="' + escapeHtml(csrfToken) + '"/>'
             + '    <input type="hidden" name="ids" value="' + escapeHtml(idsRaw) + '"/>'
             +      btnAcaoHtml
@@ -513,46 +653,54 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function carregarMaisEntregas() {
-        if (carregando || fimDasEntregas) return;
-        carregando = true;
+        var aba = abaAtual();
+        var est = estadoAtual();
+        if (!est || est.carregando || est.fim) return;
+        est.carregando = true;
+        var sentinela = sentinelaDaAba(aba);
         if (sentinela) sentinela.classList.remove('hidden');
 
-        var proximaPagina = paginaAtual + 1;
-        var url = '{{ url_for("vendas.logistica") }}?status=' + encodeURIComponent(filtroStatusAtual) + '&page=' + proximaPagina + '&ajax=1';
+        var proximaPagina = est.pagina + 1;
+        var url = '{{ url_for("vendas.logistica") }}?status=' + encodeURIComponent(est.status) + '&page=' + proximaPagina + '&ajax=1';
+        var tbodyEntregas = tbodyDaAba(aba);
+        var gridCards = gridDaAba(aba);
 
         fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 if (!data || data.success !== true) {
-                    esconderSentinela();
+                    esconderSentinela(aba);
                     return;
                 }
 
                 var lista = Array.isArray(data.entregas) ? data.entregas : [];
                 if (!lista.length) {
-                    esconderSentinela();
+                    esconderSentinela(aba);
                     return;
                 }
 
-                var rowSemEntregas = document.getElementById('row-sem-entregas');
+                var rowSemEntregas = document.getElementById('row-sem-entregas-' + aba);
                 if (rowSemEntregas && rowSemEntregas.parentNode) {
                     rowSemEntregas.parentNode.removeChild(rowSemEntregas);
                 }
-                var cardSemEntregas = document.getElementById('card-sem-entregas');
+                var cardSemEntregas = document.getElementById('card-sem-entregas-' + aba);
                 if (cardSemEntregas && cardSemEntregas.parentNode) {
                     cardSemEntregas.parentNode.removeChild(cardSemEntregas);
                 }
 
+                var root = _logisticaRootAba(aba);
+                var checkAll = root.querySelector('.check-all-entregas');
+                var checkAllCards = root.querySelector('.check-all-entregas-cards');
                 var marcarTodos = (checkAll && checkAll.checked) || (checkAllCards && checkAllCards.checked);
 
                 lista.forEach(function(entrega) {
-                    if (tbodyEntregas) tbodyEntregas.appendChild(criarLinhaEntrega(entrega));
-                    if (gridCards) gridCards.appendChild(criarCardEntrega(entrega));
+                    if (tbodyEntregas) tbodyEntregas.appendChild(criarLinhaEntrega(entrega, est.status));
+                    if (gridCards) gridCards.appendChild(criarCardEntrega(entrega, est.status));
                 });
-                paginaAtual = proximaPagina;
+                est.pagina = proximaPagina;
 
                 if (marcarTodos) {
-                    document.querySelectorAll('.check-entrega').forEach(function(cb) { cb.checked = true; });
+                    root.querySelectorAll('.check-entrega').forEach(function(cb) { cb.checked = true; });
                 }
                 if (typeof verificarExibicaoBotaoEntregar === 'function') {
                     verificarExibicaoBotaoEntregar();
@@ -562,34 +710,36 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
 
                 if (!data.has_next) {
-                    esconderSentinela();
+                    esconderSentinela(aba);
                 }
             })
             .catch(function() {
-                esconderSentinela();
+                esconderSentinela(aba);
             })
             .finally(function() {
-                carregando = false;
+                est.carregando = false;
             });
     }
 
-    var observer = null;
-    if (sentinela && !fimDasEntregas) {
+    function rebindScroll() {
+        if (observer) {
+            observer.disconnect();
+            observer = null;
+        }
+        var aba = abaAtual();
+        var est = estadoAtual();
+        var sentinela = sentinelaDaAba(aba);
+        if (!sentinela || !est || est.fim) return;
+        if (sentinela.classList.contains('hidden') && est.fim) return;
+        if (!est.fim) sentinela.classList.remove('hidden');
         observer = new IntersectionObserver(function(entries) {
             if (!entries || !entries[0] || !entries[0].isIntersecting) return;
             carregarMaisEntregas();
         }, { root: null, rootMargin: '160px', threshold: 0.1 });
         observer.observe(sentinela);
     }
-
-    document.querySelectorAll('a[href*="status=PENDENTE"], a[href*="status=ENTREGUE"]').forEach(function(link) {
-        link.addEventListener('click', function() {
-            paginaAtual = 1;
-            fimDasEntregas = false;
-            if (tbodyEntregas) tbodyEntregas.innerHTML = '';
-            if (gridCards) gridCards.innerHTML = '';
-        });
-    });
+    window.__logisticaRebindScroll = rebindScroll;
+    rebindScroll();
 
     if (typeof lucide !== 'undefined') lucide.createIcons();
 })();
@@ -623,10 +773,11 @@ function _swalErro(texto) {
     }));
 }
 
-function _checksEntregaUnicos() {
+function _checksEntregaUnicos(root) {
     var mapa = {};
     var lista = [];
-    document.querySelectorAll('.check-entrega').forEach(function(cb) {
+    var escopo = root || (typeof _logisticaRootAba === 'function' ? _logisticaRootAba() : document);
+    escopo.querySelectorAll('.check-entrega').forEach(function(cb) {
         var key = cb.getAttribute('data-ids') || cb.value || '';
         if (!key || mapa[key]) return;
         mapa[key] = true;
@@ -653,7 +804,8 @@ function verificarExibicaoBotaoEntregar() {
 }
 
 function atualizarVisibilidadeBarraAcoes() {
-    var checkboxes = document.querySelectorAll('.check-entrega:checked');
+    var root = typeof _logisticaRootAba === 'function' ? _logisticaRootAba() : document;
+    var checkboxes = root.querySelectorAll('.check-entrega:checked');
     var barraAcoes = document.getElementById('barra-acoes-lote');
 
     if (!barraAcoes) return;
@@ -784,7 +936,8 @@ function _contarPendentesRestantesApos(idsEntregues) {
     var idSet = {};
     (idsEntregues || []).forEach(function(id) { idSet[String(id)] = true; });
     var restantes = 0;
-    _checksEntregaUnicos().forEach(function(cb) {
+    var root = document.getElementById('conteudo-pendentes') || document;
+    _checksEntregaUnicos(root).forEach(function(cb) {
         var raw = cb.getAttribute('data-ids') || cb.value || '';
         var ids = raw.split(',').map(function(s) { return String(s || '').trim(); }).filter(Boolean);
         if (!ids.length) return;
@@ -988,11 +1141,12 @@ function _limparRotaOtimizadaAtiva() {
 }
 
 function _contarPendentesNaInterface() {
-    return _checksEntregaUnicos().length;
+    var root = document.getElementById('conteudo-pendentes') || document;
+    return _checksEntregaUnicos(root).length;
 }
 
 function _listaPendentesCompletamenteCarregada() {
-    var sentinela = document.getElementById('sentinela-loading');
+    var sentinela = document.getElementById('sentinela-loading-pendentes');
     return !sentinela || sentinela.classList.contains('hidden');
 }
 
@@ -1077,7 +1231,7 @@ function _restaurarRotaOtimizadaSeAtiva() {
     if (!data) return;
 
     var totalCx = Number(window.__LOGISTICA_TOTAL_CAIXAS__ || 0);
-    var filtro = '{{ filtro_status }}';
+    var filtro = window.__LOGISTICA_FILTRO_STATUS__ || '{{ filtro_status }}';
     var semPendentes = totalCx === 0
         || (filtro === 'PENDENTE'
             && _listaPendentesCompletamenteCarregada()
@@ -1241,15 +1395,16 @@ function _encontrarItemEntregaPorPedidoId(pedidoId) {
     var idStr = String(pedidoId);
     var row = null;
     var card = null;
-    document.querySelectorAll('.check-entrega').forEach(function(el) {
+    var root = document.getElementById('conteudo-pendentes') || document;
+    root.querySelectorAll('.check-entrega').forEach(function(el) {
         var match = String(el.value) === idStr;
         if (!match) {
             var ids = (el.getAttribute('data-ids') || '').split(',');
             match = ids.indexOf(idStr) !== -1;
         }
         if (!match) return;
-        var tr = el.closest('#tbody-entregas tr.ios-draggable-item');
-        var cardEl = el.closest('#grid-cards-entregas .ios-draggable-item');
+        var tr = el.closest('tr.ios-draggable-item');
+        var cardEl = el.closest('div.ios-draggable-item');
         if (tr) row = tr;
         if (cardEl) card = cardEl;
     });
@@ -1378,8 +1533,8 @@ function otimizarRotaEntregas() {
 
         _limparBadgesParada();
 
-        var tbody = document.getElementById('tbody-entregas');
-        var grid = document.getElementById('grid-cards-entregas');
+        var tbody = document.getElementById('tbody-entregas-pendentes');
+        var grid = document.getElementById('grid-cards-entregas-pendentes');
         var ordemDataIds = [];
 
         (data.pedidos || []).forEach(function(p) {
@@ -1398,7 +1553,7 @@ function otimizarRotaEntregas() {
 
         if (ordemDataIds.length) {
             try {
-                localStorage.setItem('logistica_ordem_' + '{{ filtro_status }}', JSON.stringify(ordemDataIds));
+                localStorage.setItem('logistica_ordem_PENDENTE', JSON.stringify(ordemDataIds));
             } catch (err) { /* ignore */ }
             fetch('/logistica/ordem', {
                 method: 'POST',
@@ -1621,8 +1776,9 @@ function atualizarStatusMassa(novoStatus) {
 /* ── Drag & Drop iOS: reordenar carga/rota ─────────────────────────────── */
 (function initLogisticaDragDrop() {
     function persistirOrdemLogistica(novaOrdemIds) {
+        var status = window.__LOGISTICA_FILTRO_STATUS__ || 'PENDENTE';
         try {
-            localStorage.setItem('logistica_ordem_' + '{{ filtro_status }}', JSON.stringify(novaOrdemIds || []));
+            localStorage.setItem('logistica_ordem_' + status, JSON.stringify(novaOrdemIds || []));
         } catch (err) { /* ignore */ }
         fetch('/logistica/ordem', {
             method: 'POST',
@@ -1643,8 +1799,8 @@ function atualizarStatusMassa(novoStatus) {
     function boot() {
         if (typeof window.iniciarDragDropIOS !== 'function') return;
 
-        var dndTabela = window.iniciarDragDropIOS('#tbody-entregas', function(ids) {
-            sincronizarOrdemEntreVistas('#tbody-entregas', '#grid-cards-entregas', ids);
+        var dndTabela = window.iniciarDragDropIOS('#tbody-entregas-pendentes', function(ids) {
+            sincronizarOrdemEntreVistas('#tbody-entregas-pendentes', '#grid-cards-entregas-pendentes', ids);
             persistirOrdemLogistica(ids);
         }, {
             itemSelector: 'tr.ios-draggable-item',
@@ -1653,8 +1809,8 @@ function atualizarStatusMassa(novoStatus) {
             filterSelector: 'input, button, a, select, textarea, label, .no-drag, .form-swal-confirm'
         });
 
-        var dndCards = window.iniciarDragDropIOS('#grid-cards-entregas', function(ids) {
-            sincronizarOrdemEntreVistas('#grid-cards-entregas', '#tbody-entregas', ids);
+        var dndCards = window.iniciarDragDropIOS('#grid-cards-entregas-pendentes', function(ids) {
+            sincronizarOrdemEntreVistas('#grid-cards-entregas-pendentes', '#tbody-entregas-pendentes', ids);
             persistirOrdemLogistica(ids);
         }, {
             itemSelector: '.ios-draggable-item',
@@ -1664,8 +1820,8 @@ function atualizarStatusMassa(novoStatus) {
         });
 
         // Após infinite scroll, refresca itens
-        var tbody = document.getElementById('tbody-entregas');
-        var grid = document.getElementById('grid-cards-entregas');
+        var tbody = document.getElementById('tbody-entregas-pendentes');
+        var grid = document.getElementById('grid-cards-entregas-pendentes');
         if (tbody && typeof MutationObserver !== 'undefined') {
             var mo = new MutationObserver(function() {
                 if (dndTabela && dndTabela.refresh) dndTabela.refresh();

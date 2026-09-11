@@ -303,9 +303,9 @@ def montar_alertas_pendencias(
             link = None
             if incluir_links:
                 try:
-                    link = url_for('vendas.logistica', status='PENDENTE')
+                    link = url_for('vendas.logistica')
                 except Exception:
-                    link = '/logistica?status=PENDENTE'
+                    link = '/logistica'
             alertas.append({
                 'tipo': 'logistica',
                 'id': 'alerta_logistica',
