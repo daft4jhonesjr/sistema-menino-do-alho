@@ -776,6 +776,16 @@ async function atualizarLiveActivityAposEntrega(clienteEntregue, qtdIncremento, 
         return;
     }
 
+    // Abate paradas no banner + sessionStorage enquanto a rota segue ativa.
+    if (idsEntregues && idsEntregues.length) {
+        _atualizarParadasBannerAposEntrega(idsEntregues);
+        var rotaApos = _lerRotaOtimizadaAtiva();
+        if (rotaApos && Number(rotaApos.paradas) === 0) {
+            await cancelarRotaOtimizada({ status: 'Finalizado', dismissalSeconds: 5 });
+            return;
+        }
+    }
+
     if (!DI || typeof DI.isAvailable !== 'function' || !DI.isAvailable()) return;
     if (!estado || !estado.ativo) return;
 
@@ -847,6 +857,38 @@ function _deveEncerrarRotaAposEntrega(idsEntregues) {
     if (_contarPendentesRestantesApos(idsEntregues) !== 0) return false;
     if (!_listaPendentesCompletamenteCarregada()) return false;
     return true;
+}
+
+function _atualizarParadasBannerAposEntrega(idsEntregues) {
+    var rotaAtiva = _lerRotaOtimizadaAtiva();
+    if (!rotaAtiva) return;
+
+    var idSet = {};
+    (idsEntregues || []).forEach(function(id) { idSet[String(id)] = true; });
+
+    var novasParadas;
+    if (rotaAtiva.pedidos && rotaAtiva.pedidos.length) {
+        var pedidosRestantes = rotaAtiva.pedidos.filter(function(p) {
+            return !idSet[String(p.pedido_id)];
+        });
+        rotaAtiva.pedidos = pedidosRestantes;
+        novasParadas = pedidosRestantes.length;
+    } else {
+        novasParadas = _contarPendentesRestantesApos(idsEntregues);
+    }
+
+    rotaAtiva.paradas = novasParadas;
+    try {
+        sessionStorage.setItem('rota_otimizada_ativa', JSON.stringify(rotaAtiva));
+    } catch (err) { /* ignore */ }
+
+    var el = document.getElementById('banner-qtd-paradas');
+    if (el) {
+        el.textContent = String(novasParadas);
+    } else {
+        // Banner ainda não montado com o span: re-renderiza o resumo.
+        _mostrarCardRotaOtimizada(rotaAtiva, { persist: false, scroll: false });
+    }
 }
 
 async function cancelarRotaOtimizada(opts) {
@@ -1030,8 +1072,10 @@ function _mostrarCardRotaOtimizada(data, opts) {
     var n = data.paradas != null
         ? data.paradas
         : ((data.pedidos && data.pedidos.length) || 0);
-    resumo.textContent = n + ' parada(s) · ' + (data.distancia_km != null ? data.distancia_km : '—')
-        + ' km · ~' + (data.duracao_min != null ? data.duracao_min : '—') + ' min';
+    var km = data.distancia_km != null ? data.distancia_km : '—';
+    var min = data.duracao_min != null ? data.duracao_min : '—';
+    resumo.innerHTML = '<span id="banner-qtd-paradas">' + n + '</span> parada(s) · '
+        + km + ' km · ~' + min + ' min';
 
     if (data.maps_url) {
         btnMaps.href = data.maps_url;
