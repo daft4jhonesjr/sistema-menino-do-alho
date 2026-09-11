@@ -38,7 +38,7 @@
             </button>
         </div>
 
-        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto mt-1 sm:mt-0">
+        <div id="barra-acoes-lote" class="hidden flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto mt-1 sm:mt-0">
             {% if filtro_status == 'PENDENTE' %}
             <button type="button" id="btn-entregar-selecionados" onclick="atualizarStatusMassa('ENTREGUE')" class="hidden w-full sm:w-auto justify-center bg-emerald-100 hover:bg-emerald-200 text-emerald-800 dark:bg-emerald-900/40 dark:hover:bg-emerald-900/60 dark:text-emerald-300 px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm items-center gap-2 transition-colors">
                 <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
@@ -353,6 +353,9 @@ document.addEventListener('DOMContentLoaded', function() {
         if (typeof verificarExibicaoBotaoEntregar === 'function') {
             verificarExibicaoBotaoEntregar();
         }
+        if (typeof atualizarVisibilidadeBarraAcoes === 'function') {
+            atualizarVisibilidadeBarraAcoes();
+        }
     }
 
     if (checkAll) {
@@ -371,6 +374,9 @@ document.addEventListener('DOMContentLoaded', function() {
         sincronizarChecksPorIds(e.target);
         if (typeof verificarExibicaoBotaoEntregar === 'function') {
             verificarExibicaoBotaoEntregar();
+        }
+        if (typeof atualizarVisibilidadeBarraAcoes === 'function') {
+            atualizarVisibilidadeBarraAcoes();
         }
     });
 
@@ -551,6 +557,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (typeof verificarExibicaoBotaoEntregar === 'function') {
                     verificarExibicaoBotaoEntregar();
                 }
+                if (typeof atualizarVisibilidadeBarraAcoes === 'function') {
+                    atualizarVisibilidadeBarraAcoes();
+                }
 
                 if (!data.has_next) {
                     esconderSentinela();
@@ -643,8 +652,24 @@ function verificarExibicaoBotaoEntregar() {
     }
 }
 
+function atualizarVisibilidadeBarraAcoes() {
+    var checkboxes = document.querySelectorAll('.check-entrega:checked');
+    var barraAcoes = document.getElementById('barra-acoes-lote');
+
+    if (!barraAcoes) return;
+
+    if (checkboxes.length > 0) {
+        barraAcoes.classList.remove('hidden');
+        barraAcoes.classList.add('flex');
+    } else {
+        barraAcoes.classList.add('hidden');
+        barraAcoes.classList.remove('flex');
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     verificarExibicaoBotaoEntregar();
+    atualizarVisibilidadeBarraAcoes();
 });
 
 function _proximoClientePendente(excludeCliente) {
