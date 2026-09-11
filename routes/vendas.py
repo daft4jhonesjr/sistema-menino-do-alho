@@ -1931,6 +1931,7 @@ def logistica():
                 'cliente_nome': cliente.nome_cliente or 'Sem Nome',
                 'endereco': (cliente.endereco_para_mapa or cliente.endereco or ''),
                 'produtos': [],
+                'quantidade': 0,
                 'total': 0.0,
                 'status_entrega': v.status_entrega or 'PENDENTE',
             }
@@ -1939,6 +1940,7 @@ def logistica():
         produto_nome = v.produto.nome_produto if v.produto else 'Item'
         pedidos_dict[pedido_key]['ids'].append(v.id)
         pedidos_dict[pedido_key]['produtos'].append(f"{v.quantidade_venda}x {produto_nome}")
+        pedidos_dict[pedido_key]['quantidade'] += int(getattr(v, 'quantidade_venda', 0) or 0)
         pedidos_dict[pedido_key]['total'] += float(v.calcular_total())
 
     pedidos_agrupados = [pedidos_dict[k] for k in pedidos_ordenados_keys]

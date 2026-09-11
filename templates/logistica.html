@@ -40,7 +40,7 @@
 
         <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto mt-1 sm:mt-0">
             {% if filtro_status == 'PENDENTE' %}
-            <button type="button" onclick="atualizarStatusMassa('ENTREGUE')" class="w-full sm:w-auto justify-center bg-emerald-100 hover:bg-emerald-200 text-emerald-800 dark:bg-emerald-900/40 dark:hover:bg-emerald-900/60 dark:text-emerald-300 px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center gap-2 transition-colors">
+            <button type="button" id="btn-entregar-selecionados" onclick="atualizarStatusMassa('ENTREGUE')" class="hidden w-full sm:w-auto justify-center bg-emerald-100 hover:bg-emerald-200 text-emerald-800 dark:bg-emerald-900/40 dark:hover:bg-emerald-900/60 dark:text-emerald-300 px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm items-center gap-2 transition-colors">
                 <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
                 <span class="whitespace-nowrap">Entregar Selecionados</span>
             </button>
@@ -106,7 +106,7 @@
                 {% for e in entregas %}
                 <tr class="hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition ios-draggable-item" data-id="{{ e.ids|join(',') }}">
                     <td class="px-4 py-4">
-                        <input type="checkbox" class="check-entrega rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" value="{{ e.ids[0] }}" data-ids="{{ e.ids|join(',') }}" data-endereco="{{ e.endereco }}" data-cliente="{{ e.cliente_nome }}" data-produtos="{{ e.produtos|join(' || ') }}" data-total="{{ e.total | formato_moeda }}">
+                        <input type="checkbox" class="check-entrega rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" value="{{ e.ids[0] }}" data-ids="{{ e.ids|join(',') }}" data-caixas="{{ e.quantidade or 0 }}" data-endereco="{{ e.endereco }}" data-cliente="{{ e.cliente_nome }}" data-produtos="{{ e.produtos|join(' || ') }}" data-total="{{ e.total | formato_moeda }}">
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">{{ e.data }}</td>
                     <td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">
@@ -129,7 +129,9 @@
                               data-title="{% if filtro_status == 'PENDENTE' %}Confirmar Entrega{% else %}Desfazer Entrega{% endif %}"
                               data-message="{% if filtro_status == 'PENDENTE' %}Deseja marcar este pedido como ENTREGUE?{% else %}Deseja reverter este pedido para PENDENTE?{% endif %}"
                               data-confirm-text="{% if filtro_status == 'PENDENTE' %}Sim, marcar como entregue{% else %}Sim, reverter{% endif %}"
-                              data-cliente="{{ e.cliente_nome }}">
+                              data-cliente="{{ e.cliente_nome }}"
+                              data-caixas="{{ e.quantidade or 0 }}"
+                              data-ids="{{ e.ids|join(',') }}">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                             <input type="hidden" name="ids" value="{{ e.ids|join(',') }}"/>
                             {% if filtro_status == 'PENDENTE' %}
@@ -167,7 +169,7 @@
         {% for e in entregas %}
         <div class="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-4 shadow-sm dark:shadow-lg flex flex-col gap-3 ios-draggable-item" data-id="{{ e.ids|join(',') }}" data-ids="{{ e.ids|join(',') }}">
             <div class="flex items-center justify-between gap-3">
-                <input type="checkbox" class="check-entrega check-entrega-card rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" value="{{ e.ids[0] }}" data-ids="{{ e.ids|join(',') }}" data-endereco="{{ e.endereco }}" data-cliente="{{ e.cliente_nome }}" data-produtos="{{ e.produtos|join(' || ') }}" data-total="{{ e.total | formato_moeda }}">
+                <input type="checkbox" class="check-entrega check-entrega-card rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500" value="{{ e.ids[0] }}" data-ids="{{ e.ids|join(',') }}" data-caixas="{{ e.quantidade or 0 }}" data-endereco="{{ e.endereco }}" data-cliente="{{ e.cliente_nome }}" data-produtos="{{ e.produtos|join(' || ') }}" data-total="{{ e.total | formato_moeda }}">
                 <span class="text-xs text-gray-500 dark:text-gray-400">{{ e.data }}</span>
             </div>
             <div class="flex-1 min-w-0 space-y-2">
@@ -190,7 +192,9 @@
                       data-title="{% if filtro_status == 'PENDENTE' %}Confirmar Entrega{% else %}Desfazer Entrega{% endif %}"
                       data-message="{% if filtro_status == 'PENDENTE' %}Deseja marcar este pedido como ENTREGUE?{% else %}Deseja reverter este pedido para PENDENTE?{% endif %}"
                       data-confirm-text="{% if filtro_status == 'PENDENTE' %}Sim, marcar como entregue{% else %}Sim, reverter{% endif %}"
-                      data-cliente="{{ e.cliente_nome }}">
+                      data-cliente="{{ e.cliente_nome }}"
+                      data-caixas="{{ e.quantidade or 0 }}"
+                      data-ids="{{ e.ids|join(',') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                     <input type="hidden" name="ids" value="{{ e.ids|join(',') }}"/>
                     {% if filtro_status == 'PENDENTE' %}
@@ -346,6 +350,9 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         if (checkAll) checkAll.checked = marcado;
         if (checkAllCards) checkAllCards.checked = marcado;
+        if (typeof verificarExibicaoBotaoEntregar === 'function') {
+            verificarExibicaoBotaoEntregar();
+        }
     }
 
     if (checkAll) {
@@ -362,6 +369,9 @@ document.addEventListener('DOMContentLoaded', function() {
     document.addEventListener('change', function(e) {
         if (!e.target || !e.target.classList || !e.target.classList.contains('check-entrega')) return;
         sincronizarChecksPorIds(e.target);
+        if (typeof verificarExibicaoBotaoEntregar === 'function') {
+            verificarExibicaoBotaoEntregar();
+        }
     });
 
     window.__LOGISTICA_TOTAL_CAIXAS__ = totalCaixasPendentes;
@@ -388,8 +398,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function attrsCheckboxEntrega(e, idsRaw, vendaRef, produtosLista, extraClass) {
         var produtosAttr = produtosLista.join(' || ');
+        var caixas = Number(e.quantidade != null ? e.quantidade : e.qtd_itens);
+        if (!caixas || isNaN(caixas)) {
+            caixas = 0;
+            produtosLista.forEach(function(p) {
+                var m = String(p || '').trim().match(/^(\d+)\s*x\s+/i);
+                if (m) caixas += parseInt(m[1], 10) || 0;
+            });
+        }
+        if (!caixas) caixas = 1;
         var cls = 'check-entrega rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500' + (extraClass ? ' ' + extraClass : '');
-        return 'class="' + cls + '" value="' + escapeHtml(vendaRef) + '" data-ids="' + escapeHtml(idsRaw) + '" data-endereco="' + escapeHtml(e.endereco || '') + '" data-cliente="' + escapeHtml(e.cliente_nome || '') + '" data-produtos="' + escapeHtml(produtosAttr) + '" data-total="' + escapeHtml(formatMoeda(e.total)) + '"';
+        return 'class="' + cls + '" value="' + escapeHtml(vendaRef) + '" data-ids="' + escapeHtml(idsRaw) + '" data-caixas="' + escapeHtml(caixas) + '" data-endereco="' + escapeHtml(e.endereco || '') + '" data-cliente="' + escapeHtml(e.cliente_nome || '') + '" data-produtos="' + escapeHtml(produtosAttr) + '" data-total="' + escapeHtml(formatMoeda(e.total)) + '"';
     }
 
     function criarLinhaEntrega(e) {
@@ -411,6 +430,7 @@ document.addEventListener('DOMContentLoaded', function() {
         tr.setAttribute('data-id', idsRaw);
         var vendaRef = idsLista.length ? idsLista[0] : e.venda_id;
         var produtosLista = Array.isArray(e.produtos) ? e.produtos : (e.produto ? [e.produto] : []);
+        var caixasPedido = Number(e.quantidade != null ? e.quantidade : 0) || 0;
         var produtosHtml = '<ul class="space-y-1">' + produtosLista.map(function(p) {
             return '<li>' + escapeHtml(p) + '</li>';
         }).join('') + '</ul>';
@@ -428,7 +448,7 @@ document.addEventListener('DOMContentLoaded', function() {
             + '<td class="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">' + produtosHtml + '</td>'
             + '<td class="px-6 py-4 text-sm font-semibold text-emerald-600 dark:text-emerald-400 text-right">' + formatMoeda(e.total) + '</td>'
             + '<td class="px-6 py-4 text-center">'
-            + '  <form method="post" action="/logistica/toggle/' + encodeURIComponent(vendaRef) + '?status=' + encodeURIComponent(filtroStatusAtual) + '" class="inline form-swal-confirm" data-title="' + escapeHtml(confirmarTitle) + '" data-message="' + escapeHtml(confirmarMsg) + '" data-confirm-text="' + escapeHtml(confirmarBtnTxt) + '" data-cliente="' + escapeHtml(e.cliente_nome || '') + '">'
+            + '  <form method="post" action="/logistica/toggle/' + encodeURIComponent(vendaRef) + '?status=' + encodeURIComponent(filtroStatusAtual) + '" class="inline form-swal-confirm" data-title="' + escapeHtml(confirmarTitle) + '" data-message="' + escapeHtml(confirmarMsg) + '" data-confirm-text="' + escapeHtml(confirmarBtnTxt) + '" data-cliente="' + escapeHtml(e.cliente_nome || '') + '" data-caixas="' + escapeHtml(caixasPedido) + '" data-ids="' + escapeHtml(idsRaw) + '">'
             + '    <input type="hidden" name="csrf_token" value="' + escapeHtml(csrfToken) + '"/>'
             + '    <input type="hidden" name="ids" value="' + escapeHtml(idsRaw) + '"/>'
             + '    <button type="submit" class="' + acaoClasse + ' text-sm font-medium">' + acaoTexto + '</button>'
@@ -447,6 +467,7 @@ document.addEventListener('DOMContentLoaded', function() {
         card.setAttribute('data-ids', idsRaw);
         var vendaRef = idsLista.length ? idsLista[0] : e.venda_id;
         var produtosLista = Array.isArray(e.produtos) ? e.produtos : (e.produto ? [e.produto] : []);
+        var caixasPedido = Number(e.quantidade != null ? e.quantidade : 0) || 0;
         var produtosHtml = produtosLista.map(function(p) {
             return '<li class="truncate">' + escapeHtml(p) + '</li>';
         }).join('');
@@ -476,7 +497,7 @@ document.addEventListener('DOMContentLoaded', function() {
             + '</div>'
             + '<div class="flex items-center justify-between gap-3 pt-1">'
             + '  <span class="text-base font-bold text-emerald-600 dark:text-emerald-400">' + formatMoeda(e.total) + '</span>'
-            + '  <form method="post" action="/logistica/toggle/' + encodeURIComponent(vendaRef) + '?status=' + encodeURIComponent(filtroStatusAtual) + '" class="inline form-swal-confirm" data-title="' + escapeHtml(confirmarTitle) + '" data-message="' + escapeHtml(confirmarMsg) + '" data-confirm-text="' + escapeHtml(confirmarBtnTxt) + '" data-cliente="' + escapeHtml(e.cliente_nome || '') + '">'
+            + '  <form method="post" action="/logistica/toggle/' + encodeURIComponent(vendaRef) + '?status=' + encodeURIComponent(filtroStatusAtual) + '" class="inline form-swal-confirm" data-title="' + escapeHtml(confirmarTitle) + '" data-message="' + escapeHtml(confirmarMsg) + '" data-confirm-text="' + escapeHtml(confirmarBtnTxt) + '" data-cliente="' + escapeHtml(e.cliente_nome || '') + '" data-caixas="' + escapeHtml(caixasPedido) + '" data-ids="' + escapeHtml(idsRaw) + '">'
             + '    <input type="hidden" name="csrf_token" value="' + escapeHtml(csrfToken) + '"/>'
             + '    <input type="hidden" name="ids" value="' + escapeHtml(idsRaw) + '"/>'
             +      btnAcaoHtml
@@ -526,6 +547,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 if (marcarTodos) {
                     document.querySelectorAll('.check-entrega').forEach(function(cb) { cb.checked = true; });
+                }
+                if (typeof verificarExibicaoBotaoEntregar === 'function') {
+                    verificarExibicaoBotaoEntregar();
                 }
 
                 if (!data.has_next) {
@@ -606,6 +630,23 @@ function _checksEntregaSelecionadosUnicos() {
     return _checksEntregaUnicos().filter(function(cb) { return cb.checked; });
 }
 
+function verificarExibicaoBotaoEntregar() {
+    var btn = document.getElementById('btn-entregar-selecionados');
+    if (!btn) return;
+    var temSelecionado = _checksEntregaSelecionadosUnicos().length > 0;
+    if (temSelecionado) {
+        btn.classList.remove('hidden');
+        btn.classList.add('flex');
+    } else {
+        btn.classList.add('hidden');
+        btn.classList.remove('flex');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    verificarExibicaoBotaoEntregar();
+});
+
 function _proximoClientePendente(excludeCliente) {
     var checks = _checksEntregaUnicos();
     for (var i = 0; i < checks.length; i++) {
@@ -628,6 +669,63 @@ function _coletarClientesSelecionados() {
         }
     });
     return nomes;
+}
+
+function _extrairCaixasDeProdutosAttr(produtosAttr) {
+    var total = 0;
+    String(produtosAttr || '').split('||').forEach(function(part) {
+        var m = String(part).trim().match(/^(\d+)\s*x\s+/i);
+        if (m) total += parseInt(m[1], 10) || 0;
+    });
+    return total;
+}
+
+function _caixasDoCheck(cb) {
+    if (!cb) return 0;
+    var raw = cb.getAttribute('data-caixas');
+    if (raw != null && String(raw).trim() !== '') {
+        var n = parseInt(raw, 10);
+        if (!isNaN(n) && n > 0) return n;
+    }
+    var fromProdutos = _extrairCaixasDeProdutosAttr(cb.getAttribute('data-produtos') || '');
+    return fromProdutos > 0 ? fromProdutos : 1;
+}
+
+function _somarCaixasPorIds(ids) {
+    var idSet = {};
+    (ids || []).forEach(function(id) { idSet[String(id)] = true; });
+    var total = 0;
+    var vistos = {};
+    _checksEntregaUnicos().forEach(function(cb) {
+        var key = cb.getAttribute('data-ids') || cb.value || '';
+        if (!key || vistos[key]) return;
+        var cbIds = key.split(',').map(function(s) { return String(s || '').trim(); }).filter(Boolean);
+        var match = cbIds.some(function(id) { return !!idSet[id]; });
+        if (!match) return;
+        vistos[key] = true;
+        total += _caixasDoCheck(cb);
+    });
+    if (total > 0) return total;
+    return (ids && ids.length) ? ids.length : 0;
+}
+
+function _somarCaixasDosChecks(checks) {
+    var total = 0;
+    (checks || []).forEach(function(cb) { total += _caixasDoCheck(cb); });
+    return total;
+}
+
+function _somarCaixasDosPedidosRota(pedidos) {
+    var total = 0;
+    (pedidos || []).forEach(function(p) {
+        if (!p || p.pedido_id == null) return;
+        var itens = _encontrarItemEntregaPorPedidoId(p.pedido_id);
+        var cb = (itens.row && itens.row.querySelector('.check-entrega'))
+            || (itens.card && itens.card.querySelector('.check-entrega'))
+            || null;
+        total += _caixasDoCheck(cb);
+    });
+    return total;
 }
 
 function _salvarIslandEstado(estado) {
@@ -721,8 +819,11 @@ async function iniciarLiveActivityRota(opcoes) {
     var totalCaixas = Number(
         opcoes.totalCaixas != null
             ? opcoes.totalCaixas
-            : (window.__LOGISTICA_TOTAL_CAIXAS__ || clientes.length || 0)
+            : _somarCaixasDosChecks(_checksEntregaSelecionadosUnicos())
     );
+    if (!totalCaixas) {
+        totalCaixas = Number(window.__LOGISTICA_TOTAL_CAIXAS__ || clientes.length || 0);
+    }
     var numeroCarga = (DI.gerarNumeroCarga && DI.gerarNumeroCarga()) || ('CG-' + Date.now());
     var proximoCliente = clientes[0];
 
@@ -786,26 +887,42 @@ async function atualizarLiveActivityAposEntrega(clienteEntregue, qtdIncremento, 
         }
     }
 
+    // Volume físico de caixas do(s) pedido(s) acabados de entregar.
+    var caixasDestaBaixa = 0;
+    if (idsEntregues && idsEntregues.length) {
+        caixasDestaBaixa = _somarCaixasPorIds(idsEntregues);
+    } else {
+        caixasDestaBaixa = Number(qtdIncremento || 0);
+    }
+    if (!caixasDestaBaixa || caixasDestaBaixa < 1) caixasDestaBaixa = 1;
+
     if (!DI || typeof DI.isAvailable !== 'function' || !DI.isAvailable()) return;
     if (!estado || !estado.ativo) return;
 
-    var entregues = Number(estado.caixasEntregues || 0) + Number(qtdIncremento || 1);
+    var entregues = Number(estado.caixasEntregues || 0) + caixasDestaBaixa;
     var total = Number(estado.totalCaixas || window.__LOGISTICA_TOTAL_CAIXAS__ || 0);
+    if (entregues > total && total > 0) entregues = total;
     var proximo = _proximoClientePendente(clienteEntregue);
-    var status = (entregues >= total && total > 0) ? 'Chegando' : 'Em rota';
+    var status = (entregues >= total && total > 0)
+        ? 'Finalizado'
+        : ((entregues / Math.max(total, 1)) >= 0.85 ? 'Chegando' : 'Em rota');
+    var statusText = entregues + ' de ' + total + ' caixas entregues';
 
     try {
         await DI.updateDeliveryActivity({
             caixasEntregues: entregues,
             totalCaixas: total,
             proximoCliente: proximo,
-            status: status
+            status: status,
+            statusText: statusText,
+            progressState: total > 0 ? (entregues / total) : 0
         });
         _salvarIslandEstado(Object.assign({}, estado, {
             caixasEntregues: entregues,
             totalCaixas: total,
             proximoCliente: proximo,
-            status: status
+            status: status,
+            statusText: statusText
         }));
         if (entregues >= total && total > 0) {
             await cancelarRotaOtimizada({ status: 'Finalizado', dismissalSeconds: 5 });
@@ -981,7 +1098,7 @@ document.addEventListener('submit', function(e) {
                     var id = parseInt((idTxt || '').trim(), 10);
                     if (!isNaN(id)) idsEntrega.push(id);
                 });
-                await atualizarLiveActivityAposEntrega(cliente, 1, idsEntrega);
+                await atualizarLiveActivityAposEntrega(cliente, _somarCaixasPorIds(idsEntrega), idsEntrega);
             }
             form.dataset.swalConfirmed = '1';
             form.submit();
@@ -1196,10 +1313,17 @@ function otimizarRotaEntregas() {
         _mostrarCardRotaOtimizada(data);
 
         // Liga a Dynamic Island automaticamente com os dados da rota otimizada.
+        var totalCaixasRota = _somarCaixasDosPedidosRota(data.pedidos || []);
+        if (!totalCaixasRota) {
+            totalCaixasRota = _somarCaixasDosChecks(_checksEntregaSelecionadosUnicos());
+        }
+        if (!totalCaixasRota) {
+            totalCaixasRota = Number(window.__LOGISTICA_TOTAL_CAIXAS__ || (data.pedidos || []).length || 0);
+        }
         iniciarLiveActivityRota({
             silencioso: true,
             pedidos: data.pedidos || [],
-            totalCaixas: Number(window.__LOGISTICA_TOTAL_CAIXAS__ || (data.pedidos || []).length || 0)
+            totalCaixas: totalCaixasRota
         }).catch(function() { /* silencioso na web */ });
 
         var detalhe = (data.distancia_km != null ? data.distancia_km + ' km' : '')
@@ -1376,7 +1500,11 @@ function atualizarStatusMassa(novoStatus) {
                     if (_deveEncerrarRotaAposEntrega(ids)) {
                         await cancelarRotaOtimizada({ status: 'Finalizado', dismissalSeconds: 5 });
                     } else {
-                        await atualizarLiveActivityAposEntrega(clientes[0] || '', ids.length, ids);
+                        await atualizarLiveActivityAposEntrega(
+                            clientes[0] || '',
+                            _somarCaixasPorIds(ids),
+                            ids
+                        );
                     }
                 }
                 window.location.reload();
