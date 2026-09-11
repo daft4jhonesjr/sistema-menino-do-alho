@@ -4387,6 +4387,11 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             _adicionar_coluna_se_ausente('clientes', 'longitude', 'FLOAT')
         except (OperationalError, Exception):
             db.session.rollback()
+        # Migração: endereço do depósito (ponto de partida das rotas logísticas)
+        try:
+            _adicionar_coluna_se_ausente('configuracoes', 'endereco_deposito', 'VARCHAR(255)')
+        except (OperationalError, Exception):
+            db.session.rollback()
         # Migração: soft-completion de lembretes do calendário
         try:
             _adicionar_coluna_se_ausente('lembretes', 'concluido', 'BOOLEAN NOT NULL DEFAULT FALSE')

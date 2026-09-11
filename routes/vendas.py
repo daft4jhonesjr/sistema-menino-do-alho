@@ -300,16 +300,16 @@ def salvar_ordem_logistica():
     return jsonify({'ok': True, 'count': len(session['logistica_ordem'])})
 
 
-# Coordenadas padrão do galpão (Petrolina/PE — região Petrolina/Juazeiro).
-# Sobrescrevíveis via env GALPAO_LAT / GALPAO_LON / GALPAO_ENDERECO.
+# Fallback do galpão quando Configuracao.endereco_deposito estiver vazio
+# ou a geocodificação Nominatim falhar. Env: GALPAO_LAT / GALPAO_LON / GALPAO_ENDERECO.
 _GALPAO_LAT_DEFAULT = -9.3891
 _GALPAO_LON_DEFAULT = -40.5030
-_GALPAO_ENDERECO_DEFAULT = 'Galpão Menino do Alho, Petrolina, PE'
+_GALPAO_ENDERECO_DEFAULT = 'Petrolina, PE'
 _NOMINATIM_USER_AGENT = 'SistemaMeninoDoAlho/1.0 (logistica-rota; contato@meninodoalho.local)'
 
 
-def _coords_galpao():
-    """Ponto de partida da rota (galpão). Retorna (lat, lon)."""
+def _coords_galpao_fallback():
+    """Coordenadas de fallback (env ou default hardcoded). Retorna (lat, lon)."""
     try:
         lat = float(os.environ.get('GALPAO_LAT', _GALPAO_LAT_DEFAULT))
         lon = float(os.environ.get('GALPAO_LON', _GALPAO_LON_DEFAULT))
@@ -319,8 +319,29 @@ def _coords_galpao():
 
 
 def _endereco_galpao():
-    """Endereço textual do galpão para Google Maps Directions (geocoding do Google)."""
+    """Endereço textual do depósito: Configuracao → env → fallback Petrolina, PE."""
+    try:
+        from app import get_config
+        config = get_config()
+        end = (getattr(config, 'endereco_deposito', None) or '').strip()
+        if end:
+            return end
+    except Exception:
+        pass
     return (os.environ.get('GALPAO_ENDERECO') or _GALPAO_ENDERECO_DEFAULT).strip()
+
+
+def _resolver_origem_galpao():
+    """Resolve (lat, lon, endereco) do depósito via Nominatim.
+
+    Usa o endereço configurado no banco; se a geocodificação falhar,
+    cai no fallback de coordenadas (env/default).
+    """
+    endereco = _endereco_galpao()
+    lat, lon = _geocodificar_nominatim(endereco)
+    if lat is None or lon is None:
+        lat, lon = _coords_galpao_fallback()
+    return lat, lon, endereco
 
 
 def _geocodificar_nominatim(endereco):
@@ -521,7 +542,7 @@ def otimizar_rota_logistica():
             'avisos': avisos,
         }), 422
 
-    galpao_lat, galpao_lon = _coords_galpao()
+    galpao_lat, galpao_lon, galpao_end = _resolver_origem_galpao()
     # OSRM usa lon,lat; primeiro ponto = partida fixa (source=first)
     coords = [(galpao_lon, galpao_lat)] + [
         (p['longitude'], p['latitude']) for p in pontos
@@ -563,7 +584,6 @@ def otimizar_rota_logistica():
     duracao_min = max(1, int(round(resultado['duration_s'] / 60.0)))
 
     # URL Google Maps com endereços em texto (geocoding do Google, não Nominatim).
-    galpao_end = _endereco_galpao()
     enderecos_txt = [
         (p.get('endereco') or '').strip()
         for p in pedidos_ordenados
@@ -593,7 +613,7 @@ def otimizar_rota_logistica():
         'distancia_km': distancia_km,
         'duracao_min': duracao_min,
         'origem': {
-            'nome': 'Galpão (Petrolina/Juazeiro)',
+            'nome': 'Depósito',
             'endereco': galpao_end,
             'latitude': galpao_lat,
             'longitude': galpao_lon,

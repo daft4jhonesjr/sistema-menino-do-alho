@@ -998,7 +998,7 @@ function _atualizarParadasBannerAposEntrega(idsEntregues) {
     rotaAtiva.paradas = novasParadas;
     // Recalcula URL do Maps com endereços restantes (texto, não lat/lon).
     var origemTxt = (rotaAtiva.origem && (rotaAtiva.origem.endereco || rotaAtiva.origem.nome))
-        || 'Galpão Menino do Alho, Petrolina, PE';
+        || 'Petrolina, PE';
     var novaUrl = _montarUrlGoogleMapsDirecoes(origemTxt, rotaAtiva.pedidos || []);
     if (novaUrl) rotaAtiva.maps_url = novaUrl;
     try {
@@ -1196,7 +1196,7 @@ function _montarUrlGoogleMapsDirecoes(origemTxt, pedidosOrdenados) {
     if (enderecos.length === 0) return null;
 
     var origin = encodeURIComponent(
-        ((origemTxt || '') + '').trim() || 'Galpão Menino do Alho, Petrolina, PE'
+        ((origemTxt || '') + '').trim() || 'Petrolina, PE'
     );
     var destination = encodeURIComponent(enderecos[enderecos.length - 1]);
     var url = 'https://www.google.com/maps/dir/?api=1'
@@ -1264,7 +1264,7 @@ function _mostrarCardRotaOtimizada(data, opts) {
 
     // Preferir URL com endereços em texto (geocoding do Google), não lat/lon Nominatim.
     var origemTxt = (data.origem && (data.origem.endereco || data.origem.nome))
-        || 'Galpão Menino do Alho, Petrolina, PE';
+        || 'Petrolina, PE';
     var mapsUrl = _montarUrlGoogleMapsDirecoes(origemTxt, data.pedidos || [])
         || data.maps_url
         || null;

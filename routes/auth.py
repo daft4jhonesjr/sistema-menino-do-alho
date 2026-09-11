@@ -616,6 +616,26 @@ def logout():
 def configuracoes():
     usuario = current_user
     if request.method == 'POST':
+        secao = (request.form.get('secao') or '').strip()
+
+        # Seção: Logística e Rotas (endereço do depósito por tenant)
+        if secao == 'logistica':
+            try:
+                config = get_config()
+                raw = (request.form.get('endereco_deposito') or '').strip()
+                config.endereco_deposito = raw[:255] if raw else None
+                db.session.commit()
+            except Exception as exc:
+                db.session.rollback()
+                current_app.logger.error(
+                    'Falha ao salvar endereco_deposito (usuario_id=%s): %s',
+                    getattr(usuario, 'id', None), exc, exc_info=True,
+                )
+                flash('Erro ao salvar o endereço do depósito. Tente novamente.', 'error')
+                return redirect(url_for('auth.configuracoes'))
+            flash('Endereço do depósito atualizado com sucesso!', 'success')
+            return redirect(url_for('auth.configuracoes'))
+
         from services.notificacoes_pendencias import normalizar_horario
 
         try:
@@ -662,7 +682,18 @@ def configuracoes():
         except Exception as e:
             erros_log_content = f'Não foi possível ler o log de erros: {str(e)}'
 
-    return render_template('configuracoes.html', usuario=usuario, erros_log_content=erros_log_content)
+    config = None
+    try:
+        config = get_config()
+    except Exception:
+        current_app.logger.exception('Falha ao carregar Configuracao em /configuracoes')
+
+    return render_template(
+        'configuracoes.html',
+        usuario=usuario,
+        config=config,
+        erros_log_content=erros_log_content,
+    )
 
 
 @auth_bp.route('/api/logs/erros', methods=['GET'])

@@ -690,6 +690,8 @@ class Configuracao(db.Model):
         index=True,
     )
     codigo_cadastro = db.Column(db.String(100), nullable=False, default='alho123')
+    # Ponto de partida das rotas logísticas (Google Maps / OSRM). Ex.: "Rua X, 100, Petrolina, PE"
+    endereco_deposito = db.Column(db.String(255), nullable=True)
 
     empresa = db.relationship('Empresa', backref=db.backref('configuracoes', lazy='dynamic'))
 
