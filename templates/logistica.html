@@ -770,17 +770,9 @@ async function iniciarLiveActivityRota(opcoes) {
 async function atualizarLiveActivityAposEntrega(clienteEntregue, qtdIncremento, idsEntregues) {
     var DI = window.MeninoAlhoDynamicIsland;
     var estado = _lerIslandEstado();
-    var pendentesRestantes = idsEntregues
-        ? _contarPendentesRestantesApos(idsEntregues)
-        : null;
 
-    if (pendentesRestantes === 0) {
-        await _encerrarIslandSilencioso({
-            status: 'Finalizado',
-            caixasEntregues: estado ? Number(estado.totalCaixas || 0) : undefined,
-            totalCaixas: estado ? Number(estado.totalCaixas || 0) : undefined,
-            dismissalSeconds: 5
-        });
+    if (idsEntregues && _deveEncerrarRotaAposEntrega(idsEntregues)) {
+        await cancelarRotaOtimizada({ status: 'Finalizado', dismissalSeconds: 5 });
         return;
     }
 
@@ -806,22 +798,63 @@ async function atualizarLiveActivityAposEntrega(clienteEntregue, qtdIncremento, 
             status: status
         }));
         if (entregues >= total && total > 0) {
-            await _encerrarIslandSilencioso({
-                status: 'Finalizado',
-                caixasEntregues: entregues,
-                totalCaixas: total,
-                dismissalSeconds: 5
-            });
+            await cancelarRotaOtimizada({ status: 'Finalizado', dismissalSeconds: 5 });
         }
     } catch (err) {
         console.warn('[DynamicIsland] update falhou:', err);
     }
 }
 
-async function cancelarRotaOtimizada() {
+function _salvarRotaOtimizadaAtiva(data) {
+    if (!data) return;
+    try {
+        var pedidos = data.pedidos || [];
+        var payload = {
+            maps_url: data.maps_url || null,
+            distancia_km: data.distancia_km != null ? data.distancia_km : null,
+            duracao_min: data.duracao_min != null ? data.duracao_min : null,
+            avisos: data.avisos || [],
+            pedidos: pedidos,
+            paradas: data.paradas != null ? data.paradas : pedidos.length
+        };
+        sessionStorage.setItem('rota_otimizada_ativa', JSON.stringify(payload));
+    } catch (err) { /* ignore */ }
+}
+
+function _lerRotaOtimizadaAtiva() {
+    try {
+        var raw = sessionStorage.getItem('rota_otimizada_ativa');
+        return raw ? JSON.parse(raw) : null;
+    } catch (err) {
+        return null;
+    }
+}
+
+function _limparRotaOtimizadaAtiva() {
+    try { sessionStorage.removeItem('rota_otimizada_ativa'); } catch (err) { /* ignore */ }
+}
+
+function _contarPendentesNaInterface() {
+    return _checksEntregaUnicos().length;
+}
+
+function _listaPendentesCompletamenteCarregada() {
+    var sentinela = document.getElementById('sentinela-loading');
+    return !sentinela || sentinela.classList.contains('hidden');
+}
+
+function _deveEncerrarRotaAposEntrega(idsEntregues) {
+    if (_contarPendentesRestantesApos(idsEntregues) !== 0) return false;
+    if (!_listaPendentesCompletamenteCarregada()) return false;
+    return true;
+}
+
+async function cancelarRotaOtimizada(opts) {
+    opts = opts || {};
     var card = document.getElementById('card-rota-otimizada');
     if (card) card.classList.add('hidden');
     _limparBadgesParada();
+    _limparRotaOtimizadaAtiva();
 
     var btnMaps = document.getElementById('btn-abrir-trajeto-maps');
     if (btnMaps) {
@@ -829,8 +862,48 @@ async function cancelarRotaOtimizada() {
         btnMaps.classList.add('pointer-events-none', 'opacity-50');
     }
 
-    await _encerrarIslandSilencioso({ status: 'Cancelado', dismissalSeconds: 2 });
+    var resumo = document.getElementById('card-rota-otimizada-resumo');
+    if (resumo) resumo.textContent = '';
+    var avisosEl = document.getElementById('card-rota-otimizada-avisos');
+    if (avisosEl) {
+        avisosEl.textContent = '';
+        avisosEl.classList.add('hidden');
+    }
+
+    await _encerrarIslandSilencioso({
+        status: opts.status || 'Cancelado',
+        dismissalSeconds: opts.dismissalSeconds != null ? opts.dismissalSeconds : 2
+    });
 }
+
+function _restaurarRotaOtimizadaSeAtiva() {
+    var data = _lerRotaOtimizadaAtiva();
+    if (!data) return;
+
+    var totalCx = Number(window.__LOGISTICA_TOTAL_CAIXAS__ || 0);
+    var filtro = '{{ filtro_status }}';
+    var semPendentes = totalCx === 0
+        || (filtro === 'PENDENTE'
+            && _listaPendentesCompletamenteCarregada()
+            && _contarPendentesNaInterface() === 0);
+
+    if (semPendentes) {
+        cancelarRotaOtimizada({ status: 'Finalizado', dismissalSeconds: 5 });
+        return;
+    }
+
+    _mostrarCardRotaOtimizada(data, { persist: false, scroll: false });
+    (data.pedidos || []).forEach(function(p) {
+        if (!p || p.pedido_id == null) return;
+        var itens = _encontrarItemEntregaPorPedidoId(p.pedido_id);
+        if (itens.row) _aplicarBadgeParada(itens.row, p.parada);
+        if (itens.card) _aplicarBadgeParada(itens.card, p.parada);
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    _restaurarRotaOtimizadaSeAtiva();
+});
 
 /* ── Handler delegado para forms com class="form-swal-confirm" ────────── */
 document.addEventListener('submit', function(e) {
@@ -847,7 +920,7 @@ document.addEventListener('submit', function(e) {
         showCancelButton:  true,
         confirmButtonText: form.dataset.confirmText || 'Confirmar',
         cancelButtonText:  'Cancelar',
-    })).then(function(result) {
+    })).then(async function(result) {
         if (result.isConfirmed) {
             var titulo = (form.dataset.title || '').toLowerCase();
             if (titulo.indexOf('confirmar entrega') !== -1) {
@@ -866,7 +939,7 @@ document.addEventListener('submit', function(e) {
                     var id = parseInt((idTxt || '').trim(), 10);
                     if (!isNaN(id)) idsEntrega.push(id);
                 });
-                atualizarLiveActivityAposEntrega(cliente, 1, idsEntrega);
+                await atualizarLiveActivityAposEntrega(cliente, 1, idsEntrega);
             }
             form.dataset.swalConfirmed = '1';
             form.submit();
@@ -946,14 +1019,17 @@ function _limparBadgesParada() {
     });
 }
 
-function _mostrarCardRotaOtimizada(data) {
+function _mostrarCardRotaOtimizada(data, opts) {
+    opts = opts || {};
     var card = document.getElementById('card-rota-otimizada');
     var resumo = document.getElementById('card-rota-otimizada-resumo');
     var avisosEl = document.getElementById('card-rota-otimizada-avisos');
     var btnMaps = document.getElementById('btn-abrir-trajeto-maps');
     if (!card || !resumo || !btnMaps) return;
 
-    var n = (data.pedidos && data.pedidos.length) || 0;
+    var n = data.paradas != null
+        ? data.paradas
+        : ((data.pedidos && data.pedidos.length) || 0);
     resumo.textContent = n + ' parada(s) · ' + (data.distancia_km != null ? data.distancia_km : '—')
         + ' km · ~' + (data.duracao_min != null ? data.duracao_min : '—') + ' min';
 
@@ -976,7 +1052,12 @@ function _mostrarCardRotaOtimizada(data) {
     }
 
     card.classList.remove('hidden');
-    try { card.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (e) { /* ignore */ }
+    if (opts.persist !== false) {
+        _salvarRotaOtimizadaAtiva(data);
+    }
+    if (opts.scroll !== false) {
+        try { card.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (e) { /* ignore */ }
+    }
 }
 
 function otimizarRotaEntregas() {
@@ -1248,7 +1329,11 @@ function atualizarStatusMassa(novoStatus) {
         .then(async function(data) {
             if (data.success) {
                 if (ehEntrega) {
-                    await atualizarLiveActivityAposEntrega(clientes[0] || '', ids.length, ids);
+                    if (_deveEncerrarRotaAposEntrega(ids)) {
+                        await cancelarRotaOtimizada({ status: 'Finalizado', dismissalSeconds: 5 });
+                    } else {
+                        await atualizarLiveActivityAposEntrega(clientes[0] || '', ids.length, ids);
+                    }
                 }
                 window.location.reload();
             } else {
