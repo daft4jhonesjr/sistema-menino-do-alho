@@ -213,7 +213,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         empresaSelect.value = nova.value;
                     }
                 })
-                .catch(function(err) { console.error('Erro ao buscar empresa frequente:', err); });
+                .catch(function(err) {
+                    console.error('Erro ao buscar empresa frequente:', err);
+                    if (typeof showToast === 'function') showToast('Não foi possível carregar a empresa habitual do cliente.', 'warning');
+                });
 
             fetch('/api/clientes/' + encodeURIComponent(cid) + '/prazo-padrao', { credentials: 'same-origin' })
                 .then(function(r) { return r.json(); })
@@ -224,7 +227,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (isNaN(n) || n < 0) return;
                     prazoEl.value = String(n);
                 })
-                .catch(function(err) { console.error('Erro ao buscar prazo padrão:', err); });
+                .catch(function(err) {
+                    console.error('Erro ao buscar prazo padrão:', err);
+                    if (typeof showToast === 'function') showToast('Não foi possível carregar o prazo padrão do cliente.', 'warning');
+                });
         });
         {% endif %}
     }

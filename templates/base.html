@@ -1280,6 +1280,15 @@
                             })
                             .catch(function(error) {
                                 console.error(error);
+                                // Mostra mensagem de erro inline na aba de fotos para
+                                // que o usuário saiba que houve falha (e não que não há fotos).
+                                var grid = document.getElementById('grid-fotos');
+                                var msg  = document.getElementById('sem-fotos-msg');
+                                if (grid) grid.innerHTML = '';
+                                if (msg) {
+                                    msg.textContent = 'Não foi possível carregar as fotos. Tente novamente.';
+                                    msg.classList.remove('hidden');
+                                }
                             });
                     } else {
                         abasWrap.classList.add('hidden');

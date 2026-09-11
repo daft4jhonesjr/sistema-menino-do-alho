@@ -505,13 +505,18 @@ document.addEventListener('DOMContentLoaded', function() {
     if (toggleNotif) {
         toggleNotif.addEventListener('change', async function(e) {
             toggleNotif.disabled = true;
-            if (e.target.checked) {
-                var ok = await ativarPushNotificacoes();
-                if (!ok) toggleNotif.checked = false;
-            } else {
-                await desativarPushNotificacoes();
+            try {
+                if (e.target.checked) {
+                    var ok = await ativarPushNotificacoes();
+                    if (!ok) toggleNotif.checked = false;
+                } else {
+                    await desativarPushNotificacoes();
+                }
+            } finally {
+                // Garante desbloqueio mesmo se Notification.requestPermission() lançar
+                // TypeError (Safari/iOS em contextos sem permission-policy).
+                toggleNotif.disabled = false;
             }
-            toggleNotif.disabled = false;
         });
     }
 

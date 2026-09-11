@@ -512,6 +512,14 @@
                     confirmButtonColor: '#ef4444',
                     confirmButtonText: 'Tentar Novamente'
                 }));
+                // Limpa campos de senha após erro: dados sensíveis não devem
+                // persistir visíveis no modal aberto aguardando nova tentativa.
+                var sprov = document.getElementById('senha_provisoria');
+                var ccad  = document.getElementById('codigo_cadastro');
+                var ccnf  = document.getElementById('confirmar_codigo');
+                if (sprov) sprov.value = '';
+                if (ccad)  ccad.value  = '';
+                if (ccnf)  ccnf.value  = '';
             }
         } catch (err) {
             console.error('Erro de rede ao cadastrar empresa:', err);
@@ -522,6 +530,13 @@
                 confirmButtonColor: '#ef4444',
                 confirmButtonText: 'Tentar Novamente'
             }));
+            // Limpa campos de senha também no caminho de falha de rede.
+            var sprov2 = document.getElementById('senha_provisoria');
+            var ccad2  = document.getElementById('codigo_cadastro');
+            var ccnf2  = document.getElementById('confirmar_codigo');
+            if (sprov2) sprov2.value = '';
+            if (ccad2)  ccad2.value  = '';
+            if (ccnf2)  ccnf2.value  = '';
         } finally {
             btn.disabled = false;
         }

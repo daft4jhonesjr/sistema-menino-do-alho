@@ -3189,9 +3189,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     prazoEl.classList.add('ring-2', 'ring-emerald-500', 'transition-all');
                     setTimeout(function() { prazoEl.classList.remove('ring-2', 'ring-emerald-500'); }, 1000);
                 })
-                .catch(function(err) { console.error('Erro ao buscar prazo padrão:', err); });
-        }
-        clienteSelect.addEventListener('change', preencherPrazoPadraoDoCliente);
+                .catch(function(err) {
+                    console.error('Erro ao buscar prazo padrão:', err);
+                    if (typeof showToast === 'function') showToast('Não foi possível carregar o prazo padrão do cliente.', 'warning');
+                });
     }
 
     if (produtoSelect) {
@@ -3480,7 +3481,10 @@ document.addEventListener('DOMContentLoaded', function() {
                             selectEmp.classList.add('ring-2', 'ring-emerald-500', 'transition-all');
                             setTimeout(function() { selectEmp.classList.remove('ring-2', 'ring-emerald-500'); }, 1000);
                         })
-                        .catch(function(err) { console.error('Erro ao buscar empresa frequente:', err); });
+                        .catch(function(err) {
+                            console.error('Erro ao buscar empresa frequente:', err);
+                            if (typeof showToast === 'function') showToast('Não foi possível carregar a empresa habitual do cliente.', 'warning');
+                        });
                 }
             },
             onClear: function() {
@@ -4682,12 +4686,14 @@ function ordenarVendasTabela(colIndex, tipo) {
             .then(function(res) {
                 if (!res.ok) {
                     if (btn) btn.disabled = false;
+                    if (typeof showToast === 'function') showToast('Erro ao atualizar lembrete.', 'error');
                     return;
                 }
                 _atualizarCardLembrete(id, iso, res.concluido);
             })
             .catch(function() {
                 if (btn) btn.disabled = false;
+                if (typeof showToast === 'function') showToast('Erro de conexão ao atualizar lembrete.', 'error');
             });
     };
 
@@ -4767,12 +4773,14 @@ function ordenarVendasTabela(colIndex, tipo) {
             .then(function(res) {
                 if (!res.ok) {
                     if (btn) btn.disabled = false;
+                    if (typeof showToast === 'function') showToast('Erro ao excluir lembrete.', 'error');
                     return;
                 }
                 _removerLembreteDoPainel(id, iso);
             })
             .catch(function() {
                 if (btn) btn.disabled = false;
+                if (typeof showToast === 'function') showToast('Erro de conexão ao excluir lembrete.', 'error');
             });
     };
 
@@ -4794,9 +4802,9 @@ function ordenarVendasTabela(colIndex, tipo) {
             .then(function(res) {
                 if (!res.ok) {
                     if (btn) btn.disabled = false;
+                    if (typeof showToast === 'function') showToast('Erro ao mover lembrete.', 'error');
                     return;
                 }
-                var novaData = res.nova_data;
                 var lemMovido = null;
                 if (lembretes[iso]) {
                     for (var i = 0; i < lembretes[iso].length; i++) {
@@ -4855,6 +4863,7 @@ function ordenarVendasTabela(colIndex, tipo) {
             })
             .catch(function() {
                 if (btn) btn.disabled = false;
+                if (typeof showToast === 'function') showToast('Erro de conexão ao mover lembrete.', 'error');
             });
     }
 
