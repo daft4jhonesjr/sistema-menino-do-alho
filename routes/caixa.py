@@ -283,7 +283,8 @@ def _normalizar_itens_contagem(itens, incluir_nome=False):
     """Sanitiza payload da contagem da gaveta (dinheiro/cheques).
 
     Cheques podem ter ``nome``, ``status`` (ENVIADO/NÃO ENVIADO) e
-    ``url_foto``; dinheiro é só ``valor``. Itens com valor ≤ 0 e sem
+    ``url_foto``; dinheiro usa ``valor`` e, na contagem por cédulas,
+    também ``cedula`` + ``quantidade``. Itens com valor ≤ 0 e sem
     nome são descartados.
     """
     itens_norm = []
@@ -309,7 +310,18 @@ def _normalizar_itens_contagem(itens, incluir_nome=False):
         else:
             if valor <= 0:
                 continue
-            itens_norm.append({'valor': round(valor, 2)})
+            item_norm = {'valor': round(valor, 2)}
+            # Contagem por cédulas: preserva face e quantidade quando válidas.
+            try:
+                cedula = int(item.get('cedula') or 0)
+                quantidade = int(item.get('quantidade') or 0)
+            except (TypeError, ValueError):
+                cedula, quantidade = 0, 0
+            if cedula > 0 and quantidade > 0:
+                item_norm['cedula'] = cedula
+                item_norm['quantidade'] = quantidade
+                item_norm['valor'] = round(float(cedula) * float(quantidade), 2)
+            itens_norm.append(item_norm)
     return itens_norm
 
 

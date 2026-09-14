@@ -1312,18 +1312,39 @@ document.addEventListener('keydown', function(e) {
             </button>
         </div>
 
-        <!-- Conteúdo: Dinheiro -->
+        <!-- Conteúdo: Dinheiro (contagem por quantidade de cédulas) -->
         <div id="conteudo-dinheiro" class="p-4 flex-1 overflow-y-auto overscroll-contain bg-gray-50 dark:bg-gray-900/50">
-            <div class="flex justify-between items-center mb-2 px-2 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-                <span>#</span>
-                <span class="flex-1 ml-4">Valor (R$)</span>
-                <span>Ação</span>
+            <div id="lista-valores-dinheiro" class="grid grid-cols-2 gap-3">
+                <label class="flex items-center gap-2 bg-white dark:bg-gray-800 p-2.5 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 cursor-text">
+                    <span class="text-sm font-semibold text-emerald-700 dark:text-emerald-400 whitespace-nowrap min-w-[4.75rem]">R$ 2,00</span>
+                    <input type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-cedula="2" class="input-qtd-cedula block w-full px-2.5 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm font-medium tabular-nums text-right" aria-label="Quantidade de notas de R$ 2">
+                </label>
+                <label class="flex items-center gap-2 bg-white dark:bg-gray-800 p-2.5 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 cursor-text">
+                    <span class="text-sm font-semibold text-emerald-700 dark:text-emerald-400 whitespace-nowrap min-w-[4.75rem]">R$ 5,00</span>
+                    <input type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-cedula="5" class="input-qtd-cedula block w-full px-2.5 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm font-medium tabular-nums text-right" aria-label="Quantidade de notas de R$ 5">
+                </label>
+                <label class="flex items-center gap-2 bg-white dark:bg-gray-800 p-2.5 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 cursor-text">
+                    <span class="text-sm font-semibold text-emerald-700 dark:text-emerald-400 whitespace-nowrap min-w-[4.75rem]">R$ 10,00</span>
+                    <input type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-cedula="10" class="input-qtd-cedula block w-full px-2.5 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm font-medium tabular-nums text-right" aria-label="Quantidade de notas de R$ 10">
+                </label>
+                <label class="flex items-center gap-2 bg-white dark:bg-gray-800 p-2.5 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 cursor-text">
+                    <span class="text-sm font-semibold text-emerald-700 dark:text-emerald-400 whitespace-nowrap min-w-[4.75rem]">R$ 20,00</span>
+                    <input type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-cedula="20" class="input-qtd-cedula block w-full px-2.5 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm font-medium tabular-nums text-right" aria-label="Quantidade de notas de R$ 20">
+                </label>
+                <label class="flex items-center gap-2 bg-white dark:bg-gray-800 p-2.5 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 cursor-text">
+                    <span class="text-sm font-semibold text-emerald-700 dark:text-emerald-400 whitespace-nowrap min-w-[4.75rem]">R$ 50,00</span>
+                    <input type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-cedula="50" class="input-qtd-cedula block w-full px-2.5 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm font-medium tabular-nums text-right" aria-label="Quantidade de notas de R$ 50">
+                </label>
+                <label class="flex items-center gap-2 bg-white dark:bg-gray-800 p-2.5 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 cursor-text">
+                    <span class="text-sm font-semibold text-emerald-700 dark:text-emerald-400 whitespace-nowrap min-w-[4.75rem]">R$ 100,00</span>
+                    <input type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-cedula="100" class="input-qtd-cedula block w-full px-2.5 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm font-medium tabular-nums text-right" aria-label="Quantidade de notas de R$ 100">
+                </label>
+                <label class="flex items-center gap-2 bg-white dark:bg-gray-800 p-2.5 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 cursor-text col-span-2 sm:col-span-1">
+                    <span class="text-sm font-semibold text-emerald-700 dark:text-emerald-400 whitespace-nowrap min-w-[4.75rem]">R$ 200,00</span>
+                    <input type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-cedula="200" class="input-qtd-cedula block w-full px-2.5 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm font-medium tabular-nums text-right" aria-label="Quantidade de notas de R$ 200">
+                </label>
             </div>
-            <div id="lista-valores-dinheiro" class="space-y-2"></div>
-            <button type="button" id="btn-add-dinheiro" class="mt-4 w-full py-2.5 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-gray-500 dark:text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:border-emerald-400 dark:hover:border-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-all font-medium flex justify-center items-center gap-2">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                Adicionar Valor
-            </button>
+            <p class="text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 p-2 rounded border border-gray-200 dark:border-gray-700 mt-3">💡 <strong>Como usar:</strong> Digite a quantidade de notas. Ex: Se você tem 50 notas de R$ 2,00 no estoque, digite 50 na caixinha de R$ 2,00. O sistema calculará os R$ 100,00 automaticamente.</p>
         </div>
 
         <!-- Conteúdo: Cheques -->
@@ -1385,7 +1406,6 @@ document.addEventListener('keydown', function(e) {
             containerId: 'lista-valores-dinheiro',
             conteudoId: 'conteudo-dinheiro',
             tabId: 'tab-dinheiro',
-            btnAddId: 'btn-add-dinheiro',
             label: 'Total Dinheiro',
             cor: 'emerald',
             valores: []
@@ -1408,6 +1428,7 @@ document.addEventListener('keydown', function(e) {
     var rotaUploadImagemCheque = '{{ url_for("caixa.upload_imagem_cheque") }}';
     var STATUS_CHEQUE_ENVIADO = 'ENVIADO';
     var STATUS_CHEQUE_NAO_ENVIADO = 'NÃO ENVIADO';
+    var CEDULAS_DINHEIRO = [2, 5, 10, 20, 50, 100, 200];
 
     function mostrarToast(msg, tipo) {
         if (typeof showToast === 'function') {
@@ -1445,14 +1466,75 @@ document.addEventListener('keydown', function(e) {
         }
     }
 
+    function parseQuantidadeCedula(valor) {
+        var n = parseInt(String(valor == null ? '' : valor).trim(), 10);
+        if (isNaN(n) || n < 0) return 0;
+        return n;
+    }
+
+    function lerQuantidadesCedulas() {
+        var mapa = {};
+        CEDULAS_DINHEIRO.forEach(function(cedula) { mapa[cedula] = 0; });
+        document.querySelectorAll('#lista-valores-dinheiro input.input-qtd-cedula').forEach(function(input) {
+            var cedula = parseInt(input.getAttribute('data-cedula'), 10);
+            if (!mapa.hasOwnProperty(cedula)) return;
+            mapa[cedula] = parseQuantidadeCedula(input.value);
+        });
+        return mapa;
+    }
+
+    function aplicarQuantidadesCedulas(mapa) {
+        document.querySelectorAll('#lista-valores-dinheiro input.input-qtd-cedula').forEach(function(input) {
+            var cedula = parseInt(input.getAttribute('data-cedula'), 10);
+            var qtd = mapa && mapa.hasOwnProperty(cedula) ? parseQuantidadeCedula(mapa[cedula]) : 0;
+            input.value = qtd > 0 ? String(qtd) : '';
+        });
+    }
+
+    function sincronizarValoresDinheiroDasCedulas() {
+        var mapa = lerQuantidadesCedulas();
+        var itens = [];
+        CEDULAS_DINHEIRO.forEach(function(cedula) {
+            var qtd = mapa[cedula] || 0;
+            if (qtd <= 0) return;
+            itens.push({
+                id: 'cedula-' + cedula,
+                cedula: cedula,
+                quantidade: qtd,
+                valor: (qtd * cedula).toFixed(2)
+            });
+        });
+        abas.dinheiro.valores = itens;
+        return itens;
+    }
+
+    function calcularTotalCedulas() {
+        var total = 0;
+        var mapa = lerQuantidadesCedulas();
+        CEDULAS_DINHEIRO.forEach(function(cedula) {
+            total += (mapa[cedula] || 0) * cedula;
+        });
+        return total;
+    }
+
     function aplicarEstadoServidor(estado) {
         var dinheiro = (estado && Array.isArray(estado.dinheiro)) ? estado.dinheiro : [];
         var cheques = (estado && Array.isArray(estado.cheques)) ? estado.cheques : [];
 
-        abas.dinheiro.valores = dinheiro.map(function(item, idx) {
-            var valor = parseMoedaBR(item && item.valor);
-            return { id: Date.now() + idx, valor: valor ? valor.toFixed(2) : '' };
+        var qtds = {};
+        CEDULAS_DINHEIRO.forEach(function(cedula) { qtds[cedula] = 0; });
+        var temCedulas = false;
+        dinheiro.forEach(function(item) {
+            if (!item || item.cedula == null) return;
+            var cedula = parseInt(item.cedula, 10);
+            if (!qtds.hasOwnProperty(cedula)) return;
+            temCedulas = true;
+            qtds[cedula] = parseQuantidadeCedula(item.quantidade);
         });
+        // Legado (só valor, sem cédula): não dá para reconstruir notas — zera o grid.
+        aplicarQuantidadesCedulas(temCedulas ? qtds : {});
+        sincronizarValoresDinheiroDasCedulas();
+
         abas.cheque.valores = cheques.map(function(item, idx) {
             var valor = parseMoedaBR(item && item.valor);
             var statusCheque = normalizarStatusCheque(item && item.status);
@@ -1465,7 +1547,6 @@ document.addEventListener('keydown', function(e) {
             };
         });
 
-        if (!abas.dinheiro.valores.length) abas.dinheiro.valores = [{ id: Date.now(), valor: '' }];
         if (!abas.cheque.valores.length) abas.cheque.valores = [{ id: Date.now() + 1, nome: '', valor: '', status: STATUS_CHEQUE_NAO_ENVIADO, url_foto: '' }];
     }
 
@@ -1473,9 +1554,17 @@ document.addEventListener('keydown', function(e) {
         var dinheiro = [];
         var cheques = [];
 
-        abas.dinheiro.valores.forEach(function(item) {
+        sincronizarValoresDinheiroDasCedulas().forEach(function(item) {
             var valor = parseMoedaBR(item.valor);
-            if (valor > 0) dinheiro.push({ valor: valor.toFixed(2) });
+            var qtd = parseQuantidadeCedula(item.quantidade);
+            var cedula = parseInt(item.cedula, 10) || 0;
+            if (valor > 0 && qtd > 0 && cedula > 0) {
+                dinheiro.push({
+                    cedula: cedula,
+                    quantidade: qtd,
+                    valor: valor.toFixed(2)
+                });
+            }
         });
         abas.cheque.valores.forEach(function(item) {
             var nome = (item.nome || '').trim();
@@ -1562,6 +1651,10 @@ document.addEventListener('keydown', function(e) {
     function carregarDados(tipo) {
         var cfg = abas[tipo];
         cfg.valores = [];
+        if (tipo === 'dinheiro') {
+            sincronizarValoresDinheiroDasCedulas();
+            return;
+        }
         if (tipo === 'cheque') {
             cfg.valores = cfg.valores.map(function(item) {
                 var copia = Object.assign({}, item || {});
@@ -1645,6 +1738,10 @@ document.addEventListener('keydown', function(e) {
 
     function salvar(tipo) {
         var cfg = abas[tipo];
+        if (tipo === 'dinheiro') {
+            sincronizarValoresDinheiroDasCedulas();
+            return;
+        }
         // Normaliza "5.000,00" -> "5000.00" antes de persistir
         cfg.valores = cfg.valores.map(function(item) {
             var copia = Object.assign({}, item);
@@ -1679,7 +1776,8 @@ document.addEventListener('keydown', function(e) {
     }
 
     function atualizarTotalGaveta() {
-        return calcularSoma('#lista-valores-dinheiro input[name="valor_gaveta[]"], #lista-valores-dinheiro .input-valor-dinheiro');
+        sincronizarValoresDinheiroDasCedulas();
+        return calcularTotalCedulas();
     }
 
     function atualizarTotalCheques() {
@@ -1716,6 +1814,11 @@ document.addEventListener('keydown', function(e) {
 
     function renderizar(tipo) {
         var cfg = abas[tipo];
+        if (tipo === 'dinheiro') {
+            sincronizarValoresDinheiroDasCedulas();
+            atualizarRodape();
+            return;
+        }
         var container = document.getElementById(cfg.containerId);
         var containerEnviados = null;
         if (tipo === 'cheque') {
@@ -1994,6 +2097,7 @@ document.addEventListener('keydown', function(e) {
     }
 
     function addLinha(tipo) {
+        if (tipo === 'dinheiro') return;
         var novoItem = { id: Date.now(), valor: '' };
         if (tipo === 'cheque') {
             novoItem.nome = '';
@@ -2021,6 +2125,7 @@ document.addEventListener('keydown', function(e) {
     }
 
     function remLinha(tipo, id) {
+        if (tipo === 'dinheiro') return;
         var cfg = abas[tipo];
         cfg.valores = cfg.valores.filter(function(x) { return x.id !== id; });
         if (!cfg.valores.length) cfg.valores.push({ id: Date.now(), valor: '' });
@@ -2030,7 +2135,13 @@ document.addEventListener('keydown', function(e) {
     function limpar(tipo) {
         var nome = tipo === 'dinheiro' ? 'a contagem de dinheiro' : 'a contagem de cheques';
         if (!confirm('Tem certeza que deseja apagar ' + nome + '?')) return;
-        abas[tipo].valores = [{ id: Date.now(), valor: '' }];
+        if (tipo === 'dinheiro') {
+            aplicarQuantidadesCedulas({});
+            sincronizarValoresDinheiroDasCedulas();
+            atualizarRodape();
+            return;
+        }
+        abas[tipo].valores = [{ id: Date.now(), valor: '', nome: '', status: STATUS_CHEQUE_NAO_ENVIADO, url_foto: '' }];
         renderizar(tipo);
     }
 
@@ -2065,10 +2176,24 @@ document.addEventListener('keydown', function(e) {
         liberarFundo();
     }
 
-    document.getElementById('btn-add-dinheiro').addEventListener('click', function() { addLinha('dinheiro'); });
     document.getElementById('btn-add-cheque').addEventListener('click', function() { addLinha('cheque'); });
     document.getElementById('btn-limpar-contagem').addEventListener('click', function() { limpar(abaAtiva); });
     document.getElementById('btn-salvar-contagem').addEventListener('click', function() { salvarEstadoServidor(); });
+    (function bindInputsCedulas() {
+        var grid = document.getElementById('lista-valores-dinheiro');
+        if (!grid || grid.getAttribute('data-cedulas-bound') === '1') return;
+        grid.setAttribute('data-cedulas-bound', '1');
+        grid.addEventListener('input', function(e) {
+            var alvo = e.target;
+            if (!alvo || !alvo.classList.contains('input-qtd-cedula')) return;
+            var qtd = parseQuantidadeCedula(alvo.value);
+            if (alvo.value !== '' && String(qtd) !== String(alvo.value).trim()) {
+                alvo.value = qtd > 0 ? String(qtd) : '';
+            }
+            sincronizarValoresDinheiroDasCedulas();
+            atualizarRodape();
+        });
+    })();
     var modalContagem = document.getElementById('modal-contagem-dinheiro');
     if (modalContagem) {
         modalContagem.addEventListener('keydown', function(e) {
@@ -2199,7 +2324,6 @@ document.addEventListener('keydown', function(e) {
         }
         atualizarRodape();
     }, true);
-    bindDelegacaoMascara('dinheiro');
     bindDelegacaoMascara('cheque');
 
     window.abrirModalContagemDinheiro = abrir;

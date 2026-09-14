@@ -2171,6 +2171,29 @@ def logistica():
     entregues_semana = [semana_dict[k] for k in semana_keys]
     total_semana = sum(p['total'] for p in entregues_semana)
 
+    # Agrupa entregas por semana (segunda a domingo), da mais antiga para a mais recente.
+    from collections import OrderedDict
+    semanas_map = OrderedDict()
+    for item in entregues_semana:
+        data_ref = item['data_ordenacao']
+        segunda = data_ref - timedelta(days=data_ref.weekday())
+        domingo = segunda + timedelta(days=6)
+        periodo = f"{segunda.strftime('%d/%m/%Y')} a {domingo.strftime('%d/%m/%Y')}"
+        if periodo not in semanas_map:
+            semanas_map[periodo] = {
+                'periodo': periodo,
+                'entregas': [],
+                'total_semana': 0.0,
+                '_segunda': segunda,
+            }
+        semanas_map[periodo]['entregas'].append(item)
+        semanas_map[periodo]['total_semana'] += float(item['total'] or 0)
+
+    semanas_agrupadas = []
+    for bloco in semanas_map.values():
+        bloco.pop('_segunda', None)
+        semanas_agrupadas.append(bloco)
+
     return render_template(
         'logistica.html',
         entregas=entregas_pendentes,
@@ -2182,6 +2205,7 @@ def logistica():
         has_next_entregues=has_next_entregues,
         total_caixas_pendentes=total_caixas_pendentes,
         entregues_semana=entregues_semana,
+        semanas_agrupadas=semanas_agrupadas,
         total_semana=total_semana,
         inicio_semana=inicio_periodo,
         fim_semana=domingo_atual,
