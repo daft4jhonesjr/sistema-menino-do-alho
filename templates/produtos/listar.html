@@ -627,101 +627,106 @@
     </div>
 </div>
 
-<!-- Modal Nova Entrada -->
-<div id="modal-nova-entrada-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
-    <div class="fixed inset-0 bg-black/50" id="modal-nova-entrada-overlay"></div>
-    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 z-50" onclick="event.stopPropagation()">
-        <div class="sticky top-0 flex justify-between items-center px-8 py-5 bg-emerald-700 text-white rounded-t-xl z-10">
-            <h3 class="text-xl font-bold flex items-center">
-                <i data-lucide="package" class="w-5 h-5 mr-2"></i>Nova Entrada de Produto
+<!-- Overlay + Gaveta Nova Entrada -->
+<div id="modal-nova-entrada-overlay" class="fixed inset-0 z-[60] hidden bg-black/50" aria-hidden="true"></div>
+<div id="modal-nova-entrada-wrap" class="fixed inset-y-0 right-0 z-[70] hidden w-full max-w-md translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="gaveta-nova-entrada-titulo">
+    <div class="flex items-center justify-between px-5 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))] border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 shrink-0">
+        <div>
+            <h3 id="gaveta-nova-entrada-titulo" class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <i data-lucide="package" class="w-5 h-5 text-emerald-600 dark:text-emerald-400"></i>
+                Nova Entrada de Produto
             </h3>
-            <button type="button" class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-emerald-600 text-white font-bold transition" id="modal-nova-entrada-fechar" title="Fechar">
-                <i data-lucide="x" class="w-5 h-5"></i>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Cadastro de entrada no estoque</p>
+        </div>
+        <button type="button" class="p-2 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-200 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-700 transition-colors" id="modal-nova-entrada-fechar" title="Fechar" aria-label="Fechar">
+            <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+    </div>
+
+    <form id="form-nova-entrada" action="{{ url_for('produtos.novo_produto') }}" method="POST" enctype="multipart/form-data" class="flex flex-col flex-1 min-h-0">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div class="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4 min-w-0 bg-white dark:bg-slate-900">
+            <div id="modal-nova-entrada-erro" class="hidden p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl text-red-800 dark:text-red-300 text-sm"></div>
+
+            <div>
+                <label for="preco_custo" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Preço de Custo (R$) <span class="text-red-500">*</span></label>
+                <div class="relative rounded-md shadow-sm">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <span class="text-slate-500 dark:text-slate-400 sm:text-sm">R$</span>
+                    </div>
+                    <input type="text" name="preco_custo" id="preco_custo" required inputmode="decimal" class="pl-10 w-full rounded-lg border border-slate-200 dark:border-slate-600 focus:border-emerald-500 focus:ring-emerald-500 transition-colors shadow-sm dark:bg-slate-800 dark:text-slate-100" placeholder="0,00" autocomplete="off">
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label for="quantidade_entrada" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Quantidade <span class="text-red-500">*</span></label>
+                    <input type="number" name="quantidade_entrada" id="quantidade_entrada" value="1" required inputmode="decimal" class="w-full rounded-lg border border-slate-200 dark:border-slate-600 focus:border-emerald-500 focus:ring-emerald-500 transition-colors shadow-sm dark:bg-slate-800 dark:text-slate-100">
+                </div>
+                <div>
+                    <label for="data_chegada" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Data Chegada</label>
+                    <input type="date" name="data_chegada" id="data_chegada" class="w-full rounded-lg border border-slate-200 dark:border-slate-600 focus:border-emerald-500 focus:ring-emerald-500 transition-colors shadow-sm dark:bg-slate-800 dark:text-slate-100">
+                </div>
+            </div>
+            <div>
+                <label for="tipo" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Tipo <span class="text-red-500">*</span></label>
+                <select id="tipo" name="tipo" required class="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-slate-800 dark:text-slate-100">
+                    <option value="">Selecione...</option>
+                    {% for tipo in tipos_produto %}
+                    <option value="{{ tipo.nome }}" data-id="{{ tipo.id }}">{{ tipo.nome }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="fornecedor" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Fornecedor <span class="text-red-500">*</span></label>
+                <select id="fornecedor" name="fornecedor" required class="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-slate-800 dark:text-slate-100">
+                    <option value="">Selecione...</option>
+                    {% for fornecedor in fornecedores %}
+                    <option value="{{ fornecedor.nome }}" data-tipos="{% for t in fornecedor.tipos_produtos %}{{ t.nome|upper }}{% if not loop.last %},{% endif %}{% endfor %}">{{ fornecedor.nome }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div id="container_nacionalidade">
+                <label for="nacionalidade" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nacionalidade <span class="text-red-500" id="nacionalidade-asterisco">*</span></label>
+                <input type="hidden" id="nacionalidade_hidden" value="N/A">
+                <select id="nacionalidade" name="nacionalidade" required class="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-slate-800 dark:text-slate-100">
+                    <option value="">Selecione...</option>
+                </select>
+                <p class="mt-1 text-sm text-slate-500 dark:text-slate-400 hidden" id="nacionalidade-na-msg">N/A para SACOLA</p>
+            </div>
+            <div id="container_tamanho">
+                <label for="tamanho" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Tamanho <span class="text-red-500">*</span></label>
+                <select id="tamanho" name="tamanho" required data-initial="" class="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-slate-800 dark:text-slate-100">
+                    <option value="">Selecione...</option>
+                    {% for tam in ['4', '5', '6', '7', '8', '9', '10'] %}
+                    <option value="{{ tam }}">{{ tam }}</option>
+                    {% endfor %}
+                    <option value="NA">N/A (Não se aplica)</option>
+                </select>
+            </div>
+            <div id="marca-wrap">
+                <label for="marca" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Marca <span class="text-red-500" id="marca-asterisco">*</span></label>
+                <input type="hidden" id="marca_hidden" value="SOPACK">
+                <input type="text" id="marca" name="marca" required placeholder="Ex: IMPORFOZ" autocapitalize="words" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-slate-800 dark:text-slate-100">
+            </div>
+            <div id="container_caminhoneiro">
+                <label for="caminhoneiro" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Caminhoneiro <span class="text-red-500" id="caminhoneiro-asterisco">*</span></label>
+                <input type="text" id="caminhoneiro" name="caminhoneiro" required placeholder="Ex: ALEXANDRE" autocapitalize="words" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-slate-800 dark:text-slate-100">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Fotos do Produto (Até 5 fotos)</label>
+                <input type="file" name="fotos" accept="image/*" multiple class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 dark:file:bg-emerald-900/30 dark:file:text-emerald-400">
+            </div>
+        </div>
+
+        <div class="px-4 pt-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] border-t border-slate-200 dark:border-slate-700/50 bg-slate-50 dark:bg-slate-800/80 grid grid-cols-2 gap-3 w-full shrink-0">
+            <button type="button" class="w-full flex items-center justify-center bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 px-4 py-2.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-600 transition font-medium" id="modal-nova-entrada-cancelar">
+                <i data-lucide="x" class="w-4 h-4 mr-2"></i>Cancelar
+            </button>
+            <button type="submit" class="w-full flex items-center justify-center bg-emerald-700 text-white px-4 py-2.5 rounded-xl hover:bg-emerald-600 transition font-medium" id="modal-nova-entrada-salvar">
+                <i data-lucide="check" class="w-4 h-4 mr-2"></i>Salvar
             </button>
         </div>
-        <div class="p-8 dark:bg-gray-800">
-            <div id="modal-nova-entrada-erro" class="hidden mb-4 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl text-red-800 dark:text-red-300 text-sm"></div>
-            <form id="form-nova-entrada" action="{{ url_for('produtos.novo_produto') }}" method="POST" enctype="multipart/form-data">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                <div class="grid grid-cols-2 gap-4">
-                    <div class="col-span-2">
-                        <label for="preco_custo" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Preço de Custo (R$) <span class="text-red-500">*</span></label>
-                        <div class="relative rounded-md shadow-sm">
-                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                <span class="text-gray-500 dark:text-gray-400 sm:text-sm">R$</span>
-                            </div>
-                            <input type="text" name="preco_custo" id="preco_custo" required inputmode="decimal" class="pl-10 w-full rounded-lg border-gray-300 dark:border-gray-600 focus:border-emerald-500 focus:ring-emerald-500 transition-colors shadow-sm dark:bg-gray-700 dark:text-gray-100" placeholder="0,00" autocomplete="off">
-                        </div>
-                    </div>
-                    <div class="col-span-1">
-                        <label for="quantidade_entrada" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Quantidade <span class="text-red-500">*</span></label>
-                        <input type="number" name="quantidade_entrada" id="quantidade_entrada" value="1" required inputmode="decimal" class="w-full rounded-lg border-gray-300 dark:border-gray-600 focus:border-emerald-500 focus:ring-emerald-500 transition-colors shadow-sm dark:bg-gray-700 dark:text-gray-100">
-                    </div>
-                    <div class="col-span-1">
-                        <label for="data_chegada" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Data Chegada</label>
-                        <input type="date" name="data_chegada" id="data_chegada" class="w-full rounded-lg border-gray-300 dark:border-gray-600 focus:border-emerald-500 focus:ring-emerald-500 transition-colors shadow-sm dark:bg-gray-700 dark:text-gray-100">
-                    </div>
-                    <div class="mb-4">
-                        <label for="tipo" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tipo <span class="text-red-500">*</span></label>
-                        <select id="tipo" name="tipo" required class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
-                            <option value="">Selecione...</option>
-                            {% for tipo in tipos_produto %}
-                            <option value="{{ tipo.nome }}" data-id="{{ tipo.id }}">{{ tipo.nome }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="mb-4">
-                        <label for="fornecedor" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Fornecedor <span class="text-red-500">*</span></label>
-                        <select id="fornecedor" name="fornecedor" required class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
-                            <option value="">Selecione...</option>
-                            {% for fornecedor in fornecedores %}
-                            <option value="{{ fornecedor.nome }}" data-tipos="{% for t in fornecedor.tipos_produtos %}{{ t.nome|upper }}{% if not loop.last %},{% endif %}{% endfor %}">{{ fornecedor.nome }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="mb-4" id="container_nacionalidade">
-                        <label for="nacionalidade" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Nacionalidade <span class="text-red-500" id="nacionalidade-asterisco">*</span></label>
-                        <input type="hidden" id="nacionalidade_hidden" value="N/A">
-                        <select id="nacionalidade" name="nacionalidade" required class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
-                            <option value="">Selecione...</option>
-                        </select>
-                        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400 hidden" id="nacionalidade-na-msg">N/A para SACOLA</p>
-                    </div>
-                    <div class="mb-4" id="container_tamanho">
-                        <label for="tamanho" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tamanho <span class="text-red-500">*</span></label>
-                        <select id="tamanho" name="tamanho" required data-initial="" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
-                            <option value="">Selecione...</option>
-                            {% for tam in ['4', '5', '6', '7', '8', '9', '10'] %}
-                            <option value="{{ tam }}">{{ tam }}</option>
-                            {% endfor %}
-                            <option value="NA">N/A (Não se aplica)</option>
-                        </select>
-                    </div>
-                    <div class="mb-4" id="marca-wrap">
-                        <label for="marca" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Marca <span class="text-red-500" id="marca-asterisco">*</span></label>
-                        <input type="hidden" id="marca_hidden" value="SOPACK">
-                        <input type="text" id="marca" name="marca" required placeholder="Ex: IMPORFOZ" autocapitalize="words" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
-                    </div>
-                    <div class="mb-4" id="container_caminhoneiro">
-                        <label for="caminhoneiro" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Caminhoneiro <span class="text-red-500" id="caminhoneiro-asterisco">*</span></label>
-                        <input type="text" id="caminhoneiro" name="caminhoneiro" required placeholder="Ex: ALEXANDRE" autocapitalize="words" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
-                    </div>
-                    <div class="col-span-2 mb-4">
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Fotos do Produto (Até 5 fotos)</label>
-                        <input type="file" name="fotos" accept="image/*" multiple class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 dark:file:bg-emerald-900/30 dark:file:text-emerald-400">
-                    </div>
-                </div>
-                <div class="flex gap-4 mt-6">
-                    <button type="submit" class="bg-emerald-700 text-white px-6 py-2.5 rounded-xl hover:bg-emerald-600 transition flex items-center font-medium" id="modal-nova-entrada-salvar">
-                        <i data-lucide="check" class="w-4 h-4 mr-2"></i>Salvar
-                    </button>
-                    <button type="button" class="bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-6 py-2.5 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 transition flex items-center font-medium" id="modal-nova-entrada-cancelar">
-                        <i data-lucide="x" class="w-4 h-4 mr-2"></i>Cancelar
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
+    </form>
 </div>
 
 <!-- Modal Novo Fornecedor -->
@@ -1162,91 +1167,94 @@ function editarTipoCadastrado(id, nomeAtual) {
 {% endif %}
 
 <!-- Modal Editar Produto -->
-<div id="modal-editar-produto-wrap" class="fixed inset-0 z-[70] hidden pointer-events-auto" aria-hidden="true" role="dialog" aria-modal="true">
-    <div class="fixed inset-0 bg-black/60 z-[70]" id="modal-editar-produto-overlay"></div>
-    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-xl shadow-sm dark:shadow-none border border-gray-200 dark:border-gray-700 z-[80] pointer-events-auto" onclick="event.stopPropagation()">
-        <div class="sticky top-0 flex justify-between items-center px-8 py-5 bg-emerald-700 text-white rounded-t-xl z-10">
-            <h3 class="text-xl font-bold flex items-center">
-                <i data-lucide="pencil" class="w-5 h-5 mr-2"></i>Editar Produto
+<!-- Overlay + Gaveta Editar Produto -->
+<div id="modal-editar-produto-overlay" class="fixed inset-0 z-[60] hidden bg-black/50" aria-hidden="true"></div>
+<div id="modal-editar-produto-wrap" class="fixed inset-y-0 right-0 z-[70] hidden w-full max-w-md translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col pointer-events-auto" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="gaveta-editar-produto-titulo">
+    <div class="flex items-center justify-between px-5 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))] border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 shrink-0">
+        <div>
+            <h3 id="gaveta-editar-produto-titulo" class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <i data-lucide="pencil" class="w-5 h-5 text-emerald-600 dark:text-emerald-400"></i>
+                Editar Produto
             </h3>
-            <button type="button" class="modal-editar-produto-fechar w-10 h-10 flex items-center justify-center rounded-full hover:bg-emerald-600 text-white font-bold transition" title="Fechar">
-                <i data-lucide="x" class="w-5 h-5"></i>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Atualizar dados da entrada</p>
+        </div>
+        <button type="button" class="modal-editar-produto-fechar p-2 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-200 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-700 transition-colors" title="Fechar" aria-label="Fechar">
+            <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+    </div>
+
+    <form id="form-editar-produto" method="POST" action="" enctype="multipart/form-data" data-action-base="{{ url_for('produtos.editar_produto', id=0) }}" class="flex flex-col flex-1 min-h-0">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div class="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4 min-w-0 bg-white dark:bg-slate-900">
+            <div>
+                <label for="edit_preco_custo" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Preço Custo <span class="text-red-500">*</span></label>
+                <input type="number" id="edit_preco_custo" name="preco_custo" step="0.01" min="0" required inputmode="decimal" class="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-slate-800 dark:text-slate-100">
+            </div>
+            <div>
+                <label for="edit_quantidade_entrada" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Quantidade Adicional</label>
+                <input type="number" id="edit_quantidade_entrada" name="quantidade_entrada" value="0" min="0" inputmode="decimal" class="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-slate-800 dark:text-slate-100">
+                <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Somará ao estoque atual se &gt; 0</p>
+            </div>
+            <div>
+                <label for="edit_data_chegada" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Data Chegada</label>
+                <input type="date" id="edit_data_chegada" name="data_chegada" class="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-slate-800 dark:text-slate-100">
+            </div>
+            <div>
+                <label for="edit_tipo" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Tipo <span class="text-red-500">*</span></label>
+                <select id="edit_tipo" name="tipo" required class="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-slate-800 dark:text-slate-100">
+                    <option value="">Selecione...</option>
+                    {% for t in tipos_produto %}
+                    <option value="{{ (t.nome or '')|upper }}" data-id="{{ t.id }}">{{ (t.nome or '')|upper }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="edit_fornecedor" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Fornecedor <span class="text-red-500">*</span></label>
+                <select id="edit_fornecedor" name="fornecedor" required class="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-slate-800 dark:text-slate-100">
+                    <option value="">Selecione...</option>
+                    {% for fornecedor in fornecedores %}
+                    <option value="{{ fornecedor.nome }}">{{ fornecedor.nome }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div id="edit_container_nacionalidade">
+                <label for="edit_nacionalidade" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nacionalidade <span class="text-red-500" id="edit-nacionalidade-asterisco">*</span></label>
+                <select id="edit_nacionalidade" name="nacionalidade" required class="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-slate-800 dark:text-slate-100">
+                    <option value="">Selecione...</option>
+                </select>
+            </div>
+            <div id="edit_container_tamanho">
+                <label for="edit_tamanho" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Tamanho <span class="text-red-500" id="edit-tamanho-asterisco">*</span></label>
+                <select id="edit_tamanho" name="tamanho" required class="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-slate-800 dark:text-slate-100">
+                    <option value="">Selecione...</option>
+                    {% for tam in ['4', '5', '6', '7', '8', '9', '10'] %}
+                    <option value="{{ tam }}">{{ tam }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div id="edit_container_marca">
+                <label for="edit_marca" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Marca <span class="text-red-500" id="edit-marca-asterisco">*</span></label>
+                <input type="text" id="edit_marca" name="marca" required placeholder="Ex: IMPORFOZ" autocapitalize="words" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-slate-800 dark:text-slate-100">
+            </div>
+            <div id="edit_container_caminhoneiro">
+                <label for="edit_caminhoneiro" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Caminhoneiro <span class="text-red-500" id="edit-caminhoneiro-asterisco">*</span></label>
+                <input type="text" id="edit_caminhoneiro" name="caminhoneiro" required placeholder="Ex: João" autocapitalize="words" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-slate-800 dark:text-slate-100">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Fotos do Produto (Até 5 fotos)</label>
+                <input type="file" name="fotos" accept="image/*" multiple class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 dark:file:bg-emerald-900/30 dark:file:text-emerald-400">
+            </div>
+        </div>
+
+        <div class="px-4 pt-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] border-t border-slate-200 dark:border-slate-700/50 bg-slate-50 dark:bg-slate-800/80 grid grid-cols-2 gap-3 w-full shrink-0">
+            <button type="button" class="modal-editar-produto-fechar w-full flex items-center justify-center bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 px-4 py-2.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-600 transition font-medium">
+                <i data-lucide="x" class="w-4 h-4 mr-2"></i>Cancelar
+            </button>
+            <button type="submit" class="w-full flex items-center justify-center bg-emerald-700 text-white px-4 py-2.5 rounded-xl hover:bg-emerald-600 transition font-medium" id="btn-salvar-editar-produto">
+                <i data-lucide="check" class="w-4 h-4 mr-2"></i>Salvar
             </button>
         </div>
-        <div class="p-8">
-            <form id="form-editar-produto" method="POST" action="" enctype="multipart/form-data" data-action-base="{{ url_for('produtos.editar_produto', id=0) }}">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div class="mb-4">
-                        <label for="edit_preco_custo" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Preço Custo <span class="text-red-500">*</span></label>
-                        <input type="number" id="edit_preco_custo" name="preco_custo" step="0.01" min="0" required inputmode="decimal" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
-                    </div>
-                    <div class="mb-4">
-                        <label for="edit_quantidade_entrada" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Quantidade Adicional</label>
-                        <input type="number" id="edit_quantidade_entrada" name="quantidade_entrada" value="0" min="0" inputmode="decimal" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
-                        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Somará ao estoque atual se &gt; 0</p>
-                    </div>
-                    <div class="mb-4">
-                        <label for="edit_data_chegada" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Data Chegada</label>
-                        <input type="date" id="edit_data_chegada" name="data_chegada" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
-                    </div>
-                    <div class="mb-4">
-                        <label for="edit_tipo" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tipo <span class="text-red-500">*</span></label>
-                        <select id="edit_tipo" name="tipo" required class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
-                            <option value="">Selecione...</option>
-                            {% for t in tipos_produto %}
-                            <option value="{{ (t.nome or '')|upper }}" data-id="{{ t.id }}">{{ (t.nome or '')|upper }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="mb-4">
-                        <label for="edit_fornecedor" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Fornecedor <span class="text-red-500">*</span></label>
-                        <select id="edit_fornecedor" name="fornecedor" required class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
-                            <option value="">Selecione...</option>
-                            {% for fornecedor in fornecedores %}
-                            <option value="{{ fornecedor.nome }}">{{ fornecedor.nome }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="mb-4" id="edit_container_nacionalidade">
-                        <label for="edit_nacionalidade" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Nacionalidade <span class="text-red-500" id="edit-nacionalidade-asterisco">*</span></label>
-                        <select id="edit_nacionalidade" name="nacionalidade" required class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
-                            <option value="">Selecione...</option>
-                        </select>
-                    </div>
-                    <div class="mb-4" id="edit_container_tamanho">
-                        <label for="edit_tamanho" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tamanho <span class="text-red-500" id="edit-tamanho-asterisco">*</span></label>
-                        <select id="edit_tamanho" name="tamanho" required class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
-                            <option value="">Selecione...</option>
-                            {% for tam in ['4', '5', '6', '7', '8', '9', '10'] %}
-                            <option value="{{ tam }}">{{ tam }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="mb-4" id="edit_container_marca">
-                        <label for="edit_marca" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Marca <span class="text-red-500" id="edit-marca-asterisco">*</span></label>
-                        <input type="text" id="edit_marca" name="marca" required placeholder="Ex: IMPORFOZ" autocapitalize="words" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
-                    </div>
-                    <div class="mb-4" id="edit_container_caminhoneiro">
-                        <label for="edit_caminhoneiro" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Caminhoneiro <span class="text-red-500" id="edit-caminhoneiro-asterisco">*</span></label>
-                        <input type="text" id="edit_caminhoneiro" name="caminhoneiro" required placeholder="Ex: João" autocapitalize="words" autocomplete="off" spellcheck="false" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:text-gray-100">
-                    </div>
-                    <div class="col-span-2 mb-4">
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Fotos do Produto (Até 5 fotos)</label>
-                        <input type="file" name="fotos" accept="image/*" multiple class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 dark:file:bg-emerald-900/30 dark:file:text-emerald-400">
-                    </div>
-                </div>
-                <div class="flex gap-4 mt-6">
-                    <button type="submit" class="bg-emerald-700 text-white px-6 py-2.5 rounded-xl hover:bg-emerald-600 transition flex items-center font-medium" id="btn-salvar-editar-produto">
-                        <i data-lucide="check" class="w-4 h-4 mr-2"></i>Salvar
-                    </button>
-                    <button type="button" class="modal-editar-produto-fechar bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-6 py-2.5 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 transition flex items-center font-medium">
-                        <i data-lucide="x" class="w-4 h-4 mr-2"></i>Cancelar
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
+    </form>
 </div>
 
 <!-- Modal Devolver ao Fornecedor -->
@@ -1465,6 +1473,14 @@ function editarTipoCadastrado(id, nomeAtual) {
     if (wrap && wrap.parentElement !== document.body) {
         document.body.appendChild(wrap);
     }
+    if (overlay && overlay.parentElement !== document.body) {
+        document.body.appendChild(overlay);
+    }
+    if (wrap) {
+        wrap.classList.remove('translate-x-0');
+        wrap.classList.add('translate-x-full', 'hidden');
+    }
+    if (overlay) overlay.classList.add('hidden');
     var editTipo = document.getElementById('edit_tipo');
     var editTamanho = document.getElementById('edit_tamanho');
     var editNacionalidade = document.getElementById('edit_nacionalidade');
@@ -1602,9 +1618,20 @@ function editarTipoCadastrado(id, nomeAtual) {
         }
 
         wrap.classList.remove('hidden');
+        wrap.classList.add('translate-x-full');
+        wrap.classList.remove('translate-x-0');
+        wrap.offsetHeight;
+        wrap.classList.remove('translate-x-full');
+        wrap.classList.add('translate-x-0');
         wrap.setAttribute('aria-hidden', 'false');
+        if (overlay) {
+            overlay.classList.remove('hidden');
+            overlay.setAttribute('aria-hidden', 'false');
+        }
         if (typeof travarFundo === 'function') travarFundo();
-        if (typeof lucide !== 'undefined') lucide.createIcons();
+        if (typeof lucide !== 'undefined' && lucide.createIcons) {
+            try { lucide.createIcons(); } catch (_) {}
+        }
         return true;
     }
 
@@ -1759,16 +1786,35 @@ function editarTipoCadastrado(id, nomeAtual) {
 
     function fecharModalEditarProduto() {
         wrap = elWrap();
+        overlay = document.getElementById('modal-editar-produto-overlay');
         if (wrap) {
-            wrap.classList.add('hidden');
+            wrap.classList.remove('translate-x-0');
+            wrap.classList.add('translate-x-full');
             wrap.setAttribute('aria-hidden', 'true');
+            setTimeout(function() {
+                if (wrap.classList.contains('translate-x-full')) {
+                    wrap.classList.add('hidden');
+                }
+            }, 300);
+        }
+        if (overlay) {
+            overlay.classList.add('hidden');
+            overlay.setAttribute('aria-hidden', 'true');
         }
         if (typeof liberarFundo === 'function') liberarFundo();
     }
     window.fecharModalEditarProduto = fecharModalEditarProduto;
+    window.fecharGavetaEditarProduto = fecharModalEditarProduto;
 
     if (overlay) overlay.addEventListener('click', fecharModalEditarProduto);
     btnsFechar.forEach(function(b) { b.addEventListener('click', fecharModalEditarProduto); });
+    document.addEventListener('keydown', function(e) {
+        if (e.key !== 'Escape') return;
+        wrap = elWrap();
+        if (wrap && !wrap.classList.contains('hidden') && !wrap.classList.contains('translate-x-full')) {
+            fecharModalEditarProduto();
+        }
+    });
     if (editTipo) editTipo.addEventListener('change', function() { aplicarRegrasEdicao(); });
 
     if (form) {
@@ -1825,6 +1871,11 @@ window.getTipoConfigPorSelect = function(selectEl) {
     var erroDiv = document.getElementById('modal-nova-entrada-erro');
     var btnSalvar = document.getElementById('modal-nova-entrada-salvar');
     var htmlOriginalBtnSalvar = btnSalvar ? btnSalvar.innerHTML : '';
+    if (wrap) {
+        wrap.classList.remove('translate-x-0');
+        wrap.classList.add('translate-x-full', 'hidden');
+    }
+    if (overlay) overlay.classList.add('hidden');
     var dataChegada = document.getElementById('data_chegada');
     var tipoSelect = document.getElementById('tipo');
     var containerNac = document.getElementById('container_nacionalidade');
@@ -1853,27 +1904,51 @@ window.getTipoConfigPorSelect = function(selectEl) {
     }
 
     function abrir() {
-        if (wrap) {
-            wrap.classList.remove('hidden');
-            travarFundo();
-        }
+        if (!wrap) return;
+        if (overlay) overlay.classList.remove('hidden');
+        wrap.classList.remove('hidden');
+        wrap.classList.add('translate-x-full');
+        wrap.classList.remove('translate-x-0');
+        wrap.offsetHeight;
+        wrap.classList.remove('translate-x-full');
+        wrap.classList.add('translate-x-0');
+        wrap.setAttribute('aria-hidden', 'false');
+        if (overlay) overlay.setAttribute('aria-hidden', 'false');
+        if (typeof travarFundo === 'function') travarFundo();
         resetBtnSalvar();
         if (dataChegada && !dataChegada.value) {
             dataChegada.value = new Date().toISOString().split('T')[0];
         }
         aplicarRegrasDinamicas();
         aplicarAutoPreenchimentosNegocio();
-        if (typeof lucide !== 'undefined') lucide.createIcons();
+        if (typeof lucide !== 'undefined' && lucide.createIcons) {
+            try { lucide.createIcons(); } catch (_) {}
+        }
     }
     function fechar() {
-        if (wrap) {
-            wrap.classList.add('hidden');
-            liberarFundo();
+        if (!wrap) return;
+        wrap.classList.remove('translate-x-0');
+        wrap.classList.add('translate-x-full');
+        wrap.setAttribute('aria-hidden', 'true');
+        if (overlay) {
+            overlay.classList.add('hidden');
+            overlay.setAttribute('aria-hidden', 'true');
         }
-        erroDiv.classList.add('hidden');
-        erroDiv.textContent = '';
+        setTimeout(function() {
+            if (wrap.classList.contains('translate-x-full')) {
+                wrap.classList.add('hidden');
+            }
+        }, 300);
+        if (typeof liberarFundo === 'function') liberarFundo();
+        if (erroDiv) {
+            erroDiv.classList.add('hidden');
+            erroDiv.textContent = '';
+        }
         resetBtnSalvar();
     }
+
+    window.abrirGavetaNovaEntrada = abrir;
+    window.fecharGavetaNovaEntrada = fechar;
 
     /**
      * Aplica visibility / required / opções de tamanho / opções de marca
@@ -2040,6 +2115,12 @@ window.getTipoConfigPorSelect = function(selectEl) {
     if (overlay) overlay.addEventListener('click', fechar);
     if (btnFechar) btnFechar.addEventListener('click', fechar);
     if (btnCancelar) btnCancelar.addEventListener('click', fechar);
+    document.addEventListener('keydown', function(e) {
+        if (e.key !== 'Escape') return;
+        if (wrap && !wrap.classList.contains('hidden') && !wrap.classList.contains('translate-x-full')) {
+            fechar();
+        }
+    });
 
     if (tipoSelect) {
         aplicarRegrasDinamicas();
