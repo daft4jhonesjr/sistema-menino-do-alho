@@ -25,7 +25,7 @@
             <i data-lucide="scale" class="w-5 h-5"></i>
             Gerar Balanço
         </button>
-        <button type="button" onclick="abrirModalContagemDinheiro()" class="w-full md:w-auto bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:hover:bg-emerald-800/40 px-5 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center justify-center gap-2 transition-colors border border-emerald-200 dark:border-emerald-800">
+        <button type="button" onclick="abrirGavetaContagem()" class="w-full md:w-auto bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:hover:bg-emerald-800/40 px-5 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center justify-center gap-2 transition-colors border border-emerald-200 dark:border-emerald-800">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
             💵 Dinheiro
         </button>
@@ -1310,66 +1310,71 @@ document.addEventListener('keydown', function(e) {
 })();
 </script>
 
-<!-- Modal Contagem de Gaveta (Dinheiro + Cheques) -->
-<div id="modal-contagem-dinheiro" class="hidden fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onclick="if(event.target===this) fecharModalContagemDinheiro()">
-    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-sm md:max-w-xl overflow-hidden flex flex-col max-h-[90vh] overscroll-contain" onclick="event.stopPropagation()">
-        <div class="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-900">
-            <h3 class="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
-                <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+<!-- Overlay + Gaveta Contagem de Gaveta (Dinheiro + Cheques) -->
+<div id="gaveta-contagem-overlay" class="fixed inset-0 z-[60] hidden bg-black/50" onclick="fecharGavetaContagem()" aria-hidden="true"></div>
+<div id="gaveta-contagem" class="fixed inset-y-0 right-0 z-[70] hidden w-full max-w-md translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="gaveta-contagem-titulo">
+    <div class="flex items-center justify-between px-5 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))] border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 shrink-0">
+        <div>
+            <h3 id="gaveta-contagem-titulo" class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <i data-lucide="banknote" class="w-5 h-5 text-emerald-600 dark:text-emerald-400"></i>
                 Contagem de Gaveta
             </h3>
-            <button type="button" onclick="fecharModalContagemDinheiro()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-            </button>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Dinheiro e cheques do caixa</p>
         </div>
+        <button type="button" id="btn-fechar-contagem" onclick="fecharGavetaContagem()" class="p-2 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-200 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-700 transition-colors" title="Fechar" aria-label="Fechar">
+            <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+    </div>
 
-        <!-- Abas -->
-        <div class="flex border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-            <button type="button" id="tab-dinheiro" onclick="mudarAbaContagem('dinheiro')" class="flex-1 py-2.5 text-sm font-bold text-emerald-600 border-b-2 border-emerald-500 bg-emerald-50/50 dark:bg-emerald-900/20 transition-all">
-                💵 Dinheiro
-            </button>
-            <button type="button" id="tab-cheque" onclick="mudarAbaContagem('cheque')" class="flex-1 py-2.5 text-sm font-bold text-gray-500 dark:text-gray-400 border-b-2 border-transparent hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
-                📝 Cheques
-            </button>
-        </div>
+    <!-- Abas -->
+    <div class="flex border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shrink-0">
+        <button type="button" id="tab-dinheiro" onclick="mudarAbaContagem('dinheiro')" class="flex-1 py-2.5 text-sm font-bold text-emerald-600 border-b-2 border-emerald-500 bg-emerald-50/50 dark:bg-emerald-900/20 transition-all">
+            Dinheiro
+        </button>
+        <button type="button" id="tab-cheque" onclick="mudarAbaContagem('cheque')" class="flex-1 py-2.5 text-sm font-bold text-gray-500 dark:text-gray-400 border-b-2 border-transparent hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
+            Cheques
+        </button>
+    </div>
 
+    <!-- Corpo rolável -->
+    <div class="flex-1 min-h-0 overflow-hidden flex flex-col">
         <!-- Conteúdo: Dinheiro (contagem por quantidade de cédulas) -->
-        <div id="conteudo-dinheiro" class="p-4 flex-1 overflow-y-auto overscroll-contain bg-gray-50 dark:bg-gray-900/50">
+        <div id="conteudo-dinheiro" class="p-4 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain bg-slate-50 dark:bg-slate-900/50 min-w-0">
             <div id="lista-valores-dinheiro" class="grid grid-cols-2 gap-3">
-                <label class="flex items-center gap-2 bg-white dark:bg-gray-800 p-2.5 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 cursor-text">
+                <label class="flex items-center gap-2 bg-white dark:bg-slate-800 p-2.5 rounded-lg shadow-sm border border-slate-100 dark:border-slate-700 cursor-text">
                     <span class="text-sm font-semibold text-emerald-700 dark:text-emerald-400 whitespace-nowrap min-w-[4.75rem]">R$ 2,00</span>
-                    <input type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-cedula="2" class="input-qtd-cedula block w-full px-2.5 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm font-medium tabular-nums text-right" aria-label="Quantidade de notas de R$ 2">
+                    <input type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-cedula="2" class="input-qtd-cedula block w-full px-2.5 py-2 border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm font-medium tabular-nums text-right" aria-label="Quantidade de notas de R$ 2">
                 </label>
-                <label class="flex items-center gap-2 bg-white dark:bg-gray-800 p-2.5 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 cursor-text">
+                <label class="flex items-center gap-2 bg-white dark:bg-slate-800 p-2.5 rounded-lg shadow-sm border border-slate-100 dark:border-slate-700 cursor-text">
                     <span class="text-sm font-semibold text-emerald-700 dark:text-emerald-400 whitespace-nowrap min-w-[4.75rem]">R$ 5,00</span>
-                    <input type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-cedula="5" class="input-qtd-cedula block w-full px-2.5 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm font-medium tabular-nums text-right" aria-label="Quantidade de notas de R$ 5">
+                    <input type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-cedula="5" class="input-qtd-cedula block w-full px-2.5 py-2 border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm font-medium tabular-nums text-right" aria-label="Quantidade de notas de R$ 5">
                 </label>
-                <label class="flex items-center gap-2 bg-white dark:bg-gray-800 p-2.5 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 cursor-text">
+                <label class="flex items-center gap-2 bg-white dark:bg-slate-800 p-2.5 rounded-lg shadow-sm border border-slate-100 dark:border-slate-700 cursor-text">
                     <span class="text-sm font-semibold text-emerald-700 dark:text-emerald-400 whitespace-nowrap min-w-[4.75rem]">R$ 10,00</span>
-                    <input type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-cedula="10" class="input-qtd-cedula block w-full px-2.5 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm font-medium tabular-nums text-right" aria-label="Quantidade de notas de R$ 10">
+                    <input type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-cedula="10" class="input-qtd-cedula block w-full px-2.5 py-2 border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm font-medium tabular-nums text-right" aria-label="Quantidade de notas de R$ 10">
                 </label>
-                <label class="flex items-center gap-2 bg-white dark:bg-gray-800 p-2.5 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 cursor-text">
+                <label class="flex items-center gap-2 bg-white dark:bg-slate-800 p-2.5 rounded-lg shadow-sm border border-slate-100 dark:border-slate-700 cursor-text">
                     <span class="text-sm font-semibold text-emerald-700 dark:text-emerald-400 whitespace-nowrap min-w-[4.75rem]">R$ 20,00</span>
-                    <input type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-cedula="20" class="input-qtd-cedula block w-full px-2.5 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm font-medium tabular-nums text-right" aria-label="Quantidade de notas de R$ 20">
+                    <input type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-cedula="20" class="input-qtd-cedula block w-full px-2.5 py-2 border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm font-medium tabular-nums text-right" aria-label="Quantidade de notas de R$ 20">
                 </label>
-                <label class="flex items-center gap-2 bg-white dark:bg-gray-800 p-2.5 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 cursor-text">
+                <label class="flex items-center gap-2 bg-white dark:bg-slate-800 p-2.5 rounded-lg shadow-sm border border-slate-100 dark:border-slate-700 cursor-text">
                     <span class="text-sm font-semibold text-emerald-700 dark:text-emerald-400 whitespace-nowrap min-w-[4.75rem]">R$ 50,00</span>
-                    <input type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-cedula="50" class="input-qtd-cedula block w-full px-2.5 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm font-medium tabular-nums text-right" aria-label="Quantidade de notas de R$ 50">
+                    <input type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-cedula="50" class="input-qtd-cedula block w-full px-2.5 py-2 border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm font-medium tabular-nums text-right" aria-label="Quantidade de notas de R$ 50">
                 </label>
-                <label class="flex items-center gap-2 bg-white dark:bg-gray-800 p-2.5 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 cursor-text">
+                <label class="flex items-center gap-2 bg-white dark:bg-slate-800 p-2.5 rounded-lg shadow-sm border border-slate-100 dark:border-slate-700 cursor-text">
                     <span class="text-sm font-semibold text-emerald-700 dark:text-emerald-400 whitespace-nowrap min-w-[4.75rem]">R$ 100,00</span>
-                    <input type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-cedula="100" class="input-qtd-cedula block w-full px-2.5 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm font-medium tabular-nums text-right" aria-label="Quantidade de notas de R$ 100">
+                    <input type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-cedula="100" class="input-qtd-cedula block w-full px-2.5 py-2 border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm font-medium tabular-nums text-right" aria-label="Quantidade de notas de R$ 100">
                 </label>
-                <label class="flex items-center gap-2 bg-white dark:bg-gray-800 p-2.5 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 cursor-text col-span-2 sm:col-span-1">
+                <label class="flex items-center gap-2 bg-white dark:bg-slate-800 p-2.5 rounded-lg shadow-sm border border-slate-100 dark:border-slate-700 cursor-text col-span-2">
                     <span class="text-sm font-semibold text-emerald-700 dark:text-emerald-400 whitespace-nowrap min-w-[4.75rem]">R$ 200,00</span>
-                    <input type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-cedula="200" class="input-qtd-cedula block w-full px-2.5 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm font-medium tabular-nums text-right" aria-label="Quantidade de notas de R$ 200">
+                    <input type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-cedula="200" class="input-qtd-cedula block w-full px-2.5 py-2 border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm font-medium tabular-nums text-right" aria-label="Quantidade de notas de R$ 200">
                 </label>
             </div>
-            <p class="text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 p-2 rounded border border-gray-200 dark:border-gray-700 mt-3">💡 <strong>Como usar:</strong> Digite a quantidade de notas. Ex: Se você tem 50 notas de R$ 2,00 no estoque, digite 50 na caixinha de R$ 2,00. O sistema calculará os R$ 100,00 automaticamente.</p>
+            <p class="text-xs text-slate-500 dark:text-slate-400 bg-slate-100/80 dark:bg-slate-800/50 p-2 rounded border border-slate-200 dark:border-slate-700 mt-3"><strong>Como usar:</strong> Digite a quantidade de notas. Ex: Se você tem 50 notas de R$ 2,00 no estoque, digite 50 na caixinha de R$ 2,00. O sistema calculará os R$ 100,00 automaticamente.</p>
         </div>
 
         <!-- Conteúdo: Cheques -->
-        <div id="conteudo-cheque" class="hidden p-4 flex-1 overflow-y-auto overscroll-contain bg-gray-50 dark:bg-gray-900/50">
+        <div id="conteudo-cheque" class="hidden p-4 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain bg-slate-50 dark:bg-slate-900/50 min-w-0">
             <div class="flex items-center mb-2 px-2 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider gap-2">
                 <span class="w-6 text-center">#</span>
                 <span class="flex-1">Nome</span>
@@ -1377,38 +1382,38 @@ document.addEventListener('keydown', function(e) {
                 <span class="w-10 text-center">Ação</span>
             </div>
             <div id="lista-cheques-pendentes" class="space-y-2"></div>
-            <button type="button" id="btn-add-cheque" class="mt-4 w-full py-2.5 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-400 dark:hover:border-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all font-medium flex justify-center items-center gap-2">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+            <button type="button" id="btn-add-cheque" class="mt-4 w-full py-2.5 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-400 dark:hover:border-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all font-medium flex justify-center items-center gap-2">
+                <i data-lucide="plus" class="w-5 h-5"></i>
                 Adicionar Cheque
             </button>
-            <details class="mt-4 group rounded-md border border-slate-700 bg-slate-800/50">
-                <summary class="cursor-pointer p-3 font-semibold text-slate-300 flex justify-between items-center list-none">
-                    <span>📁 Cheques Enviados</span>
+            <details class="mt-4 group rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/50">
+                <summary class="cursor-pointer p-3 font-semibold text-slate-600 dark:text-slate-300 flex justify-between items-center list-none">
+                    <span>Cheques Enviados</span>
                     <span class="transition group-open:rotate-180">▼</span>
                 </summary>
-                <div id="lista-cheques-enviados" class="p-2 space-y-2 border-t border-slate-700"></div>
+                <div id="lista-cheques-enviados" class="p-2 space-y-2 border-t border-slate-200 dark:border-slate-700"></div>
             </details>
         </div>
+    </div>
 
-        <!-- Rodapé com Total -->
-        <div class="px-5 pt-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col gap-3 shrink-0">
-            <div class="flex flex-col">
-                <div id="resumo-subtotais-cheques" class="hidden text-xs text-slate-400 font-semibold mb-1 flex items-center gap-3">
-                    <span>Pendentes: <span id="display-total-pendentes" class="text-yellow-500">R$ 0,00</span></span>
-                    <span>|</span>
-                    <span>Enviados: <span id="display-total-enviados" class="text-emerald-500">R$ 0,00</span></span>
-                </div>
-                <span id="label-total-contagem" class="text-xs text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider">Total Dinheiro</span>
-                <span id="total-contagem-dinheiro" class="text-2xl font-black text-emerald-600 dark:text-emerald-400 total-cheques-display">R$ 0,00</span>
+    <!-- Rodapé fixo -->
+    <div class="px-5 pt-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] border-t border-slate-200 dark:border-slate-700/50 bg-slate-50 dark:bg-slate-800/80 flex flex-col gap-3 shrink-0">
+        <div class="flex flex-col">
+            <div id="resumo-subtotais-cheques" class="hidden text-xs text-slate-400 font-semibold mb-1 flex items-center gap-3">
+                <span>Pendentes: <span id="display-total-pendentes" class="text-yellow-500">R$ 0,00</span></span>
+                <span>|</span>
+                <span>Enviados: <span id="display-total-enviados" class="text-emerald-500">R$ 0,00</span></span>
             </div>
-            <div class="grid grid-cols-2 gap-3 w-full">
-                <button type="button" id="btn-limpar-contagem" class="w-full block text-sm text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 font-medium px-3 py-2.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors border border-red-200/60 dark:border-red-800/50">
-                    Limpar Tudo
-                </button>
-                <button type="button" id="btn-salvar-contagem" class="w-full flex items-center justify-center px-4 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold shadow-sm transition-colors">
-                    Salvar Contagem
-                </button>
-            </div>
+            <span id="label-total-contagem" class="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Total Dinheiro</span>
+            <span id="total-contagem-dinheiro" class="text-2xl font-black text-emerald-600 dark:text-emerald-400 total-cheques-display">R$ 0,00</span>
+        </div>
+        <div class="grid grid-cols-2 gap-3 w-full">
+            <button type="button" id="btn-limpar-contagem" class="w-full block text-sm text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 font-medium px-3 py-2.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors border border-red-200/60 dark:border-red-800/50">
+                Limpar Tudo
+            </button>
+            <button type="button" id="btn-salvar-contagem" class="w-full flex items-center justify-center px-4 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold shadow-sm transition-colors">
+                Salvar Contagem
+            </button>
         </div>
     </div>
 </div>
@@ -2185,16 +2190,44 @@ document.addEventListener('keydown', function(e) {
     }
 
     function abrir() {
-        document.getElementById('modal-contagem-dinheiro').classList.remove('hidden');
-        travarFundo();
+        var overlay = document.getElementById('gaveta-contagem-overlay');
+        var gaveta = document.getElementById('gaveta-contagem');
+        if (!gaveta) return;
+        if (overlay) overlay.classList.remove('hidden');
+        gaveta.classList.remove('hidden');
+        gaveta.classList.add('translate-x-full');
+        gaveta.classList.remove('translate-x-0');
+        gaveta.offsetHeight;
+        gaveta.classList.remove('translate-x-full');
+        gaveta.classList.add('translate-x-0');
+        gaveta.setAttribute('aria-hidden', 'false');
+        if (overlay) overlay.setAttribute('aria-hidden', 'false');
+        if (typeof travarFundo === 'function') travarFundo();
+        if (typeof lucide !== 'undefined' && lucide.createIcons) {
+            try { lucide.createIcons(); } catch (_) {}
+        }
         carregarEstadoServidor()
             .then(function() { mudarAba(abaAtiva); })
             .catch(function() { mudarAba(abaAtiva); });
     }
 
     function fechar() {
-        document.getElementById('modal-contagem-dinheiro').classList.add('hidden');
-        liberarFundo();
+        var overlay = document.getElementById('gaveta-contagem-overlay');
+        var gaveta = document.getElementById('gaveta-contagem');
+        if (!gaveta) return;
+        gaveta.classList.remove('translate-x-0');
+        gaveta.classList.add('translate-x-full');
+        gaveta.setAttribute('aria-hidden', 'true');
+        if (overlay) {
+            overlay.classList.add('hidden');
+            overlay.setAttribute('aria-hidden', 'true');
+        }
+        setTimeout(function() {
+            if (gaveta.classList.contains('translate-x-full')) {
+                gaveta.classList.add('hidden');
+            }
+        }, 300);
+        if (typeof liberarFundo === 'function') liberarFundo();
     }
 
     document.getElementById('btn-add-cheque').addEventListener('click', function() { addLinha('cheque'); });
@@ -2215,14 +2248,18 @@ document.addEventListener('keydown', function(e) {
             atualizarRodape();
         });
     })();
-    var modalContagem = document.getElementById('modal-contagem-dinheiro');
-    if (modalContagem) {
-        modalContagem.addEventListener('keydown', function(e) {
+    var gavetaContagemEl = document.getElementById('gaveta-contagem');
+    if (gavetaContagemEl) {
+        gavetaContagemEl.classList.remove('translate-x-0');
+        gavetaContagemEl.classList.add('translate-x-full', 'hidden');
+        gavetaContagemEl.addEventListener('keydown', function(e) {
             if (e.key === 'Enter') {
                 e.preventDefault();
             }
         });
     }
+    var overlayContagemEl = document.getElementById('gaveta-contagem-overlay');
+    if (overlayContagemEl) overlayContagemEl.classList.add('hidden');
     document.addEventListener('change', async function(e) {
         if (!e.target.matches('.input-foto-cheque')) return;
 
@@ -2347,6 +2384,8 @@ document.addEventListener('keydown', function(e) {
     }, true);
     bindDelegacaoMascara('cheque');
 
+    window.abrirGavetaContagem = abrir;
+    window.fecharGavetaContagem = fechar;
     window.abrirModalContagemDinheiro = abrir;
     window.fecharModalContagemDinheiro = fechar;
     window.mudarAbaContagem = mudarAba;
@@ -2499,6 +2538,7 @@ document.addEventListener('keydown', function(e) {
     if (e.key !== 'Escape') return;
     var dropdown = document.getElementById('dropdown-importar-caixa');
     if (dropdown) dropdown.classList.add('hidden');
+    if (typeof fecharGavetaContagem === 'function') fecharGavetaContagem();
     if (typeof fecharGavetaOrcamento === 'function') fecharGavetaOrcamento();
 });
 </script>
