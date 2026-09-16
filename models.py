@@ -791,6 +791,7 @@ class ItemOrcamento(db.Model):
     valor = db.Column(db.Numeric(10, 2), nullable=False)
     categoria = db.Column(db.String(50), nullable=True)
     forma_pagamento = db.Column(db.String(50), nullable=True, default='Pix')
+    data_vencimento = db.Column(db.Date, nullable=True)
 
     empresa = db.relationship('Empresa', backref=db.backref('itens_orcamento', lazy='dynamic'))
     pagamentos = db.relationship(

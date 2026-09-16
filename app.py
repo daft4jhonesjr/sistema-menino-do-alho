@@ -4432,6 +4432,10 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
                 db.session.commit()
         except (OperationalError, Exception):
             db.session.rollback()
+        try:
+            _adicionar_coluna_se_ausente('itens_orcamento', 'data_vencimento', 'DATE')
+        except (OperationalError, Exception):
+            db.session.rollback()
         # Migração: índices para campos filtráveis (performance em 10k+ registros)
         for idx_sql in [
             'CREATE INDEX IF NOT EXISTS ix_clientes_cnpj ON clientes(cnpj)',

@@ -16,7 +16,7 @@ Rotas extraídas do legado ``app.py``:
 * ``POST /api/caixa/fechar_mes``                   — zera/transporta fundo mensal
 * ``GET  /api/orcamento``                          — lista itens + total do orçamento (+ flag pago)
 * ``POST /api/orcamento``                          — cria item do orçamento
-* ``POST /api/orcamento/<id>/editar``              — edita descrição/valor do item
+* ``POST /api/orcamento/<id>/editar``              — edita descrição/valor/forma/vencimento do item
 * ``DELETE /api/orcamento/<id>``                   — remove item do orçamento
 * ``POST /api/orcamento/<id>/toggle-pagamento``    — marca/desmarca pago no mês atual
 
@@ -839,13 +839,32 @@ def _sanitizar_forma_pagamento(valor):
     return forma
 
 
+def _parse_data_vencimento(valor):
+    """Converte 'YYYY-MM-DD' (ou date) em ``date``; vazio/inválido → None."""
+    if valor is None:
+        return None
+    if isinstance(valor, datetime):
+        return valor.date()
+    if isinstance(valor, date):
+        return valor
+    raw = str(valor).strip()
+    if not raw:
+        return None
+    try:
+        return datetime.strptime(raw[:10], '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        return None
+
+
 def _item_orcamento_dict(item, pago=False):
+    data_venc = getattr(item, 'data_vencimento', None)
     return {
         'id': item.id,
         'descricao': item.descricao,
         'valor': float(item.valor or 0),
         'categoria': item.categoria or '',
         'forma_pagamento': _sanitizar_forma_pagamento(item.forma_pagamento),
+        'data_vencimento': data_venc.isoformat() if data_venc else None,
         'pago': bool(pago),
     }
 
@@ -905,7 +924,7 @@ def listar_orcamento():
 
 @caixa_bp.route('/api/orcamento', methods=['POST'])
 def criar_item_orcamento():
-    """Cria um item de orçamento (descrição, valor, categoria, forma de pagamento)."""
+    """Cria um item de orçamento (descrição, valor, categoria, forma e vencimento)."""
     data = request.get_json(silent=True) or {}
     descricao = (data.get('descricao') or '').strip()[:150]
     if not descricao:
@@ -916,6 +935,7 @@ def criar_item_orcamento():
         return jsonify({'ok': False, 'mensagem': 'Categoria inválida.'}), 400
 
     forma_pagamento = _sanitizar_forma_pagamento(data.get('forma_pagamento'))
+    data_vencimento = _parse_data_vencimento(data.get('data_vencimento'))
 
     valor = _limpar_valor_moeda(data.get('valor'))
     if valor <= 0:
@@ -929,6 +949,7 @@ def criar_item_orcamento():
             valor=valor.quantize(Decimal('0.01')),
             categoria=categoria,
             forma_pagamento=str(forma_pagamento)[:50],
+            data_vencimento=data_vencimento,
         )
         db.session.add(item)
         ok, msg = _safe_db_commit()
@@ -948,7 +969,7 @@ def criar_item_orcamento():
 
 @caixa_bp.route('/api/orcamento/<int:item_id>/editar', methods=['POST', 'PUT'])
 def editar_item_orcamento(item_id):
-    """Atualiza descrição, valor e forma de pagamento de um item do orçamento."""
+    """Atualiza descrição, valor, forma de pagamento e vencimento de um item."""
     item = _query_orcamento_atual().filter_by(id=item_id).first()
     if not item:
         return jsonify({'ok': False, 'mensagem': 'Item não encontrado.'}), 404
@@ -974,10 +995,16 @@ def editar_item_orcamento(item_id):
     else:
         forma_pagamento = _sanitizar_forma_pagamento(item.forma_pagamento)
 
+    if 'data_vencimento' in data:
+        data_vencimento = _parse_data_vencimento(data.get('data_vencimento'))
+    else:
+        data_vencimento = item.data_vencimento
+
     try:
         item.descricao = descricao
         item.valor = valor.quantize(Decimal('0.01'))
         item.forma_pagamento = str(forma_pagamento)[:50]
+        item.data_vencimento = data_vencimento
         ok, msg = _safe_db_commit()
         if not ok:
             db.session.rollback()
