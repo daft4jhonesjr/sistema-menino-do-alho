@@ -408,7 +408,7 @@
         <p id="orcamento-form-erro" class="hidden text-xs text-red-500 dark:text-red-400"></p>
     </form>
 
-    <div id="lista-orcamento" class="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+    <div id="lista-orcamento" class="flex-1 overflow-y-auto overflow-x-hidden px-5 py-4 space-y-4 min-w-0">
         <p class="text-sm text-slate-400 dark:text-slate-500 text-center py-8">Carregando…</p>
     </div>
 
@@ -2644,14 +2644,21 @@ document.addEventListener('keydown', function(e) {
         return d.getFullYear() + '-' + mes;
     }
 
-    function atualizarResumoFormasPagto(totaisPorFormaPagto) {
+    function renderizarResumoFormas(itens) {
         if (!resumoFormasEl) return;
-        var formas = Object.keys(totaisPorFormaPagto || {});
+        var totaisPorFormaPagto = {};
+        (itens || []).forEach(function(item) {
+            var forma = formaPagamentoSegura(item.forma_pagamento) || 'Não informada';
+            totaisPorFormaPagto[forma] = (totaisPorFormaPagto[forma] || 0) + (Number(item.valor) || 0);
+        });
+
+        var formas = Object.keys(totaisPorFormaPagto);
         if (!formas.length) {
-            resumoFormasEl.innerHTML = '';
             resumoFormasEl.classList.add('hidden');
+            resumoFormasEl.innerHTML = '';
             return;
         }
+
         formas.sort(function(a, b) {
             var ia = FORMAS_PAGAMENTO.indexOf(a);
             var ib = FORMAS_PAGAMENTO.indexOf(b);
@@ -2660,11 +2667,12 @@ document.addEventListener('keydown', function(e) {
             if (ia !== ib) return ia - ib;
             return a.localeCompare(b, 'pt-BR', { sensitivity: 'base' });
         });
-        var html = '<h4 class="text-[10px] font-bold text-slate-500 dark:text-slate-500 uppercase tracking-wider mb-2">Resumo por Forma de Pagto</h4>';
+
+        var html = '<h4 class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Resumo por Forma de Pagto</h4>';
         formas.forEach(function(forma) {
             html += '<div class="flex justify-between items-center text-xs gap-3">';
-            html += '<span class="text-slate-600 dark:text-slate-400 truncate">' + escapeHtml(forma) + '</span>';
-            html += '<span class="font-medium tabular-nums text-slate-800 dark:text-slate-300 whitespace-nowrap">' + formatarBRL(totaisPorFormaPagto[forma]) + '</span>';
+            html += '<span class="text-slate-500 dark:text-slate-400 truncate">' + escapeHtml(forma) + '</span>';
+            html += '<span class="font-medium tabular-nums text-slate-700 dark:text-slate-300 whitespace-nowrap">' + formatarBRL(totaisPorFormaPagto[forma]) + '</span>';
             html += '</div>';
         });
         resumoFormasEl.innerHTML = html;
@@ -2675,16 +2683,12 @@ document.addEventListener('keydown', function(e) {
         var itens = (data && data.itens) || [];
         var total = data && data.total != null ? data.total : 0;
         var totalPagoGeral = 0;
-        var totaisPorFormaPagto = {};
         itens.forEach(function(item) {
-            var valorItem = Number(item.valor) || 0;
-            if (item.pago) totalPagoGeral += valorItem;
-            var forma = formaPagamentoSegura(item.forma_pagamento) || 'Não informada';
-            totaisPorFormaPagto[forma] = (totaisPorFormaPagto[forma] || 0) + valorItem;
+            if (item.pago) totalPagoGeral += Number(item.valor) || 0;
         });
         if (totalEl) totalEl.textContent = formatarBRL(total);
         if (totalPagoEl) totalPagoEl.textContent = formatarBRL(totalPagoGeral);
-        atualizarResumoFormasPagto(itens.length ? totaisPorFormaPagto : {});
+        renderizarResumoFormas(itens);
 
         if (!itens.length) {
             listaEl.innerHTML = '<p class="text-sm text-slate-400 dark:text-slate-500 text-center py-10">Nenhum item ainda. Adicione suas despesas mensais.</p>';
@@ -2733,15 +2737,18 @@ document.addEventListener('keydown', function(e) {
                 var textoPago = pago ? ' line-through opacity-50' : '';
                 var btnPagoCls = pago
                     ? 'text-emerald-500 bg-emerald-500/10'
-                    : 'text-gray-300 hover:text-emerald-500';
+                    : 'text-slate-400 hover:text-emerald-500 dark:text-gray-300';
                 var forma = formaPagamentoSegura(item.forma_pagamento);
                 var formaEsc = escapeHtml(forma);
-                html += '<li class="flex items-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-3 py-2.5" data-item-id="' + item.id + '">';
-                html += '<div class="min-w-0 flex-1 flex flex-col">';
-                html += '<p class="orcamento-descricao text-sm font-medium text-slate-800 dark:text-slate-100 truncate' + textoPago + '">' + escapeHtml(item.descricao) + '</p>';
-                html += '<span class="orcamento-forma text-[10px] font-bold text-slate-500 dark:text-slate-400 bg-slate-200/70 dark:bg-slate-700/50 px-1.5 py-0.5 rounded w-max mt-0.5 border border-slate-300/60 dark:border-slate-600/50"></span>';
+                html += '<li class="flex flex-col gap-2 p-3 rounded-lg border border-slate-200 dark:border-slate-700/50 bg-slate-50 dark:bg-slate-800/50 min-w-0 overflow-hidden" data-item-id="' + item.id + '">';
+                html += '<div class="flex justify-between items-start gap-3 min-w-0 w-full">';
+                html += '<div class="flex flex-col gap-1.5 min-w-0 flex-1 w-full">';
+                html += '<span class="orcamento-descricao text-sm font-medium text-slate-800 dark:text-slate-200 break-words whitespace-normal leading-tight' + textoPago + '">' + escapeHtml(item.descricao) + '</span>';
+                html += '<span class="orcamento-forma text-[10px] font-bold text-slate-500 dark:text-slate-400 bg-slate-200/70 dark:bg-slate-700/50 px-1.5 py-0.5 rounded w-max border border-slate-300/60 dark:border-slate-600/50"></span>';
                 html += '</div>';
-                html += '<span class="orcamento-valor text-sm font-bold tabular-nums text-slate-900 dark:text-white whitespace-nowrap' + textoPago + '">' + formatarBRL(item.valor) + '</span>';
+                html += '<span class="orcamento-valor shrink-0 font-bold tabular-nums text-slate-900 dark:text-slate-100 whitespace-nowrap mt-0.5' + textoPago + '">' + formatarBRL(item.valor) + '</span>';
+                html += '</div>';
+                html += '<div class="flex justify-end items-center gap-2 pt-2 mt-1 border-t border-slate-200 dark:border-slate-700/50 shrink-0">';
                 html += '<button type="button" class="btn-pago-orcamento shrink-0 p-1.5 rounded-lg transition-colors ' + btnPagoCls + '" data-id="' + item.id + '" data-pago="' + (pago ? '1' : '0') + '" title="' + (pago ? 'Desmarcar como pago' : 'Marcar como pago') + '" aria-label="' + (pago ? 'Desmarcar como pago' : 'Marcar como pago') + '" aria-pressed="' + (pago ? 'true' : 'false') + '">';
                 html += '<i data-lucide="check" class="w-4 h-4 pointer-events-none"></i>';
                 html += '</button>';
@@ -2751,6 +2758,7 @@ document.addEventListener('keydown', function(e) {
                 html += '<button type="button" class="btn-excluir-orcamento shrink-0 p-1.5 rounded-lg text-red-500 hover:text-white hover:bg-red-600 dark:text-red-400 dark:hover:text-white dark:hover:bg-red-600 transition-colors" data-id="' + item.id + '" data-descricao="' + escapeHtml(item.descricao) + '" title="Excluir">';
                 html += '<i data-lucide="trash-2" class="w-4 h-4 pointer-events-none"></i>';
                 html += '</button>';
+                html += '</div>';
                 html += '</li>';
             });
             html += '</ul></div>';
