@@ -16,6 +16,7 @@ Rotas extraídas do legado ``app.py``:
 * ``POST /api/caixa/fechar_mes``                   — zera/transporta fundo mensal
 * ``GET  /api/orcamento``                          — lista itens + total do orçamento (+ flag pago)
 * ``POST /api/orcamento``                          — cria item do orçamento
+* ``POST /api/orcamento/<id>/editar``              — edita descrição/valor do item
 * ``DELETE /api/orcamento/<id>``                   — remove item do orçamento
 * ``POST /api/orcamento/<id>/toggle-pagamento``    — marca/desmarca pago no mês atual
 
@@ -906,6 +907,43 @@ def criar_item_orcamento():
     payload['item'] = _item_orcamento_dict(item, pago=False)
     payload['mensagem'] = 'Item adicionado.'
     return jsonify(payload), 201
+
+
+@caixa_bp.route('/api/orcamento/<int:item_id>/editar', methods=['POST', 'PUT'])
+def editar_item_orcamento(item_id):
+    """Atualiza descrição e/ou valor de um item do orçamento pessoal."""
+    item = _query_orcamento_atual().filter_by(id=item_id).first()
+    if not item:
+        return jsonify({'ok': False, 'mensagem': 'Item não encontrado.'}), 404
+
+    data = request.get_json(silent=True) or {}
+    descricao = (data.get('descricao') or '').strip()[:150]
+    if not descricao:
+        return jsonify({'ok': False, 'mensagem': 'Informe a descrição do item.'}), 400
+
+    valor = _limpar_valor_moeda(data.get('valor'))
+    if valor <= 0:
+        return jsonify({'ok': False, 'mensagem': 'Informe um valor maior que zero.'}), 400
+
+    if 'categoria' in data:
+        categoria = (data.get('categoria') or '').strip() or item.categoria or 'Custo básico'
+        if categoria not in CATEGORIAS_ORCAMENTO:
+            return jsonify({'ok': False, 'mensagem': 'Categoria inválida.'}), 400
+        item.categoria = categoria
+
+    item.descricao = descricao
+    item.valor = valor.quantize(Decimal('0.01'))
+
+    ok, msg = _safe_db_commit()
+    if not ok:
+        return jsonify({'ok': False, 'mensagem': 'Não foi possível salvar as alterações.'}), 500
+
+    mes_ano = _mes_ano_atual(data.get('mes_ano') or request.args.get('mes_ano'))
+    pagos = _ids_pagos_no_mes([item.id], mes_ano)
+    payload = _payload_orcamento(mes_ano)
+    payload['item'] = _item_orcamento_dict(item, pago=(item.id in pagos))
+    payload['mensagem'] = 'Item atualizado.'
+    return jsonify(payload)
 
 
 @caixa_bp.route('/api/orcamento/<int:item_id>', methods=['DELETE'])

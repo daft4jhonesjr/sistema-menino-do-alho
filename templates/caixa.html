@@ -2657,6 +2657,9 @@ document.addEventListener('keydown', function(e) {
                 html += '<button type="button" class="btn-pago-orcamento shrink-0 p-1.5 rounded-lg transition-colors ' + btnPagoCls + '" data-id="' + item.id + '" data-pago="' + (pago ? '1' : '0') + '" title="' + (pago ? 'Desmarcar como pago' : 'Marcar como pago') + '" aria-label="' + (pago ? 'Desmarcar como pago' : 'Marcar como pago') + '" aria-pressed="' + (pago ? 'true' : 'false') + '">';
                 html += '<i data-lucide="check" class="w-4 h-4 pointer-events-none"></i>';
                 html += '</button>';
+                html += '<button type="button" class="btn-editar-orcamento shrink-0 p-1.5 rounded-lg text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 transition-colors" data-id="' + item.id + '" data-descricao="' + escapeHtml(item.descricao) + '" data-valor="' + (Number(item.valor) || 0) + '" title="Editar Item" aria-label="Editar Item">';
+                html += '<i data-lucide="pencil" class="w-4 h-4 pointer-events-none"></i>';
+                html += '</button>';
                 html += '<button type="button" class="btn-excluir-orcamento shrink-0 p-1.5 rounded-lg text-red-500 hover:text-white hover:bg-red-600 dark:text-red-400 dark:hover:text-white dark:hover:bg-red-600 transition-colors" data-id="' + item.id + '" data-descricao="' + escapeHtml(item.descricao) + '" title="Excluir">';
                 html += '<i data-lucide="trash-2" class="w-4 h-4 pointer-events-none"></i>';
                 html += '</button>';
@@ -2667,6 +2670,86 @@ document.addEventListener('keydown', function(e) {
         listaEl.innerHTML = html;
         refreshIcons();
     }
+
+    window.editarItemOrcamento = async function(id, descricaoAtual, valorAtual) {
+        if (!id) return;
+        if (!window.Swal) {
+            setErro('Não foi possível abrir o editor.');
+            return;
+        }
+
+        var descEsc = escapeHtml(descricaoAtual);
+        var valorNum = typeof valorAtual === 'number' ? valorAtual : parseFloat(valorAtual);
+        if (!isFinite(valorNum)) valorNum = 0;
+
+        var result = await Swal.fire({
+            title: 'Editar Item',
+            html:
+                '<input id="swal-desc" class="swal2-input" value="' + descEsc + '" placeholder="Descrição" maxlength="150">' +
+                '<input id="swal-val" type="number" step="0.01" min="0.01" class="swal2-input" value="' + valorNum + '" placeholder="Valor (R$)">',
+            focusConfirm: false,
+            showCancelButton: true,
+            confirmButtonText: 'Salvar',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#10b981',
+            cancelButtonColor: '#64748b',
+            background: '#1e293b',
+            color: '#f8fafc',
+            preConfirm: function() {
+                var descEl = document.getElementById('swal-desc');
+                var valEl = document.getElementById('swal-val');
+                var descricao = ((descEl && descEl.value) || '').trim();
+                var valor = parseFloat(valEl && valEl.value);
+                if (!descricao) {
+                    Swal.showValidationMessage('Informe a descrição.');
+                    return false;
+                }
+                if (!isFinite(valor) || valor <= 0) {
+                    Swal.showValidationMessage('Informe um valor maior que zero.');
+                    return false;
+                }
+                return { descricao: descricao, valor: valor };
+            }
+        });
+
+        if (!result.isConfirmed || !result.value) return;
+
+        try {
+            var resp = await fetch('/api/orcamento/' + encodeURIComponent(id) + '/editar', {
+                method: 'POST',
+                headers: csrfHeaders(),
+                body: JSON.stringify({
+                    descricao: result.value.descricao,
+                    valor: result.value.valor,
+                    mes_ano: mesAnoAtual()
+                })
+            });
+            var data = await resp.json();
+            if (!resp.ok || !data.ok) {
+                setErro((data && data.mensagem) || 'Não foi possível salvar as alterações.');
+                await Swal.fire({
+                    icon: 'error',
+                    title: 'Erro',
+                    text: (data && data.mensagem) || 'Não foi possível salvar as alterações.',
+                    background: '#1e293b',
+                    color: '#f8fafc',
+                    confirmButtonColor: '#ef4444'
+                });
+                return;
+            }
+            renderizarOrcamento(data);
+        } catch (err) {
+            setErro('Erro de conexão. Tente novamente.');
+            await Swal.fire({
+                icon: 'error',
+                title: 'Erro de conexão',
+                text: 'Tente novamente.',
+                background: '#1e293b',
+                color: '#f8fafc',
+                confirmButtonColor: '#ef4444'
+            });
+        }
+    };
 
     window.togglePagamentoOrcamento = async function(itemId) {
         if (!itemId) return;
@@ -2753,6 +2836,17 @@ document.addEventListener('keydown', function(e) {
         if (btnPago) {
             e.preventDefault();
             await togglePagamentoOrcamento(btnPago.getAttribute('data-id'));
+            return;
+        }
+
+        var btnEditar = e.target.closest('.btn-editar-orcamento');
+        if (btnEditar) {
+            e.preventDefault();
+            await editarItemOrcamento(
+                btnEditar.getAttribute('data-id'),
+                btnEditar.getAttribute('data-descricao') || '',
+                parseFloat(btnEditar.getAttribute('data-valor'))
+            );
             return;
         }
 

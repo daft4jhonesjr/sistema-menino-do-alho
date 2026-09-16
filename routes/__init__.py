@@ -54,7 +54,8 @@ Estado atual:
                            /caixa/<id>/toggle_status_cheque,
                            /upload_imagem_cheque, /caixa/gaveta/{salvar,carregar},
                            /caixa/{salvar_gaveta,obter_gaveta},
-                           /api/orcamento, /api/orcamento/<id>/toggle-pagamento
+                           /api/orcamento, /api/orcamento/<id>/editar,
+                           /api/orcamento/<id>/toggle-pagamento
     * ``financeiro_bp``  → /api/balanco/dados-atuais, /api/balanco/exportar-csv
     * ``push_bp``        → /api/push/subscribe, /api/push/unsubscribe,
                            /api/push/vapid-public-key, /api/vapid-public-key (legado),
