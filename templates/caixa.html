@@ -364,7 +364,7 @@
 <!-- Overlay + Gaveta de Orçamento Pessoal -->
 <div id="gaveta-orcamento-overlay" class="fixed inset-0 z-[60] hidden bg-black/50" onclick="fecharGavetaOrcamento()" aria-hidden="true"></div>
 <div id="gaveta-orcamento" class="fixed inset-y-0 right-0 z-[70] hidden w-full max-w-md translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="gaveta-orcamento-titulo">
-    <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80">
+    <div class="flex items-center justify-between px-5 pb-4 pt-[calc(env(safe-area-inset-top,0px)+1rem)] border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80">
         <div>
             <h3 id="gaveta-orcamento-titulo" class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                 <i data-lucide="wallet" class="w-5 h-5 text-emerald-600 dark:text-emerald-400"></i>
@@ -2742,7 +2742,8 @@ document.addEventListener('keydown', function(e) {
 
         var descEsc = escapeHtml(descricaoAtual);
         var valorNum = typeof valorAtual === 'number' ? valorAtual : parseFloat(valorAtual);
-        if (!isFinite(valorNum)) valorNum = 0;
+        if (!isFinite(valorNum) || valorNum < 0) valorNum = 0;
+        var valorMascarado = formatarBRL(valorNum);
         var formaSel = formaPagamentoSegura(formaAtual);
 
         var optionsHtml = FORMAS_PAGAMENTO.map(function(f) {
@@ -2753,7 +2754,7 @@ document.addEventListener('keydown', function(e) {
             title: 'Editar Item',
             html:
                 '<input id="swal-desc" class="swal2-input" value="' + descEsc + '" placeholder="Descrição" maxlength="150">' +
-                '<input id="swal-val" type="number" step="0.01" min="0.01" class="swal2-input" value="' + valorNum + '" placeholder="Valor (R$)">' +
+                '<input id="swal-val" type="text" inputmode="decimal" autocomplete="off" class="swal2-input" value="' + escapeHtml(valorMascarado) + '" placeholder="R$ 0,00">' +
                 '<select id="swal-forma" class="swal2-select" style="width:100%;margin:0.5em 2em 0.3em;display:flex;">' + optionsHtml + '</select>',
             focusConfirm: false,
             showCancelButton: true,
@@ -2763,13 +2764,25 @@ document.addEventListener('keydown', function(e) {
             cancelButtonColor: '#64748b',
             background: '#1e293b',
             color: '#f8fafc',
-            preConfirm: function() {
+            didOpen: function() {
+                var valEl = document.getElementById('swal-val');
+                if (!valEl) return;
+                mascaraValorBRL(valEl);
+                valEl.addEventListener('input', function() {
+                    mascaraValorBRL(valEl);
+                });
+                valEl.addEventListener('blur', function() {
+                    if (valEl.value) mascaraValorBRL(valEl);
+                });
+            },
+            preConfirm: async function() {
                 var descEl = document.getElementById('swal-desc');
                 var valEl = document.getElementById('swal-val');
                 var formaEl = document.getElementById('swal-forma');
                 var descricao = ((descEl && descEl.value) || '').trim();
-                var valor = parseFloat(valEl && valEl.value);
+                var valor = parseValorBRL(valEl && valEl.value);
                 var forma_pagamento = formaPagamentoSegura(formaEl && formaEl.value);
+
                 if (!descricao) {
                     Swal.showValidationMessage('Informe a descrição.');
                     return false;
@@ -2778,48 +2791,32 @@ document.addEventListener('keydown', function(e) {
                     Swal.showValidationMessage('Informe um valor maior que zero.');
                     return false;
                 }
-                return { descricao: descricao, valor: valor, forma_pagamento: forma_pagamento };
+
+                try {
+                    var resp = await fetch('/api/orcamento/' + encodeURIComponent(id) + '/editar', {
+                        method: 'POST',
+                        headers: csrfHeaders(),
+                        body: JSON.stringify({
+                            descricao: descricao,
+                            valor: valor,
+                            forma_pagamento: forma_pagamento,
+                            mes_ano: mesAnoAtual()
+                        })
+                    });
+                    var data = await resp.json().catch(function() { return null; });
+                    if (!resp.ok || !data || !data.ok) {
+                        throw new Error((data && data.mensagem) || 'Falha ao salvar.');
+                    }
+                    return data;
+                } catch (err) {
+                    Swal.showValidationMessage('Tivemos um problema de conexão. Por favor, tente novamente.');
+                    return false;
+                }
             }
         });
 
         if (!result.isConfirmed || !result.value) return;
-
-        try {
-            var resp = await fetch('/api/orcamento/' + encodeURIComponent(id) + '/editar', {
-                method: 'POST',
-                headers: csrfHeaders(),
-                body: JSON.stringify({
-                    descricao: result.value.descricao,
-                    valor: result.value.valor,
-                    forma_pagamento: result.value.forma_pagamento,
-                    mes_ano: mesAnoAtual()
-                })
-            });
-            var data = await resp.json();
-            if (!resp.ok || !data.ok) {
-                setErro((data && data.mensagem) || 'Não foi possível salvar as alterações.');
-                await Swal.fire({
-                    icon: 'error',
-                    title: 'Erro',
-                    text: (data && data.mensagem) || 'Não foi possível salvar as alterações.',
-                    background: '#1e293b',
-                    color: '#f8fafc',
-                    confirmButtonColor: '#ef4444'
-                });
-                return;
-            }
-            renderizarOrcamento(data);
-        } catch (err) {
-            setErro('Erro de conexão. Tente novamente.');
-            await Swal.fire({
-                icon: 'error',
-                title: 'Erro de conexão',
-                text: 'Tente novamente.',
-                background: '#1e293b',
-                color: '#f8fafc',
-                confirmButtonColor: '#ef4444'
-            });
-        }
+        renderizarOrcamento(result.value);
     };
 
     window.togglePagamentoOrcamento = async function(itemId) {
