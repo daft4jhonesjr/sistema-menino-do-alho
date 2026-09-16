@@ -4419,6 +4419,19 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             _adicionar_coluna_se_ausente('log_atividades', 'arquivo_anexo', 'VARCHAR(500)')
         except (OperationalError, Exception):
             db.session.rollback()
+        try:
+            if _adicionar_coluna_se_ausente(
+                'itens_orcamento',
+                'forma_pagamento',
+                "VARCHAR(50) DEFAULT 'Pix'",
+            ):
+                db.session.execute(text(
+                    "UPDATE itens_orcamento SET forma_pagamento = 'Pix' "
+                    "WHERE forma_pagamento IS NULL OR forma_pagamento = ''"
+                ))
+                db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
         # Migração: índices para campos filtráveis (performance em 10k+ registros)
         for idx_sql in [
             'CREATE INDEX IF NOT EXISTS ix_clientes_cnpj ON clientes(cnpj)',

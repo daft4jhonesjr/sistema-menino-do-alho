@@ -764,6 +764,14 @@ class ContagemGaveta(db.Model):
 
 
 CATEGORIAS_ORCAMENTO = ('Custo básico', 'Saúde', 'Lazer', 'Investimento')
+FORMAS_PAGAMENTO_ORCAMENTO = (
+    'Pix',
+    'Cartão de Crédito',
+    'Dinheiro',
+    'Cheque',
+    'Boleto',
+    'Débito Automático',
+)
 
 
 class ItemOrcamento(db.Model):
@@ -782,6 +790,7 @@ class ItemOrcamento(db.Model):
     descricao = db.Column(db.String(150), nullable=False)
     valor = db.Column(db.Numeric(10, 2), nullable=False)
     categoria = db.Column(db.String(50), nullable=True)
+    forma_pagamento = db.Column(db.String(50), nullable=True, default='Pix')
 
     empresa = db.relationship('Empresa', backref=db.backref('itens_orcamento', lazy='dynamic'))
     pagamentos = db.relationship(

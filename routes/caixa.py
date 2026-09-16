@@ -58,7 +58,8 @@ import cloudinary.uploader
 
 from models import (
     db, Venda, LancamentoCaixa, ContagemGaveta,
-    ItemOrcamento, PagamentoOrcamento, CATEGORIAS_ORCAMENTO,
+    ItemOrcamento, PagamentoOrcamento,
+    CATEGORIAS_ORCAMENTO, FORMAS_PAGAMENTO_ORCAMENTO,
 )
 from services.auth_utils import tenant_required, admin_required, _checar_permissao_ou_redirecionar
 from services.db_utils import (
@@ -818,12 +819,20 @@ def _mes_ano_atual(valor=None):
     return f'{agora.year:04d}-{agora.month:02d}'
 
 
+def _normalizar_forma_pagamento(valor, padrao='Pix'):
+    forma = (valor or '').strip() or padrao
+    if forma not in FORMAS_PAGAMENTO_ORCAMENTO:
+        return None
+    return forma
+
+
 def _item_orcamento_dict(item, pago=False):
     return {
         'id': item.id,
         'descricao': item.descricao,
         'valor': float(item.valor or 0),
         'categoria': item.categoria or '',
+        'forma_pagamento': item.forma_pagamento or 'Pix',
         'pago': bool(pago),
     }
 
@@ -854,7 +863,12 @@ def _payload_orcamento(mes_ano=None):
     mes_ano = _mes_ano_atual(mes_ano)
     itens = (
         _query_orcamento_atual()
-        .order_by(ItemOrcamento.categoria.asc(), ItemOrcamento.descricao.asc(), ItemOrcamento.id.asc())
+        .order_by(
+            ItemOrcamento.categoria.asc(),
+            ItemOrcamento.forma_pagamento.asc(),
+            ItemOrcamento.descricao.asc(),
+            ItemOrcamento.id.asc(),
+        )
         .all()
     )
     pagos = _ids_pagos_no_mes([i.id for i in itens], mes_ano)
@@ -865,6 +879,7 @@ def _payload_orcamento(mes_ano=None):
         'itens': [_item_orcamento_dict(i, pago=(i.id in pagos)) for i in itens],
         'total': float(total),
         'categorias': list(CATEGORIAS_ORCAMENTO),
+        'formas_pagamento': list(FORMAS_PAGAMENTO_ORCAMENTO),
     }
 
 
@@ -877,7 +892,7 @@ def listar_orcamento():
 
 @caixa_bp.route('/api/orcamento', methods=['POST'])
 def criar_item_orcamento():
-    """Cria um item de orçamento (descrição, valor, categoria)."""
+    """Cria um item de orçamento (descrição, valor, categoria, forma de pagamento)."""
     data = request.get_json(silent=True) or {}
     descricao = (data.get('descricao') or '').strip()[:150]
     if not descricao:
@@ -886,6 +901,10 @@ def criar_item_orcamento():
     categoria = (data.get('categoria') or '').strip() or 'Custo básico'
     if categoria not in CATEGORIAS_ORCAMENTO:
         return jsonify({'ok': False, 'mensagem': 'Categoria inválida.'}), 400
+
+    forma_pagamento = _normalizar_forma_pagamento(data.get('forma_pagamento'))
+    if not forma_pagamento:
+        return jsonify({'ok': False, 'mensagem': 'Forma de pagamento inválida.'}), 400
 
     valor = _limpar_valor_moeda(data.get('valor'))
     if valor <= 0:
@@ -897,6 +916,7 @@ def criar_item_orcamento():
         descricao=descricao,
         valor=valor.quantize(Decimal('0.01')),
         categoria=categoria,
+        forma_pagamento=forma_pagamento,
     )
     db.session.add(item)
     ok, msg = _safe_db_commit()
@@ -911,7 +931,7 @@ def criar_item_orcamento():
 
 @caixa_bp.route('/api/orcamento/<int:item_id>/editar', methods=['POST', 'PUT'])
 def editar_item_orcamento(item_id):
-    """Atualiza descrição e/ou valor de um item do orçamento pessoal."""
+    """Atualiza descrição, valor e forma de pagamento de um item do orçamento."""
     item = _query_orcamento_atual().filter_by(id=item_id).first()
     if not item:
         return jsonify({'ok': False, 'mensagem': 'Item não encontrado.'}), 404
@@ -930,6 +950,15 @@ def editar_item_orcamento(item_id):
         if categoria not in CATEGORIAS_ORCAMENTO:
             return jsonify({'ok': False, 'mensagem': 'Categoria inválida.'}), 400
         item.categoria = categoria
+
+    if 'forma_pagamento' in data or not item.forma_pagamento:
+        forma_pagamento = _normalizar_forma_pagamento(
+            data.get('forma_pagamento'),
+            padrao=item.forma_pagamento or 'Pix',
+        )
+        if not forma_pagamento:
+            return jsonify({'ok': False, 'mensagem': 'Forma de pagamento inválida.'}), 400
+        item.forma_pagamento = forma_pagamento
 
     item.descricao = descricao
     item.valor = valor.quantize(Decimal('0.01'))
