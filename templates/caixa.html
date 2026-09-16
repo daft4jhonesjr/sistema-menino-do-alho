@@ -2923,6 +2923,9 @@ document.addEventListener('keydown', function(e) {
                 '<input id="swal-venc" type="date" class="swal2-input" value="' + escapeHtml(vencAtual) + '" placeholder="Data de Vencimento">',
             focusConfirm: false,
             showCancelButton: true,
+            showLoaderOnConfirm: true,
+            allowOutsideClick: function() { return !Swal.isLoading(); },
+            allowEscapeKey: function() { return !Swal.isLoading(); },
             confirmButtonText: 'Salvar',
             cancelButtonText: 'Cancelar',
             confirmButtonColor: '#10b981',
@@ -2944,11 +2947,12 @@ document.addEventListener('keydown', function(e) {
                 var descEl = document.getElementById('swal-desc');
                 var valEl = document.getElementById('swal-val');
                 var formaEl = document.getElementById('swal-forma');
-                var vencEl = document.getElementById('swal-venc');
                 var descricao = ((descEl && descEl.value) || '').trim();
                 var valor = parseValorBRL(valEl && valEl.value);
                 var forma_pagamento = formaPagamentoSegura(formaEl && formaEl.value);
-                var data_vencimento = ((vencEl && vencEl.value) || '').trim() || null;
+                var data_vencimento = document.getElementById('swal-venc')
+                    ? (document.getElementById('swal-venc').value || '').trim() || null
+                    : null;
 
                 if (!descricao) {
                     Swal.showValidationMessage('Informe a descrição.');
@@ -2960,24 +2964,46 @@ document.addEventListener('keydown', function(e) {
                 }
 
                 try {
+                    var headers = csrfHeaders();
+                    headers['Accept'] = 'application/json';
                     var resp = await fetch('/api/orcamento/' + encodeURIComponent(id) + '/editar', {
                         method: 'POST',
-                        headers: csrfHeaders(),
+                        headers: headers,
                         body: JSON.stringify({
                             descricao: descricao,
                             valor: valor,
                             forma_pagamento: forma_pagamento,
                             data_vencimento: data_vencimento,
                             mes_ano: mesAnoAtual()
-                        })
+                        }),
+                        credentials: 'same-origin',
+                        redirect: 'manual'
                     });
-                    var data = await resp.json().catch(function() { return null; });
+
+                    // Redirect (ex.: CSRF/login) não deve navegar a página por baixo do Swal
+                    if (resp.type === 'opaqueredirect' || (resp.status >= 300 && resp.status < 400)) {
+                        throw new Error('Sessão expirada ou CSRF inválido. Recarregue a página e tente de novo.');
+                    }
+
+                    var ct = (resp.headers.get('content-type') || '').toLowerCase();
+                    var data = null;
+                    if (ct.indexOf('application/json') >= 0) {
+                        data = await resp.json().catch(function() { return null; });
+                    } else {
+                        var texto = await resp.text().catch(function() { return ''; });
+                        if (texto && /<!doctype html|<html/i.test(texto)) {
+                            throw new Error('O servidor respondeu com HTML em vez de JSON. Recarregue a página.');
+                        }
+                        throw new Error('Resposta inválida do servidor (HTTP ' + resp.status + ').');
+                    }
+
                     if (!resp.ok || !data || !data.ok) {
-                        throw new Error((data && data.mensagem) || 'Falha ao salvar.');
+                        throw new Error((data && data.mensagem) || ('Falha ao salvar (HTTP ' + resp.status + ').'));
                     }
                     return data;
-                } catch (err) {
-                    Swal.showValidationMessage('Tivemos um problema de conexão. Por favor, tente novamente.');
+                } catch (error) {
+                    var msg = (error && error.message) ? error.message : 'Erro desconhecido';
+                    Swal.showValidationMessage('Falha na comunicação: ' + msg + '. Tente novamente.');
                     return false;
                 }
             }

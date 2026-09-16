@@ -995,10 +995,20 @@ def editar_item_orcamento(item_id):
     else:
         forma_pagamento = _sanitizar_forma_pagamento(item.forma_pagamento)
 
+    # Sempre processa data_vencimento quando vier no body (null/'' → limpa o campo)
     if 'data_vencimento' in data:
-        data_vencimento = _parse_data_vencimento(data.get('data_vencimento'))
+        raw_venc = data.get('data_vencimento')
+        if raw_venc is None or (isinstance(raw_venc, str) and not raw_venc.strip()):
+            data_vencimento = None
+        else:
+            data_vencimento = _parse_data_vencimento(raw_venc)
+            if data_vencimento is None:
+                return jsonify({
+                    'ok': False,
+                    'mensagem': 'Data de vencimento inválida. Use o formato AAAA-MM-DD.',
+                }), 400
     else:
-        data_vencimento = item.data_vencimento
+        data_vencimento = getattr(item, 'data_vencimento', None)
 
     try:
         item.descricao = descricao
@@ -1008,9 +1018,18 @@ def editar_item_orcamento(item_id):
         ok, msg = _safe_db_commit()
         if not ok:
             db.session.rollback()
-            return jsonify({'ok': False, 'mensagem': 'Não foi possível salvar as alterações.'}), 500
-    except Exception:
+            return jsonify({
+                'ok': False,
+                'mensagem': msg or 'Não foi possível salvar as alterações.',
+            }), 500
+    except Exception as exc:
         db.session.rollback()
+        exc_txt = str(exc).lower()
+        if 'data_vencimento' in exc_txt or 'no such column' in exc_txt or 'undefined column' in exc_txt:
+            return jsonify({
+                'ok': False,
+                'mensagem': 'Coluna data_vencimento ausente no banco. Reinicie o app para migrar.',
+            }), 500
         return jsonify({'ok': False, 'mensagem': 'Não foi possível salvar as alterações.'}), 500
 
     mes_ano = _mes_ano_atual(data.get('mes_ano') or request.args.get('mes_ano'))
