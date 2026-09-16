@@ -413,6 +413,7 @@
     </div>
 
     <div class="px-5 py-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 space-y-1.5">
+        <div id="orcamento-resumo-formas" class="hidden mb-3 pb-3 border-b border-slate-200 dark:border-slate-700/50 space-y-1.5"></div>
         <div class="flex items-baseline justify-between gap-3">
             <span class="text-sm font-medium text-slate-500 dark:text-slate-400">Total Pago</span>
             <span id="orcamento-total-pago" class="text-base font-bold tabular-nums text-emerald-600 dark:text-emerald-400">R$ 0,00</span>
@@ -2503,6 +2504,7 @@ document.addEventListener('keydown', function(e) {
     var listaEl = document.getElementById('lista-orcamento');
     var totalEl = document.getElementById('orcamento-total');
     var totalPagoEl = document.getElementById('orcamento-total-pago');
+    var resumoFormasEl = document.getElementById('orcamento-resumo-formas');
     var form = document.getElementById('form-orcamento');
     var erroEl = document.getElementById('orcamento-form-erro');
     if (!gaveta || !form) return;
@@ -2642,15 +2644,47 @@ document.addEventListener('keydown', function(e) {
         return d.getFullYear() + '-' + mes;
     }
 
+    function atualizarResumoFormasPagto(totaisPorFormaPagto) {
+        if (!resumoFormasEl) return;
+        var formas = Object.keys(totaisPorFormaPagto || {});
+        if (!formas.length) {
+            resumoFormasEl.innerHTML = '';
+            resumoFormasEl.classList.add('hidden');
+            return;
+        }
+        formas.sort(function(a, b) {
+            var ia = FORMAS_PAGAMENTO.indexOf(a);
+            var ib = FORMAS_PAGAMENTO.indexOf(b);
+            if (ia === -1) ia = 999;
+            if (ib === -1) ib = 999;
+            if (ia !== ib) return ia - ib;
+            return a.localeCompare(b, 'pt-BR', { sensitivity: 'base' });
+        });
+        var html = '<h4 class="text-[10px] font-bold text-slate-500 dark:text-slate-500 uppercase tracking-wider mb-2">Resumo por Forma de Pagto</h4>';
+        formas.forEach(function(forma) {
+            html += '<div class="flex justify-between items-center text-xs gap-3">';
+            html += '<span class="text-slate-600 dark:text-slate-400 truncate">' + escapeHtml(forma) + '</span>';
+            html += '<span class="font-medium tabular-nums text-slate-800 dark:text-slate-300 whitespace-nowrap">' + formatarBRL(totaisPorFormaPagto[forma]) + '</span>';
+            html += '</div>';
+        });
+        resumoFormasEl.innerHTML = html;
+        resumoFormasEl.classList.remove('hidden');
+    }
+
     function renderizarOrcamento(data) {
         var itens = (data && data.itens) || [];
         var total = data && data.total != null ? data.total : 0;
         var totalPagoGeral = 0;
+        var totaisPorFormaPagto = {};
         itens.forEach(function(item) {
-            if (item.pago) totalPagoGeral += Number(item.valor) || 0;
+            var valorItem = Number(item.valor) || 0;
+            if (item.pago) totalPagoGeral += valorItem;
+            var forma = formaPagamentoSegura(item.forma_pagamento) || 'Não informada';
+            totaisPorFormaPagto[forma] = (totaisPorFormaPagto[forma] || 0) + valorItem;
         });
         if (totalEl) totalEl.textContent = formatarBRL(total);
         if (totalPagoEl) totalPagoEl.textContent = formatarBRL(totalPagoGeral);
+        atualizarResumoFormasPagto(itens.length ? totaisPorFormaPagto : {});
 
         if (!itens.length) {
             listaEl.innerHTML = '<p class="text-sm text-slate-400 dark:text-slate-500 text-center py-10">Nenhum item ainda. Adicione suas despesas mensais.</p>';
