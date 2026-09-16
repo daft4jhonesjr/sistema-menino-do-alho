@@ -808,6 +808,10 @@ def api_fechar_mes_caixa():
     return jsonify(resultado), status
 
 
+METODOS_PERMITIDOS = list(FORMAS_PAGAMENTO_ORCAMENTO)
+_FORMA_PAGAMENTO_PADRAO = 'Pix'
+
+
 def _mes_ano_atual(valor=None):
     """Normaliza competência para 'YYYY-MM'. Aceita query/body ou usa o mês corrente."""
     raw = (valor or '').strip() if isinstance(valor, str) else ''
@@ -819,10 +823,19 @@ def _mes_ano_atual(valor=None):
     return f'{agora.year:04d}-{agora.month:02d}'
 
 
-def _normalizar_forma_pagamento(valor, padrao='Pix'):
-    forma = (valor or '').strip() or padrao
-    if forma not in FORMAS_PAGAMENTO_ORCAMENTO:
-        return None
+def _sanitizar_forma_pagamento(valor):
+    """Whitelist + limite de tamanho para forma_pagamento do orçamento.
+
+    Valores nulos, vazios ou fora de ``METODOS_PERMITIDOS`` caem no padrão
+    seguro ``Pix``. O resultado nunca excede 50 caracteres.
+    """
+    if valor is None:
+        return _FORMA_PAGAMENTO_PADRAO
+    if not isinstance(valor, str):
+        valor = str(valor)
+    forma = valor.strip()[:50]
+    if not forma or forma not in METODOS_PERMITIDOS:
+        return _FORMA_PAGAMENTO_PADRAO
     return forma
 
 
@@ -832,7 +845,7 @@ def _item_orcamento_dict(item, pago=False):
         'descricao': item.descricao,
         'valor': float(item.valor or 0),
         'categoria': item.categoria or '',
-        'forma_pagamento': item.forma_pagamento or 'Pix',
+        'forma_pagamento': _sanitizar_forma_pagamento(item.forma_pagamento),
         'pago': bool(pago),
     }
 
@@ -902,26 +915,30 @@ def criar_item_orcamento():
     if categoria not in CATEGORIAS_ORCAMENTO:
         return jsonify({'ok': False, 'mensagem': 'Categoria inválida.'}), 400
 
-    forma_pagamento = _normalizar_forma_pagamento(data.get('forma_pagamento'))
-    if not forma_pagamento:
-        return jsonify({'ok': False, 'mensagem': 'Forma de pagamento inválida.'}), 400
+    forma_pagamento = _sanitizar_forma_pagamento(data.get('forma_pagamento'))
 
     valor = _limpar_valor_moeda(data.get('valor'))
     if valor <= 0:
         return jsonify({'ok': False, 'mensagem': 'Informe um valor maior que zero.'}), 400
 
-    item = ItemOrcamento(
-        empresa_id=empresa_id_atual(),
-        usuario_id=getattr(current_user, 'id', None),
-        descricao=descricao,
-        valor=valor.quantize(Decimal('0.01')),
-        categoria=categoria,
-        forma_pagamento=forma_pagamento,
-    )
-    db.session.add(item)
-    ok, msg = _safe_db_commit()
-    if not ok:
+    try:
+        item = ItemOrcamento(
+            empresa_id=empresa_id_atual(),
+            usuario_id=getattr(current_user, 'id', None),
+            descricao=descricao,
+            valor=valor.quantize(Decimal('0.01')),
+            categoria=categoria,
+            forma_pagamento=str(forma_pagamento)[:50],
+        )
+        db.session.add(item)
+        ok, msg = _safe_db_commit()
+        if not ok:
+            db.session.rollback()
+            return jsonify({'ok': False, 'mensagem': 'Não foi possível salvar o item.'}), 500
+    except Exception:
+        db.session.rollback()
         return jsonify({'ok': False, 'mensagem': 'Não foi possível salvar o item.'}), 500
+
     mes_ano = _mes_ano_atual(data.get('mes_ano'))
     payload = _payload_orcamento(mes_ano)
     payload['item'] = _item_orcamento_dict(item, pago=False)
@@ -951,20 +968,22 @@ def editar_item_orcamento(item_id):
             return jsonify({'ok': False, 'mensagem': 'Categoria inválida.'}), 400
         item.categoria = categoria
 
-    if 'forma_pagamento' in data or not item.forma_pagamento:
-        forma_pagamento = _normalizar_forma_pagamento(
-            data.get('forma_pagamento'),
-            padrao=item.forma_pagamento or 'Pix',
-        )
-        if not forma_pagamento:
-            return jsonify({'ok': False, 'mensagem': 'Forma de pagamento inválida.'}), 400
-        item.forma_pagamento = forma_pagamento
+    # Sempre sanitiza: whitelist + default Pix + limite 50
+    if 'forma_pagamento' in data:
+        forma_pagamento = _sanitizar_forma_pagamento(data.get('forma_pagamento'))
+    else:
+        forma_pagamento = _sanitizar_forma_pagamento(item.forma_pagamento)
 
-    item.descricao = descricao
-    item.valor = valor.quantize(Decimal('0.01'))
-
-    ok, msg = _safe_db_commit()
-    if not ok:
+    try:
+        item.descricao = descricao
+        item.valor = valor.quantize(Decimal('0.01'))
+        item.forma_pagamento = str(forma_pagamento)[:50]
+        ok, msg = _safe_db_commit()
+        if not ok:
+            db.session.rollback()
+            return jsonify({'ok': False, 'mensagem': 'Não foi possível salvar as alterações.'}), 500
+    except Exception:
+        db.session.rollback()
         return jsonify({'ok': False, 'mensagem': 'Não foi possível salvar as alterações.'}), 500
 
     mes_ano = _mes_ano_atual(data.get('mes_ano') or request.args.get('mes_ano'))

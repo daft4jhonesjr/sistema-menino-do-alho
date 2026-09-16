@@ -2523,6 +2523,12 @@ document.addEventListener('keydown', function(e) {
         'Débito Automático'
     ];
 
+    function formaPagamentoSegura(valor) {
+        var forma = String(valor == null ? '' : valor).trim().slice(0, 50);
+        if (!forma || FORMAS_PAGAMENTO.indexOf(forma) === -1) return 'Pix';
+        return forma;
+    }
+
     function csrfHeaders() {
         var headers = { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
         if (typeof window.getCsrfHeaders === 'function') {
@@ -2682,8 +2688,8 @@ document.addEventListener('keydown', function(e) {
             html += '</div>';
             html += '<ul class="space-y-2">';
             var itensCat = grupos[cat].slice().sort(function(a, b) {
-                var fa = String(a.forma_pagamento || 'Pix');
-                var fb = String(b.forma_pagamento || 'Pix');
+                var fa = formaPagamentoSegura(a.forma_pagamento);
+                var fb = formaPagamentoSegura(b.forma_pagamento);
                 var cmp = fa.localeCompare(fb, 'pt-BR', { sensitivity: 'base' });
                 if (cmp !== 0) return cmp;
                 return String(a.descricao || '').localeCompare(String(b.descricao || ''), 'pt-BR', { sensitivity: 'base' });
@@ -2694,17 +2700,18 @@ document.addEventListener('keydown', function(e) {
                 var btnPagoCls = pago
                     ? 'text-emerald-500 bg-emerald-500/10'
                     : 'text-gray-300 hover:text-emerald-500';
-                var forma = item.forma_pagamento || 'Não informada';
+                var forma = formaPagamentoSegura(item.forma_pagamento);
+                var formaEsc = escapeHtml(forma);
                 html += '<li class="flex items-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-3 py-2.5" data-item-id="' + item.id + '">';
                 html += '<div class="min-w-0 flex-1 flex flex-col">';
                 html += '<p class="orcamento-descricao text-sm font-medium text-slate-800 dark:text-slate-100 truncate' + textoPago + '">' + escapeHtml(item.descricao) + '</p>';
-                html += '<span class="text-[10px] font-bold text-slate-500 dark:text-slate-400 bg-slate-200/70 dark:bg-slate-700/50 px-1.5 py-0.5 rounded w-max mt-0.5 border border-slate-300/60 dark:border-slate-600/50">' + escapeHtml(forma) + '</span>';
+                html += '<span class="orcamento-forma text-[10px] font-bold text-slate-500 dark:text-slate-400 bg-slate-200/70 dark:bg-slate-700/50 px-1.5 py-0.5 rounded w-max mt-0.5 border border-slate-300/60 dark:border-slate-600/50"></span>';
                 html += '</div>';
                 html += '<span class="orcamento-valor text-sm font-bold tabular-nums text-slate-900 dark:text-white whitespace-nowrap' + textoPago + '">' + formatarBRL(item.valor) + '</span>';
                 html += '<button type="button" class="btn-pago-orcamento shrink-0 p-1.5 rounded-lg transition-colors ' + btnPagoCls + '" data-id="' + item.id + '" data-pago="' + (pago ? '1' : '0') + '" title="' + (pago ? 'Desmarcar como pago' : 'Marcar como pago') + '" aria-label="' + (pago ? 'Desmarcar como pago' : 'Marcar como pago') + '" aria-pressed="' + (pago ? 'true' : 'false') + '">';
                 html += '<i data-lucide="check" class="w-4 h-4 pointer-events-none"></i>';
                 html += '</button>';
-                html += '<button type="button" class="btn-editar-orcamento shrink-0 p-1.5 rounded-lg text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 transition-colors" data-id="' + item.id + '" data-descricao="' + escapeHtml(item.descricao) + '" data-valor="' + (Number(item.valor) || 0) + '" data-forma="' + escapeHtml(forma) + '" title="Editar Item" aria-label="Editar Item">';
+                html += '<button type="button" class="btn-editar-orcamento shrink-0 p-1.5 rounded-lg text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 transition-colors" data-id="' + item.id + '" data-descricao="' + escapeHtml(item.descricao) + '" data-valor="' + (Number(item.valor) || 0) + '" data-forma="' + formaEsc + '" title="Editar Item" aria-label="Editar Item">';
                 html += '<i data-lucide="pencil" class="w-4 h-4 pointer-events-none"></i>';
                 html += '</button>';
                 html += '<button type="button" class="btn-excluir-orcamento shrink-0 p-1.5 rounded-lg text-red-500 hover:text-white hover:bg-red-600 dark:text-red-400 dark:hover:text-white dark:hover:bg-red-600 transition-colors" data-id="' + item.id + '" data-descricao="' + escapeHtml(item.descricao) + '" title="Excluir">';
@@ -2715,6 +2722,14 @@ document.addEventListener('keydown', function(e) {
             html += '</ul></div>';
         });
         listaEl.innerHTML = html;
+        // textContent evita XSS mesmo se algum valor escapar da whitelist
+        listaEl.querySelectorAll('li[data-item-id]').forEach(function(li) {
+            var btn = li.querySelector('.btn-editar-orcamento');
+            var badge = li.querySelector('.orcamento-forma');
+            if (badge) {
+                badge.textContent = formaPagamentoSegura(btn && btn.getAttribute('data-forma'));
+            }
+        });
         refreshIcons();
     }
 
@@ -2728,8 +2743,7 @@ document.addEventListener('keydown', function(e) {
         var descEsc = escapeHtml(descricaoAtual);
         var valorNum = typeof valorAtual === 'number' ? valorAtual : parseFloat(valorAtual);
         if (!isFinite(valorNum)) valorNum = 0;
-        var formaSel = formaAtual || 'Pix';
-        if (FORMAS_PAGAMENTO.indexOf(formaSel) === -1) formaSel = 'Pix';
+        var formaSel = formaPagamentoSegura(formaAtual);
 
         var optionsHtml = FORMAS_PAGAMENTO.map(function(f) {
             return '<option value="' + escapeHtml(f) + '"' + (f === formaSel ? ' selected' : '') + '>' + escapeHtml(f) + '</option>';
@@ -2755,17 +2769,13 @@ document.addEventListener('keydown', function(e) {
                 var formaEl = document.getElementById('swal-forma');
                 var descricao = ((descEl && descEl.value) || '').trim();
                 var valor = parseFloat(valEl && valEl.value);
-                var forma_pagamento = (formaEl && formaEl.value) || 'Pix';
+                var forma_pagamento = formaPagamentoSegura(formaEl && formaEl.value);
                 if (!descricao) {
                     Swal.showValidationMessage('Informe a descrição.');
                     return false;
                 }
                 if (!isFinite(valor) || valor <= 0) {
                     Swal.showValidationMessage('Informe um valor maior que zero.');
-                    return false;
-                }
-                if (FORMAS_PAGAMENTO.indexOf(forma_pagamento) === -1) {
-                    Swal.showValidationMessage('Forma de pagamento inválida.');
                     return false;
                 }
                 return { descricao: descricao, valor: valor, forma_pagamento: forma_pagamento };
@@ -2863,7 +2873,7 @@ document.addEventListener('keydown', function(e) {
             descricao: (document.getElementById('orcamento-descricao').value || '').trim(),
             valor: valorFloat,
             categoria: document.getElementById('orcamento-categoria').value,
-            forma_pagamento: (document.getElementById('forma-pagamento-orcamento') || {}).value || 'Pix',
+            forma_pagamento: formaPagamentoSegura((document.getElementById('forma-pagamento-orcamento') || {}).value),
             mes_ano: mesAnoAtual()
         };
         if (!payload.descricao) {
@@ -2910,7 +2920,7 @@ document.addEventListener('keydown', function(e) {
                 btnEditar.getAttribute('data-id'),
                 btnEditar.getAttribute('data-descricao') || '',
                 parseFloat(btnEditar.getAttribute('data-valor')),
-                btnEditar.getAttribute('data-forma') || 'Pix'
+                formaPagamentoSegura(btnEditar.getAttribute('data-forma'))
             );
             return;
         }
