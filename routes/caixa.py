@@ -14,9 +14,10 @@ Rotas extraídas do legado ``app.py``:
 * ``POST /caixa/deletar_massa``                    — deletar múltiplos (admin)
 * ``POST /caixa/importar``                         — importação CSV/TSV/TXT
 * ``POST /api/caixa/fechar_mes``                   — zera/transporta fundo mensal
-* ``GET  /api/orcamento``                          — lista itens + total do orçamento
+* ``GET  /api/orcamento``                          — lista itens + total do orçamento (+ flag pago)
 * ``POST /api/orcamento``                          — cria item do orçamento
 * ``DELETE /api/orcamento/<id>``                   — remove item do orçamento
+* ``POST /api/orcamento/<id>/toggle-pagamento``    — marca/desmarca pago no mês atual
 
 Helpers exclusivos do módulo (usados também por scripts utilitários e
 por outros blueprints via ``from routes.caixa import _limpar_valor_moeda``):
@@ -54,7 +55,10 @@ from sqlalchemy import event, func, case
 import cloudinary
 import cloudinary.uploader
 
-from models import db, Venda, LancamentoCaixa, ContagemGaveta, ItemOrcamento, CATEGORIAS_ORCAMENTO
+from models import (
+    db, Venda, LancamentoCaixa, ContagemGaveta,
+    ItemOrcamento, PagamentoOrcamento, CATEGORIAS_ORCAMENTO,
+)
 from services.auth_utils import tenant_required, admin_required, _checar_permissao_ou_redirecionar
 from services.db_utils import (
     query_tenant, empresa_id_atual, _safe_db_commit,
@@ -802,12 +806,24 @@ def api_fechar_mes_caixa():
     return jsonify(resultado), status
 
 
-def _item_orcamento_dict(item):
+def _mes_ano_atual(valor=None):
+    """Normaliza competência para 'YYYY-MM'. Aceita query/body ou usa o mês corrente."""
+    raw = (valor or '').strip() if isinstance(valor, str) else ''
+    if len(raw) == 7 and raw[4] == '-' and raw[:4].isdigit() and raw[5:].isdigit():
+        mes = int(raw[5:])
+        if 1 <= mes <= 12:
+            return raw
+    agora = datetime.now()
+    return f'{agora.year:04d}-{agora.month:02d}'
+
+
+def _item_orcamento_dict(item, pago=False):
     return {
         'id': item.id,
         'descricao': item.descricao,
         'valor': float(item.valor or 0),
         'categoria': item.categoria or '',
+        'pago': bool(pago),
     }
 
 
@@ -819,16 +835,33 @@ def _query_orcamento_atual():
     return q
 
 
-def _payload_orcamento():
+def _ids_pagos_no_mes(item_ids, mes_ano):
+    if not item_ids:
+        return set()
+    rows = (
+        db.session.query(PagamentoOrcamento.item_id)
+        .filter(
+            PagamentoOrcamento.item_id.in_(item_ids),
+            PagamentoOrcamento.mes_ano == mes_ano,
+        )
+        .all()
+    )
+    return {r[0] for r in rows}
+
+
+def _payload_orcamento(mes_ano=None):
+    mes_ano = _mes_ano_atual(mes_ano)
     itens = (
         _query_orcamento_atual()
         .order_by(ItemOrcamento.categoria.asc(), ItemOrcamento.descricao.asc(), ItemOrcamento.id.asc())
         .all()
     )
+    pagos = _ids_pagos_no_mes([i.id for i in itens], mes_ano)
     total = sum((Decimal(str(i.valor or 0)) for i in itens), Decimal('0.00'))
     return {
         'ok': True,
-        'itens': [_item_orcamento_dict(i) for i in itens],
+        'mes_ano': mes_ano,
+        'itens': [_item_orcamento_dict(i, pago=(i.id in pagos)) for i in itens],
         'total': float(total),
         'categorias': list(CATEGORIAS_ORCAMENTO),
     }
@@ -836,8 +869,9 @@ def _payload_orcamento():
 
 @caixa_bp.route('/api/orcamento', methods=['GET'])
 def listar_orcamento():
-    """Retorna os itens do orçamento pessoal do usuário, agrupáveis por categoria."""
-    return jsonify(_payload_orcamento())
+    """Retorna os itens do orçamento pessoal do usuário, com flag pago no mês."""
+    mes_ano = _mes_ano_atual(request.args.get('mes_ano'))
+    return jsonify(_payload_orcamento(mes_ano))
 
 
 @caixa_bp.route('/api/orcamento', methods=['POST'])
@@ -867,8 +901,9 @@ def criar_item_orcamento():
     ok, msg = _safe_db_commit()
     if not ok:
         return jsonify({'ok': False, 'mensagem': 'Não foi possível salvar o item.'}), 500
-    payload = _payload_orcamento()
-    payload['item'] = _item_orcamento_dict(item)
+    mes_ano = _mes_ano_atual(data.get('mes_ano'))
+    payload = _payload_orcamento(mes_ano)
+    payload['item'] = _item_orcamento_dict(item, pago=False)
     payload['mensagem'] = 'Item adicionado.'
     return jsonify(payload), 201
 
@@ -883,8 +918,48 @@ def deletar_item_orcamento(item_id):
     ok, msg = _safe_db_commit()
     if not ok:
         return jsonify({'ok': False, 'mensagem': 'Não foi possível excluir o item.'}), 500
-    payload = _payload_orcamento()
+    mes_ano = _mes_ano_atual(request.args.get('mes_ano') or (request.get_json(silent=True) or {}).get('mes_ano'))
+    payload = _payload_orcamento(mes_ano)
     payload['mensagem'] = 'Item excluído.'
+    return jsonify(payload)
+
+
+@caixa_bp.route('/api/orcamento/<int:item_id>/toggle-pagamento', methods=['POST'])
+def toggle_pagamento_orcamento(item_id):
+    """Alterna o status de pago do item na competência informada (ou mês atual).
+
+    Se existir registro em PagamentoOrcamento para (item, mes_ano), remove-o
+    (pendente). Caso contrário, cria o registro (pago).
+    """
+    item = _query_orcamento_atual().filter_by(id=item_id).first()
+    if not item:
+        return jsonify({'ok': False, 'mensagem': 'Item não encontrado.'}), 404
+
+    data = request.get_json(silent=True) or {}
+    mes_ano = _mes_ano_atual(data.get('mes_ano') or request.args.get('mes_ano'))
+
+    existente = (
+        PagamentoOrcamento.query
+        .filter_by(item_id=item.id, mes_ano=mes_ano)
+        .first()
+    )
+    if existente:
+        db.session.delete(existente)
+        pago = False
+        mensagem = 'Pagamento desmarcado.'
+    else:
+        db.session.add(PagamentoOrcamento(item_id=item.id, mes_ano=mes_ano))
+        pago = True
+        mensagem = 'Marcado como pago.'
+
+    ok, msg = _safe_db_commit()
+    if not ok:
+        return jsonify({'ok': False, 'mensagem': 'Não foi possível atualizar o pagamento.'}), 500
+
+    payload = _payload_orcamento(mes_ano)
+    payload['item'] = _item_orcamento_dict(item, pago=pago)
+    payload['pago'] = pago
+    payload['mensagem'] = mensagem
     return jsonify(payload)
 
 

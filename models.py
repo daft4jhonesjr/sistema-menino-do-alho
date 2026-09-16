@@ -784,9 +784,43 @@ class ItemOrcamento(db.Model):
     categoria = db.Column(db.String(50), nullable=True)
 
     empresa = db.relationship('Empresa', backref=db.backref('itens_orcamento', lazy='dynamic'))
+    pagamentos = db.relationship(
+        'PagamentoOrcamento',
+        back_populates='item',
+        cascade='all, delete-orphan',
+        lazy='dynamic',
+    )
 
     def __repr__(self):
         return f'<ItemOrcamento {self.id} {self.descricao}>'
+
+
+class PagamentoOrcamento(db.Model):
+    """Registro de pagamento mensal de um item do orçamento (competência YYYY-MM).
+
+    A presença de uma linha para (item_id, mes_ano) significa que o item
+    está pago naquele mês. Sem registro = pendente. Assim o status reseta
+    automaticamente no dia 1º de cada mês (novo mes_ano sem registro).
+    """
+
+    __tablename__ = 'pagamentos_orcamento'
+    __table_args__ = (
+        db.UniqueConstraint('item_id', 'mes_ano', name='uq_pagamento_orcamento_item_mes'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    item_id = db.Column(
+        db.Integer,
+        db.ForeignKey('itens_orcamento.id', ondelete='CASCADE'),
+        nullable=False,
+        index=True,
+    )
+    mes_ano = db.Column(db.String(7), nullable=False, index=True)  # 'YYYY-MM'
+
+    item = db.relationship('ItemOrcamento', back_populates='pagamentos')
+
+    def __repr__(self):
+        return f'<PagamentoOrcamento item={self.item_id} {self.mes_ano}>'
 
 
 class PushSubscription(db.Model):

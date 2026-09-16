@@ -2606,6 +2606,12 @@ document.addEventListener('keydown', function(e) {
         });
     }
 
+    function mesAnoAtual() {
+        var d = new Date();
+        var mes = String(d.getMonth() + 1).padStart(2, '0');
+        return d.getFullYear() + '-' + mes;
+    }
+
     function renderizarOrcamento(data) {
         var itens = (data && data.itens) || [];
         var total = data && data.total != null ? data.total : 0;
@@ -2638,11 +2644,19 @@ document.addEventListener('keydown', function(e) {
             html += '</div>';
             html += '<ul class="space-y-2">';
             grupos[cat].forEach(function(item) {
-                html += '<li class="flex items-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-3 py-2.5">';
+                var pago = !!item.pago;
+                var textoPago = pago ? ' line-through opacity-50' : '';
+                var btnPagoCls = pago
+                    ? 'text-emerald-500 bg-emerald-500/10'
+                    : 'text-gray-300 hover:text-emerald-500';
+                html += '<li class="flex items-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-3 py-2.5" data-item-id="' + item.id + '">';
                 html += '<div class="min-w-0 flex-1">';
-                html += '<p class="text-sm font-medium text-slate-800 dark:text-slate-100 truncate">' + escapeHtml(item.descricao) + '</p>';
+                html += '<p class="orcamento-descricao text-sm font-medium text-slate-800 dark:text-slate-100 truncate' + textoPago + '">' + escapeHtml(item.descricao) + '</p>';
                 html += '</div>';
-                html += '<span class="text-sm font-bold tabular-nums text-slate-900 dark:text-white whitespace-nowrap">' + formatarBRL(item.valor) + '</span>';
+                html += '<span class="orcamento-valor text-sm font-bold tabular-nums text-slate-900 dark:text-white whitespace-nowrap' + textoPago + '">' + formatarBRL(item.valor) + '</span>';
+                html += '<button type="button" class="btn-pago-orcamento shrink-0 p-1.5 rounded-lg transition-colors ' + btnPagoCls + '" data-id="' + item.id + '" data-pago="' + (pago ? '1' : '0') + '" title="' + (pago ? 'Desmarcar como pago' : 'Marcar como pago') + '" aria-label="' + (pago ? 'Desmarcar como pago' : 'Marcar como pago') + '" aria-pressed="' + (pago ? 'true' : 'false') + '">';
+                html += '<i data-lucide="check" class="w-4 h-4 pointer-events-none"></i>';
+                html += '</button>';
                 html += '<button type="button" class="btn-excluir-orcamento shrink-0 p-1.5 rounded-lg text-red-500 hover:text-white hover:bg-red-600 dark:text-red-400 dark:hover:text-white dark:hover:bg-red-600 transition-colors" data-id="' + item.id + '" data-descricao="' + escapeHtml(item.descricao) + '" title="Excluir">';
                 html += '<i data-lucide="trash-2" class="w-4 h-4 pointer-events-none"></i>';
                 html += '</button>';
@@ -2654,10 +2668,33 @@ document.addEventListener('keydown', function(e) {
         refreshIcons();
     }
 
+    window.togglePagamentoOrcamento = async function(itemId) {
+        if (!itemId) return;
+        var btn = listaEl && listaEl.querySelector('.btn-pago-orcamento[data-id="' + itemId + '"]');
+        if (btn) btn.disabled = true;
+        try {
+            var resp = await fetch('/api/orcamento/' + encodeURIComponent(itemId) + '/toggle-pagamento', {
+                method: 'POST',
+                headers: csrfHeaders(),
+                body: JSON.stringify({ mes_ano: mesAnoAtual() })
+            });
+            var data = await resp.json();
+            if (!resp.ok || !data.ok) {
+                setErro((data && data.mensagem) || 'Não foi possível atualizar o pagamento.');
+                if (btn) btn.disabled = false;
+                return;
+            }
+            renderizarOrcamento(data);
+        } catch (err) {
+            setErro('Erro de conexão. Tente novamente.');
+            if (btn) btn.disabled = false;
+        }
+    };
+
     window.carregarOrcamento = async function() {
         if (!listaEl) return;
         try {
-            var resp = await fetch('/api/orcamento', { headers: csrfHeaders() });
+            var resp = await fetch('/api/orcamento?mes_ano=' + encodeURIComponent(mesAnoAtual()), { headers: csrfHeaders() });
             var data = await resp.json();
             if (!resp.ok || !data.ok) {
                 listaEl.innerHTML = '<p class="text-sm text-red-500 text-center py-8">' + escapeHtml((data && data.mensagem) || 'Não foi possível carregar o orçamento.') + '</p>';
@@ -2681,7 +2718,8 @@ document.addEventListener('keydown', function(e) {
         var payload = {
             descricao: (document.getElementById('orcamento-descricao').value || '').trim(),
             valor: valorFloat,
-            categoria: document.getElementById('orcamento-categoria').value
+            categoria: document.getElementById('orcamento-categoria').value,
+            mes_ano: mesAnoAtual()
         };
         if (!payload.descricao) {
             setErro('Informe a descrição.');
@@ -2711,6 +2749,13 @@ document.addEventListener('keydown', function(e) {
     });
 
     listaEl.addEventListener('click', async function(e) {
+        var btnPago = e.target.closest('.btn-pago-orcamento');
+        if (btnPago) {
+            e.preventDefault();
+            await togglePagamentoOrcamento(btnPago.getAttribute('data-id'));
+            return;
+        }
+
         var btn = e.target.closest('.btn-excluir-orcamento');
         if (!btn) return;
         var id = btn.getAttribute('data-id');
@@ -2733,7 +2778,7 @@ document.addEventListener('keydown', function(e) {
         if (!confirmar) return;
         btn.disabled = true;
         try {
-            var resp = await fetch('/api/orcamento/' + encodeURIComponent(id), {
+            var resp = await fetch('/api/orcamento/' + encodeURIComponent(id) + '?mes_ano=' + encodeURIComponent(mesAnoAtual()), {
                 method: 'DELETE',
                 headers: csrfHeaders()
             });
