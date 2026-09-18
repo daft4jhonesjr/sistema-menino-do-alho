@@ -41,36 +41,25 @@
         <button type="button" id="bulk-delete-btn" class="hidden bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-xl transition duration-200 ease-in-out flex items-center justify-center w-full sm:w-auto" data-endpoint="{{ url_for('produtos.bulk_delete_produtos') }}" data-redirect="{{ url_for('produtos.listar_produtos', ordem_data=ordem_data) }}">
             <i data-lucide="trash-2" class="w-4 h-4 mr-2"></i>Excluir Selecionados
         </button>
-        <div class="flex w-full sm:w-auto sm:inline-flex rounded-md shadow-sm" id="grupo-botoes-entrada">
-            <button type="button" id="btn-toggle-nova-entrada" class="flex-1 justify-center inline-flex items-center px-6 py-3 rounded-l-md border border-transparent bg-emerald-700 text-lg font-medium text-white hover:bg-emerald-800 transition-colors">
+        <div class="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center w-full sm:w-auto" id="grupo-botoes-entrada">
+            <button type="button" id="btn-toggle-nova-entrada" class="flex-1 sm:flex-none justify-center inline-flex items-center px-6 py-3 rounded-xl border border-transparent bg-emerald-700 text-lg font-medium text-white hover:bg-emerald-800 transition-colors">
                 📦 Nova Entrada
             </button>
-
-            <div class="relative block">
-                <button type="button" id="btn-dropdown-produtos" onclick="toggleDropdownEntrada(event)" class="inline-flex items-center px-4 py-3 rounded-r-md border-l border-emerald-800 bg-emerald-700 text-lg font-medium text-white hover:bg-emerald-800 transition-colors h-full">
-                    <i class="fas fa-chevron-down"></i>
+            <div class="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
+                <button type="button" data-gaveta-acao="relatorio" class="inline-flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-300 dark:hover:border-emerald-700 hover:text-emerald-800 dark:hover:text-emerald-300 transition-colors">
+                    📄 Relatório
                 </button>
-
-                <div id="dropdown-entrada" class="hidden origin-top-right absolute right-0 mt-2 w-72 sm:w-56 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 z-50">
-                    <div class="py-1">
-                        <button type="button" onclick="fecharDropdownEntrada();abrirModalRelatorioProdutos();" class="group flex items-center w-full px-4 py-3 sm:py-2 text-base sm:text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
-                            📄&nbsp;Gerar Relatorio
-                        </button>
-                        {% if current_user.is_authenticated and current_user.is_admin() %}
-                        <a href="{{ url_for('produtos.importar_produtos') }}" class="group flex items-center px-4 py-3 sm:py-2 text-base sm:text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700" onclick="fecharDropdownEntrada()">
-                            📥&nbsp;Importar Lista
-                        </a>
-                        {% endif %}
-
-                        <a href="#" data-bs-toggle="modal" data-bs-target="#modalTiposCadastrados" onclick="event.preventDefault();fecharDropdownEntrada();document.getElementById('modalTiposCadastrados').classList.remove('hidden');travarFundo();" class="group flex items-center px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
-                            📂&nbsp;Tipos Cadastrados
-                        </a>
-
-                        <button type="button" onclick="fecharDropdownEntrada();document.getElementById('modal-lista-fornecedores').classList.remove('hidden');travarFundo();" class="group flex items-center w-full px-4 py-3 sm:py-2 text-base sm:text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
-                            📋&nbsp;Fornecedores Cadastrados
-                        </button>
-                    </div>
-                </div>
+                {% if current_user.is_authenticated and current_user.is_admin() %}
+                <button type="button" data-gaveta-acao="importar" class="inline-flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-300 dark:hover:border-emerald-700 hover:text-emerald-800 dark:hover:text-emerald-300 transition-colors">
+                    📥 Importar
+                </button>
+                {% endif %}
+                <button type="button" data-gaveta-acao="tipos" class="inline-flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-300 dark:hover:border-emerald-700 hover:text-emerald-800 dark:hover:text-emerald-300 transition-colors">
+                    📂 Tipos
+                </button>
+                <button type="button" data-gaveta-acao="fornecedores" class="inline-flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-300 dark:hover:border-emerald-700 hover:text-emerald-800 dark:hover:text-emerald-300 transition-colors">
+                    📋 Fornecedores
+                </button>
             </div>
         </div>
     </div>
@@ -174,82 +163,6 @@
     });
 })();
 </script>
-
-<div id="modal-relatorio-produtos-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
-    <div class="fixed inset-0 bg-black/50" id="modal-relatorio-produtos-overlay"></div>
-    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 z-50" onclick="event.stopPropagation()">
-        <div class="sticky top-0 flex justify-between items-center px-8 py-5 bg-emerald-700 text-white rounded-t-xl z-10">
-            <h3 class="text-xl font-bold flex items-center">
-                <i data-lucide="file-spreadsheet" class="w-5 h-5 mr-2"></i>Gerador de Relatorio de Produtos
-            </h3>
-            <button type="button" id="modal-relatorio-produtos-fechar" class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-emerald-600 text-white font-bold transition" title="Fechar">
-                <i data-lucide="x" class="w-5 h-5"></i>
-            </button>
-        </div>
-        <div class="p-6">
-            <form action="{{ url_for('produtos.exportar_relatorio_produtos') }}" method="POST" id="form-relatorio-produtos">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-
-                <div class="mb-6">
-                    <h4 class="text-sm font-bold uppercase tracking-wide text-gray-600 dark:text-gray-300 mb-3">Filtros</h4>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                            <label for="filtro_fornecedor" class="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Fornecedor</label>
-                            <select id="filtro_fornecedor" name="filtro_fornecedor" class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm px-3 py-2 focus:ring-2 focus:ring-emerald-500">
-                                <option value="TODOS">Todos</option>
-                                {% for f in fornecedores %}
-                                <option value="{{ (f.nome or '')|upper }}">{{ (f.nome or '')|upper }}</option>
-                                {% endfor %}
-                                <option value="NENHUM">NENHUM</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label for="filtro_tipo" class="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Tipo</label>
-                            <select id="filtro_tipo" name="filtro_tipo" class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm px-3 py-2 focus:ring-2 focus:ring-emerald-500">
-                                <option value="TODOS">Todos</option>
-                                {% for t in tipos_produto %}
-                                <option value="{{ (t.nome or '')|upper }}">{{ (t.nome or '')|upper }}</option>
-                                {% endfor %}
-                                <option value="OUTROS">OUTROS</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label for="filtro_nacionalidade" class="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Nacionalidade</label>
-                            <select id="filtro_nacionalidade" name="filtro_nacionalidade" class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm px-3 py-2 focus:ring-2 focus:ring-emerald-500">
-                                <option value="TODAS">Todas</option>
-                                <option value="NACIONAL">NACIONAL</option>
-                                <option value="ARGENTINO">ARGENTINO</option>
-                                <option value="CHINES">CHINES</option>
-                                <option value="N/A">N/A</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="mb-6">
-                    <h4 class="text-sm font-bold uppercase tracking-wide text-gray-600 dark:text-gray-300 mb-3">Colunas para exportar</h4>
-                    <div class="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
-                        <label class="flex items-center gap-2"><input type="checkbox" name="colunas" value="produto" checked class="rounded text-emerald-600 focus:ring-emerald-500">Produto</label>
-                        <label class="flex items-center gap-2"><input type="checkbox" name="colunas" value="preco" checked class="rounded text-emerald-600 focus:ring-emerald-500">Preco</label>
-                        <label class="flex items-center gap-2"><input type="checkbox" name="colunas" value="qtd_entrada" checked class="rounded text-emerald-600 focus:ring-emerald-500">Qtd Entrada</label>
-                        <label class="flex items-center gap-2"><input type="checkbox" name="colunas" value="valor_total" checked class="rounded text-emerald-600 focus:ring-emerald-500">Valor Total</label>
-                        <label class="flex items-center gap-2"><input type="checkbox" name="colunas" value="estoque_atual" checked class="rounded text-emerald-600 focus:ring-emerald-500">Estoque Atual</label>
-                        <label class="flex items-center gap-2"><input type="checkbox" name="colunas" value="lucro_realizado" checked class="rounded text-emerald-600 focus:ring-emerald-500">Lucro Realizado</label>
-                        <label class="flex items-center gap-2"><input type="checkbox" name="colunas" value="data_chegada" checked class="rounded text-emerald-600 focus:ring-emerald-500">Data Chegada</label>
-                        <label class="flex items-center gap-2"><input type="checkbox" name="colunas" value="tipo" checked class="rounded text-emerald-600 focus:ring-emerald-500">Tipo</label>
-                        <label class="flex items-center gap-2"><input type="checkbox" name="colunas" value="fornecedor" checked class="rounded text-emerald-600 focus:ring-emerald-500">Fornecedor</label>
-                        <label class="flex items-center gap-2"><input type="checkbox" name="colunas" value="nacionalidade" checked class="rounded text-emerald-600 focus:ring-emerald-500">Nacionalidade</label>
-                    </div>
-                </div>
-
-                <div class="flex justify-end gap-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-                    <button type="button" id="modal-relatorio-produtos-cancelar" class="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 transition">Cancelar</button>
-                    <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-700 text-white hover:bg-emerald-600 transition font-semibold">Baixar Relatorio (CSV)</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
 
 <div class="relative">
     <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-hidden">
@@ -627,23 +540,25 @@
     </div>
 </div>
 
-<!-- Overlay + Gaveta Nova Entrada -->
+<!-- Overlay + Gaveta de Ações (Nova Entrada e demais) -->
 <div id="modal-nova-entrada-overlay" class="fixed inset-0 z-[60] hidden bg-black/50" aria-hidden="true"></div>
-<div id="modal-nova-entrada-wrap" class="fixed inset-y-0 right-0 z-[70] hidden w-full max-w-md translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="gaveta-nova-entrada-titulo">
+<div id="modal-nova-entrada-wrap" class="fixed inset-y-0 right-0 z-[70] hidden w-full max-w-md translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="gaveta-nova-entrada-titulo" data-acao="">
     <div class="flex items-center justify-between px-5 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))] border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 shrink-0">
         <div>
             <h3 id="gaveta-nova-entrada-titulo" class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                <i data-lucide="package" class="w-5 h-5 text-emerald-600 dark:text-emerald-400"></i>
-                Nova Entrada de Produto
+                <span id="gaveta-acoes-icone-wrap" class="inline-flex">
+                    <i data-lucide="package" class="w-5 h-5 text-emerald-600 dark:text-emerald-400"></i>
+                </span>
+                <span id="gaveta-acoes-titulo-texto">Nova Entrada de Produto</span>
             </h3>
-            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Cadastro de entrada no estoque</p>
+            <p id="gaveta-acoes-subtitulo" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Cadastro de entrada no estoque</p>
         </div>
         <button type="button" class="p-2 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-200 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-700 transition-colors" id="modal-nova-entrada-fechar" title="Fechar" aria-label="Fechar">
             <i data-lucide="x" class="w-5 h-5"></i>
         </button>
     </div>
 
-    <form id="form-nova-entrada" action="{{ url_for('produtos.novo_produto') }}" method="POST" enctype="multipart/form-data" class="flex flex-col flex-1 min-h-0">
+    <form id="form-nova-entrada" data-gaveta-painel="entrada" action="{{ url_for('produtos.novo_produto') }}" method="POST" enctype="multipart/form-data" class="flex flex-col flex-1 min-h-0">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         <div class="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4 min-w-0 bg-white dark:bg-slate-900">
             <div id="modal-nova-entrada-erro" class="hidden p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl text-red-800 dark:text-red-300 text-sm"></div>
@@ -727,14 +642,271 @@
             </button>
         </div>
     </form>
+
+    <form id="form-relatorio-produtos" data-gaveta-painel="relatorio" action="{{ url_for('produtos.exportar_relatorio_produtos') }}" method="POST" class="hidden flex-col flex-1 min-h-0">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div class="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-5 min-w-0 bg-white dark:bg-slate-900">
+            <div>
+                <h4 class="text-sm font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300 mb-3">Filtros</h4>
+                <div class="space-y-3">
+                    <div>
+                        <label for="filtro_fornecedor" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Fornecedor</label>
+                        <select id="filtro_fornecedor" name="filtro_fornecedor" class="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-slate-800 dark:text-slate-100">
+                            <option value="TODOS">Todos</option>
+                            {% for f in fornecedores %}
+                            <option value="{{ (f.nome or '')|upper }}">{{ (f.nome or '')|upper }}</option>
+                            {% endfor %}
+                            <option value="NENHUM">NENHUM</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="filtro_tipo" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Tipo</label>
+                        <select id="filtro_tipo" name="filtro_tipo" class="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-slate-800 dark:text-slate-100">
+                            <option value="TODOS">Todos</option>
+                            {% for t in tipos_produto %}
+                            <option value="{{ (t.nome or '')|upper }}">{{ (t.nome or '')|upper }}</option>
+                            {% endfor %}
+                            <option value="OUTROS">OUTROS</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="filtro_nacionalidade" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nacionalidade</label>
+                        <select id="filtro_nacionalidade" name="filtro_nacionalidade" class="w-full px-4 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-slate-800 dark:text-slate-100">
+                            <option value="TODAS">Todas</option>
+                            <option value="NACIONAL">NACIONAL</option>
+                            <option value="ARGENTINO">ARGENTINO</option>
+                            <option value="CHINES">CHINES</option>
+                            <option value="N/A">N/A</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <h4 class="text-sm font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300 mb-3">Colunas para exportar</h4>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-slate-700 dark:text-slate-200">
+                    <label class="flex items-center gap-2"><input type="checkbox" name="colunas" value="produto" checked class="rounded text-emerald-600 focus:ring-emerald-500">Produto</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" name="colunas" value="preco" checked class="rounded text-emerald-600 focus:ring-emerald-500">Preço</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" name="colunas" value="qtd_entrada" checked class="rounded text-emerald-600 focus:ring-emerald-500">Qtd Entrada</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" name="colunas" value="valor_total" checked class="rounded text-emerald-600 focus:ring-emerald-500">Valor Total</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" name="colunas" value="estoque_atual" checked class="rounded text-emerald-600 focus:ring-emerald-500">Estoque Atual</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" name="colunas" value="lucro_realizado" checked class="rounded text-emerald-600 focus:ring-emerald-500">Lucro Realizado</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" name="colunas" value="data_chegada" checked class="rounded text-emerald-600 focus:ring-emerald-500">Data Chegada</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" name="colunas" value="tipo" checked class="rounded text-emerald-600 focus:ring-emerald-500">Tipo</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" name="colunas" value="fornecedor" checked class="rounded text-emerald-600 focus:ring-emerald-500">Fornecedor</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" name="colunas" value="nacionalidade" checked class="rounded text-emerald-600 focus:ring-emerald-500">Nacionalidade</label>
+                </div>
+            </div>
+        </div>
+        <div class="px-4 pt-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] border-t border-slate-200 dark:border-slate-700/50 bg-slate-50 dark:bg-slate-800/80 grid grid-cols-2 gap-3 w-full shrink-0">
+            <button type="button" id="modal-relatorio-produtos-cancelar" class="w-full flex items-center justify-center bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 px-4 py-2.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-600 transition font-medium">
+                <i data-lucide="x" class="w-4 h-4 mr-2"></i>Cancelar
+            </button>
+            <button type="submit" class="w-full flex items-center justify-center bg-emerald-700 text-white px-4 py-2.5 rounded-xl hover:bg-emerald-600 transition font-medium">
+                <i data-lucide="download" class="w-4 h-4 mr-2"></i>Baixar CSV
+            </button>
+        </div>
+    </form>
+
+    {% if current_user.is_authenticated and current_user.is_admin() %}
+    <form id="form-importar-produtos-gaveta" data-gaveta-painel="importar" action="{{ url_for('produtos.importar_produtos') }}" method="POST" enctype="multipart/form-data" class="hidden flex-col flex-1 min-h-0">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div class="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4 min-w-0 bg-white dark:bg-slate-900">
+            <div>
+                <label for="arquivo-importar-gaveta" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Arquivo Excel ou CSV <span class="text-red-500">*</span></label>
+                <input type="file" id="arquivo-importar-gaveta" name="arquivo" accept=".xlsx,.xls,.csv" required class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 dark:file:bg-emerald-900/30 dark:file:text-emerald-400">
+                <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Formatos aceitos: .xlsx, .xls, .csv</p>
+            </div>
+            <div class="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-4">
+                <h4 class="text-sm font-semibold text-blue-900 dark:text-blue-300 mb-2">Formato esperado</h4>
+                <ul class="text-xs text-blue-800 dark:text-blue-300 space-y-1">
+                    <li>• <strong>preco_custo</strong> ou <strong>preco</strong> (obrigatório)</li>
+                    <li>• <strong>quantidade</strong> ou <strong>qtd</strong> (obrigatório)</li>
+                    <li>• <strong>tipo</strong> e <strong>fornecedor</strong> (obrigatórios)</li>
+                    <li>• <strong>nacionalidade</strong>, <strong>tamanho</strong>, <strong>marca</strong>, <strong>caminhoneiro</strong></li>
+                    <li>• <strong>data_chegada</strong> (opcional; padrão: hoje)</li>
+                </ul>
+                <p class="mt-3 text-xs font-semibold text-blue-900 dark:text-blue-300">Se o produto já existir, a quantidade será somada ao estoque.</p>
+            </div>
+        </div>
+        <div class="px-4 pt-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] border-t border-slate-200 dark:border-slate-700/50 bg-slate-50 dark:bg-slate-800/80 grid grid-cols-2 gap-3 w-full shrink-0">
+            <button type="button" data-gaveta-fechar class="w-full flex items-center justify-center bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 px-4 py-2.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-600 transition font-medium">
+                <i data-lucide="x" class="w-4 h-4 mr-2"></i>Cancelar
+            </button>
+            <button type="submit" class="w-full flex items-center justify-center bg-emerald-700 text-white px-4 py-2.5 rounded-xl hover:bg-emerald-600 transition font-medium">
+                <i data-lucide="upload" class="w-4 h-4 mr-2"></i>Importar
+            </button>
+        </div>
+    </form>
+    {% endif %}
+
+    <div id="modalTiposCadastrados" data-gaveta-painel="tipos" class="hidden flex-col flex-1 min-h-0">
+        <div class="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4 min-w-0 bg-white dark:bg-slate-900">
+            <button type="button" onclick="abrirModalTipo('novo')" class="w-full inline-flex justify-center items-center px-4 py-2.5 border border-transparent text-sm font-medium rounded-xl shadow-sm text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none">
+                <i data-lucide="plus" class="w-4 h-4 mr-2"></i> Novo Tipo
+            </button>
+            <ul class="divide-y divide-slate-200 dark:divide-slate-700 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                {% for tipo in tipos %}
+                <li class="px-4 py-3 flex justify-between items-center w-full bg-white dark:bg-slate-900">
+                    <span class="text-sm font-medium text-slate-800 dark:text-slate-100">{{ tipo.nome }}</span>
+                    <div class="flex items-center gap-2">
+                        <button type="button"
+                                onclick="editarTipoCadastrado({{ tipo.id }}, '{{ tipo.nome|e }}')"
+                                class="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-500 dark:text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition focus:outline-none focus:ring-2 focus:ring-amber-500"
+                                title="Editar tipo"
+                                aria-label="Editar tipo {{ tipo.nome }}">
+                            <i data-lucide="pencil" class="w-4 h-4"></i>
+                        </button>
+                        <form action="{{ url_for('produtos.deletar_tipo', id=tipo.id) }}" method="POST" class="inline m-0 p-0 flex items-center" onsubmit="return confirm('Tem certeza que deseja apagar o tipo {{ tipo.nome }}?');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                            <button type="submit"
+                                    class="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-500 dark:text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition focus:outline-none focus:ring-2 focus:ring-red-500"
+                                    title="Excluir tipo"
+                                    aria-label="Excluir tipo {{ tipo.nome }}">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        </form>
+                    </div>
+                </li>
+                {% else %}
+                <li class="px-4 py-8 text-sm text-center text-slate-500 dark:text-slate-400">Nenhum tipo cadastrado.</li>
+                {% endfor %}
+            </ul>
+        </div>
+        <div class="px-4 pt-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] border-t border-slate-200 dark:border-slate-700/50 bg-slate-50 dark:bg-slate-800/80 w-full shrink-0">
+            <button type="button" data-gaveta-fechar class="w-full flex items-center justify-center bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 px-4 py-2.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-600 transition font-medium">
+                <i data-lucide="x" class="w-4 h-4 mr-2"></i>Fechar
+            </button>
+        </div>
+    </div>
+
+    <div id="modal-lista-fornecedores" data-gaveta-painel="fornecedores" class="hidden flex-col flex-1 min-h-0">
+        <div class="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4 min-w-0 bg-white dark:bg-slate-900">
+            <button type="button" onclick="abrirModalNovoFornecedor()" class="w-full inline-flex justify-center items-center px-4 py-2.5 border border-transparent text-sm font-medium rounded-xl shadow-sm text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none">
+                <i data-lucide="plus" class="w-4 h-4 mr-2"></i> Novo Fornecedor
+            </button>
+            <div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+                <table class="w-full text-sm text-left min-w-[36rem]">
+                    <thead class="text-xs text-slate-500 uppercase bg-slate-100 dark:bg-slate-900 dark:text-slate-400">
+                        <tr>
+                            <th class="px-4 py-3">Nome Fantasia</th>
+                            <th class="px-4 py-3">Razão Social</th>
+                            <th class="px-4 py-3">CNPJ</th>
+                            <th class="px-4 py-3">Tipos</th>
+                            <th class="px-4 py-3 text-right">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for fornecedor in fornecedores %}
+                        <tr class="border-b dark:border-slate-700 group transition-colors hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                            <td class="px-4 py-3">
+                                <span class="display-mode font-bold text-slate-800 dark:text-slate-200">{{ fornecedor.nome }}</span>
+                                <input
+                                    type="text"
+                                    name="nome"
+                                    value="{{ fornecedor.nome }}"
+                                    data-original="{{ fornecedor.nome }}"
+                                    class="edit-mode hidden w-full rounded-md border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white px-2 py-1 text-sm focus:border-blue-500 focus:outline-none uppercase"
+                                >
+                            </td>
+                            <td class="px-4 py-3">
+                                <span class="display-mode text-slate-600 dark:text-slate-400">{{ fornecedor.razao_social or '--' }}</span>
+                                <input
+                                    type="text"
+                                    name="razao_social"
+                                    value="{{ fornecedor.razao_social or '' }}"
+                                    data-original="{{ fornecedor.razao_social or '' }}"
+                                    class="edit-mode hidden w-full rounded-md border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white px-2 py-1 text-sm focus:border-blue-500 focus:outline-none uppercase"
+                                >
+                            </td>
+                            <td class="px-4 py-3">
+                                <span class="display-mode text-slate-600 dark:text-slate-400">{{ fornecedor.cnpj or '--' }}</span>
+                                <input
+                                    type="text"
+                                    name="cnpj"
+                                    value="{{ fornecedor.cnpj or '' }}"
+                                    data-original="{{ fornecedor.cnpj or '' }}"
+                                    maxlength="18"
+                                    class="edit-mode hidden w-full rounded-md border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white px-2 py-1 text-sm focus:border-blue-500 focus:outline-none input-cnpj"
+                                >
+                            </td>
+                            <td class="px-4 py-3">
+                                <span class="display-mode text-slate-600 dark:text-slate-400 fornecedor-tipos-display">
+                                    {% if fornecedor.tipos_produtos %}
+                                        {% for t in fornecedor.tipos_produtos %}{{ t.nome }}{% if not loop.last %}, {% endif %}{% endfor %}
+                                    {% else %}
+                                        --
+                                    {% endif %}
+                                </span>
+                                <div class="edit-mode hidden space-y-1 max-h-28 overflow-y-auto rounded-md border border-slate-200 dark:border-slate-700 p-2">
+                                    {% for tipo in tipos %}
+                                    <label class="inline-flex items-center gap-1 text-xs text-slate-700 dark:text-slate-200 mr-2">
+                                        <input
+                                            type="checkbox"
+                                            name="tipos_produtos"
+                                            value="{{ tipo.id }}"
+                                            data-original-checked="{% if tipo in fornecedor.tipos_produtos %}1{% else %}0{% endif %}"
+                                            {% if tipo in fornecedor.tipos_produtos %}checked{% endif %}
+                                            class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                        >
+                                        <span>{{ tipo.nome }}</span>
+                                    </label>
+                                    {% endfor %}
+                                </div>
+                            </td>
+                            <td class="px-4 py-3 text-right w-24">
+                                <div class="display-mode flex justify-end gap-3">
+                                    <button
+                                        type="button"
+                                        class="text-blue-500 hover:text-blue-700"
+                                        title="Editar"
+                                        onclick="ativarEdicaoLinha(this)"
+                                    >✏️</button>
+                                    <button
+                                        type="button"
+                                        class="text-red-500 hover:text-red-700"
+                                        title="Excluir"
+                                        onclick='excluirFornecedor({{ fornecedor.id }}, {{ fornecedor.nome|tojson }})'
+                                    >🗑️</button>
+                                </div>
+                                <div class="edit-mode hidden flex justify-end gap-3">
+                                    <button
+                                        type="button"
+                                        class="text-emerald-500 hover:text-emerald-700 text-lg"
+                                        title="Salvar"
+                                        onclick="salvarEdicaoLinha(this, {{ fornecedor.id }})"
+                                    >✅</button>
+                                    <button
+                                        type="button"
+                                        class="text-slate-500 hover:text-slate-700 text-lg"
+                                        title="Cancelar"
+                                        onclick="cancelarEdicaoLinha(this)"
+                                    >❌</button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="px-4 py-8 text-center text-slate-500">Nenhum fornecedor cadastrado no sistema.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="px-4 pt-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] border-t border-slate-200 dark:border-slate-700/50 bg-slate-50 dark:bg-slate-800/80 w-full shrink-0">
+            <button type="button" data-gaveta-fechar class="w-full flex items-center justify-center bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 px-4 py-2.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-600 transition font-medium">
+                <i data-lucide="x" class="w-4 h-4 mr-2"></i>Fechar
+            </button>
+        </div>
+    </div>
 </div>
 
 <!-- Modal Novo Fornecedor -->
-<div id="modal-novo-fornecedor" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onclick="if(event.target===this){this.classList.add('hidden');liberarFundo();}">
+<div id="modal-novo-fornecedor" class="hidden fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4" onclick="if(event.target===this){fecharModalNovoFornecedor();}">
     <div class="bg-white dark:bg-slate-800 rounded-xl shadow-lg w-full max-w-lg overflow-hidden" onclick="event.stopPropagation()">
         <div class="flex justify-between items-center px-6 py-4 bg-emerald-700 text-white">
             <h3 class="font-bold text-lg">🏢 Novo Fornecedor</h3>
-            <button type="button" onclick="document.getElementById('modal-novo-fornecedor').classList.add('hidden');liberarFundo();" class="hover:text-slate-200">✖</button>
+            <button type="button" onclick="fecharModalNovoFornecedor()" class="hover:text-slate-200">✖</button>
         </div>
         <form action="{{ url_for('produtos.novo_fornecedor') }}" method="POST" class="p-6 space-y-4">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
@@ -768,7 +940,7 @@
                 </div>
             </div>
             <div class="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-700">
-                <button type="button" onclick="document.getElementById('modal-novo-fornecedor').classList.add('hidden');liberarFundo();" class="px-4 py-2 bg-slate-200 text-slate-700 rounded-md text-sm font-semibold hover:bg-slate-300">Cancelar</button>
+                <button type="button" onclick="fecharModalNovoFornecedor()" class="px-4 py-2 bg-slate-200 text-slate-700 rounded-md text-sm font-semibold hover:bg-slate-300">Cancelar</button>
                 <button type="submit" class="px-4 py-2 bg-emerald-700 text-white rounded-md text-sm font-semibold hover:bg-emerald-800">✓ Salvar</button>
             </div>
         </form>
@@ -776,7 +948,7 @@
 </div>
 
 <!-- Modal Gerenciar Tipo (criar e editar) -->
-<div id="modalTipo" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onclick="if(event.target===this){fecharModalTipo();}">
+<div id="modalTipo" class="hidden fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4" onclick="if(event.target===this){fecharModalTipo();}">
     <div class="bg-white dark:bg-slate-800 rounded-xl shadow-lg w-full max-w-xl overflow-hidden max-h-[90vh] flex flex-col" onclick="event.stopPropagation()">
         <div class="flex justify-between items-center px-6 py-4 bg-emerald-700 text-white flex-shrink-0">
             <h3 class="font-bold text-lg"><span id="modalTipo-titulo">🏷️ Novo Tipo</span></h3>
@@ -855,70 +1027,29 @@
     </div>
 </div>
 
-<!-- Modal Tipos Cadastrados -->
-<div id="modalTiposCadastrados" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onclick="if(event.target===this){this.classList.add('hidden');liberarFundo();}">
-    <div class="bg-white dark:bg-slate-800 rounded-xl shadow-lg w-full max-w-2xl overflow-hidden max-h-[85vh] flex flex-col" onclick="event.stopPropagation()">
-        <div class="flex justify-between items-center px-6 py-4 bg-slate-700 text-white">
-            <h3 class="font-bold text-lg">📂 Tipos Cadastrados</h3>
-            <button type="button" onclick="document.getElementById('modalTiposCadastrados').classList.add('hidden');liberarFundo();" class="hover:text-slate-300 text-xl font-bold">✖</button>
-        </div>
-        <div class="p-6 overflow-y-auto">
-            <button type="button" onclick="document.getElementById('modalTiposCadastrados').classList.add('hidden');abrirModalTipo('novo');" class="mb-3 w-full sm:w-auto inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none">
-                <i data-lucide="plus" class="w-4 h-4 mr-2"></i> Novo Tipo
-            </button>
-            <ul class="divide-y divide-gray-200 dark:divide-gray-700">
-                {% for tipo in tipos %}
-                <li class="py-3 flex justify-between items-center w-full border-b border-gray-100 dark:border-gray-700 last:border-0">
-                    <span class="text-sm font-medium text-gray-900 dark:text-white">{{ tipo.nome }}</span>
-
-                    <div class="flex items-center gap-2">
-                        <button type="button"
-                                onclick="editarTipoCadastrado({{ tipo.id }}, '{{ tipo.nome|e }}')"
-                                class="inline-flex items-center justify-center w-8 h-8 rounded-lg text-gray-500 dark:text-gray-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition focus:outline-none focus:ring-2 focus:ring-amber-500"
-                                title="Editar tipo"
-                                aria-label="Editar tipo {{ tipo.nome }}">
-                            <i data-lucide="pencil" class="w-4 h-4"></i>
-                        </button>
-
-                        <form action="{{ url_for('produtos.deletar_tipo', id=tipo.id) }}" method="POST" class="inline m-0 p-0 flex items-center" onsubmit="return confirm('Tem certeza que deseja apagar o tipo {{ tipo.nome }}?');">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                            <button type="submit"
-                                    class="inline-flex items-center justify-center w-8 h-8 rounded-lg text-gray-500 dark:text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition focus:outline-none focus:ring-2 focus:ring-red-500"
-                                    title="Excluir tipo"
-                                    aria-label="Excluir tipo {{ tipo.nome }}">
-                                <i data-lucide="trash-2" class="w-4 h-4"></i>
-                            </button>
-                        </form>
-                    </div>
-                </li>
-                {% else %}
-                <li class="py-3 text-sm text-gray-500 dark:text-gray-400">Nenhum tipo cadastrado.</li>
-                {% endfor %}
-            </ul>
-        </div>
-        <div class="flex justify-end px-6 py-4 border-t border-slate-100 dark:border-slate-700">
-            <button type="button" onclick="document.getElementById('modalTiposCadastrados').classList.add('hidden');liberarFundo();" class="px-4 py-2 bg-slate-200 text-slate-700 rounded-md text-sm font-semibold hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600">Fechar</button>
-        </div>
-    </div>
-</div>
 <script>
 // Config de atributos por tipo (id -> { usa_nacionalidade, tamanhos_opcoes, ... })
 // Fonte de verdade dos formulários dinâmicos.
 window.TIPOS_CONFIG_MAP = {{ tipos_config_map|tojson }};
 
 function toggleInputListaTipo(campo) {
-    var chk = document.getElementById(campo === 'tamanhos_opcoes' ? 'cfg-usa-tamanho' : 'cfg-usa-marca');
+    var chk = document.getElementById(campo === 'tamanhos_opcoes' ? 'cfg-usa-tamanho' : (campo === 'nacionalidades_opcoes' ? 'cfg-usa-nacionalidade' : 'cfg-usa-marca'));
     var wrap = document.getElementById('wrap-' + campo);
     if (!chk || !wrap) return;
     if (chk.checked) wrap.classList.remove('hidden');
     else wrap.classList.add('hidden');
 }
 
+function gavetaAcoesEstaAberta() {
+    var wrap = document.getElementById('modal-nova-entrada-wrap');
+    return !!(wrap && !wrap.classList.contains('hidden') && !wrap.classList.contains('translate-x-full'));
+}
+
 function fecharModalTipo() {
     var m = document.getElementById('modalTipo');
     if (!m) return;
     m.classList.add('hidden');
-    if (typeof liberarFundo === 'function') liberarFundo();
+    if (typeof liberarFundo === 'function' && !gavetaAcoesEstaAberta()) liberarFundo();
 }
 
 function abrirModalTipo(modo, tipoId, tipoNome) {
@@ -979,138 +1110,27 @@ function abrirModalTipo(modo, tipoId, tipoNome) {
     toggleInputListaTipo('marcas_opcoes');
 
     modal.classList.remove('hidden');
-    if (typeof travarFundo === 'function') travarFundo();
+    if (typeof travarFundo === 'function' && !gavetaAcoesEstaAberta()) travarFundo();
 }
 
 function editarTipoCadastrado(id, nomeAtual) {
-    // Fecha o modal de listagem e abre o modal unificado em modo editar.
-    var lista = document.getElementById('modalTiposCadastrados');
-    if (lista) lista.classList.add('hidden');
     abrirModalTipo('editar', id, nomeAtual);
 }
+
+function abrirModalNovoFornecedor() {
+    var modal = document.getElementById('modal-novo-fornecedor');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    if (typeof travarFundo === 'function' && !gavetaAcoesEstaAberta()) travarFundo();
+}
+
+function fecharModalNovoFornecedor() {
+    var modal = document.getElementById('modal-novo-fornecedor');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    if (typeof liberarFundo === 'function' && !gavetaAcoesEstaAberta()) liberarFundo();
+}
 </script>
-
-<!-- Modal Lista de Fornecedores -->
-<div id="modal-lista-fornecedores" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onclick="if(event.target===this){this.classList.add('hidden');liberarFundo();}">
-    <div class="bg-white dark:bg-slate-800 rounded-xl shadow-lg w-full max-w-4xl overflow-hidden max-h-[85vh] flex flex-col" onclick="event.stopPropagation()">
-        <div class="flex justify-between items-center px-6 py-4 bg-slate-700 text-white">
-            <h3 class="font-bold text-lg">📋 Fornecedores Cadastrados</h3>
-            <button type="button" onclick="document.getElementById('modal-lista-fornecedores').classList.add('hidden');liberarFundo();" class="hover:text-slate-300 text-xl font-bold">✖</button>
-        </div>
-
-        <div class="p-6 overflow-y-auto">
-            <button type="button" data-bs-dismiss="modal" data-bs-toggle="modal" data-bs-target="#modalNovoFornecedor" onclick="document.getElementById('modal-lista-fornecedores').classList.add('hidden');document.getElementById('modal-novo-fornecedor').classList.remove('hidden');travarFundo();" class="mb-3 w-full sm:w-auto inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none">
-                <i class="fas fa-plus mr-2"></i> Novo Fornecedor
-            </button>
-            <table class="w-full text-sm text-left border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
-                <thead class="text-xs text-slate-500 uppercase bg-slate-100 dark:bg-slate-900 dark:text-slate-400">
-                    <tr>
-                        <th class="px-4 py-3">Nome Fantasia</th>
-                        <th class="px-4 py-3">Razão Social</th>
-                        <th class="px-4 py-3">CNPJ</th>
-                        <th class="px-4 py-3">Tipos</th>
-                        <th class="px-4 py-3 text-right">Ações</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for fornecedor in fornecedores %}
-                    <tr class="border-b dark:border-slate-700 group transition-colors hover:bg-slate-50 dark:hover:bg-slate-700/50">
-                        <td class="px-4 py-3">
-                            <span class="display-mode font-bold text-slate-800 dark:text-slate-200">{{ fornecedor.nome }}</span>
-                            <input
-                                type="text"
-                                name="nome"
-                                value="{{ fornecedor.nome }}"
-                                data-original="{{ fornecedor.nome }}"
-                                class="edit-mode hidden w-full rounded-md border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white px-2 py-1 text-sm focus:border-blue-500 focus:outline-none uppercase"
-                            >
-                        </td>
-                        <td class="px-4 py-3">
-                            <span class="display-mode text-slate-600 dark:text-slate-400">{{ fornecedor.razao_social or '--' }}</span>
-                            <input
-                                type="text"
-                                name="razao_social"
-                                value="{{ fornecedor.razao_social or '' }}"
-                                data-original="{{ fornecedor.razao_social or '' }}"
-                                class="edit-mode hidden w-full rounded-md border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white px-2 py-1 text-sm focus:border-blue-500 focus:outline-none uppercase"
-                            >
-                        </td>
-                        <td class="px-4 py-3">
-                            <span class="display-mode text-slate-600 dark:text-slate-400">{{ fornecedor.cnpj or '--' }}</span>
-                            <input
-                                type="text"
-                                name="cnpj"
-                                value="{{ fornecedor.cnpj or '' }}"
-                                data-original="{{ fornecedor.cnpj or '' }}"
-                                maxlength="18"
-                                class="edit-mode hidden w-full rounded-md border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white px-2 py-1 text-sm focus:border-blue-500 focus:outline-none input-cnpj"
-                            >
-                        </td>
-                        <td class="px-4 py-3">
-                            <span class="display-mode text-slate-600 dark:text-slate-400 fornecedor-tipos-display">
-                                {% if fornecedor.tipos_produtos %}
-                                    {% for t in fornecedor.tipos_produtos %}{{ t.nome }}{% if not loop.last %}, {% endif %}{% endfor %}
-                                {% else %}
-                                    --
-                                {% endif %}
-                            </span>
-                            <div class="edit-mode hidden space-y-1 max-h-28 overflow-y-auto rounded-md border border-slate-200 dark:border-slate-700 p-2">
-                                {% for tipo in tipos %}
-                                <label class="inline-flex items-center gap-1 text-xs text-slate-700 dark:text-slate-200 mr-2">
-                                    <input
-                                        type="checkbox"
-                                        name="tipos_produtos"
-                                        value="{{ tipo.id }}"
-                                        data-original-checked="{% if tipo in fornecedor.tipos_produtos %}1{% else %}0{% endif %}"
-                                        {% if tipo in fornecedor.tipos_produtos %}checked{% endif %}
-                                        class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                                    >
-                                    <span>{{ tipo.nome }}</span>
-                                </label>
-                                {% endfor %}
-                            </div>
-                        </td>
-                        <td class="px-4 py-3 text-right w-24">
-                            <div class="display-mode flex justify-end gap-3">
-                                <button
-                                    type="button"
-                                    class="text-blue-500 hover:text-blue-700"
-                                    title="Editar"
-                                    onclick="ativarEdicaoLinha(this)"
-                                >✏️</button>
-                                <button
-                                    type="button"
-                                    class="text-red-500 hover:text-red-700"
-                                    title="Excluir"
-                                    onclick='excluirFornecedor({{ fornecedor.id }}, {{ fornecedor.nome|tojson }})'
-                                >🗑️</button>
-                            </div>
-                            <div class="edit-mode hidden flex justify-end gap-3">
-                                <button
-                                    type="button"
-                                    class="text-emerald-500 hover:text-emerald-700 text-lg"
-                                    title="Salvar"
-                                    onclick="salvarEdicaoLinha(this, {{ fornecedor.id }})"
-                                >✅</button>
-                                <button
-                                    type="button"
-                                    class="text-slate-500 hover:text-slate-700 text-lg"
-                                    title="Cancelar"
-                                    onclick="cancelarEdicaoLinha(this)"
-                                >❌</button>
-                            </div>
-                        </td>
-                    </tr>
-                    {% else %}
-                    <tr>
-                        <td colspan="5" class="px-4 py-8 text-center text-slate-500">Nenhum fornecedor cadastrado no sistema.</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-</div>
 
 <!-- Modal Corrigir Categoria (OUTROS) -->
 {% if produtos_outros %}
@@ -1903,24 +1923,85 @@ window.getTipoConfigPorSelect = function(selectEl) {
         if (typeof lucide !== 'undefined') lucide.createIcons();
     }
 
-    function abrir() {
-        if (!wrap) return;
-        if (overlay) overlay.classList.remove('hidden');
-        wrap.classList.remove('hidden');
-        wrap.classList.add('translate-x-full');
-        wrap.classList.remove('translate-x-0');
-        wrap.offsetHeight;
-        wrap.classList.remove('translate-x-full');
-        wrap.classList.add('translate-x-0');
-        wrap.setAttribute('aria-hidden', 'false');
-        if (overlay) overlay.setAttribute('aria-hidden', 'false');
-        if (typeof travarFundo === 'function') travarFundo();
-        resetBtnSalvar();
-        if (dataChegada && !dataChegada.value) {
-            dataChegada.value = new Date().toISOString().split('T')[0];
+    var GAVETA_ACOES = {
+        entrada: {
+            titulo: 'Nova Entrada de Produto',
+            subtitulo: 'Cadastro de entrada no estoque',
+            icone: 'package'
+        },
+        relatorio: {
+            titulo: 'Gerar Relatório',
+            subtitulo: 'Filtros e colunas para exportar CSV',
+            icone: 'file-spreadsheet'
+        },
+        importar: {
+            titulo: 'Importar Lista',
+            subtitulo: 'Upload de planilha Excel ou CSV',
+            icone: 'upload'
+        },
+        tipos: {
+            titulo: 'Tipos Cadastrados',
+            subtitulo: 'Gerenciar tipos de produto',
+            icone: 'folder'
+        },
+        fornecedores: {
+            titulo: 'Fornecedores Cadastrados',
+            subtitulo: 'Cadastro e edição de fornecedores',
+            icone: 'clipboard-list'
         }
-        aplicarRegrasDinamicas();
-        aplicarAutoPreenchimentosNegocio();
+    };
+    var acaoAtual = null;
+
+    function aplicarPainel(acao) {
+        acaoAtual = acao || 'entrada';
+        window.gavetaAcaoAtual = acaoAtual;
+        if (wrap) wrap.setAttribute('data-acao', acaoAtual);
+
+        var meta = GAVETA_ACOES[acaoAtual] || GAVETA_ACOES.entrada;
+        var tituloEl = document.getElementById('gaveta-acoes-titulo-texto');
+        var subtituloEl = document.getElementById('gaveta-acoes-subtitulo');
+        var iconeWrap = document.getElementById('gaveta-acoes-icone-wrap');
+        if (tituloEl) tituloEl.textContent = meta.titulo;
+        if (subtituloEl) subtituloEl.textContent = meta.subtitulo;
+        if (iconeWrap) {
+            iconeWrap.innerHTML = '<i data-lucide="' + meta.icone + '" class="w-5 h-5 text-emerald-600 dark:text-emerald-400"></i>';
+        }
+
+        document.querySelectorAll('[data-gaveta-painel]').forEach(function(el) {
+            var ativo = el.getAttribute('data-gaveta-painel') === acaoAtual;
+            el.classList.toggle('hidden', !ativo);
+            el.style.display = ativo ? 'flex' : 'none';
+            el.setAttribute('aria-hidden', ativo ? 'false' : 'true');
+        });
+    }
+
+    function abrir(acao) {
+        if (!wrap) return;
+        acao = acao || 'entrada';
+        var jaAberta = !wrap.classList.contains('hidden') && !wrap.classList.contains('translate-x-full');
+        aplicarPainel(acao);
+
+        if (!jaAberta) {
+            if (overlay) overlay.classList.remove('hidden');
+            wrap.classList.remove('hidden');
+            wrap.classList.add('translate-x-full');
+            wrap.classList.remove('translate-x-0');
+            wrap.offsetHeight;
+            wrap.classList.remove('translate-x-full');
+            wrap.classList.add('translate-x-0');
+            wrap.setAttribute('aria-hidden', 'false');
+            if (overlay) overlay.setAttribute('aria-hidden', 'false');
+            if (typeof travarFundo === 'function') travarFundo();
+        }
+
+        if (acao === 'entrada') {
+            resetBtnSalvar();
+            if (dataChegada && !dataChegada.value) {
+                dataChegada.value = new Date().toISOString().split('T')[0];
+            }
+            aplicarRegrasDinamicas();
+            aplicarAutoPreenchimentosNegocio();
+        }
         if (typeof lucide !== 'undefined' && lucide.createIcons) {
             try { lucide.createIcons(); } catch (_) {}
         }
@@ -1945,9 +2026,14 @@ window.getTipoConfigPorSelect = function(selectEl) {
             erroDiv.textContent = '';
         }
         resetBtnSalvar();
+        acaoAtual = null;
+        window.gavetaAcaoAtual = null;
+        if (wrap) wrap.setAttribute('data-acao', '');
     }
 
-    window.abrirGavetaNovaEntrada = abrir;
+    window.abrirGavetaAcoes = abrir;
+    window.fecharGavetaAcoes = fechar;
+    window.abrirGavetaNovaEntrada = function() { abrir('entrada'); };
     window.fecharGavetaNovaEntrada = fechar;
 
     /**
@@ -2111,12 +2197,42 @@ window.getTipoConfigPorSelect = function(selectEl) {
         }
     }
 
-    if (btnAbrir) btnAbrir.addEventListener('click', abrir);
+    if (btnAbrir) btnAbrir.addEventListener('click', function() { abrir('entrada'); });
+    document.querySelectorAll('[data-gaveta-acao]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            abrir(btn.getAttribute('data-gaveta-acao'));
+        });
+    });
+    document.querySelectorAll('[data-gaveta-fechar]').forEach(function(btn) {
+        btn.addEventListener('click', fechar);
+    });
+    var btnCancelarRel = document.getElementById('modal-relatorio-produtos-cancelar');
+    if (btnCancelarRel) btnCancelarRel.addEventListener('click', fechar);
+    var formRel = document.getElementById('form-relatorio-produtos');
+    if (formRel) {
+        formRel.addEventListener('submit', function(e) {
+            var checks = formRel.querySelectorAll('input[name="colunas"]:checked');
+            if (!checks.length) {
+                e.preventDefault();
+                alert('Selecione pelo menos uma coluna para exportar.');
+            }
+        });
+    }
     if (overlay) overlay.addEventListener('click', fechar);
     if (btnFechar) btnFechar.addEventListener('click', fechar);
     if (btnCancelar) btnCancelar.addEventListener('click', fechar);
     document.addEventListener('keydown', function(e) {
         if (e.key !== 'Escape') return;
+        var modalTipo = document.getElementById('modalTipo');
+        if (modalTipo && !modalTipo.classList.contains('hidden')) {
+            if (typeof fecharModalTipo === 'function') fecharModalTipo();
+            return;
+        }
+        var modalForn = document.getElementById('modal-novo-fornecedor');
+        if (modalForn && !modalForn.classList.contains('hidden')) {
+            if (typeof fecharModalNovoFornecedor === 'function') fecharModalNovoFornecedor();
+            return;
+        }
         if (wrap && !wrap.classList.contains('hidden') && !wrap.classList.contains('translate-x-full')) {
             fechar();
         }
@@ -2747,73 +2863,19 @@ async function excluirFornecedor(id, nome) {
     }
 }
 
-function toggleDropdownEntrada(event) {
-    if (event) {
-        event.preventDefault();
-        event.stopPropagation();
-    }
-    var dropdown = document.getElementById('dropdown-entrada');
-    if (dropdown) {
-        dropdown.classList.toggle('hidden');
-    }
-}
-
-function fecharDropdownEntrada() {
-    var dropdown = document.getElementById('dropdown-entrada');
-    if (dropdown) {
-        dropdown.classList.add('hidden');
-    }
-}
-
 function abrirModalRelatorioProdutos() {
-    var wrap = document.getElementById('modal-relatorio-produtos-wrap');
-    if (!wrap) return;
-    wrap.classList.remove('hidden');
-    if (typeof travarFundo === 'function') travarFundo();
+    if (typeof window.abrirGavetaAcoes === 'function') {
+        window.abrirGavetaAcoes('relatorio');
+    }
 }
 
 function fecharModalRelatorioProdutos() {
-    var wrap = document.getElementById('modal-relatorio-produtos-wrap');
-    if (!wrap) return;
-    wrap.classList.add('hidden');
-    if (typeof liberarFundo === 'function') liberarFundo();
+    if (typeof window.fecharGavetaAcoes === 'function') {
+        window.fecharGavetaAcoes();
+    }
 }
 
-document.addEventListener('click', function(event) {
-    var dropdown = document.getElementById('dropdown-entrada');
-    var grupo = document.getElementById('grupo-botoes-entrada');
-
-    if (dropdown && !dropdown.classList.contains('hidden')) {
-        if (!grupo || !grupo.contains(event.target)) {
-            dropdown.classList.add('hidden');
-        }
-    }
-});
-
 document.addEventListener('DOMContentLoaded', function() {
-    var overlayRel = document.getElementById('modal-relatorio-produtos-overlay');
-    var btnFecharRel = document.getElementById('modal-relatorio-produtos-fechar');
-    var btnCancelarRel = document.getElementById('modal-relatorio-produtos-cancelar');
-    var formRel = document.getElementById('form-relatorio-produtos');
-
-    if (overlayRel) overlayRel.addEventListener('click', fecharModalRelatorioProdutos);
-    if (btnFecharRel) btnFecharRel.addEventListener('click', fecharModalRelatorioProdutos);
-    if (btnCancelarRel) btnCancelarRel.addEventListener('click', fecharModalRelatorioProdutos);
-
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') fecharModalRelatorioProdutos();
-    });
-
-    if (formRel) {
-        formRel.addEventListener('submit', function(e) {
-            var checks = formRel.querySelectorAll('input[name="colunas"]:checked');
-            if (!checks.length) {
-                e.preventDefault();
-                alert('Selecione pelo menos uma coluna para exportar.');
-            }
-        });
-    }
-
     var tipoSelectNovaEntrada = document.getElementById('tipo');
     var fornecedorSelectNovaEntrada = document.getElementById('fornecedor');
     function parseTiposPermitidos(value) {
