@@ -5089,6 +5089,12 @@ def static_icons_safari():
     )
 
 
+@app.route('/robots.txt')
+def robots_txt():
+    """Bloqueia crawlers e bots de redes sociais (ex.: facebookexternalhit)."""
+    return "User-agent: *\nDisallow: /", 200, {'Content-Type': 'text/plain'}
+
+
 @app.route('/.well-known/apple-app-site-association')
 def apple_app_site_association():
     """Associa o domínio web ao app iOS para iCloud Keychain / AutoFill.
