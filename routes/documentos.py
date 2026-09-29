@@ -438,29 +438,78 @@ def upload_documento():
     ``_processar_documentos_pendentes`` (Organizar).
     Campo ``tipo``: 'boleto' -> boletos ; 'nfe' -> notas_fiscais
     """
+    # ── LOG DE DIAGNÓSTICO OBRIGATÓRIO — primeira linha, antes de qualquer validação ──
+    current_app.logger.info(
+        "[upload_documento] ► DUMP BRUTO DA REQUISIÇÃO\n"
+        "  IP: %s\n"
+        "  Content-Type: %s | Content-Length: %s bytes\n"
+        "  Authorization presente: %s\n"
+        "  request.files keys: %s\n"
+        "  request.form keys: %s | form data: %s\n"
+        "  Filename (file/arquivo/documento): %s",
+        request.remote_addr,
+        request.content_type,
+        request.content_length,
+        bool(request.headers.get('Authorization')),
+        list(request.files.keys()),
+        list(request.form.keys()),
+        {k: v for k, v in request.form.items()},
+        next(
+            (request.files.get(k).filename for k in ('file', 'arquivo', 'documento')
+             if request.files.get(k) and request.files.get(k).filename),
+            '(nenhum arquivo detectado)'
+        ),
+    )
+    # ──────────────────────────────────────────────────────────────────────────────────
+
     # CSRF está exempt para esta rota — exemption aplicada no app.py após
     # ``register_blueprint(documentos_bp)`` via ``csrf.exempt(view_func)``.
     # Bot externo se autentica via header Authorization (token).
 
     arquivo = request.files.get('file') or request.files.get('arquivo') or request.files.get('documento')
     if not arquivo or not arquivo.filename:
+        current_app.logger.warning("[upload_documento] ❌ Nenhum arquivo recebido. Files dict: %s", dict(request.files))
         return jsonify({'mensagem': 'Nenhum arquivo enviado.'}), 400
+
     nome_arquivo = secure_filename(arquivo.filename or '')
     extensao = os.path.splitext(nome_arquivo)[1].lower()
-    extensoes_permitidas = {'.pdf', '.png', '.jpg', '.jpeg'}
-    mimes_permitidos = {'application/pdf', 'image/png', 'image/jpeg'}
-    mime = (getattr(arquivo, 'mimetype', '') or '').lower()
+
+    # Extensões permitidas — inclui variações de case (secure_filename já normaliza)
+    extensoes_permitidas = {'.pdf', '.png', '.jpg', '.jpeg', '.xml'}
+    # MIME types permitidos — inclui 'application/octet-stream' para bots que não
+    # definem Content-Type explicitamente no FormData.
+    mimes_permitidos = {
+        'application/pdf',
+        'application/octet-stream',
+        'binary/octet-stream',
+        'image/png',
+        'image/jpeg',
+        'text/xml',
+        'application/xml',
+    }
+    mime = (getattr(arquivo, 'mimetype', '') or '').lower().strip()
+
+    current_app.logger.info(
+        "[upload_documento] Arquivo: '%s' | Extensão: '%s' | MIME: '%s'",
+        nome_arquivo, extensao, mime,
+    )
+
     if extensao not in extensoes_permitidas:
-        return jsonify({'mensagem': 'Extensão de arquivo não permitida.'}), 400
-    if mime not in mimes_permitidos:
-        return jsonify({'mensagem': 'Tipo MIME inválido para upload.'}), 400
+        current_app.logger.warning("[upload_documento] ❌ Extensão não permitida: '%s'", extensao)
+        return jsonify({'mensagem': f"Extensão '{extensao}' não permitida. Use .pdf, .png, .jpg ou .xml."}), 400
+
+    # Se MIME veio em branco (alguns clientes não enviam) ou é octet-stream, aceita pela extensão
+    if mime and mime not in mimes_permitidos:
+        current_app.logger.warning("[upload_documento] ❌ MIME inválido: '%s'", mime)
+        return jsonify({'mensagem': f"Tipo MIME '{mime}' inválido para upload."}), 400
 
     tipo = (request.form.get('tipo') or request.form.get('type') or '').strip().lower()
     if tipo == 'boleto':
         subpasta = 'boletos'
-    elif tipo == 'nfe':
+    elif tipo in ('nfe', 'nf', 'nota_fiscal'):
         subpasta = 'notas_fiscais'
     else:
+        current_app.logger.warning("[upload_documento] ❌ Campo 'tipo' inválido: '%s'", tipo)
         return jsonify({'mensagem': "Campo 'tipo' inválido. Use 'boleto' ou 'nfe'."}), 400
 
     # ── 1. Salva arquivo em disco (síncrono, rápido) ─────────────────────
@@ -469,9 +518,15 @@ def upload_documento():
         caminho_final = os.path.join(base_dir, subpasta)
         os.makedirs(caminho_final, exist_ok=True)
         caminho_completo = os.path.join(caminho_final, nome_arquivo)
+        arquivo.stream.seek(0)
         arquivo.save(caminho_completo)
+        tamanho = os.path.getsize(caminho_completo) if os.path.exists(caminho_completo) else 0
+        current_app.logger.info(
+            "[upload_documento] ✅ Arquivo salvo: %s (%d bytes)", caminho_completo, tamanho,
+        )
     except Exception as e:
         db.session.rollback()
+        current_app.logger.error("[upload_documento] ❌ EXCEÇÃO ao salvar arquivo: %s", str(e), exc_info=True)
         return erro_json(
             e,
             'Falha ao guardar arquivo. Verifique os logs do servidor.',
@@ -486,10 +541,21 @@ def upload_documento():
     _nome = nome_arquivo
 
     # ── 3. OCR e criação do Documento rodam em background ────────────────
+    # CORRECÇÃO: O arquivo já está em documentos_entrada/<subpasta>/ — não chamamos
+    # _processar_documento() que o moveria para a raiz e poderia reclassificá-lo
+    # incorretamente como 'nao_identificados'. Chamamos _processar_documentos_pendentes()
+    # diretamente, que processa o arquivo na pasta correta.
     def _processar_bg(caminho, user_id, subpasta_nome, nome):
         with app_obj.app_context():
             try:
-                _processar_documento(caminho, user_id_forcado=user_id)
+                app_obj.logger.info(
+                    '[OCR-BG] upload_documento: iniciando processamento de %s (subpasta=%s)',
+                    nome, subpasta_nome,
+                )
+                # Processa diretamente os pendentes nas pastas corretas (sem mover para raiz)
+                _processar_documentos_pendentes(user_id_forcado=user_id)
+
+                # Verifica se o Documento foi criado pelo processamento
                 caminho_rel = os.path.join(
                     'documentos_entrada', subpasta_nome, nome
                 ).replace('\\', '/')
@@ -500,6 +566,11 @@ def upload_documento():
                     .first()
                 )
                 if not doc:
+                    # Fallback: cria registo mínimo para que o documento apareça no painel
+                    app_obj.logger.warning(
+                        '[OCR-BG] upload_documento: _processar_documentos_pendentes não criou '
+                        'registo para %s — criando manualmente como fallback.', nome,
+                    )
                     tipo_doc = 'BOLETO' if subpasta_nome == 'boletos' else 'NOTA_FISCAL'
                     doc = Documento(
                         caminho_arquivo=caminho_rel,
@@ -511,6 +582,12 @@ def upload_documento():
                     )
                     db.session.add(doc)
                     db.session.commit()
+                    app_obj.logger.info('[OCR-BG] upload_documento: Documento fallback criado. ID: %s', doc.id)
+                else:
+                    app_obj.logger.info(
+                        '[OCR-BG] upload_documento: Documento encontrado/criado. ID: %s | empresa_id: %s',
+                        doc.id, doc.empresa_id,
+                    )
                 limpar_cache_dashboard()
             except Exception as err:
                 try:
@@ -540,6 +617,30 @@ def api_receber_automatico():
     """
     @limiter.limit("10 per minute")
     def _impl():
+        # ── LOG DE DIAGNÓSTICO OBRIGATÓRIO — primeira linha, antes de qualquer validação ──
+        current_app.logger.info(
+            "[api_receber_automatico] ► DUMP BRUTO DA REQUISIÇÃO\n"
+            "  IP: %s\n"
+            "  Content-Type: %s | Content-Length: %s bytes\n"
+            "  Authorization presente: %s\n"
+            "  request.files keys: %s\n"
+            "  request.form keys: %s | form data: %s\n"
+            "  Filename (file/arquivo/documento): %s",
+            request.remote_addr,
+            request.content_type,
+            request.content_length,
+            bool(request.headers.get('Authorization')),
+            list(request.files.keys()),
+            list(request.form.keys()),
+            {k: v for k, v in request.form.items()},
+            next(
+                (request.files.get(k).filename for k in ('file', 'arquivo', 'documento')
+                 if request.files.get(k) and request.files.get(k).filename),
+                '(nenhum arquivo detectado)'
+            ),
+        )
+        # ──────────────────────────────────────────────────────────────────────────────────
+
         token_esperado = os.environ.get('API_RECEBER_AUTOMATICO_TOKEN')
         if not token_esperado:
             return jsonify({'status': 'erro', 'mensagem': 'API_RECEBER_AUTOMATICO_TOKEN não configurado no ambiente.'}), 503
@@ -698,15 +799,45 @@ def api_bot_upload():
     """
     @limiter.limit("10 per minute")
     def _impl():
-        # ── LOG DE RASTREABILIDADE ────────────────────────────────────────────
+        # ── LOG DE DIAGNÓSTICO OBRIGATÓRIO — PRIMEIRA LINHA, antes de qualquer validação ──
+        # Este bloco regista TODO o conteúdo bruto do pedido para permitir diagnóstico
+        # de documentos que "desaparecem" silenciosamente (ex.: cliente JNS).
+        try:
+            _filename_debug = next(
+                (request.files.get(k).filename for k in ('file', 'arquivo', 'documento')
+                 if request.files.get(k) and request.files.get(k).filename),
+                '(nenhum arquivo detectado)'
+            )
+            _mime_debug = next(
+                (getattr(request.files.get(k), 'mimetype', '') for k in ('file', 'arquivo', 'documento')
+                 if request.files.get(k)),
+                ''
+            )
+        except Exception:
+            _filename_debug = '(erro ao inspecionar files)'
+            _mime_debug = '(erro)'
+
         current_app.logger.info(
-            "[api_bot_upload] ► Requisição POST recebida do Bot. "
-            "IP: %s | Content-Type: %s | Content-Length: %s",
+            "[api_bot_upload] ► DUMP BRUTO DA REQUISIÇÃO\n"
+            "  IP: %s\n"
+            "  Content-Type: %s | Content-Length: %s bytes\n"
+            "  X-API-KEY presente: %s\n"
+            "  request.files keys: %s\n"
+            "  request.form keys: %s\n"
+            "  form data (todos os campos): %s\n"
+            "  Filename detectado: %s\n"
+            "  MIME detectado: %s",
             request.remote_addr,
             request.content_type,
             request.content_length,
+            bool(request.headers.get('X-API-KEY')),
+            list(request.files.keys()),
+            list(request.form.keys()),
+            {k: v for k, v in request.form.items()},
+            _filename_debug,
+            _mime_debug,
         )
-        # ─────────────────────────────────────────────────────────────────────
+        # ──────────────────────────────────────────────────────────────────────────────────
 
         token_enviado = request.headers.get('X-API-KEY')
         token_verdadeiro = os.environ.get('API_BOT_TOKEN')
@@ -800,10 +931,35 @@ def api_bot_upload():
         _nome = nome_arquivo
 
         # ── 3. OCR e criação do Documento rodam em background ────────────
+        # CORRECÇÃO CRÍTICA: O arquivo já foi salvo corretamente em
+        # documentos_entrada/<subpasta>/<nome>. NÃO chamamos _processar_documento()
+        # porque essa função move o arquivo para a RAIZ de documentos_entrada/ e
+        # depois chama organizar_arquivos(), que pode reclassificá-lo como
+        # 'nao_identificados' (pasta ignorada por _processar_documentos_pendentes).
+        # Isso causava o desaparecimento silencioso de documentos cujo PDF não
+        # continha as palavras-chave de classificação esperadas.
+        # Chamamos _processar_documentos_pendentes() diretamente — ele processa
+        # os arquivos já nas subpastas corretas (boletos/ e notas_fiscais/).
         def _processar_bg_bot(caminho, uid, subpasta_nome, nome):
             with app_obj.app_context():
                 try:
-                    _processar_documento(caminho, user_id_forcado=uid)
+                    app_obj.logger.info(
+                        '[OCR-BG] api_bot_upload: iniciando. arquivo=%s | subpasta=%s | user_id=%s',
+                        nome, subpasta_nome, uid,
+                    )
+
+                    # Chama o processamento OCR diretamente nas pastas corretas
+                    resultado_ocr = _processar_documentos_pendentes(user_id_forcado=uid)
+                    app_obj.logger.info(
+                        '[OCR-BG] api_bot_upload: _processar_documentos_pendentes concluído — '
+                        'processados=%s | vinculos=%s | erros=%s | msgs=%s',
+                        resultado_ocr.get('processados', 0),
+                        resultado_ocr.get('vinculos_novos', 0),
+                        resultado_ocr.get('erros', 0),
+                        resultado_ocr.get('mensagens', []),
+                    )
+
+                    # Verifica se o Documento foi criado pelo processamento OCR
                     caminho_rel = os.path.join(
                         'documentos_entrada', subpasta_nome, nome
                     ).replace('\\', '/')
@@ -814,9 +970,13 @@ def api_bot_upload():
                         .first()
                     )
                     if not doc:
+                        # Fallback: o OCR pode ter falhado (PDF corrompido, formato desconhecido)
+                        # mas o arquivo existe em disco — criamos registo mínimo para garantir
+                        # que aparece no painel de documentos recebidos.
                         app_obj.logger.warning(
-                            '[OCR-BG] api_bot_upload: _processar_documento não criou registro'
-                            ' — criando manualmente.',
+                            '[OCR-BG] api_bot_upload: _processar_documentos_pendentes não criou '
+                            'registo para %s (caminho_rel=%s) — criando manualmente como fallback.',
+                            nome, caminho_rel,
                         )
                         tipo_doc = 'BOLETO' if subpasta_nome == 'boletos' else 'NOTA_FISCAL'
                         doc = Documento(
@@ -830,12 +990,14 @@ def api_bot_upload():
                         db.session.add(doc)
                         db.session.commit()
                         app_obj.logger.info(
-                            '[OCR-BG] api_bot_upload: Documento criado. ID: %s', doc.id,
+                            '[OCR-BG] api_bot_upload: Documento fallback criado. ID: %s | caminho: %s',
+                            doc.id, caminho_rel,
                         )
                     else:
                         app_obj.logger.info(
-                            '[OCR-BG] api_bot_upload: Documento encontrado. ID: %s'
-                            ' | empresa_id: %s', doc.id, doc.empresa_id,
+                            '[OCR-BG] api_bot_upload: Documento encontrado/criado pelo OCR. '
+                            'ID: %s | empresa_id: %s | venda_id: %s | numero_nf: %s',
+                            doc.id, doc.empresa_id, doc.venda_id, doc.numero_nf,
                         )
                     limpar_cache_dashboard()
                 except Exception as err:
@@ -844,7 +1006,7 @@ def api_bot_upload():
                     except Exception:
                         pass
                     app_obj.logger.error(
-                        '[OCR-BG] api_bot_upload: %s', err, exc_info=True,
+                        '[OCR-BG] api_bot_upload: EXCEÇÃO não capturada: %s', err, exc_info=True,
                     )
 
         threading.Thread(

@@ -888,14 +888,61 @@ def _extrair_texto_primeira_pagina(caminho_arquivo):
 
 def _classificar_pdf(texto):
     """Classifica um PDF pelo texto da primeira página.
-    Retorna 'NOTA_FISCAL', 'BOLETO' ou 'NAO_IDENTIFICADO'."""
+    Retorna 'NOTA_FISCAL', 'BOLETO' ou 'NAO_IDENTIFICADO'.
+
+    A lista de palavras-chave de boleto é propositalmente ampla para evitar
+    que documentos de bancos menos comuns (Santander, BB, Sicredi, Caixa, etc.)
+    sejam enviados para 'nao_identificados' e desapareçam silenciosamente.
+    """
     u = (texto or "").upper()
-    if "DANFE" in u or "NOTA FISCAL" in u:
+
+    # ── Nota Fiscal ─────────────────────────────────────────────────────────
+    if "DANFE" in u or "NOTA FISCAL" in u or "NOTA FISCAL ELETRONICA" in u:
         return "NOTA_FISCAL"
-    if "BOLETO" in u or "LINHA DIGITÁVEL" in u or "LINHA DIGITAVEL" in u:
+
+    # ── Boleto — palavras-chave diretas ────────────────────────────────────
+    palavras_boleto = (
+        "BOLETO",
+        "LINHA DIGITÁVEL",
+        "LINHA DIGITAVEL",
+        "CODIGO DE BARRAS",
+        "CÓDIGO DE BARRAS",
+        "VENCIMENTO",          # campo presente em quase todos os boletos
+        "NOSSO NUMERO",
+        "NOSSO NÚMERO",
+        # Bancos emissores mais comuns
+        "ITAU", "ITAÚ",
+        "BRADESCO",
+        "SANTANDER",
+        "BANCO DO BRASIL",
+        "CAIXA ECONOMICA",
+        "CAIXA ECONÔMICA",
+        "SICREDI",
+        "SICOOB",
+        "UNICRED",
+        "BANRISUL",
+        "INTER",
+        # Texto típico do rodapé de boletos bancários
+        "SACADO",
+        "CEDENTE",
+        "BENEFICIÁRIO",
+        "BENEFICIARIO",
+    )
+    for palavra in palavras_boleto:
+        if palavra in u:
+            return "BOLETO"
+
+    # ── Fallback conservador: se extraiu texto mas não identificou, assume BOLETO ──
+    # É preferível processar um documento no pipeline de boletos e não vincular
+    # automaticamente do que descartá-lo em 'nao_identificados' silenciosamente.
+    if texto and len(texto.strip()) > 50:
+        app.logger.warning(
+            "[_classificar_pdf] Texto extraído (%d chars) mas sem palavras-chave reconhecidas. "
+            "Tratando como BOLETO (fallback conservador) para evitar perda silenciosa.",
+            len(texto.strip()),
+        )
         return "BOLETO"
-    if "ITAU" in u or "ITAÚ" in u or "BRADESCO" in u:
-        return "BOLETO"
+
     return "NAO_IDENTIFICADO"
 
 
