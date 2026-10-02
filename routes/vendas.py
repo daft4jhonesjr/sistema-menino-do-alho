@@ -3165,6 +3165,10 @@ def editar_venda(id):
                     f"Total: R$ {_venda_editada.calcular_total():.2f}.",
                 )
             flash('Venda atualizada com sucesso!', 'success')
+            _next = request.form.get('_next', '').strip()
+            # Aceita apenas URLs locais (evita open-redirect)
+            if _next and _next.startswith('/') and '//' not in _next:
+                return redirect(_next)
             return redirect(url_for('vendas.listar_vendas'))
         except Exception as e:
             db.session.rollback()

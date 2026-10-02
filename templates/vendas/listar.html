@@ -1993,6 +1993,12 @@ function loadingBotaoEditarVenda(formElement) {
 
             form.action = actionBase.replace(/\/0$/, '/') + id;
 
+            // Guarda o pedido-id no form para que a lógica de restauração
+            // pós-save saiba até qual linha fazer scroll.
+            var _trDetalhes = btn.closest('tr.pedido-detalhes');
+            form.setAttribute('data-current-pedido-id',
+                _trDetalhes ? (_trDetalhes.getAttribute('data-pedido-id') || '') : '');
+
             var elCliente = document.getElementById('edit_cliente_id');
             var elProduto = document.getElementById('edit_produto_id');
             var elQtd = document.getElementById('edit_quantidade_venda');
@@ -2097,6 +2103,33 @@ function loadingBotaoEditarVenda(formElement) {
         }
     });
 
+    // ─── Persistência de estado: salva posição + URL antes do reload ───
+    function _salvarEstadoEdicao(form) {
+        try {
+            var pedidoId = form.getAttribute('data-current-pedido-id') || '';
+
+            // Garante o campo oculto _next com a URL completa atual
+            var inputNext = form.querySelector('input[name="_next"]');
+            if (!inputNext) {
+                inputNext = document.createElement('input');
+                inputNext.type = 'hidden';
+                inputNext.name = '_next';
+                form.appendChild(inputNext);
+            }
+            inputNext.value = window.location.pathname + window.location.search;
+
+            if (pedidoId) {
+                sessionStorage.setItem('_vendas_estado_edicao', JSON.stringify({
+                    pedidoId: pedidoId,
+                    allLoaded: !!window._vendasTodosCarregados,
+                    ts: Date.now()
+                }));
+            }
+        } catch (e) {
+            // sessionStorage indisponível ou bloqueado — ignora silenciosamente
+        }
+    }
+
     var form = document.getElementById('form-editar-venda');
     if (form) {
         form.addEventListener('submit', function(e) {
@@ -2112,6 +2145,7 @@ function loadingBotaoEditarVenda(formElement) {
                     fecharModalEdicaoVenda();
                 }
                 loadingBotaoEditarVenda(form);
+                _salvarEstadoEdicao(form);
                 form.setAttribute('data-submitting', '1');
                 form.submit();
                 return;
@@ -2137,6 +2171,7 @@ function loadingBotaoEditarVenda(formElement) {
                     fecharModalEdicaoVenda();
                 }
                 loadingBotaoEditarVenda(form);
+                _salvarEstadoEdicao(form);
                 form.setAttribute('data-submitting', '1');
                 form.submit();
             });
@@ -4016,11 +4051,16 @@ document.addEventListener('DOMContentLoaded', function() {
     function pararScroll() {
         fimDaLista = true;
         carregando = false;
+        window._vendasTodosCarregados = true; // flag global para _salvarEstadoEdicao
         if (observer) observer.disconnect();
         if (sentinela) sentinela.remove();
         // Fim da lista atingido (via scroll ou via "Carregar todos os dados") — some com o botão.
         var btnTudoFim = document.getElementById('btn-carregar-tudo');
         if (btnTudoFim) btnTudoFim.remove();
+        // Se há uma restauração de estado pendente, agora é o momento de fazer o scroll
+        if (typeof window._restaurarEstadoEdicao === 'function') {
+            window._restaurarEstadoEdicao();
+        }
     }
 
     // Loop assíncrono encadeado: chama carregarMaisVendas() repetidamente até
@@ -4231,6 +4271,78 @@ function ordenarVendasTabela(colIndex, tipo) {
 {% endblock %}
 
 {% block scripts %}
+<!-- ─── Restauração de estado após salvar uma edição ─────────────────── -->
+<script>
+(function() {
+    var CHAVE = '_vendas_estado_edicao';
+    var TTL = 30000; // 30 s — expira estado obsoleto
+
+    function _scrollParaPedido(pedidoId) {
+        var tr = document.querySelector('tr.pedido-resumo[data-pedido-id="' + pedidoId + '"]');
+        if (!tr) return false;
+        tr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Pulsa brevemente a linha para destacar visualmente
+        tr.style.transition = 'box-shadow 0.3s ease';
+        tr.style.boxShadow = '0 0 0 3px rgba(5,150,105,0.5)';
+        setTimeout(function() { tr.style.boxShadow = ''; }, 1800);
+        return true;
+    }
+
+    // Exposta globalmente para que pararScroll() possa chamá-la
+    window._restaurarEstadoEdicao = function() {
+        try {
+            var raw = sessionStorage.getItem(CHAVE);
+            if (!raw) return;
+            var estado = JSON.parse(raw);
+            if (!estado || !estado.pedidoId) return;
+            if (Date.now() - (estado.ts || 0) > TTL) {
+                sessionStorage.removeItem(CHAVE);
+                return;
+            }
+            sessionStorage.removeItem(CHAVE); // limpa antes de agir
+            _scrollParaPedido(estado.pedidoId);
+        } catch (e) { /* sessionStorage indisponível */ }
+    };
+
+    document.addEventListener('DOMContentLoaded', function() {
+        try {
+            var raw = sessionStorage.getItem(CHAVE);
+            if (!raw) return;
+            var estado = JSON.parse(raw);
+            if (!estado || !estado.pedidoId) { sessionStorage.removeItem(CHAVE); return; }
+            if (Date.now() - (estado.ts || 0) > TTL) { sessionStorage.removeItem(CHAVE); return; }
+
+            var btnTudo = document.getElementById('btn-carregar-tudo');
+
+            // Caso 1: a linha já está no DOM (ex.: filtro ?cliente_id= retornou poucos resultados)
+            if (_scrollParaPedido(estado.pedidoId)) {
+                sessionStorage.removeItem(CHAVE);
+                return;
+            }
+
+            // Caso 2: precisamos carregar o restante das páginas primeiro
+            if (estado.allLoaded && btnTudo) {
+                // _restaurarEstadoEdicao() será chamado por pararScroll() quando terminar.
+                // Apenas acionamos o botão aqui.
+                btnTudo.click();
+                // Segurança: se após 25 s o estado ainda existir, limpa.
+                setTimeout(function() { sessionStorage.removeItem(CHAVE); }, 25000);
+            } else if (estado.allLoaded && !btnTudo) {
+                // Todos os dados já estavam na página (sem btn) — scroll imediato.
+                setTimeout(function() {
+                    if (!_scrollParaPedido(estado.pedidoId)) {
+                        sessionStorage.removeItem(CHAVE);
+                    }
+                }, 300);
+            } else {
+                // Dados incompletos / linha fora da página carregada — descarta.
+                sessionStorage.removeItem(CHAVE);
+            }
+        } catch (e) { /* sessionStorage indisponível */ }
+    });
+})();
+</script>
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
 <!-- Split Calendar: calendário mensal + painel de detalhes (Entregas + Vencimentos) -->
