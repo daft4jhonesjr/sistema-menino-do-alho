@@ -1228,6 +1228,32 @@ def _processar_documento(caminho_arquivo, user_id_forcado=None):
     _processar_documentos_pendentes(user_id_forcado=user_id_forcado)
 
 
+def _empresa_escopo_vinculo(documento=None, user_id_forcado=None):
+    """Tenant ao qual o vínculo automático por NF deve se restringir.
+
+    Retorna None apenas quando nenhum tenant pode ser inferido (cron global
+    sem usuário); nesse caso o chamador mantém a busca legada sem filtro.
+    Não usa o fallback "primeira Empresa ativa" de
+    ``_empresa_id_para_documento``: escopar pelo tenant errado faria o
+    documento ser vinculado a uma venda de outra empresa.
+    """
+    if documento is not None and getattr(documento, 'empresa_id', None):
+        return int(documento.empresa_id)
+    try:
+        if getattr(current_user, 'is_authenticated', False) and getattr(current_user, 'empresa_id', None):
+            return int(current_user.empresa_id)
+    except Exception:
+        pass
+    if user_id_forcado:
+        try:
+            u = Usuario.query.with_entities(Usuario.empresa_id).filter_by(id=int(user_id_forcado)).first()
+            if u and u.empresa_id:
+                return int(u.empresa_id)
+        except Exception:
+            db.session.rollback()
+    return None
+
+
 def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado=None):
     """Verifica as pastas de documentos e processa novos arquivos PDF que ainda não foram registrados.
     
@@ -1345,16 +1371,30 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                         'data_vencimento': doc_existente.data_vencimento,
                         'valor_boleto': getattr(doc_existente, 'valor', None),
                     }
-                    # Se valor ainda não foi persistido, re-extrai só o valor do PDF
-                    if dados_extraidos.get('valor_boleto') is None and os.path.isfile(caminho_completo):
+                    # NF veio de cache (ex.: informada pelo bot): completa valor e
+                    # vencimento a partir do PDF quando ainda não persistidos.
+                    falta_valor = dados_extraidos.get('valor_boleto') is None
+                    falta_venc = tipo == 'BOLETO' and dados_extraidos.get('data_vencimento') is None
+                    if (falta_valor or falta_venc) and os.path.isfile(caminho_completo):
                         try:
-                            dados_pdf = _processar_pdf(caminho_completo, tipo)
-                            if dados_pdf and dados_pdf.get('valor_boleto') is not None:
+                            dados_pdf = _processar_pdf(caminho_completo, tipo) or {}
+                            if falta_valor and dados_pdf.get('valor_boleto') is not None:
                                 documento.valor = dados_pdf.get('valor_boleto')
                                 dados_extraidos['valor_boleto'] = documento.valor
-                                db.session.flush()
+                            if falta_venc and dados_pdf.get('data_vencimento'):
+                                documento.data_vencimento = dados_pdf.get('data_vencimento')
+                                dados_extraidos['data_vencimento'] = documento.data_vencimento
+                            for campo in ('cnpj', 'razao_social'):
+                                if not getattr(documento, campo, None) and dados_pdf.get(campo):
+                                    setattr(documento, campo, dados_pdf.get(campo))
+                                    dados_extraidos[campo] = dados_pdf.get(campo)
+                            if 'empresa_destak' in dados_pdf:
+                                dados_extraidos['empresa_destak'] = dados_pdf['empresa_destak']
+                            db.session.flush()
                         except Exception:
-                            pass
+                            app.logger.warning(
+                                f"[vinculo-nf] Falha ao completar dados do PDF {arquivo}", exc_info=True
+                            )
                 else:
                     dados_extraidos = _processar_pdf(caminho_completo, tipo)
                     if dados_extraidos is None:
@@ -1397,11 +1437,19 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                 # Exceção: NFs inválidas não vinculam automaticamente
                 nfs_invalidas = ('S/N', '0', 'Falta_nota', '')
                 if nf_limpa and nf_limpa not in nfs_invalidas:
-                    # Buscar TODAS as vendas e normalizar suas NFs para comparação
+                    # Buscar as vendas do tenant e normalizar suas NFs para comparação
                     # Isso garante que encontramos vendas mesmo com formatos diferentes (zeros à esquerda, prefixos, etc.)
-                    todas_vendas = Venda.query.filter(
-                        Venda.nf.isnot(None)
-                    ).options(
+                    eid_escopo = _empresa_escopo_vinculo(documento, user_id_forcado)
+                    vendas_q = Venda.query.filter(Venda.nf.isnot(None))
+                    if eid_escopo is not None:
+                        vendas_q = vendas_q.filter(Venda.empresa_id == eid_escopo)
+                    else:
+                        app.logger.warning(
+                            f"[vinculo-nf] Tenant indefinido para {arquivo}: busca de NF '{nf_limpa}' "
+                            f"sem filtro de empresa (fluxo legado)."
+                        )
+                    _log_detalhado(f"Escopo de tenant da busca por NF: empresa_id={eid_escopo}")
+                    todas_vendas = vendas_q.options(
                         joinedload(Venda.cliente), joinedload(Venda.produto)
                     ).all()
                     vendas_candidatas = []
