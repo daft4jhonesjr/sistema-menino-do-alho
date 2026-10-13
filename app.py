@@ -1231,8 +1231,8 @@ def _processar_documento(caminho_arquivo, user_id_forcado=None):
 def _empresa_escopo_vinculo(documento=None, user_id_forcado=None):
     """Tenant ao qual o vínculo automático por NF deve se restringir.
 
-    Retorna None apenas quando nenhum tenant pode ser inferido (cron global
-    sem usuário); nesse caso o chamador mantém a busca legada sem filtro.
+    Retorna None quando nenhum tenant pode ser inferido (ex.: cron global
+    sem usuário); nesse caso o chamador NÃO deve vincular automaticamente.
     Não usa o fallback "primeira Empresa ativa" de
     ``_empresa_id_para_documento``: escopar pelo tenant errado faria o
     documento ser vinculado a uma venda de outra empresa.
@@ -1252,6 +1252,13 @@ def _empresa_escopo_vinculo(documento=None, user_id_forcado=None):
         except Exception:
             db.session.rollback()
     return None
+
+
+def _vendas_da_empresa(vendas, empresa_id):
+    """Mantém só as vendas da empresa informada; ``None`` → nenhuma venda."""
+    if empresa_id is None:
+        return []
+    return [v for v in vendas if v.empresa_id == empresa_id]
 
 
 def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado=None):
@@ -1440,18 +1447,19 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                     # Buscar as vendas do tenant e normalizar suas NFs para comparação
                     # Isso garante que encontramos vendas mesmo com formatos diferentes (zeros à esquerda, prefixos, etc.)
                     eid_escopo = _empresa_escopo_vinculo(documento, user_id_forcado)
-                    vendas_q = Venda.query.filter(Venda.nf.isnot(None))
-                    if eid_escopo is not None:
-                        vendas_q = vendas_q.filter(Venda.empresa_id == eid_escopo)
-                    else:
-                        app.logger.warning(
-                            f"[vinculo-nf] Tenant indefinido para {arquivo}: busca de NF '{nf_limpa}' "
-                            f"sem filtro de empresa (fluxo legado)."
-                        )
                     _log_detalhado(f"Escopo de tenant da busca por NF: empresa_id={eid_escopo}")
-                    todas_vendas = vendas_q.options(
-                        joinedload(Venda.cliente), joinedload(Venda.produto)
-                    ).all()
+                    if eid_escopo is None:
+                        app.logger.warning(
+                            f"[vinculo-nf] {arquivo}: empresa indefinida — vínculo automático da "
+                            f"NF '{nf_limpa}' ignorado para não cruzar vendas de outras empresas."
+                        )
+                        todas_vendas = []
+                    else:
+                        todas_vendas = Venda.query.filter(
+                            Venda.nf.isnot(None), Venda.empresa_id == eid_escopo,
+                        ).options(
+                            joinedload(Venda.cliente), joinedload(Venda.produto)
+                        ).all()
                     vendas_candidatas = []
                     for v in todas_vendas:
                         if v.nf:
@@ -1681,6 +1689,8 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                     cliente_nome = venda_match.cliente.nome_cliente
                     nf_doc = dados_extraidos.get('numero_nf') or 'N/A'
                     documento.venda_id = venda_id  # doc existente: garantir venda_id ao vincular
+                    if not documento.empresa_id:
+                        documento.empresa_id = venda_match.empresa_id
                     
                     # Log de identidade detalhado
                     doc_status = f"ID={documento.id}, tipo={tipo}, caminho={path_rel}"
@@ -1851,8 +1861,14 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
             if not nf_doc_norm or nf_doc_norm in ('S/N', '0', ''):
                 continue
 
+            eid_doc = _empresa_escopo_vinculo(doc_pendente, user_id_forcado)
+            if eid_doc is None:
+                app.logger.warning(
+                    f"[vinculo-nf] [P2] doc_id={doc_pendente.id}: empresa indefinida — vínculo ignorado."
+                )
+                continue
             vendas_validas_p2 = [
-                v for v in vendas_com_nf_cache
+                v for v in _vendas_da_empresa(vendas_com_nf_cache, eid_doc)
                 if _nf_match(nf_doc_norm, _normalizar_nf(str(v.nf)))
             ]
             vendas_validas_p2 = _deduplicar_vendas_por_pedido(vendas_validas_p2)
@@ -1862,6 +1878,8 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
             venda_p2 = vendas_validas_p2[0]
             try:
                 doc_pendente.venda_id = venda_p2.id
+                if not doc_pendente.empresa_id:
+                    doc_pendente.empresa_id = venda_p2.empresa_id
                 path_rel = (doc_pendente.caminho_arquivo or '').strip()
                 if path_rel:
                     for vv in _vendas_do_pedido(venda_p2):
@@ -2052,12 +2070,13 @@ def _diagnosticar_vinculo_falhou(doc, vendas_com_nf_cache=None):
         }
     # Buscar vendas com NF preenchida (evita carregar tabela inteira)
     vendas_validas = []
+    eid_doc = _empresa_escopo_vinculo(doc)
     vendas_com_nf = vendas_com_nf_cache
     if vendas_com_nf is None:
         vendas_com_nf = Venda.query.filter(
-            Venda.nf.isnot(None), Venda.nf != ''
-        ).options(joinedload(Venda.cliente)).limit(5000).all()
-    for v in vendas_com_nf:
+            Venda.nf.isnot(None), Venda.nf != '', Venda.empresa_id == eid_doc,
+        ).options(joinedload(Venda.cliente)).limit(5000).all() if eid_doc is not None else []
+    for v in _vendas_da_empresa(vendas_com_nf, eid_doc):
         nf_venda_norm = _normalizar_nf(str(v.nf))
         if _nf_match(nf_limpa, nf_venda_norm):
             vendas_validas.append(v)
@@ -2143,6 +2162,8 @@ def _listar_documentos_recem_chegados():
                 try:
                     doc.venda_id = venda_id_diag
                     venda_alvo = db.session.get(Venda, venda_id_diag)
+                    if venda_alvo and not doc.empresa_id:
+                        doc.empresa_id = venda_alvo.empresa_id
                     if venda_alvo and doc.caminho_arquivo:
                         path_rel = doc.caminho_arquivo
                         for vv in _vendas_do_pedido(venda_alvo):
@@ -2219,7 +2240,7 @@ def _auto_vincular_documentos_pendentes_por_nf(user_id=None):
                 continue
 
             vendas_candidatas = []
-            for venda in vendas_com_nf:
+            for venda in _vendas_da_empresa(vendas_com_nf, _empresa_escopo_vinculo(doc, user_id)):
                 nf_venda = _normalizar_nf(str(venda.nf or '').strip())
                 if _nf_match(nf_doc, nf_venda):
                     vendas_candidatas.append(venda)
@@ -2230,6 +2251,8 @@ def _auto_vincular_documentos_pendentes_por_nf(user_id=None):
 
             # Sem bloqueios adicionais: apenas vincula este documento à venda encontrada.
             doc.venda_id = venda_match.id
+            if not doc.empresa_id:
+                doc.empresa_id = venda_match.empresa_id
 
             # Mantém compatibilidade com fluxos legados que usam caminho_boleto/caminho_nf.
             path = (doc.caminho_arquivo or '').strip()
