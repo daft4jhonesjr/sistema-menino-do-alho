@@ -49,6 +49,7 @@ import re
 import threading
 import urllib.parse
 import urllib.request
+import uuid
 
 from flask import (
     Blueprint, render_template, request, redirect, url_for,
@@ -64,7 +65,7 @@ import cloudinary  # noqa: F401
 import cloudinary.uploader
 import pdfplumber
 
-from models import db, Documento, Venda, Cliente, Usuario
+from models import db, Documento, Venda, Cliente, Usuario, Empresa, PERFIL_DONO
 from extensions import limiter
 from services.auth_utils import (
     tenant_required, admin_required, master_required,
@@ -145,6 +146,92 @@ def _extrair_texto_raw_pdfplumber(arquivo_pdf):
             if texto_pagina:
                 texto_completo += texto_pagina + "\n"
     return texto_completo
+
+
+def _resolver_tenant_bot():
+    """Resolve ``(empresa_id, usuario_id, origem, erro)`` para documentos do bot.
+
+    O bot não tem sessão, então o tenant precisa ser explícito. Ordem:
+        1. campo ``empresa_id`` enviado no formulário pelo bot;
+        2. variável de ambiente ``API_BOT_EMPRESA_ID``;
+        3. Empresa do primeiro DONO cadastrado (fallback com warning).
+    ``Usuario.query.first()`` não serve: o primeiro usuário costuma ser o
+    MASTER, que não pertence a nenhuma Empresa.
+
+    Um valor informado mas inválido NÃO cai para o próximo nível (isso
+    gravaria o documento em outra empresa): devolve ``erro=(status, msg)``
+    com 400 para o payload e 503 para a variável de ambiente.
+    """
+    candidatos = (
+        ('payload', request.form.get('empresa_id'), 400),
+        ('env', os.environ.get('API_BOT_EMPRESA_ID'), 503),
+    )
+    for origem, valor, status_erro in candidatos:
+        valor = (valor or '').strip()
+        if not valor:
+            continue
+        try:
+            eid = int(valor)
+        except ValueError:
+            eid = None
+        if eid is None or not Empresa.query.filter_by(id=eid, ativo=True).first():
+            msg = f"empresa_id '{valor}' ({origem}) inválido, inexistente ou inativo."
+            current_app.logger.error("[api_bot_upload] ❌ %s", msg)
+            return None, None, origem, (status_erro, msg)
+        dono = (
+            Usuario.query.filter_by(empresa_id=eid)
+            .order_by((Usuario.perfil == PERFIL_DONO).desc(), Usuario.id.asc())
+            .first()
+        )
+        return eid, (dono.id if dono else None), origem, None
+
+    dono = (
+        Usuario.query.filter(Usuario.perfil == PERFIL_DONO, Usuario.empresa_id.isnot(None))
+        .order_by(Usuario.id.asc())
+        .first()
+    )
+    if dono:
+        current_app.logger.warning(
+            "[api_bot_upload] API_BOT_EMPRESA_ID não configurado — usando empresa do primeiro "
+            "DONO (usuario_id=%s, empresa_id=%s). Configure API_BOT_EMPRESA_ID no Render.",
+            dono.id, dono.empresa_id,
+        )
+        return int(dono.empresa_id), dono.id, 'fallback_dono', None
+    return None, None, 'indefinido', None
+
+
+def _log_estado_final_documento_bot(app_obj, documento_id):
+    """Linha final de monitoramento do upload do bot (buscar por ``doc_id=``)."""
+    doc = db.session.get(Documento, documento_id)
+    if doc is None:
+        app_obj.logger.error(
+            '[api_bot_upload] doc_id=%s REMOVIDO após o processamento '
+            '(bonificação ou exclusão) — não aparece na fila.', documento_id,
+        )
+    elif doc.venda_id:
+        app_obj.logger.info(
+            '[api_bot_upload] doc_id=%s vinculado automaticamente à venda_id=%s '
+            '(empresa_id=%s, NF=%s)', doc.id, doc.venda_id, doc.empresa_id, doc.numero_nf,
+        )
+    else:
+        app_obj.logger.info(
+            '[api_bot_upload] doc_id=%s PENDENTE na fila (empresa_id=%s, NF=%s)',
+            doc.id, doc.empresa_id, doc.numero_nf,
+        )
+
+
+def _nome_arquivo_disponivel(pasta, subpasta, nome_arquivo):
+    """Evita sobrescrever um PDF anterior com o mesmo nome (comum em envios
+    do WhatsApp). Sem isso, o documento novo reaproveita o registro antigo
+    (já vinculado) e é descartado silenciosamente."""
+    base, ext = os.path.splitext(nome_arquivo)
+    nome = nome_arquivo
+    while True:
+        caminho_rel = f'documentos_entrada/{subpasta}/{nome}'
+        if (not os.path.exists(os.path.join(pasta, nome))
+                and not Documento.query.filter_by(caminho_arquivo=caminho_rel).first()):
+            return nome
+        nome = f'{base}_bot{uuid.uuid4().hex[:8]}{ext}'
 
 
 def _token_upload_required(f):
@@ -795,7 +882,12 @@ def api_bot_upload():
 
     Autenticação via header X-API-KEY validado contra a variável de ambiente
     API_BOT_TOKEN. Aceita campos: file/arquivo/documento (arquivo),
-    tipo (boleto|nfe), numero_nf, razao_social.
+    tipo (boleto|nfe), numero_nf, razao_social, valor e empresa_id (opcional;
+    padrão ``API_BOT_EMPRESA_ID``).
+
+    O ``Documento`` é gravado no banco ANTES da resposta 200; a resposta traz
+    ``documento_id``/``empresa_id`` para o bot registrar no próprio log. O OCR
+    e o vínculo automático por NF rodam depois, em background.
     """
     @limiter.limit("10 per minute")
     def _impl():
@@ -900,128 +992,136 @@ def api_bot_upload():
             current_app.logger.warning("[api_bot_upload] ❌ Campo 'tipo' inválido: '%s'", tipo)
             return jsonify({'erro': "Campo 'tipo' inválido. Use 'boleto' ou 'nfe'."}), 400
 
-        primeiro_user = Usuario.query.first()
-        user_id = primeiro_user.id if primeiro_user else None
+        empresa_id, user_id, origem_tenant, erro_tenant = _resolver_tenant_bot()
+        if erro_tenant:
+            status_erro, msg_erro = erro_tenant
+            return jsonify({'erro': msg_erro}), status_erro
+        if empresa_id is None:
+            current_app.logger.error(
+                "[api_bot_upload] ❌ Nenhum tenant resolvido (sem empresa_id no form, sem "
+                "API_BOT_EMPRESA_ID e sem usuário DONO). Documento '%s' recusado.", nome_arquivo,
+            )
+            return jsonify({
+                'erro': 'Empresa de destino indefinida. Configure API_BOT_EMPRESA_ID no servidor.',
+            }), 503
+
+        numero_nf = (request.form.get('numero_nf') or request.form.get('nf') or '').strip() or None
+        razao_social = (
+            request.form.get('razao_social') or request.form.get('emitente') or ''
+        ).strip() or None
+        valor_raw = (request.form.get('valor') or request.form.get('valor_total') or '').strip()
+        valor_doc = None
+        if valor_raw:
+            try:
+                from routes.caixa import _limpar_valor_moeda
+                valor_doc = _limpar_valor_moeda(valor_raw) or None
+            except Exception:
+                valor_doc = None
+            if valor_doc is None:
+                current_app.logger.warning("[api_bot_upload] Valor ignorado (formato inválido): '%s'", valor_raw)
+
+        base_dir = os.path.join(current_app.root_path, 'documentos_entrada')
+        caminho_final = os.path.join(base_dir, subpasta)
+        os.makedirs(caminho_final, exist_ok=True)
+        nome_original = nome_arquivo
+        nome_arquivo = _nome_arquivo_disponivel(caminho_final, subpasta, nome_arquivo)
+        if nome_arquivo != nome_original:
+            current_app.logger.warning(
+                "[api_bot_upload] Nome '%s' já usado por outro documento — salvando como '%s'.",
+                nome_original, nome_arquivo,
+            )
+        caminho_completo = os.path.join(caminho_final, nome_arquivo)
+        caminho_rel = f'documentos_entrada/{subpasta}/{nome_arquivo}'
 
         current_app.logger.info(
-            "[api_bot_upload] Processando: arquivo='%s' | subpasta='%s' | user_id=%s",
-            nome_arquivo, subpasta, user_id,
+            "[api_bot_upload] Processando: arquivo='%s' | subpasta='%s' | empresa_id=%s (origem=%s) "
+            "| user_id=%s | numero_nf=%s | razao_social=%s | valor=%s",
+            nome_arquivo, subpasta, empresa_id, origem_tenant, user_id,
+            numero_nf, razao_social, valor_doc,
         )
 
-        # ── 1. Salva arquivo em disco (síncrono, rápido) ─────────────────
+        # ── 1. Salva arquivo e grava o Documento ANTES de responder ──────
+        # Se o worker do Render reiniciar durante o OCR em background, o
+        # registro já existe no banco e continua visível na fila.
         try:
-            base_dir = os.path.join(current_app.root_path, 'documentos_entrada')
-            caminho_final = os.path.join(base_dir, subpasta)
-            os.makedirs(caminho_final, exist_ok=True)
-            caminho_completo = os.path.join(caminho_final, nome_arquivo)
-
             arquivo.stream.seek(0)
             arquivo.save(caminho_completo)
-            current_app.logger.info("[api_bot_upload] ✅ Arquivo salvo em: %s", caminho_completo)
+            documento = Documento(
+                caminho_arquivo=caminho_rel,
+                tipo='BOLETO' if subpasta == 'boletos' else 'NOTA_FISCAL',
+                numero_nf=numero_nf,
+                nf_extraida=numero_nf,
+                razao_social=razao_social,
+                valor=valor_doc,
+                usuario_id=user_id,
+                empresa_id=empresa_id,
+                venda_id=None,
+                data_processamento=date.today(),
+            )
+            db.session.add(documento)
+            db.session.commit()
+            doc_id = documento.id
+            limpar_cache_dashboard()
         except Exception as e:
+            db.session.rollback()
             current_app.logger.error(
-                "[api_bot_upload] ❌ EXCEÇÃO ao salvar arquivo: %s", str(e), exc_info=True,
+                "[api_bot_upload] ❌ EXCEÇÃO ao salvar/registrar '%s': %s", nome_arquivo, e, exc_info=True,
             )
             return erro_json(e, 'Falha ao salvar arquivo do bot.', contexto='api_bot_upload:salvar')
 
-        # ── 2. Captura contexto de request ANTES de sair da thread principal
-        app_obj = current_app._get_current_object()
-        _user_id = user_id
-        _subpasta = subpasta
-        _nome = nome_arquivo
+        current_app.logger.info(
+            "[api_bot_upload] ✅ Documento ID=%s gravado (empresa_id=%s, venda_id=NULL) — "
+            "visível na fila até o vínculo automático.", doc_id, empresa_id,
+        )
 
-        # ── 3. OCR e criação do Documento rodam em background ────────────
-        # CORRECÇÃO CRÍTICA: O arquivo já foi salvo corretamente em
-        # documentos_entrada/<subpasta>/<nome>. NÃO chamamos _processar_documento()
-        # porque essa função move o arquivo para a RAIZ de documentos_entrada/ e
-        # depois chama organizar_arquivos(), que pode reclassificá-lo como
-        # 'nao_identificados' (pasta ignorada por _processar_documentos_pendentes).
-        # Isso causava o desaparecimento silencioso de documentos cujo PDF não
-        # continha as palavras-chave de classificação esperadas.
-        # Chamamos _processar_documentos_pendentes() diretamente — ele processa
-        # os arquivos já nas subpastas corretas (boletos/ e notas_fiscais/).
-        def _processar_bg_bot(caminho, uid, subpasta_nome, nome):
+        app_obj = current_app._get_current_object()
+
+        # ── 2. OCR + upload Cloudinary + vínculo por NF em background ────
+        # Não chamamos _processar_documento(): ele move o arquivo para a raiz
+        # de documentos_entrada/ e pode reclassificá-lo como 'nao_identificados'.
+        def _processar_bg_bot(documento_id, uid):
             with app_obj.app_context():
                 try:
-                    app_obj.logger.info(
-                        '[OCR-BG] api_bot_upload: iniciando. arquivo=%s | subpasta=%s | user_id=%s',
-                        nome, subpasta_nome, uid,
-                    )
-
-                    # Chama o processamento OCR diretamente nas pastas corretas
                     resultado_ocr = _processar_documentos_pendentes(user_id_forcado=uid)
                     app_obj.logger.info(
-                        '[OCR-BG] api_bot_upload: _processar_documentos_pendentes concluído — '
-                        'processados=%s | vinculos=%s | erros=%s | msgs=%s',
+                        '[OCR-BG] api_bot_upload: doc_id=%s | processados=%s | vinculos=%s | '
+                        'erros=%s | msgs=%s',
+                        documento_id,
                         resultado_ocr.get('processados', 0),
                         resultado_ocr.get('vinculos_novos', 0),
                         resultado_ocr.get('erros', 0),
                         resultado_ocr.get('mensagens', []),
                     )
-
-                    # Verifica se o Documento foi criado pelo processamento OCR
-                    caminho_rel = os.path.join(
-                        'documentos_entrada', subpasta_nome, nome
-                    ).replace('\\', '/')
-                    doc = (
-                        Documento.query
-                        .filter_by(caminho_arquivo=caminho_rel)
-                        .order_by(Documento.id.desc())
-                        .first()
-                    )
-                    if not doc:
-                        # Fallback: o OCR pode ter falhado (PDF corrompido, formato desconhecido)
-                        # mas o arquivo existe em disco — criamos registo mínimo para garantir
-                        # que aparece no painel de documentos recebidos.
-                        app_obj.logger.warning(
-                            '[OCR-BG] api_bot_upload: _processar_documentos_pendentes não criou '
-                            'registo para %s (caminho_rel=%s) — criando manualmente como fallback.',
-                            nome, caminho_rel,
-                        )
-                        tipo_doc = 'BOLETO' if subpasta_nome == 'boletos' else 'NOTA_FISCAL'
-                        doc = Documento(
-                            caminho_arquivo=caminho_rel,
-                            tipo=tipo_doc,
-                            usuario_id=uid,
-                            empresa_id=_empresa_id_para_documento(fallback_user_id=uid),
-                            venda_id=None,
-                            data_processamento=date.today(),
-                        )
-                        db.session.add(doc)
-                        db.session.commit()
-                        app_obj.logger.info(
-                            '[OCR-BG] api_bot_upload: Documento fallback criado. ID: %s | caminho: %s',
-                            doc.id, caminho_rel,
-                        )
-                    else:
-                        app_obj.logger.info(
-                            '[OCR-BG] api_bot_upload: Documento encontrado/criado pelo OCR. '
-                            'ID: %s | empresa_id: %s | venda_id: %s | numero_nf: %s',
-                            doc.id, doc.empresa_id, doc.venda_id, doc.numero_nf,
-                        )
-                    limpar_cache_dashboard()
                 except Exception as err:
                     try:
                         db.session.rollback()
                     except Exception:
                         pass
                     app_obj.logger.error(
-                        '[OCR-BG] api_bot_upload: EXCEÇÃO não capturada: %s', err, exc_info=True,
+                        '[OCR-BG] api_bot_upload: doc_id=%s EXCEÇÃO no OCR/vínculo: %s',
+                        documento_id, err, exc_info=True,
+                    )
+                try:
+                    _log_estado_final_documento_bot(app_obj, documento_id)
+                    limpar_cache_dashboard()
+                except Exception as err:
+                    app_obj.logger.error(
+                        '[api_bot_upload] doc_id=%s falha ao consultar estado final: %s',
+                        documento_id, err, exc_info=True,
                     )
 
         threading.Thread(
             target=_processar_bg_bot,
-            args=(caminho_completo, _user_id, _subpasta, _nome),
+            args=(doc_id, user_id),
             daemon=True,
         ).start()
 
-        current_app.logger.info(
-            "[api_bot_upload] ✅ Arquivo '%s' recebido — OCR despachado para background.",
-            nome_arquivo,
-        )
         return jsonify({
             'status': 'success',
             'mensagem': 'Documento recebido. Processamento OCR em segundo plano.',
+            'documento_id': doc_id,
+            'empresa_id': empresa_id,
+            'arquivo': nome_arquivo,
         }), 200
 
     return _impl()
