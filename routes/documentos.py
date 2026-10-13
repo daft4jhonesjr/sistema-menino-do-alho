@@ -149,7 +149,7 @@ def _extrair_texto_raw_pdfplumber(arquivo_pdf):
 
 
 def _resolver_tenant_bot():
-    """Resolve ``(empresa_id, usuario_id, origem)`` para documentos do bot.
+    """Resolve ``(empresa_id, usuario_id, origem, erro)`` para documentos do bot.
 
     O bot não tem sessão, então o tenant precisa ser explícito. Ordem:
         1. campo ``empresa_id`` enviado no formulário pelo bot;
@@ -157,33 +157,33 @@ def _resolver_tenant_bot():
         3. Empresa do primeiro DONO cadastrado (fallback com warning).
     ``Usuario.query.first()`` não serve: o primeiro usuário costuma ser o
     MASTER, que não pertence a nenhuma Empresa.
+
+    Um valor informado mas inválido NÃO cai para o próximo nível (isso
+    gravaria o documento em outra empresa): devolve ``erro=(status, msg)``
+    com 400 para o payload e 503 para a variável de ambiente.
     """
     candidatos = (
-        ('form', request.form.get('empresa_id')),
-        ('env', os.environ.get('API_BOT_EMPRESA_ID')),
+        ('payload', request.form.get('empresa_id'), 400),
+        ('env', os.environ.get('API_BOT_EMPRESA_ID'), 503),
     )
-    for origem, valor in candidatos:
+    for origem, valor, status_erro in candidatos:
         valor = (valor or '').strip()
         if not valor:
             continue
         try:
             eid = int(valor)
         except ValueError:
-            current_app.logger.error(
-                "[api_bot_upload] empresa_id inválido vindo de %s: '%s'", origem, valor,
-            )
-            continue
-        if not Empresa.query.filter_by(id=eid, ativo=True).first():
-            current_app.logger.error(
-                "[api_bot_upload] empresa_id=%s (de %s) não existe ou está inativa.", eid, origem,
-            )
-            continue
+            eid = None
+        if eid is None or not Empresa.query.filter_by(id=eid, ativo=True).first():
+            msg = f"empresa_id '{valor}' ({origem}) inválido, inexistente ou inativo."
+            current_app.logger.error("[api_bot_upload] ❌ %s", msg)
+            return None, None, origem, (status_erro, msg)
         dono = (
             Usuario.query.filter_by(empresa_id=eid)
             .order_by((Usuario.perfil == PERFIL_DONO).desc(), Usuario.id.asc())
             .first()
         )
-        return eid, (dono.id if dono else None), origem
+        return eid, (dono.id if dono else None), origem, None
 
     dono = (
         Usuario.query.filter(Usuario.perfil == PERFIL_DONO, Usuario.empresa_id.isnot(None))
@@ -196,8 +196,28 @@ def _resolver_tenant_bot():
             "DONO (usuario_id=%s, empresa_id=%s). Configure API_BOT_EMPRESA_ID no Render.",
             dono.id, dono.empresa_id,
         )
-        return int(dono.empresa_id), dono.id, 'fallback_dono'
-    return None, None, 'indefinido'
+        return int(dono.empresa_id), dono.id, 'fallback_dono', None
+    return None, None, 'indefinido', None
+
+
+def _log_estado_final_documento_bot(app_obj, documento_id):
+    """Linha final de monitoramento do upload do bot (buscar por ``doc_id=``)."""
+    doc = db.session.get(Documento, documento_id)
+    if doc is None:
+        app_obj.logger.error(
+            '[api_bot_upload] doc_id=%s REMOVIDO após o processamento '
+            '(bonificação ou exclusão) — não aparece na fila.', documento_id,
+        )
+    elif doc.venda_id:
+        app_obj.logger.info(
+            '[api_bot_upload] doc_id=%s vinculado automaticamente à venda_id=%s '
+            '(empresa_id=%s, NF=%s)', doc.id, doc.venda_id, doc.empresa_id, doc.numero_nf,
+        )
+    else:
+        app_obj.logger.info(
+            '[api_bot_upload] doc_id=%s PENDENTE na fila (empresa_id=%s, NF=%s)',
+            doc.id, doc.empresa_id, doc.numero_nf,
+        )
 
 
 def _nome_arquivo_disponivel(pasta, subpasta, nome_arquivo):
@@ -972,7 +992,10 @@ def api_bot_upload():
             current_app.logger.warning("[api_bot_upload] ❌ Campo 'tipo' inválido: '%s'", tipo)
             return jsonify({'erro': "Campo 'tipo' inválido. Use 'boleto' ou 'nfe'."}), 400
 
-        empresa_id, user_id, origem_tenant = _resolver_tenant_bot()
+        empresa_id, user_id, origem_tenant, erro_tenant = _resolver_tenant_bot()
+        if erro_tenant:
+            status_erro, msg_erro = erro_tenant
+            return jsonify({'erro': msg_erro}), status_erro
         if empresa_id is None:
             current_app.logger.error(
                 "[api_bot_upload] ❌ Nenhum tenant resolvido (sem empresa_id no form, sem "
@@ -1069,32 +1092,22 @@ def api_bot_upload():
                         resultado_ocr.get('erros', 0),
                         resultado_ocr.get('mensagens', []),
                     )
-                    doc = db.session.get(Documento, documento_id)
-                    if doc is None:
-                        app_obj.logger.error(
-                            '[OCR-BG] api_bot_upload: doc_id=%s NÃO existe mais após o OCR '
-                            '(removido como bonificação ou excluído).', documento_id,
-                        )
-                    elif doc.venda_id:
-                        app_obj.logger.info(
-                            '[OCR-BG] api_bot_upload: doc_id=%s NF=%s vinculado automaticamente à '
-                            'venda_id=%s (empresa_id=%s) — sai da fila de pendentes.',
-                            doc.id, doc.numero_nf, doc.venda_id, doc.empresa_id,
-                        )
-                    else:
-                        app_obj.logger.info(
-                            '[OCR-BG] api_bot_upload: doc_id=%s NF=%s sem venda correspondente — '
-                            'PENDENTE na fila "Documentos Recém-Chegados" (empresa_id=%s).',
-                            doc.id, doc.numero_nf, doc.empresa_id,
-                        )
-                    limpar_cache_dashboard()
                 except Exception as err:
                     try:
                         db.session.rollback()
                     except Exception:
                         pass
                     app_obj.logger.error(
-                        '[OCR-BG] api_bot_upload: doc_id=%s EXCEÇÃO: %s', documento_id, err, exc_info=True,
+                        '[OCR-BG] api_bot_upload: doc_id=%s EXCEÇÃO no OCR/vínculo: %s',
+                        documento_id, err, exc_info=True,
+                    )
+                try:
+                    _log_estado_final_documento_bot(app_obj, documento_id)
+                    limpar_cache_dashboard()
+                except Exception as err:
+                    app_obj.logger.error(
+                        '[api_bot_upload] doc_id=%s falha ao consultar estado final: %s',
+                        documento_id, err, exc_info=True,
                     )
 
         threading.Thread(
