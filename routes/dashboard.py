@@ -1045,6 +1045,25 @@ def api_frases_voto_atual():
     return jsonify({'voto': 'like' if registro.gostou else 'dislike'})
 
 
+def _nome_cliente_venda(venda):
+    """Nome do cliente para cada item do histórico de vendas.
+
+    O relacionamento já vem carregado por ``joinedload(Venda.cliente)``.
+    Venda sem cliente, com nome vazio ou só o placeholder "Desconhecido"
+    (sem identificação avulsa) aparece como "Não informado".
+    """
+    cliente = getattr(venda, 'cliente', None)
+    nome = str(getattr(cliente, 'nome_cliente', '') or '').strip() if cliente is not None else ''
+    avulso = str(getattr(venda, 'cliente_avulso', '') or '').strip()
+    if not nome:
+        return avulso or 'Não informado'
+    if 'DESCONHECIDO' in nome.upper():
+        if avulso:
+            return f'{nome} ({avulso})'
+        return 'Não informado'
+    return nome
+
+
 @dashboard_bp.route('/api/vendas_por_filtro')
 def api_vendas_por_filtro():
     """Retorna vendas em JSON filtradas por produto_id ou cliente_id com paginação."""
@@ -1056,6 +1075,8 @@ def api_vendas_por_filtro():
     if not produto_id and not cliente_id:
         return jsonify({'erro': 'Informe produto_id ou cliente_id'}), 400
 
+    # joinedload gera LEFT OUTER JOIN em clientes e produtos, então
+    # cada item da lista já traz o nome do cliente associado à venda.
     query = query_tenant(Venda).options(joinedload(Venda.cliente), joinedload(Venda.produto))
     if produto_id:
         query = query.filter(Venda.produto_id == produto_id)
@@ -1102,11 +1123,14 @@ def api_vendas_por_filtro():
         nf_atual = (v.nf or '-').strip() if v.nf else '-'
         if nf_anterior is not None and nf_atual != nf_anterior:
             grupo_atual = 2 if grupo_atual == 1 else 1
+        nome_cliente = _nome_cliente_venda(v)
         lista.append({
             'id': v.id,
             'data': v.data_venda.strftime('%d/%m/%Y'),
             'nf': nf_atual,
             'produto': v.produto.nome_produto if v.produto else '-',
+            'cliente': nome_cliente,
+            'cliente_nome': nome_cliente,
             'preco_unitario': float(v.preco_venda),
             'quantidade': v.quantidade_venda,
             'valor': float(v.preco_venda * v.quantidade_venda),

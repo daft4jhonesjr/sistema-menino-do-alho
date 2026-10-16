@@ -1131,18 +1131,19 @@
                 </div>
                 
                 <div id="modal-vendas-tabela-wrapper" class="overflow-x-auto w-full rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 no-resize" data-disable-resize="true">
                         <thead class="bg-gray-50 dark:bg-gray-900/50">
                             <tr>
                                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Data</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">NF</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Produto</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Pedido</th>
+                                <th class="js-col-produto px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Produto</th>
+                                <th class="js-col-cliente hidden px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Cliente</th>
                                 <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Qtd</th>
-                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Preço Unit.</th>
                                 <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Valor</th>
+                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Total</th>
                                 <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Lucro</th>
                                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Empresa</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Situação</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Status</th>
                                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Pagamento</th>
                             </tr>
                         </thead>
@@ -1223,6 +1224,27 @@
         return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
+    function escaparHtmlModal(valor) {
+        return String(valor == null ? '' : valor)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    // No histórico de um produto o nome se repete em todas as linhas
+    // (já está no título do modal). A coluna some para abrir espaço ao cliente.
+    function ajustarColunasModalVendas() {
+        var exibirCliente = modalVendasTipo === 'produto';
+        document.querySelectorAll('#modal-vendas .js-col-produto').forEach(function(el) {
+            el.classList.toggle('hidden', exibirCliente);
+        });
+        document.querySelectorAll('#modal-vendas .js-col-cliente').forEach(function(el) {
+            el.classList.toggle('hidden', !exibirCliente);
+        });
+    }
+
     function abrirModalVendas(tipo, id) {
         var overlay = document.getElementById('modal-vendas-overlay');
         var modal = document.getElementById('modal-vendas');
@@ -1250,6 +1272,7 @@
         document.getElementById('modal-vendas-totais-produto').classList.add('hidden');
         document.getElementById('modal-vendas-carregar-mais-wrapper').classList.add('hidden');
         tbody.innerHTML = '';
+        ajustarColunasModalVendas();
         titulo.innerHTML = '<i data-lucide="loader-2" class="w-5 h-5 mr-2 animate-spin"></i>Carregando...';
         if (typeof lucide !== 'undefined') lucide.createIcons();
 
@@ -1428,10 +1451,15 @@
                     var vendaId = parseInt(v.id || 0, 10) || 0;
                     var formaPag = (v.forma_pagamento || '-').toString().toUpperCase();
                     var formaPagClass = formaPag === 'BOLETO' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
+                    var clienteNome = String((v.cliente || v.cliente_nome || '')).trim();
+                    if (!clienteNome || clienteNome === '-') clienteNome = 'Não informado';
+                    var classeColProduto = modalVendasTipo === 'produto' ? ' js-col-produto hidden' : ' js-col-produto';
+                    var classeColCliente = modalVendasTipo === 'produto' ? ' js-col-cliente' : ' js-col-cliente hidden';
                     tr.innerHTML =
                         '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">' + (v.data || '-') + '</td>' +
                         '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">' + (v.nf || '-') + '</td>' +
-                        '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">' + (v.produto || '-') + '</td>' +
+                        '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap' + classeColProduto + '">' + (v.produto || '-') + '</td>' +
+                        '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap' + classeColCliente + '" title="' + escaparHtmlModal(clienteNome) + '">' + escaparHtmlModal(clienteNome) + '</td>' +
                         '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 text-right whitespace-nowrap">' + (v.quantidade || 0) + '</td>' +
                         '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 text-right whitespace-nowrap valor-financeiro">' + precoUnitStr + '</td>' +
                         '<td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100 text-right whitespace-nowrap valor-financeiro">' + valorStr + '</td>' +
@@ -1454,6 +1482,7 @@
                     
                     nfAnterior = nfAtual;
                 });
+                ajustarColunasModalVendas();
                 
                 // Atualizar nfAnterior global para próxima página
                 if (data.vendas.length > 0) {
