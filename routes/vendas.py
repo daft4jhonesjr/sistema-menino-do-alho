@@ -200,6 +200,144 @@ def _webcal_url_calendario():
 # ============================================================
 # Lembretes do Calendário de Vendas
 # ============================================================
+_RECORRENCIAS_LEMBRETE = {
+    'nunca': 'nunca',
+    'never': 'nunca',
+    'none': 'nunca',
+    'diaria': 'diaria',
+    'diariamente': 'diaria',
+    'daily': 'diaria',
+    'semanal': 'semanal',
+    'semanalmente': 'semanal',
+    'weekly': 'semanal',
+    'mensal': 'mensal',
+    'mensalmente': 'mensal',
+    'monthly': 'mensal',
+    'anual': 'anual',
+    'anualmente': 'anual',
+    'yearly': 'anual',
+}
+
+
+def _normalizar_horario_lembrete(raw):
+    """Devolve ``HH:MM``, ``None`` se vazio, ou ``False`` se inválido."""
+    txt = (raw or '').strip()
+    if not txt:
+        return None
+    m = re.match(r'^(\d{1,2}):(\d{2})$', txt)
+    if not m:
+        return False
+    hora, minuto = int(m.group(1)), int(m.group(2))
+    if hora > 23 or minuto > 59:
+        return False
+    return f'{hora:02d}:{minuto:02d}'
+
+
+def _normalizar_recorrencia_lembrete(raw):
+    """Devolve a chave canônica ou ``None`` se o valor não for reconhecido."""
+    val = (raw or '').strip().lower()
+    if not val:
+        return 'nunca'
+    return _RECORRENCIAS_LEMBRETE.get(val)
+
+
+def _proxima_data_lembrete(data_obj, recorrencia):
+    """Próxima data da série. ``None`` quando a repetição é 'nunca'."""
+    import calendar
+
+    if recorrencia == 'diaria':
+        return data_obj + timedelta(days=1)
+    if recorrencia == 'semanal':
+        return data_obj + timedelta(days=7)
+    if recorrencia == 'mensal':
+        mes = data_obj.month + 1
+        ano = data_obj.year
+        if mes > 12:
+            mes = 1
+            ano += 1
+        ultimo = calendar.monthrange(ano, mes)[1]
+        return data_obj.replace(year=ano, month=mes, day=min(data_obj.day, ultimo))
+    if recorrencia == 'anual':
+        try:
+            return data_obj.replace(year=data_obj.year + 1)
+        except ValueError:
+            return data_obj.replace(year=data_obj.year + 1, day=28)
+    return None
+
+
+def _lembrete_para_dict(lembrete):
+    horario = (getattr(lembrete, 'horario', None) or '')
+    recorrencia = (getattr(lembrete, 'recorrencia', None) or 'nunca')
+    data_iso = lembrete.data.isoformat() if getattr(lembrete, 'data', None) else ''
+    return {
+        'id': lembrete.id,
+        'data': data_iso,
+        'descricao': lembrete.descricao,
+        'concluido': bool(getattr(lembrete, 'concluido', False)),
+        'ordem': int(getattr(lembrete, 'ordem', 0) or 0),
+        'horario': horario,
+        'time': horario,
+        'recorrencia': recorrencia,
+        'recurrence': recorrencia,
+        'tipo': 'manual',
+    }
+
+
+def _ler_horario_recorrencia_form():
+    horario = _normalizar_horario_lembrete(
+        request.form.get('time') or request.form.get('horario')
+    )
+    if horario is False:
+        return None, None, 'Horário inválido. Use o formato HH:MM.'
+    recorrencia = _normalizar_recorrencia_lembrete(
+        request.form.get('recurrence') or request.form.get('recorrencia')
+    )
+    if recorrencia is None:
+        return None, None, 'Repetição inválida.'
+    return horario, recorrencia, None
+
+
+def _gerar_proximo_lembrete(lembrete):
+    """Cria a ocorrência seguinte ao concluir um lembrete recorrente.
+
+    Não duplica se essa conclusão já tiver gerado a próxima.
+    """
+    recorrencia = (getattr(lembrete, 'recorrencia', None) or 'nunca')
+    if recorrencia == 'nunca' or not lembrete.data:
+        return None
+    ja_gerado = (
+        query_tenant(Lembrete)
+        .filter_by(origem_id=lembrete.id)
+        .first()
+    )
+    if ja_gerado:
+        return None
+    proxima = _proxima_data_lembrete(lembrete.data, recorrencia)
+    if not proxima:
+        return None
+    max_ordem = (
+        db.session.query(func.coalesce(func.max(Lembrete.ordem), -1))
+        .filter(
+            Lembrete.empresa_id == lembrete.empresa_id,
+            Lembrete.data == proxima,
+        )
+        .scalar()
+    )
+    novo = Lembrete(
+        empresa_id=lembrete.empresa_id,
+        data=proxima,
+        descricao=lembrete.descricao,
+        concluido=False,
+        ordem=int(max_ordem) + 1,
+        horario=getattr(lembrete, 'horario', None),
+        recorrencia=recorrencia,
+        origem_id=lembrete.id,
+    )
+    db.session.add(novo)
+    db.session.flush()
+    return novo
+
+
 @vendas_bp.route('/lembretes/criar', methods=['POST'])
 def criar_lembrete():
     """Cria um lembrete manual para o calendário de entregas/vendas."""
@@ -215,6 +353,10 @@ def criar_lembrete():
     except ValueError:
         return jsonify({'ok': False, 'erro': 'Data inválida.'}), 400
 
+    horario, recorrencia, erro_meta = _ler_horario_recorrencia_form()
+    if erro_meta:
+        return jsonify({'ok': False, 'erro': erro_meta}), 400
+
     try:
         _max_ordem = (
             db.session.query(func.coalesce(func.max(Lembrete.ordem), -1))
@@ -229,35 +371,58 @@ def criar_lembrete():
             data=data_obj,
             descricao=descricao,
             ordem=int(_max_ordem) + 1,
+            horario=horario,
+            recorrencia=recorrencia,
         )
         db.session.add(lembrete)
         db.session.commit()
-        return jsonify({
-            'ok': True,
-            'id': lembrete.id,
-            'data': data_obj.isoformat(),
-            'descricao': lembrete.descricao,
-            'concluido': False,
-            'ordem': lembrete.ordem,
-        })
+        payload = _lembrete_para_dict(lembrete)
+        payload['ok'] = True
+        return jsonify(payload)
     except Exception:
         db.session.rollback()
         return jsonify({'ok': False, 'erro': 'Erro ao salvar lembrete.'}), 500
 
 
+@vendas_bp.route('/lembretes/<int:id>/editar', methods=['POST'])
+def editar_lembrete(id):
+    """Atualiza descrição, horário e repetição de um lembrete manual."""
+    lembrete = query_tenant(Lembrete).filter_by(id=id).first_or_404()
+    descricao = (request.form.get('descricao') or '').strip()[:500]
+    if not descricao:
+        return jsonify({'ok': False, 'erro': 'A descrição não pode estar vazia.'}), 400
+    horario, recorrencia, erro_meta = _ler_horario_recorrencia_form()
+    if erro_meta:
+        return jsonify({'ok': False, 'erro': erro_meta}), 400
+    try:
+        lembrete.descricao = descricao
+        lembrete.horario = horario
+        lembrete.recorrencia = recorrencia
+        db.session.commit()
+        payload = _lembrete_para_dict(lembrete)
+        payload['ok'] = True
+        return jsonify(payload)
+    except Exception:
+        db.session.rollback()
+        return jsonify({'ok': False, 'erro': 'Erro ao editar lembrete.'}), 500
+
+
 @vendas_bp.route('/lembretes/<int:id>/concluir', methods=['POST'])
 def concluir_lembrete(id):
-    """Alterna o status concluído do lembrete (soft-completion)."""
+    """Alterna o status concluído do lembrete (soft-completion).
+
+    Ao marcar como concluído um lembrete com repetição, gera a próxima
+    ocorrência (mesmo horário e mesma regra) na data seguinte da série.
+    """
     lembrete = query_tenant(Lembrete).filter_by(id=id).first_or_404()
     try:
         lembrete.concluido = not bool(lembrete.concluido)
+        proximo = _gerar_proximo_lembrete(lembrete) if lembrete.concluido else None
         db.session.commit()
-        return jsonify({
-            'ok': True,
-            'id': lembrete.id,
-            'concluido': bool(lembrete.concluido),
-            'descricao': lembrete.descricao,
-        })
+        payload = _lembrete_para_dict(lembrete)
+        payload['ok'] = True
+        payload['proximo'] = _lembrete_para_dict(proximo) if proximo else None
+        return jsonify(payload)
     except Exception:
         db.session.rollback()
         return jsonify({'ok': False, 'erro': 'Erro ao concluir lembrete.'}), 500
@@ -285,14 +450,13 @@ def adiar_lembrete(id):
             return jsonify({'ok': False, 'erro': 'Lembrete sem data.'}), 400
         lembrete.data = lembrete.data + timedelta(days=1)
         db.session.commit()
-        return jsonify({
+        payload = _lembrete_para_dict(lembrete)
+        payload.update({
             'ok': True,
             'status': 'success',
-            'id': lembrete.id,
             'nova_data': lembrete.data.strftime('%Y-%m-%d'),
-            'descricao': lembrete.descricao,
-            'concluido': bool(lembrete.concluido),
         })
+        return jsonify(payload)
     except Exception:
         db.session.rollback()
         return jsonify({'ok': False, 'erro': 'Erro ao adiar lembrete.'}), 500
@@ -307,14 +471,13 @@ def voltar_lembrete(id):
             return jsonify({'ok': False, 'erro': 'Lembrete sem data.'}), 400
         lembrete.data = lembrete.data - timedelta(days=1)
         db.session.commit()
-        return jsonify({
+        payload = _lembrete_para_dict(lembrete)
+        payload.update({
             'ok': True,
             'status': 'success',
-            'id': lembrete.id,
             'nova_data': lembrete.data.strftime('%Y-%m-%d'),
-            'descricao': lembrete.descricao,
-            'concluido': bool(lembrete.concluido),
         })
+        return jsonify(payload)
     except Exception:
         db.session.rollback()
         return jsonify({'ok': False, 'erro': 'Erro ao voltar lembrete.'}), 500
@@ -1719,13 +1882,7 @@ def listar_vendas():
         )
         for _l in _lembs:
             _iso_l = _l.data.isoformat()
-            lembretes_por_data.setdefault(_iso_l, []).append({
-                'id': _l.id,
-                'descricao': _l.descricao,
-                'concluido': bool(getattr(_l, 'concluido', False)),
-                'ordem': int(getattr(_l, 'ordem', 0) or 0),
-                'tipo': 'manual',
-            })
+            lembretes_por_data.setdefault(_iso_l, []).append(_lembrete_para_dict(_l))
     except Exception:
         db.session.rollback()
         lembretes_por_data = {}

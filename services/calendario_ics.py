@@ -271,10 +271,28 @@ def _adicionar_lembretes(cal: Calendar, empresa_id: int, inicio: date) -> None:
         if not dia:
             continue
         titulo = (lem.descricao or 'Lembrete').strip()
+        horario = (getattr(lem, 'horario', None) or '').strip()
+        recorrencia = (getattr(lem, 'recorrencia', None) or 'nunca').strip()
+        descricao = titulo
+        if recorrencia and recorrencia != 'nunca':
+            descricao = f'{titulo}\nRepetição: {recorrencia}'
+        partes = horario.split(':') if horario else []
+        if len(partes) == 2 and partes[0].isdigit() and partes[1].isdigit():
+            inicio_dt = datetime(dia.year, dia.month, dia.day, int(partes[0]), int(partes[1]))
+            event = Event()
+            event.add('uid', f'lembrete-{lem.id}@menino-do-alho')
+            event.add('dtstamp', datetime.utcnow())
+            event.add('dtstart', inicio_dt)
+            event.add('dtend', inicio_dt + timedelta(minutes=30))
+            event.add('summary', f'[LEMBRETE] {titulo}')
+            event.add('description', descricao)
+            event.add('transp', 'TRANSPARENT')
+            cal.add_component(event)
+            continue
         _add_all_day(
             cal,
             uid=f"lembrete-{lem.id}@menino-do-alho",
             dia=dia,
             summary=f"[LEMBRETE] {titulo}",
-            description=titulo,
+            description=descricao,
         )

@@ -4521,6 +4521,19 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             _adicionar_coluna_se_ausente('lembretes', 'ordem', 'INTEGER NOT NULL DEFAULT 0')
         except (OperationalError, Exception):
             db.session.rollback()
+        # Migração: horário, repetição e vínculo da próxima ocorrência
+        try:
+            _adicionar_coluna_se_ausente('lembretes', 'horario', 'VARCHAR(5)')
+        except (OperationalError, Exception):
+            db.session.rollback()
+        try:
+            _adicionar_coluna_se_ausente('lembretes', 'recorrencia', "VARCHAR(20) NOT NULL DEFAULT 'nunca'")
+        except (OperationalError, Exception):
+            db.session.rollback()
+        try:
+            _adicionar_coluna_se_ausente('lembretes', 'origem_id', 'INTEGER')
+        except (OperationalError, Exception):
+            db.session.rollback()
         # Migração: tabela de auditoria de ações (log de atividades)
         try:
             LogAtividade.__table__.create(bind=db.engine, checkfirst=True)
