@@ -153,6 +153,29 @@
     /* Feedback visual: campo obrigatório em falta */
     .campo-erro { border-color: #ef4444 !important; box-shadow: 0 0 0 1px #ef4444 !important; }
     #cliente-select-wrap .ts-wrapper.campo-erro .ts-control { border-color: #ef4444 !important; box-shadow: 0 0 0 1px #ef4444 !important; }
+    /* Sub-lembretes: indentação + linha guia, fundo mais suave que o master */
+    .lembrete-filhos {
+        margin-top: 0.25rem;
+        margin-left: 1rem;
+        padding-left: 0.75rem;
+        border-left: 2px solid rgba(196, 181, 253, 0.95);
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+    .dark .lembrete-filhos {
+        border-left-color: rgba(167, 139, 250, 0.5);
+    }
+    .lembrete-card-sub {
+        font-size: 0.8125rem;
+        line-height: 1.35;
+    }
+    .lembrete-card-sub[data-concluido="0"] {
+        background-color: rgba(237, 233, 254, 0.78);
+    }
+    .dark .lembrete-card-sub[data-concluido="0"] {
+        background-color: rgba(88, 28, 135, 0.34);
+    }
 </style>
 <script>
 (function() {
@@ -4593,7 +4616,7 @@ function ordenarVendasTabela(colIndex, tipo) {
 
         if (manuaisLembs.length) {
             manuaisLembs.forEach(function(lem) {
-                html += _htmlLembrete(iso, lem);
+                html += _htmlNodoLembrete(iso, lem, 0);
             });
         } else {
             html += '<p class="text-xs text-gray-400 dark:text-gray-500 italic" id="empty-lembretes-' + iso + '">Nenhum lembrete para este dia.</p>';
@@ -4601,6 +4624,7 @@ function ordenarVendasTabela(colIndex, tipo) {
 
         html += '</div>' +
             '<div id="form-lembrete-' + iso + '" class="hidden mt-3 space-y-2">' +
+                '<p id="hint-sub-lembrete-' + iso + '" class="hidden text-xs text-purple-600 dark:text-purple-400"></p>' +
                 '<div class="flex items-center gap-2">' +
                     '<input type="text" id="input-lembrete-' + iso + '" maxlength="500" placeholder="Descrição do lembrete…" ' +
                         'class="flex-1 min-w-0 bg-gray-800 border border-gray-700 text-white placeholder-gray-500 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 transition-colors" />' +
@@ -4841,7 +4865,12 @@ function ordenarVendasTabela(colIndex, tipo) {
         });
     };
 
-    function _htmlLembrete(iso, lem) {
+    function _ehSubLembrete(lem, depth) {
+        return (depth || 0) > 0 || !!(lem && lem.parent_id);
+    }
+
+    function _htmlLembrete(iso, lem, depth) {
+        depth = depth || 0;
         // Evento dinâmico do Radar de Recompra (não persistido)
         if (lem && lem.tipo === 'recompra') {
             var statusRadar = lem.status || '';
@@ -4887,9 +4916,17 @@ function ordenarVendasTabela(colIndex, tipo) {
         }
 
         var concluido = !!lem.concluido;
-        var cardCls = concluido
-            ? 'flex items-start justify-between gap-2 bg-gray-800/30 border border-gray-700 rounded-lg px-3 py-2 text-sm group'
-            : 'flex items-start justify-between gap-2 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg px-3 py-2 text-sm group';
+        var sub = _ehSubLembrete(lem, depth);
+        var cardCls = 'flex items-start justify-between gap-2 rounded-lg px-3 py-2 group ';
+        if (concluido) {
+            cardCls += sub
+                ? 'lembrete-card-sub bg-gray-800/30 border border-gray-700'
+                : 'text-sm bg-gray-800/30 border border-gray-700';
+        } else if (sub) {
+            cardCls += 'lembrete-card-sub bg-purple-100 dark:bg-purple-900/40 border border-purple-200 dark:border-purple-800';
+        } else {
+            cardCls += 'text-sm bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800';
+        }
         var textoCls = concluido
             ? 'line-through text-gray-500 opacity-70 leading-snug'
             : 'text-gray-800 dark:text-gray-200 leading-snug';
@@ -4899,13 +4936,24 @@ function ordenarVendasTabela(colIndex, tipo) {
             : 'inline-flex items-center gap-1 text-[11px] font-medium text-gray-400 dark:text-gray-500 hover:text-emerald-500 dark:hover:text-emerald-400 hover:bg-emerald-500/10 rounded-md px-1.5 py-0.5 transition-colors';
         var btnLabel = concluido ? 'Desfazer' : 'Concluído';
         var meta = _metaLembreteHtml(lem);
+        var btnSub = '';
+        if (!lem.parent_id) {
+            btnSub =
+                '<button type="button" onclick="abrirFormSubLembrete(' + lem.id + ',\'' + esc(iso) + '\')" ' +
+                    'title="Adicionar sub-lembrete" aria-label="Adicionar sub-lembrete" ' +
+                    'class="inline-flex items-center text-[11px] font-medium text-purple-600 hover:text-purple-800 dark:text-purple-300 dark:hover:text-purple-200 hover:bg-purple-500/10 rounded-md px-1.5 py-0.5 transition-colors">' +
+                    '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">' +
+                        '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 5v14M5 12h14"/>' +
+                    '</svg>' +
+                '</button>';
+        }
 
-        return '<div class="' + cardCls + ' ios-draggable-item" id="lem-' + lem.id + '" data-id="' + lem.id + '" data-concluido="' + (concluido ? '1' : '0') + '">' +
+        return '<div class="' + cardCls + '" id="lem-' + lem.id + '" data-concluido="' + (concluido ? '1' : '0') + '">' +
             '<div class="min-w-0 flex-1 pr-1">' +
                 '<p class="' + textoCls + '">' + esc(lem.descricao) + '</p>' +
                 (meta ? '<p class="mt-1 flex items-center gap-2 flex-wrap">' + meta + '</p>' : '') +
             '</div>' +
-            '<div class="flex items-center gap-1.5 flex-shrink-0 mt-0.5 no-drag">' +
+            '<div class="flex items-center justify-end gap-1 flex-wrap mt-0.5 no-drag" style="max-width:13.5rem">' +
                 '<button type="button" onclick="concluirLembrete(' + lem.id + ',\'' + esc(iso) + '\', this)" ' +
                     'title="' + btnTitulo + '" ' +
                     'class="' + btnCls + '">' +
@@ -4930,6 +4978,7 @@ function ordenarVendasTabela(colIndex, tipo) {
                     '</svg>' +
                     '<span class="hidden sm:inline">Adiar</span>' +
                 '</button>' +
+                btnSub +
                 '<button type="button" onclick="editarLembrete(' + lem.id + ',\'' + esc(iso) + '\')" ' +
                     'title="Editar lembrete" ' +
                     'class="inline-flex items-center gap-1 text-[11px] font-medium text-purple-500 hover:text-purple-700 dark:text-purple-300 dark:hover:text-purple-200 hover:bg-purple-500/10 rounded-md px-1.5 py-0.5 transition-colors">' +
@@ -4944,6 +4993,22 @@ function ordenarVendasTabela(colIndex, tipo) {
                     '✕' +
                 '</button>' +
             '</div>' +
+        '</div>';
+    }
+
+    function _htmlNodoLembrete(iso, lem, depth) {
+        depth = depth || 0;
+        if (lem && lem.tipo === 'recompra') return _htmlLembrete(iso, lem, 0);
+        var filhos = (lem && lem.filhos) || [];
+        var miolo = '';
+        for (var i = 0; i < filhos.length; i++) {
+            miolo += _htmlNodoLembrete(iso, filhos[i], depth + 1);
+        }
+        var arrastavel = depth === 0 ? ' ios-draggable-item' : '';
+        var guia = filhos.length ? 'lembrete-filhos no-drag' : 'no-drag hidden';
+        return '<div class="lembrete-nodo' + arrastavel + '" id="nodo-lem-' + lem.id + '" data-id="' + lem.id + '">' +
+            _htmlLembrete(iso, lem, depth) +
+            '<div id="filhos-lem-' + lem.id + '" class="' + guia + '">' + miolo + '</div>' +
         '</div>';
     }
 
@@ -4993,48 +5058,104 @@ function ordenarVendasTabela(colIndex, tipo) {
     }
 
     function _lembreteDaResposta(res) {
+        var parentId = res.parent_id;
+        if (parentId === '' || parentId == null) parentId = null;
+        else parentId = Number(parentId);
         return {
             id: res.id,
+            data: res.data || '',
             descricao: res.descricao || '',
             concluido: !!res.concluido,
             time: res.time || res.horario || '',
             recurrence: res.recurrence || res.recorrencia || 'nunca',
-            ordem: res.ordem
+            ordem: res.ordem,
+            parent_id: parentId,
+            filhos: Array.isArray(res.filhos) ? res.filhos : []
         };
     }
 
+    function _mesmoIdLembrete(a, b) {
+        return String(a) === String(b);
+    }
+
+    function _percorrerLembretes(lista, fn) {
+        (lista || []).forEach(function(l) {
+            if (!l) return;
+            fn(l);
+            _percorrerLembretes(l.filhos, fn);
+        });
+    }
+
     function _encontrarLembrete(iso, id) {
-        var lista = lembretes[iso] || [];
-        for (var i = 0; i < lista.length; i++) {
-            if (lista[i] && lista[i].id === id) return lista[i];
+        var achado = null;
+        _percorrerLembretes(lembretes[iso], function(l) {
+            if (!achado && _mesmoIdLembrete(l.id, id)) achado = l;
+        });
+        return achado;
+    }
+
+    function _extrairLembrete(iso, id) {
+        function extrair(lista) {
+            if (!lista) return null;
+            for (var i = 0; i < lista.length; i++) {
+                var l = lista[i];
+                if (!l) continue;
+                if (_mesmoIdLembrete(l.id, id)) {
+                    lista.splice(i, 1);
+                    return l;
+                }
+                var achou = extrair(l.filhos);
+                if (achou) return achou;
+            }
+            return null;
         }
-        return null;
+        var nodo = extrair(lembretes[iso]);
+        if (lembretes[iso] && !lembretes[iso].length) delete lembretes[iso];
+        return nodo;
+    }
+
+    function _inserirLembrete(iso, nodo) {
+        if (!nodo) return;
+        if (!lembretes[iso]) lembretes[iso] = [];
+        var pai = nodo.parent_id ? _encontrarLembrete(iso, nodo.parent_id) : null;
+        if (pai) {
+            if (!pai.filhos) pai.filhos = [];
+            pai.filhos.push(nodo);
+        } else {
+            lembretes[iso].push(nodo);
+        }
+        setLembretes[iso] = true;
+    }
+
+    function _mostrarGuiaFilhos(parentId) {
+        var cont = document.getElementById('filhos-lem-' + parentId);
+        if (!cont) return null;
+        cont.className = 'lembrete-filhos no-drag';
+        return cont;
     }
 
     function _removerLembreteDoPainel(id, iso) {
-        if (lembretes[iso]) {
-            lembretes[iso] = lembretes[iso].filter(function(l) { return l.id !== id; });
-            if (!lembretes[iso].length) delete lembretes[iso];
-        }
+        _extrairLembrete(iso, id);
 
         function finalizarRemocao() {
-            var card = document.getElementById('lem-' + id);
+            var card = document.getElementById('nodo-lem-' + id) || document.getElementById('lem-' + id);
+            var guia = card && card.parentElement;
             if (card) card.remove();
+            if (guia && guia.id && guia.id.indexOf('filhos-lem-') === 0 && !guia.querySelector('.lembrete-nodo')) {
+                guia.className = 'no-drag hidden';
+            }
             var lista = document.getElementById('lista-lembretes-' + iso);
-            if (lista && !lista.querySelector('[id^="lem-"]')) {
+            if (lista && !lista.querySelector(':scope > .lembrete-nodo') && !lista.querySelector(':scope > [id^="lem-"]')) {
                 var p = document.createElement('p');
                 p.className = 'text-xs text-gray-400 dark:text-gray-500 italic';
                 p.id = 'empty-lembretes-' + iso;
                 p.textContent = 'Nenhum lembrete para este dia.';
                 lista.appendChild(p);
             }
-            if (!lembretes[iso] || !lembretes[iso].length) {
-                delete setLembretes[iso];
-                _atualizarBarraLembrete(iso);
-            }
+            _atualizarBarraLembrete(iso);
         }
 
-        var card = document.getElementById('lem-' + id);
+        var card = document.getElementById('nodo-lem-' + id) || document.getElementById('lem-' + id);
         if (card) {
             card.style.transition = 'opacity 180ms ease, transform 180ms ease';
             card.style.opacity = '0';
@@ -5046,25 +5167,14 @@ function ordenarVendasTabela(colIndex, tipo) {
     }
 
     function _atualizarCardLembrete(id, iso, concluido) {
-        if (lembretes[iso]) {
-            lembretes[iso].forEach(function(l) {
-                if (l.id === id) l.concluido = !!concluido;
-            });
-        }
+        var lem = _encontrarLembrete(iso, id);
+        if (lem) lem.concluido = !!concluido;
         var card = document.getElementById('lem-' + id);
         if (!card) return;
-        var lem = { id: id, descricao: '', concluido: !!concluido };
-        if (lembretes[iso]) {
-            for (var i = 0; i < lembretes[iso].length; i++) {
-                if (lembretes[iso][i].id === id) {
-                    lem = lembretes[iso][i];
-                    break;
-                }
-            }
-        }
+        if (!lem) lem = { id: id, descricao: '', concluido: !!concluido, filhos: [] };
         var tmp = document.createElement('div');
-        tmp.innerHTML = _htmlLembrete(iso, lem);
-        card.replaceWith(tmp.firstElementChild);
+        tmp.innerHTML = _htmlLembrete(iso, lem, lem.parent_id ? 1 : 0);
+        if (tmp.firstElementChild) card.replaceWith(tmp.firstElementChild);
     }
 
     window.concluirLembrete = function(id, iso, btn) {
@@ -5080,15 +5190,13 @@ function ordenarVendasTabela(colIndex, tipo) {
                     if (typeof showToast === 'function') showToast('Erro ao atualizar lembrete.', 'error');
                     return;
                 }
-                if (lembretes[iso]) {
-                    lembretes[iso].forEach(function(l) {
-                        if (l.id === id) {
-                            l.concluido = !!res.concluido;
-                            if (res.time || res.horario) l.time = res.time || res.horario;
-                            if (res.recurrence || res.recorrencia) l.recurrence = res.recurrence || res.recorrencia;
-                        }
-                    });
-                }
+                _percorrerLembretes(lembretes[iso], function(l) {
+                    if (_mesmoIdLembrete(l.id, id)) {
+                        l.concluido = !!res.concluido;
+                        if (res.time || res.horario) l.time = res.time || res.horario;
+                        if (res.recurrence || res.recorrencia) l.recurrence = res.recurrence || res.recorrencia;
+                    }
+                });
                 _atualizarCardLembrete(id, iso, res.concluido);
                 if (res.proximo) _registrarProximoLembrete(res.proximo);
             })
@@ -5100,13 +5208,24 @@ function ordenarVendasTabela(colIndex, tipo) {
 
     function _limparFormLembrete(iso) {
         var frm = document.getElementById('form-lembrete-' + iso);
-        if (frm) frm.removeAttribute('data-edit-id');
+        if (frm) {
+            frm.removeAttribute('data-edit-id');
+            frm.removeAttribute('data-parent-id');
+        }
         var inp = document.getElementById('input-lembrete-' + iso);
         var horario = document.getElementById('input-horario-lembrete-' + iso);
         var rec = document.getElementById('input-recorrencia-lembrete-' + iso);
-        if (inp) inp.value = '';
+        var hint = document.getElementById('hint-sub-lembrete-' + iso);
+        if (inp) {
+            inp.value = '';
+            inp.placeholder = 'Descrição do lembrete…';
+        }
         if (horario) horario.value = '';
         if (rec) rec.value = 'nunca';
+        if (hint) {
+            hint.textContent = '';
+            hint.classList.add('hidden');
+        }
     }
 
     window.abrirFormLembrete = function(iso) {
@@ -5127,9 +5246,16 @@ function ordenarVendasTabela(colIndex, tipo) {
         var inp = document.getElementById('input-lembrete-' + iso);
         var horario = document.getElementById('input-horario-lembrete-' + iso);
         var rec = document.getElementById('input-recorrencia-lembrete-' + iso);
-        if (inp) { inp.value = lem.descricao || ''; inp.focus(); }
+        frm.removeAttribute('data-parent-id');
+        if (inp) {
+            inp.value = lem.descricao || '';
+            inp.placeholder = 'Descrição do lembrete…';
+            inp.focus();
+        }
         if (horario) horario.value = _horarioDoLembrete(lem);
         if (rec) rec.value = _recorrenciaDoLembrete(lem) || 'nunca';
+        var hint = document.getElementById('hint-sub-lembrete-' + iso);
+        if (hint) hint.classList.add('hidden');
         var err = document.getElementById('erro-lembrete-' + iso);
         if (err) err.classList.add('hidden');
     };
@@ -5142,24 +5268,52 @@ function ordenarVendasTabela(colIndex, tipo) {
         if (err) err.classList.add('hidden');
     };
 
+    window.abrirFormSubLembrete = function(parentId, iso) {
+        var pai = _encontrarLembrete(iso, parentId);
+        if (!pai || pai.parent_id) return;
+        window.abrirFormLembrete(iso);
+        var frm = document.getElementById('form-lembrete-' + iso);
+        if (frm) frm.setAttribute('data-parent-id', String(parentId));
+        var inp = document.getElementById('input-lembrete-' + iso);
+        if (inp) {
+            inp.placeholder = 'Descrição do sub-lembrete…';
+            inp.focus();
+        }
+        var hint = document.getElementById('hint-sub-lembrete-' + iso);
+        if (hint) {
+            hint.textContent = 'Sub-lembrete de: ' + (pai.descricao || 'lembrete');
+            hint.classList.remove('hidden');
+        }
+    };
+
+    function _anexarNodoLembrete(iso, nodo, depth) {
+        var tmp = document.createElement('div');
+        tmp.innerHTML = _htmlNodoLembrete(iso, nodo, depth || 0);
+        if (!tmp.firstElementChild) return;
+        if (nodo.parent_id) {
+            var cont = _mostrarGuiaFilhos(nodo.parent_id);
+            if (cont) {
+                cont.appendChild(tmp.firstElementChild);
+                return;
+            }
+        }
+        var lista = document.getElementById('lista-lembretes-' + iso);
+        if (!lista) return;
+        var empty = document.getElementById('empty-lembretes-' + iso);
+        if (empty) empty.remove();
+        lista.appendChild(tmp.firstElementChild);
+        _iniciarDnDLembretes(iso);
+    }
+
     function _registrarProximoLembrete(proximo) {
         if (!proximo || proximo.id == null || !proximo.data) return;
         var isoP = proximo.data;
         var novo = _lembreteDaResposta(proximo);
-        if (!lembretes[isoP]) lembretes[isoP] = [];
-        var ja = lembretes[isoP].some(function(l) { return l && l.id === novo.id; });
-        if (!ja) lembretes[isoP].push(novo);
-        setLembretes[isoP] = true;
+        if (_encontrarLembrete(isoP, novo.id)) return;
+        _inserirLembrete(isoP, novo);
         _atualizarBarraLembrete(isoP);
-        var lista = document.getElementById('lista-lembretes-' + isoP);
-        if (lista && !document.getElementById('lem-' + novo.id)) {
-            var empty = document.getElementById('empty-lembretes-' + isoP);
-            if (empty) empty.remove();
-            var tmp = document.createElement('div');
-            tmp.innerHTML = _htmlLembrete(isoP, novo);
-            if (tmp.firstElementChild) lista.appendChild(tmp.firstElementChild);
-            _iniciarDnDLembretes(isoP);
-        }
+        if (document.getElementById('nodo-lem-' + novo.id) || document.getElementById('lem-' + novo.id)) return;
+        _anexarNodoLembrete(isoP, novo, novo.parent_id ? 1 : 0);
     }
 
     window.salvarLembrete = function(iso) {
@@ -5180,11 +5334,13 @@ function ordenarVendasTabela(colIndex, tipo) {
         if (btn) btn.disabled = true;
 
         var editId = frm ? frm.getAttribute('data-edit-id') : '';
+        var parentId = (!editId && frm) ? (frm.getAttribute('data-parent-id') || '') : '';
         var fd = new FormData();
         fd.append('data', iso);
         fd.append('descricao', descricao);
         fd.append('time', horarioEl ? horarioEl.value : '');
         fd.append('recurrence', recEl ? recEl.value : 'nunca');
+        if (parentId) fd.append('parent_id', parentId);
         fd.append('csrf_token', CSRF_TOKEN);
 
         var url = editId ? ('/lembretes/' + editId + '/editar') : '/lembretes/criar';
@@ -5197,36 +5353,27 @@ function ordenarVendasTabela(colIndex, tipo) {
                     return;
                 }
                 var salvo = _lembreteDaResposta(res);
-                if (!lembretes[iso]) lembretes[iso] = [];
+                if (!salvo.filhos) salvo.filhos = [];
                 if (editId) {
-                    var achou = false;
-                    lembretes[iso].forEach(function(l) {
-                        if (String(l.id) === String(editId)) {
-                            l.descricao = salvo.descricao;
-                            l.time = salvo.time;
-                            l.recurrence = salvo.recurrence;
-                            l.concluido = salvo.concluido;
-                            achou = true;
-                        }
-                    });
-                    if (!achou) lembretes[iso].push(salvo);
+                    var atual = _encontrarLembrete(iso, editId);
+                    if (atual) {
+                        atual.descricao = salvo.descricao;
+                        atual.time = salvo.time;
+                        atual.recurrence = salvo.recurrence;
+                        atual.concluido = salvo.concluido;
+                    } else {
+                        _inserirLembrete(iso, salvo);
+                    }
                     var card = document.getElementById('lem-' + editId);
                     if (card) {
+                        var alvo = _encontrarLembrete(iso, editId) || salvo;
                         var tmpEdit = document.createElement('div');
-                        tmpEdit.innerHTML = _htmlLembrete(iso, _encontrarLembrete(iso, Number(editId)) || salvo);
+                        tmpEdit.innerHTML = _htmlLembrete(iso, alvo, alvo.parent_id ? 1 : 0);
                         if (tmpEdit.firstElementChild) card.replaceWith(tmpEdit.firstElementChild);
                     }
                 } else {
-                    lembretes[iso].push(salvo);
-                    var empty = document.getElementById('empty-lembretes-' + iso);
-                    if (empty) empty.remove();
-                    var lista = document.getElementById('lista-lembretes-' + iso);
-                    if (lista) {
-                        var tmp = document.createElement('div');
-                        tmp.innerHTML = _htmlLembrete(iso, salvo);
-                        if (tmp.firstElementChild) lista.appendChild(tmp.firstElementChild);
-                        _iniciarDnDLembretes(iso);
-                    }
+                    _inserirLembrete(iso, salvo);
+                    _anexarNodoLembrete(iso, salvo, salvo.parent_id ? 1 : 0);
                 }
                 setLembretes[iso] = true;
 
@@ -5281,41 +5428,27 @@ function ordenarVendasTabela(colIndex, tipo) {
                     if (typeof showToast === 'function') showToast('Erro ao mover lembrete.', 'error');
                     return;
                 }
-                var lemMovido = null;
-                if (lembretes[iso]) {
-                    for (var i = 0; i < lembretes[iso].length; i++) {
-                        if (lembretes[iso][i].id === id) {
-                            lemMovido = lembretes[iso][i];
-                            break;
-                        }
-                    }
-                }
+                var novaData = res.nova_data || res.data || '';
+                var lemMovido = _extrairLembrete(iso, id);
                 if (!lemMovido) {
                     lemMovido = _lembreteDaResposta(res);
                 } else {
                     if (res.time || res.horario) lemMovido.time = res.time || res.horario;
                     if (res.recurrence || res.recorrencia) lemMovido.recurrence = res.recurrence || res.recorrencia;
+                    lemMovido.data = novaData || lemMovido.data;
                 }
 
-                // Remove do dia atual e recoloca no dia destino (estado em memória).
-                if (lembretes[iso]) {
-                    lembretes[iso] = lembretes[iso].filter(function(l) { return l.id !== id; });
-                    if (!lembretes[iso].length) delete lembretes[iso];
-                }
-                if (novaData) {
-                    if (!lembretes[novaData]) lembretes[novaData] = [];
-                    lembretes[novaData].push(lemMovido);
-                    setLembretes[novaData] = true;
-                }
-                if (!lembretes[iso] || !lembretes[iso].length) {
-                    delete setLembretes[iso];
-                }
+                if (novaData) _inserirLembrete(novaData, lemMovido);
 
-                var card = document.getElementById('lem-' + id);
+                var card = document.getElementById('nodo-lem-' + id) || document.getElementById('lem-' + id);
                 function finalizarMovimento() {
-                    if (card) card.remove();
+                    var guia = card && card.parentElement;
+                    if (card && card.parentNode) card.remove();
+                    if (guia && guia.id && guia.id.indexOf('filhos-lem-') === 0 && !guia.querySelector('.lembrete-nodo')) {
+                        guia.className = 'no-drag hidden';
+                    }
                     var lista = document.getElementById('lista-lembretes-' + iso);
-                    if (lista && !lista.querySelector('[id^="lem-"]')) {
+                    if (lista && !lista.querySelector(':scope > .lembrete-nodo') && !lista.querySelector(':scope > [id^="lem-"]')) {
                         var p = document.createElement('p');
                         p.className = 'text-xs text-gray-400 dark:text-gray-500 italic';
                         p.id = 'empty-lembretes-' + iso;

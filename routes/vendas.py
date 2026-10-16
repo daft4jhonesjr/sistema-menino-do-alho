@@ -265,10 +265,15 @@ def _proxima_data_lembrete(data_obj, recorrencia):
     return None
 
 
-def _lembrete_para_dict(lembrete):
+def _lembrete_para_dict(lembrete, filhos=None):
     horario = (getattr(lembrete, 'horario', None) or '')
     recorrencia = (getattr(lembrete, 'recorrencia', None) or 'nunca')
     data_iso = lembrete.data.isoformat() if getattr(lembrete, 'data', None) else ''
+    parent_id = getattr(lembrete, 'parent_id', None)
+    try:
+        parent_id = int(parent_id) if parent_id else None
+    except (TypeError, ValueError):
+        parent_id = None
     return {
         'id': lembrete.id,
         'data': data_iso,
@@ -279,8 +284,89 @@ def _lembrete_para_dict(lembrete):
         'time': horario,
         'recorrencia': recorrencia,
         'recurrence': recorrencia,
+        'parent_id': parent_id,
+        'filhos': list(filhos or []),
         'tipo': 'manual',
     }
+
+
+def _arvore_lembretes(lembretes):
+    """Aninha sub-lembretes no master quando os dois estão no mesmo conjunto.
+
+    Itens cujo pai não está no conjunto (outro dia, excluído) sobem como raiz
+    para não sumirem da agenda.
+    """
+    nos = {}
+    for lem in lembretes:
+        nos[lem.id] = _lembrete_para_dict(lem, filhos=[])
+    raizes = []
+    for lem in lembretes:
+        no = nos[lem.id]
+        pai_id = no.get('parent_id')
+        if pai_id and pai_id in nos and pai_id != lem.id:
+            nos[pai_id]['filhos'].append(no)
+        else:
+            raizes.append(no)
+    return raizes
+
+
+def _resolver_pai_lembrete():
+    """Valida ``parent_id`` do formulário. Devolve ``(pai_ou_None, erro)``."""
+    raw = (request.form.get('parent_id') or '').strip()
+    if not raw:
+        return None, None
+    try:
+        pid = int(raw)
+    except (TypeError, ValueError):
+        return None, 'Lembrete principal inválido.'
+    if pid <= 0:
+        return None, 'Lembrete principal inválido.'
+    pai = query_tenant(Lembrete).filter_by(id=pid).first()
+    if not pai:
+        return None, 'Lembrete principal não encontrado.'
+    if getattr(pai, 'parent_id', None):
+        return None, 'Só é possível criar sub-lembretes em um lembrete principal.'
+    if not pai.data:
+        return None, 'Lembrete principal sem data.'
+    return pai, None
+
+
+def _proxima_ordem_lembrete(empresa_id, data_obj, parent_id):
+    consulta = (
+        db.session.query(func.coalesce(func.max(Lembrete.ordem), -1))
+        .filter(
+            Lembrete.empresa_id == empresa_id,
+            Lembrete.data == data_obj,
+        )
+    )
+    if parent_id:
+        consulta = consulta.filter(Lembrete.parent_id == parent_id)
+    else:
+        consulta = consulta.filter(Lembrete.parent_id.is_(None))
+    valor = consulta.scalar()
+    if valor is None:
+        valor = -1
+    return int(valor) + 1
+
+
+def _excluir_lembrete_e_filhos(lembrete):
+    """Remove o lembrete e toda a subárvore (o banco pode não ter FK CASCADE)."""
+    filhos = query_tenant(Lembrete).filter_by(parent_id=lembrete.id).all()
+    for filho in filhos:
+        _excluir_lembrete_e_filhos(filho)
+    db.session.delete(lembrete)
+
+
+def _mover_arvore_para_data(lembrete, data_origem, data_destino):
+    """Leva o lembrete e os sub-lembretes que ainda estão no mesmo dia."""
+    lembrete.data = data_destino
+    filhos = (
+        query_tenant(Lembrete)
+        .filter_by(parent_id=lembrete.id, data=data_origem)
+        .all()
+    )
+    for filho in filhos:
+        _mover_arvore_para_data(filho, data_origem, data_destino)
 
 
 def _ler_horario_recorrencia_form():
@@ -315,23 +401,18 @@ def _gerar_proximo_lembrete(lembrete):
     proxima = _proxima_data_lembrete(lembrete.data, recorrencia)
     if not proxima:
         return None
-    max_ordem = (
-        db.session.query(func.coalesce(func.max(Lembrete.ordem), -1))
-        .filter(
-            Lembrete.empresa_id == lembrete.empresa_id,
-            Lembrete.data == proxima,
-        )
-        .scalar()
-    )
     novo = Lembrete(
         empresa_id=lembrete.empresa_id,
         data=proxima,
         descricao=lembrete.descricao,
         concluido=False,
-        ordem=int(max_ordem) + 1,
+        ordem=_proxima_ordem_lembrete(
+            lembrete.empresa_id, proxima, getattr(lembrete, 'parent_id', None),
+        ),
         horario=getattr(lembrete, 'horario', None),
         recorrencia=recorrencia,
         origem_id=lembrete.id,
+        parent_id=getattr(lembrete, 'parent_id', None),
     )
     db.session.add(novo)
     db.session.flush()
@@ -357,22 +438,26 @@ def criar_lembrete():
     if erro_meta:
         return jsonify({'ok': False, 'erro': erro_meta}), 400
 
+    pai, erro_pai = _resolver_pai_lembrete()
+    if erro_pai:
+        status = 404 if erro_pai == 'Lembrete principal não encontrado.' else 400
+        return jsonify({'ok': False, 'erro': erro_pai}), status
+    if pai and pai.data != data_obj:
+        return jsonify({
+            'ok': False,
+            'erro': 'O sub-lembrete deve ficar no mesmo dia do lembrete principal.',
+        }), 400
+
     try:
-        _max_ordem = (
-            db.session.query(func.coalesce(func.max(Lembrete.ordem), -1))
-            .filter(
-                Lembrete.empresa_id == empresa_id_atual(),
-                Lembrete.data == data_obj,
-            )
-            .scalar()
-        )
+        parent_id = pai.id if pai else None
         lembrete = Lembrete(
             empresa_id=empresa_id_atual(),
             data=data_obj,
             descricao=descricao,
-            ordem=int(_max_ordem) + 1,
+            ordem=_proxima_ordem_lembrete(empresa_id_atual(), data_obj, parent_id),
             horario=horario,
             recorrencia=recorrencia,
+            parent_id=parent_id,
         )
         db.session.add(lembrete)
         db.session.commit()
@@ -433,7 +518,7 @@ def excluir_lembrete(id):
     """Remove um lembrete do calendário."""
     lembrete = query_tenant(Lembrete).filter_by(id=id).first_or_404()
     try:
-        db.session.delete(lembrete)
+        _excluir_lembrete_e_filhos(lembrete)
         db.session.commit()
         return jsonify({'ok': True})
     except Exception:
@@ -448,7 +533,9 @@ def adiar_lembrete(id):
     try:
         if not lembrete.data:
             return jsonify({'ok': False, 'erro': 'Lembrete sem data.'}), 400
-        lembrete.data = lembrete.data + timedelta(days=1)
+        origem = lembrete.data
+        destino = origem + timedelta(days=1)
+        _mover_arvore_para_data(lembrete, origem, destino)
         db.session.commit()
         payload = _lembrete_para_dict(lembrete)
         payload.update({
@@ -469,7 +556,9 @@ def voltar_lembrete(id):
     try:
         if not lembrete.data:
             return jsonify({'ok': False, 'erro': 'Lembrete sem data.'}), 400
-        lembrete.data = lembrete.data - timedelta(days=1)
+        origem = lembrete.data
+        destino = origem - timedelta(days=1)
+        _mover_arvore_para_data(lembrete, origem, destino)
         db.session.commit()
         payload = _lembrete_para_dict(lembrete)
         payload.update({
@@ -1880,9 +1969,11 @@ def listar_vendas():
             .order_by(Lembrete.data.asc(), Lembrete.ordem.asc(), Lembrete.criado_em.asc())
             .all()
         )
+        _por_dia = {}
         for _l in _lembs:
-            _iso_l = _l.data.isoformat()
-            lembretes_por_data.setdefault(_iso_l, []).append(_lembrete_para_dict(_l))
+            _por_dia.setdefault(_l.data.isoformat(), []).append(_l)
+        for _iso_l, _grupo in _por_dia.items():
+            lembretes_por_data[_iso_l] = _arvore_lembretes(_grupo)
     except Exception:
         db.session.rollback()
         lembretes_por_data = {}

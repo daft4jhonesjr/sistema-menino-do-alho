@@ -933,9 +933,23 @@ class Lembrete(db.Model):
     recorrencia = db.Column(db.String(20), nullable=False, default='nunca')
     # Lembrete que originou esta ocorrência (série gerada ao concluir).
     origem_id   = db.Column(db.Integer, nullable=True, index=True)
+    # Hierarquia: nulo no lembrete principal; id do master nos sub-lembretes.
+    parent_id   = db.Column(
+        db.Integer,
+        db.ForeignKey('lembretes.id', ondelete='CASCADE'),
+        nullable=True,
+        index=True,
+    )
     criado_em   = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     empresa = db.relationship('Empresa', backref=db.backref('lembretes', lazy='dynamic'))
+    filhos = db.relationship(
+        'Lembrete',
+        backref=db.backref('pai', remote_side='Lembrete.id'),
+        foreign_keys='Lembrete.parent_id',
+        order_by='Lembrete.ordem',
+        cascade='save-update, merge',
+    )
 
     def __repr__(self):
         return f'<Lembrete {self.id} {self.data} {self.descricao[:30]}>'
