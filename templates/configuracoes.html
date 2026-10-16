@@ -7,10 +7,11 @@
         <p class="text-gray-600 dark:text-gray-400">Personalize a aparência e o comportamento do sistema.</p>
     </div>
 
-    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+        <section class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
         <h3 class="text-lg font-bold text-emerald-700 dark:text-emerald-500 border-b border-gray-100 dark:border-gray-700 pb-2 mb-4">Aparência e Visualização</h3>
 
-        <div class="mb-6">
+        <div>
             <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Tema do Sistema (Modo Escuro)</label>
             <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Escolha como o sistema deve se comportar visualmente.</p>
 
@@ -42,19 +43,21 @@
             </div>
         </div>
 
-        <h3 class="text-lg font-bold text-emerald-700 dark:text-emerald-500 border-b border-gray-100 dark:border-gray-700 pb-2 mb-4 mt-8">Logística e Rotas</h3>
+        </section>
 
-        <form method="POST" action="{{ url_for('auth.configuracoes') }}" class="mb-6" id="form-logistica-deposito">
+        <section class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <h3 class="text-lg font-bold text-emerald-700 dark:text-emerald-500 border-b border-gray-100 dark:border-gray-700 pb-2 mb-4">Logística e Rotas</h3>
+
+        <form method="POST" action="{{ url_for('auth.configuracoes') }}" id="form-logistica-deposito">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <input type="hidden" name="secao" value="logistica"/>
-            <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                <div class="px-5 py-4 border-b border-gray-200 dark:border-gray-700">
-                    <h3 class="text-lg font-semibold text-emerald-800 dark:text-emerald-400">Ponto de partida das entregas</h3>
-                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        Endereço usado como origem na otimização de rotas (OSRM) e no Google Maps.
-                    </p>
-                </div>
-                <div class="p-5 space-y-4">
+            <div class="mb-4">
+                <h3 class="text-base font-semibold text-emerald-800 dark:text-emerald-400">Ponto de partida das entregas</h3>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Endereço usado como origem na otimização de rotas (OSRM) e no Google Maps.
+                </p>
+            </div>
+            <div class="space-y-4">
                     <div>
                         <label for="endereco_deposito" class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
                             Endereço Padrão do Depósito (Ponto de Partida)
@@ -75,20 +78,21 @@
                             Salvar endereço do depósito
                         </button>
                     </div>
-                </div>
             </div>
         </form>
 
-        <h3 class="text-lg font-bold text-emerald-700 dark:text-emerald-500 border-b border-gray-100 dark:border-gray-700 pb-2 mb-4 mt-8">Alertas e Notificações</h3>
+        </section>
+
+        <section class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <h3 class="text-lg font-bold text-emerald-700 dark:text-emerald-500 border-b border-gray-100 dark:border-gray-700 pb-2 mb-4">Alertas e Notificações</h3>
 
         <form method="POST" action="{{ url_for('auth.configuracoes') }}" class="mb-6" id="form-prefs-notif">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-            <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                <div class="px-5 py-4 border-b border-gray-200 dark:border-gray-700">
-                    <h3 class="text-lg font-semibold text-emerald-800 dark:text-emerald-400">Preferências de Notificação</h3>
-                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Escolha o que receber e o horário diário do disparo (fuso Brasil).</p>
-                </div>
-                <div class="p-5 space-y-5">
+            <div class="mb-4">
+                <h3 class="text-base font-semibold text-emerald-800 dark:text-emerald-400">Preferências de Notificação</h3>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Escolha o que receber e o horário diário do disparo (fuso Brasil).</p>
+            </div>
+            <div class="space-y-5">
                     {% macro linha_notif(nome_toggle, nome_horario, titulo, descricao, checked, horario_val) %}
                     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3" data-notif-row>
                         <div class="flex-1 min-w-0">
@@ -154,7 +158,6 @@
                             Salvar preferências
                         </button>
                     </div>
-                </div>
             </div>
         </form>
         <script>
@@ -207,8 +210,11 @@
             </button>
         </div>
 
+        </section>
+
         <!-- Central de Permissões do Dispositivo (GPS, Notificações, etc.) -->
-        <h3 class="text-lg font-bold text-emerald-700 dark:text-emerald-500 border-b border-gray-100 dark:border-gray-700 pb-2 mb-2 mt-8">
+        <section class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <h3 class="text-lg font-bold text-emerald-700 dark:text-emerald-500 border-b border-gray-100 dark:border-gray-700 pb-2 mb-2">
             Privacidade e Permissões do Dispositivo
         </h3>
         <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
@@ -317,10 +323,13 @@
             </div>
         </div>
 
-        {% if current_user.is_admin() %}
-        <h3 class="text-lg font-bold text-emerald-700 dark:text-emerald-500 border-b border-gray-100 dark:border-gray-700 pb-2 mb-4 mt-8">Gerenciamento do Sistema</h3>
+        </section>
 
-        <div class="mb-6 w-full border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-800/50">
+        {% if current_user.is_admin() %}
+        <section class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <h3 class="text-lg font-bold text-emerald-700 dark:text-emerald-500 border-b border-gray-100 dark:border-gray-700 pb-2 mb-4">Gerenciamento do Sistema</h3>
+
+        <div class="w-full border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-800/50">
             <div class="flex items-center mb-2">
                 <span class="text-2xl mr-3">📁</span>
                 <h4 class="font-bold text-gray-800 dark:text-white">Arquivos do Banco</h4>
@@ -330,8 +339,10 @@
                 Acessar Arquivos
             </a>
         </div>
+        </section>
 
-        <div class="mb-6 border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-800/50">
+        <div class="md:col-span-2 flex flex-col gap-6">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
             <div class="flex items-center justify-between mb-3">
                 <h4 class="font-bold text-gray-800 dark:text-white">Monitor de Erros do Sistema (Logs)</h4>
                 <div class="flex items-center gap-2">
@@ -342,7 +353,7 @@
             <textarea id="logMonitor" readonly class="w-full h-64 bg-slate-900 text-emerald-400 font-mono text-xs p-4 rounded outline-none resize-none" placeholder="Carregando logs..."></textarea>
         </div>
 
-        <div class="mb-6 border border-red-900/60 rounded-lg p-4" style="background-color:#1a0a0a;">
+        <div class="rounded-xl shadow-sm border border-red-900/60 p-6" style="background-color:#1a0a0a;">
             <div class="flex items-center justify-between mb-3">
                 <div>
                     <h4 class="font-bold text-red-400">🚨 Histórico de Erros Críticos <span class="font-normal text-xs text-red-600 ml-1">(erros_sistema.log — snapshot do carregamento)</span></h4>
@@ -356,6 +367,7 @@
             <pre id="logErrosCriticos"
                 class="w-full h-72 overflow-y-auto bg-gray-950 text-red-400 font-mono text-xs p-4 rounded-md border border-red-900/50 shadow-inner whitespace-pre-wrap break-words"
                 style="background-color:#030712; color:#f87171;">{{ erros_log_content | default('Nenhum erro crítico registrado ainda.') | e }}</pre>
+        </div>
         </div>
         {% endif %}
     </div>
