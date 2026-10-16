@@ -4534,6 +4534,18 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
             _adicionar_coluna_se_ausente('lembretes', 'origem_id', 'INTEGER')
         except (OperationalError, Exception):
             db.session.rollback()
+        # Migração: sub-lembretes (parent_id nulo = master; preenchido = filho)
+        try:
+            _adicionar_coluna_se_ausente('lembretes', 'parent_id', 'INTEGER')
+        except (OperationalError, Exception):
+            db.session.rollback()
+        try:
+            db.session.execute(text(
+                'CREATE INDEX IF NOT EXISTS ix_lembretes_parent_id ON lembretes (parent_id)'
+            ))
+            db.session.commit()
+        except (OperationalError, Exception):
+            db.session.rollback()
         # Migração: tabela de auditoria de ações (log de atividades)
         try:
             LogAtividade.__table__.create(bind=db.engine, checkfirst=True)
