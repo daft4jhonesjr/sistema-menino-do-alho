@@ -153,6 +153,82 @@
     /* Feedback visual: campo obrigatório em falta */
     .campo-erro { border-color: #ef4444 !important; box-shadow: 0 0 0 1px #ef4444 !important; }
     #cliente-select-wrap .ts-wrapper.campo-erro .ts-control { border-color: #ef4444 !important; box-shadow: 0 0 0 1px #ef4444 !important; }
+
+    /* Celular: radar e lembretes usam menos recuo lateral e o formulário empilha.
+       Telas maiores continuam só com as classes utilitárias. */
+    @media (max-width: 768px) {
+        #calendario-split-wrap > aside {
+            padding-left: 0.625rem;
+            padding-right: 0.625rem;
+        }
+        .blocos-agenda-dia {
+            margin-left: -0.25rem;
+            margin-right: -0.25rem;
+        }
+        #painel-lembretes {
+            padding-left: 0.5rem;
+            padding-right: 0.5rem;
+        }
+        [id^="painel-radar-"] > button {
+            padding-left: 0.5rem;
+            padding-right: 0.5rem;
+        }
+        [id^="lista-radar-"] {
+            padding-left: 0.375rem;
+            padding-right: 0.375rem;
+        }
+        #painel-lembretes .ios-draggable-item,
+        [id^="lista-radar-"] > div {
+            padding-left: 0.5rem;
+            padding-right: 0.5rem;
+        }
+        [id^="form-lembrete-"]:not(.hidden) {
+            display: flex;
+            flex-direction: row;
+            flex-wrap: wrap;
+            align-items: stretch;
+            column-gap: 0.5rem;
+            row-gap: 0.5rem;
+        }
+        [id^="form-lembrete-"] > .flex,
+        [id^="form-lembrete-"] > .grid {
+            display: contents;
+        }
+        [id^="form-lembrete-"] input[type="text"] {
+            order: 1;
+            flex: 1 1 100%;
+            width: 100%;
+            min-height: 44px;
+        }
+        [id^="form-lembrete-"] .grid > label:first-child,
+        [id^="form-lembrete-"] .grid > label:last-child {
+            flex: 1 1 100%;
+            min-width: 0;
+        }
+        [id^="form-lembrete-"] .grid > label:first-child { order: 2; }
+        [id^="form-lembrete-"] .grid > label:last-child { order: 3; }
+        [id^="form-lembrete-"] input[type="time"],
+        [id^="form-lembrete-"] select {
+            min-height: 44px;
+            width: 100%;
+        }
+        [id^="form-lembrete-"] button[id^="btn-salvar-lembrete-"] {
+            order: 4;
+            flex: 1 1 auto;
+            min-height: 44px;
+        }
+        [id^="form-lembrete-"] button[title="Cancelar"] {
+            order: 5;
+            flex: 0 0 44px;
+            width: 44px;
+            min-height: 44px;
+        }
+        [id^="form-lembrete-"] p[id^="erro-lembrete-"] {
+            order: 6;
+            flex: 1 1 100%;
+            margin-top: 0;
+        }
+    }
 </style>
 <script>
 (function() {
@@ -4552,7 +4628,7 @@ function ordenarVendasTabela(colIndex, tipo) {
         var radarMinimizado = false;
         try { radarMinimizado = localStorage.getItem('cal_radar_minimizado') === '1'; } catch (eRad) {}
 
-        html += '<div class="mt-2 flex flex-col gap-3 items-stretch">';
+        html += '<div class="blocos-agenda-dia mt-2 flex flex-col gap-3 items-stretch">';
 
         if (radarLembs.length) {
             html +=
