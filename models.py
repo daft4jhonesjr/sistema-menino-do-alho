@@ -924,11 +924,16 @@ class Lembrete(db.Model):
         nullable=False,
         index=True,
     )
-    data       = db.Column(db.Date, nullable=False, index=True)
-    descricao  = db.Column(db.String(500), nullable=False)
-    concluido  = db.Column(db.Boolean, default=False, nullable=False)
-    ordem      = db.Column(db.Integer, default=0, nullable=False)
-    criado_em  = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    data        = db.Column(db.Date, nullable=False, index=True)
+    descricao   = db.Column(db.String(500), nullable=False)
+    concluido   = db.Column(db.Boolean, default=False, nullable=False)
+    ordem       = db.Column(db.Integer, default=0, nullable=False)
+    # Horário opcional (HH:MM) e repetição: nunca, diaria, semanal, mensal, anual.
+    horario     = db.Column(db.String(5), nullable=True)
+    recorrencia = db.Column(db.String(20), nullable=False, default='nunca')
+    # Lembrete que originou esta ocorrência (série gerada ao concluir).
+    origem_id   = db.Column(db.Integer, nullable=True, index=True)
+    criado_em   = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     empresa = db.relationship('Empresa', backref=db.backref('lembretes', lazy='dynamic'))
 
