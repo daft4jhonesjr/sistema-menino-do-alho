@@ -1611,6 +1611,73 @@ function otimizarRotaEntregas() {
 }
 
 /* ── Romaneio para WhatsApp ───────────────────────────────────────────── */
+
+function _linhasProdutoDeTexto(texto) {
+    return String(texto || '')
+        .split(/\n+/)
+        .map(function(linha) { return linha.replace(/[ \t\f\v]+/g, ' ').trim(); })
+        .filter(Boolean);
+}
+
+/* Percorre a coluna Produto inteira. Cada <li>, <div>, <p> ou <br> vira um
+   item — parar no firstElementChild (ou no textContent colado) descartava
+   os produtos seguintes do mesmo pedido. */
+function _itensProdutoDoContainer(container) {
+    if (!container) return [];
+
+    var itens = [];
+    var buffer = '';
+    function flush() {
+        _linhasProdutoDeTexto(buffer).forEach(function(linha) { itens.push(linha); });
+        buffer = '';
+    }
+    function walk(node) {
+        Array.prototype.forEach.call(node.childNodes || [], function(child) {
+            if (child.nodeType === 3) {
+                buffer += child.textContent || '';
+                return;
+            }
+            if (child.nodeType !== 1) return;
+            var tag = String(child.tagName || '').toUpperCase();
+            if (tag === 'BR') {
+                flush();
+                return;
+            }
+            if (tag === 'LI' || tag === 'DIV' || tag === 'P') {
+                flush();
+                walk(child);
+                flush();
+                return;
+            }
+            walk(child);
+        });
+    }
+    walk(container);
+    flush();
+    return itens;
+}
+
+function _containerProdutosDoCheck(cb) {
+    if (!cb || !cb.closest) return null;
+    var tr = cb.closest('tr');
+    if (tr) {
+        return tr.querySelector('td ul') || (tr.cells && tr.cells.length > 4 ? tr.cells[4] : null);
+    }
+    var card = cb.closest('.ios-draggable-item');
+    return card ? card.querySelector('ul') : null;
+}
+
+function _produtosSelecionadosRomaneio(cb) {
+    var doDom = _itensProdutoDoContainer(_containerProdutosDoCheck(cb));
+    var bruto = (cb.getAttribute('data-produtos') || '').trim();
+    var doAttr = bruto
+        ? bruto.split(/\s*\|\|\s*/).map(function(p) { return p.replace(/\s+/g, ' ').trim(); }).filter(Boolean)
+        : [];
+    if (doDom.length >= doAttr.length && doDom.length) return doDom;
+    if (doAttr.length) return doAttr;
+    return doDom;
+}
+
 function copiarRomaneioWhatsApp() {
     const selecionados = _checksEntregaSelecionadosUnicos();
 
@@ -1624,10 +1691,8 @@ function copiarRomaneioWhatsApp() {
         const cliente  = (cb.dataset.cliente || '').replace(/\s+/g, ' ').trim();
         const endereco = (cb.dataset.endereco || '').replace(/\s+/g, ' ').trim();
         const total    = (cb.dataset.total || '').replace(/\s+/g, ' ').trim();
-        const produtosRaw = (cb.dataset.produtos || '').trim();
-        const produtoTexto = produtosRaw
-            ? produtosRaw.split(' || ').map(function(p) { return p.replace(/\s+/g, ' ').trim(); }).filter(Boolean).join(', ')
-            : '—';
+        const itensProduto = _produtosSelecionadosRomaneio(cb);
+        const produtoTexto = itensProduto.length ? itensProduto.join(',\n') : '—';
 
         blocos.push(
             '📦 *Cliente:* ' + (cliente || '—') + '\n' +
