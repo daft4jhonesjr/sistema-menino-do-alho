@@ -4571,7 +4571,10 @@ function ordenarVendasTabela(colIndex, tipo) {
 
         // ─── Radar e Lembretes em blocos independentes ─────────────
         var radarLembs = listaLembs.filter(function(l) { return l && l.tipo === 'recompra'; });
-        var manuaisLembs = listaLembs.filter(function(l) { return !(l && l.tipo === 'recompra'); });
+        var manuaisLembs = _ordenarLembretesPai(
+            listaLembs.filter(function(l) { return !(l && l.tipo === 'recompra'); })
+        );
+        if (lembretes[iso]) lembretes[iso] = radarLembs.concat(manuaisLembs);
         var radarMinimizado = false;
         try { radarMinimizado = localStorage.getItem('cal_radar_minimizado') === '1'; } catch (eRad) {}
 
@@ -4711,6 +4714,7 @@ function ordenarVendasTabela(colIndex, tipo) {
                     }
                 });
                 Object.keys(byId).forEach(function(k) { reordenados.push(byId[k]); });
+                reordenados.forEach(function(l, idx) { if (l) l.ordem = idx; });
                 var radar = (lembretes[iso] || []).filter(function(l) { return l && l.tipo === 'recompra'; });
                 lembretes[iso] = radar.concat(reordenados);
             }
@@ -5024,6 +5028,55 @@ function ordenarVendasTabela(colIndex, tipo) {
         return /^\d{2}:\d{2}$/.test(h) ? h : '';
     }
 
+    function _compararLembretesPai(a, b) {
+        var ha = _horarioDoLembrete(a);
+        var hb = _horarioDoLembrete(b);
+        if (ha && hb) {
+            var cmpH = ha.localeCompare(hb);
+            if (cmpH) return cmpH;
+        } else if (ha || hb) {
+            return ha ? -1 : 1;
+        }
+        var oa = Number(a && a.ordem);
+        var ob = Number(b && b.ordem);
+        if (isNaN(oa)) oa = 0;
+        if (isNaN(ob)) ob = 0;
+        if (oa !== ob) return oa - ob;
+        var ia = Number(a && a.id) || 0;
+        var ib = Number(b && b.id) || 0;
+        return ia - ib;
+    }
+
+    function _ordenarLembretesPai(lista) {
+        return (lista || []).filter(function(l) { return !!l; }).slice().sort(_compararLembretesPai);
+    }
+
+    function _ordenarLembretesDoDia(iso) {
+        if (!lembretes[iso]) return [];
+        var radar = [];
+        var pais = [];
+        lembretes[iso].forEach(function(l) {
+            if (!l) return;
+            if (l.tipo === 'recompra') radar.push(l);
+            else pais.push(l);
+        });
+        pais.sort(_compararLembretesPai);
+        lembretes[iso] = radar.concat(pais);
+        return pais;
+    }
+
+    function _reordenarNodosLembretes(iso) {
+        var lista = document.getElementById('lista-lembretes-' + iso);
+        if (!lista) return;
+        var pais = _ordenarLembretesDoDia(iso);
+        var frag = document.createDocumentFragment();
+        for (var i = 0; i < pais.length; i++) {
+            var el = document.getElementById('nodo-lem-' + pais[i].id);
+            if (el && el.parentNode === lista) frag.appendChild(el);
+        }
+        if (frag.childNodes.length) lista.appendChild(frag);
+    }
+
     function _recorrenciaDoLembrete(lem) {
         var r = String((lem && (lem.recurrence || lem.recorrencia)) || 'nunca').trim().toLowerCase();
         return _RECORRENCIA_LABEL[r] ? r : '';
@@ -5123,6 +5176,7 @@ function ordenarVendasTabela(colIndex, tipo) {
             pai.filhos.push(nodo);
         } else {
             lembretes[iso].push(nodo);
+            if (nodo.tipo !== 'recompra') _ordenarLembretesDoDia(iso);
         }
         setLembretes[iso] = true;
     }
@@ -5302,6 +5356,7 @@ function ordenarVendasTabela(colIndex, tipo) {
         var empty = document.getElementById('empty-lembretes-' + iso);
         if (empty) empty.remove();
         lista.appendChild(tmp.firstElementChild);
+        _reordenarNodosLembretes(iso);
         _iniciarDnDLembretes(iso);
     }
 
@@ -5358,18 +5413,25 @@ function ordenarVendasTabela(colIndex, tipo) {
                     var atual = _encontrarLembrete(iso, editId);
                     if (atual) {
                         atual.descricao = salvo.descricao;
-                        atual.time = salvo.time;
+                        atual.time = salvo.time || '';
+                        atual.horario = salvo.time || '';
                         atual.recurrence = salvo.recurrence;
+                        atual.recorrencia = salvo.recurrence;
                         atual.concluido = salvo.concluido;
+                        if (!atual.parent_id) _ordenarLembretesDoDia(iso);
                     } else {
                         _inserirLembrete(iso, salvo);
                     }
+                    var alvo = _encontrarLembrete(iso, editId) || salvo;
                     var card = document.getElementById('lem-' + editId);
                     if (card) {
-                        var alvo = _encontrarLembrete(iso, editId) || salvo;
                         var tmpEdit = document.createElement('div');
                         tmpEdit.innerHTML = _htmlLembrete(iso, alvo, alvo.parent_id ? 1 : 0);
                         if (tmpEdit.firstElementChild) card.replaceWith(tmpEdit.firstElementChild);
+                    }
+                    if (!alvo.parent_id) {
+                        _reordenarNodosLembretes(iso);
+                        _iniciarDnDLembretes(iso);
                     }
                 } else {
                     _inserirLembrete(iso, salvo);
