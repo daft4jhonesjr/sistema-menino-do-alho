@@ -4952,10 +4952,10 @@ function ordenarVendasTabela(colIndex, tipo) {
                 '</button>';
         }
 
-        return '<div class="' + cardCls + '" id="lem-' + lem.id + '" data-concluido="' + (concluido ? '1' : '0') + '">' +
+        return '<div class="' + cardCls + '" id="lem-' + lem.id + '" data-lem-id="' + lem.id + '" data-concluido="' + (concluido ? '1' : '0') + '">' +
             '<div class="min-w-0 flex-1 pr-1">' +
-                '<p class="' + textoCls + '">' + esc(lem.descricao) + '</p>' +
-                (meta ? '<p class="mt-1 flex items-center gap-2 flex-wrap">' + meta + '</p>' : '') +
+                '<p class="lembrete-desc ' + textoCls + '">' + esc(lem.descricao) + '</p>' +
+                (meta ? '<p class="lembrete-meta mt-1 flex items-center gap-2 flex-wrap">' + meta + '</p>' : '') +
             '</div>' +
             '<div class="flex items-center justify-end gap-1 flex-wrap mt-0.5 no-drag" style="max-width:13.5rem">' +
                 '<button type="button" onclick="concluirLembrete(' + lem.id + ',\'' + esc(iso) + '\', this)" ' +
@@ -4985,7 +4985,7 @@ function ordenarVendasTabela(colIndex, tipo) {
                 btnSub +
                 '<button type="button" onclick="editarLembrete(' + lem.id + ',\'' + esc(iso) + '\')" ' +
                     'title="Editar lembrete" ' +
-                    'class="inline-flex items-center gap-1 text-[11px] font-medium text-purple-500 hover:text-purple-700 dark:text-purple-300 dark:hover:text-purple-200 hover:bg-purple-500/10 rounded-md px-1.5 py-0.5 transition-colors">' +
+                    'class="lembrete-btn-editar inline-flex items-center gap-1 text-[11px] font-medium text-purple-500 hover:text-purple-700 dark:text-purple-300 dark:hover:text-purple-200 hover:bg-purple-500/10 rounded-md px-1.5 py-0.5 transition-colors">' +
                     '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">' +
                         '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15.232 5.232l3.536 3.536M4 20h4l10.5-10.5a2.121 2.121 0 00-3-3L5 17v3z"/>' +
                     '</svg>' +
@@ -5087,7 +5087,7 @@ function ordenarVendasTabela(colIndex, tipo) {
         var horario = _horarioDoLembrete(lem);
         if (horario) {
             partes.push(
-                '<span class="inline-flex items-center gap-1 text-[11px] font-semibold tabular-nums text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-900/40 rounded px-1.5 py-0.5">' +
+                '<span class="lembrete-badge-horario inline-flex items-center gap-1 text-[11px] font-semibold tabular-nums text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-900/40 rounded px-1.5 py-0.5">' +
                     '<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">' +
                         '<circle cx="12" cy="12" r="9" stroke-width="2.5"/>' +
                         '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 7v5l3 2"/>' +
@@ -5291,27 +5291,215 @@ function ordenarVendasTabela(colIndex, tipo) {
         if (inp) inp.focus();
     };
 
-    window.editarLembrete = function(id, iso) {
-        var frm = document.getElementById('form-lembrete-' + iso);
+    var _lembreteInlineAberto = null;
+
+    function _horaInputLembrete(valor) {
+        var m = String(valor || '').trim().match(/^(\d{2}):(\d{2})/);
+        return m ? (m[1] + ':' + m[2]) : '';
+    }
+
+    function _headersCsrfLembrete() {
+        var headers = { 'X-Requested-With': 'XMLHttpRequest' };
+        if (window.getCsrfHeaders) Object.assign(headers, window.getCsrfHeaders());
+        if (!headers['X-CSRFToken'] && CSRF_TOKEN) headers['X-CSRFToken'] = CSRF_TOKEN;
+        return headers;
+    }
+
+    function _toastLembrete(msg, tipo) {
+        if (typeof showToast === 'function') showToast(msg, tipo || 'error');
+        else alert(msg);
+    }
+
+    function _fecharEdicaoInline(card) {
+        if (!card) return;
+        card.setAttribute('data-cancelando', '1');
+        card.setAttribute('data-editando', '0');
+        if (_lembreteInlineAberto === card) _lembreteInlineAberto = null;
+        var iso = card._isoEdicao;
+        var id = card.getAttribute('data-lem-id');
+        var lem = iso && id != null ? _encontrarLembrete(iso, id) : null;
+        if (lem) _atualizarCardLembrete(id, iso, lem.concluido);
+    }
+
+    function _salvarEdicaoInline(card, iso, id, descricao, horario) {
         var lem = _encontrarLembrete(iso, id);
-        if (!frm || !lem) return;
-        frm.classList.remove('hidden');
-        frm.setAttribute('data-edit-id', String(id));
-        var inp = document.getElementById('input-lembrete-' + iso);
-        var horario = document.getElementById('input-horario-lembrete-' + iso);
-        var rec = document.getElementById('input-recorrencia-lembrete-' + iso);
-        frm.removeAttribute('data-parent-id');
-        if (inp) {
-            inp.value = lem.descricao || '';
-            inp.placeholder = 'Descrição do lembrete…';
-            inp.focus();
+        if (!lem) {
+            _fecharEdicaoInline(card);
+            return;
         }
-        if (horario) horario.value = _horarioDoLembrete(lem);
-        if (rec) rec.value = _recorrenciaDoLembrete(lem) || 'nunca';
-        var hint = document.getElementById('hint-sub-lembrete-' + iso);
-        if (hint) hint.classList.add('hidden');
-        var err = document.getElementById('erro-lembrete-' + iso);
-        if (err) err.classList.add('hidden');
+        var horaAntes = _horarioDoLembrete(lem);
+        card.setAttribute('data-salvando', '1');
+        var fd = new FormData();
+        fd.append('descricao', descricao);
+        fd.append('horario', horario);
+        fd.append('time', horario);
+        fd.append('recurrence', _recorrenciaDoLembrete(lem) || 'nunca');
+        fd.append('csrf_token', CSRF_TOKEN);
+        fetch('/lembretes/' + id + '/editar', {
+            method: 'POST',
+            body: fd,
+            headers: _headersCsrfLembrete()
+        })
+            .then(function(r) {
+                return r.json().then(function(j) { return { http: r.ok, j: j }; }, function() { return { http: false, j: null }; });
+            })
+            .then(function(res) {
+                if (!res.http || !res.j || !res.j.ok) {
+                    var erro = (res.j && res.j.erro) ? res.j.erro : 'Não foi possível salvar o lembrete.';
+                    _toastLembrete(erro, 'error');
+                    _fecharEdicaoInline(card);
+                    return;
+                }
+                var salvo = _lembreteDaResposta(res.j);
+                lem.descricao = salvo.descricao;
+                lem.time = salvo.time || '';
+                lem.horario = salvo.time || '';
+                lem.recurrence = salvo.recurrence;
+                lem.recorrencia = salvo.recurrence;
+                lem.concluido = salvo.concluido;
+                card.setAttribute('data-editando', '0');
+                if (_lembreteInlineAberto === card) _lembreteInlineAberto = null;
+                if (card.isConnected) _atualizarCardLembrete(id, iso, lem.concluido);
+                if (horaAntes !== _horarioDoLembrete(lem) && !lem.parent_id) {
+                    _ordenarLembretesDoDia(iso);
+                    if (card.isConnected || document.getElementById('nodo-lem-' + id)) {
+                        _reordenarNodosLembretes(iso);
+                        _iniciarDnDLembretes(iso);
+                    }
+                }
+            })
+            .catch(function() {
+                _toastLembrete('Erro de conexão ao salvar o lembrete.', 'error');
+                _fecharEdicaoInline(card);
+            });
+    }
+
+    function _confirmarEdicaoInline(card, explicito) {
+        if (!card || card.getAttribute('data-editando') !== '1') return;
+        if (card.getAttribute('data-salvando') === '1' || card.getAttribute('data-cancelando') === '1') return;
+        var descInput = card.querySelector('.lembrete-edit-desc');
+        var horaInput = card.querySelector('.lembrete-edit-hora');
+        var descricao = descInput ? descInput.value.trim() : '';
+        var horario = _horaInputLembrete(horaInput ? horaInput.value : '');
+        if (!descricao) {
+            if (explicito) {
+                _toastLembrete('A descrição não pode estar vazia.', 'error');
+                if (descInput) descInput.focus();
+                return;
+            }
+            _fecharEdicaoInline(card);
+            return;
+        }
+        var origDesc = card.getAttribute('data-orig-desc') || '';
+        var origHora = card.getAttribute('data-orig-hora') || '';
+        if (descricao === origDesc && horario === origHora) {
+            _fecharEdicaoInline(card);
+            return;
+        }
+        _salvarEdicaoInline(card, card._isoEdicao, card.getAttribute('data-lem-id'), descricao, horario);
+    }
+
+    function _abrirEdicaoInline(card, lem, iso) {
+        var descEl = card.querySelector('.lembrete-desc');
+        if (!descEl) return;
+        var originalDesc = lem.descricao || '';
+        var originalHora = _horarioDoLembrete(lem);
+        card._isoEdicao = iso;
+        card.setAttribute('data-editando', '1');
+        card.setAttribute('data-cancelando', '0');
+        card.setAttribute('data-salvando', '0');
+        card.setAttribute('data-orig-desc', originalDesc);
+        card.setAttribute('data-orig-hora', originalHora);
+        _lembreteInlineAberto = card;
+
+        var input = document.createElement('input');
+        input.type = 'text';
+        input.maxLength = 500;
+        input.value = originalDesc;
+        input.autocomplete = 'off';
+        input.setAttribute('aria-label', 'Descrição do lembrete');
+        input.className = descEl.className + ' lembrete-edit-desc';
+        input.style.cssText = 'width:100%;min-width:0;margin:0;padding:0;border:0;border-bottom:1px solid transparent;border-radius:0;outline:none;background:transparent;box-shadow:none;font:inherit;font-size:inherit;line-height:inherit;color:inherit;';
+        descEl.replaceWith(input);
+
+        var bloco = input.parentNode;
+        var meta = card.querySelector('.lembrete-meta');
+        if (!meta) {
+            meta = document.createElement('p');
+            meta.className = 'lembrete-meta mt-1 flex items-center gap-2 flex-wrap';
+            bloco.appendChild(meta);
+        }
+        var hora = document.createElement('input');
+        hora.type = 'time';
+        hora.value = originalHora;
+        hora.setAttribute('aria-label', 'Horário do lembrete');
+        hora.className = 'lembrete-edit-hora inline-flex items-center text-[11px] font-semibold tabular-nums text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-900/40 rounded px-1.5 py-0.5 border-0 cursor-pointer';
+        hora.style.cssText = 'width:5.5rem;min-height:1.4rem;color-scheme:inherit;';
+        var badge = meta.querySelector('.lembrete-badge-horario');
+        if (badge) badge.replaceWith(hora);
+        else meta.insertBefore(hora, meta.firstChild);
+
+        var btn = card.querySelector('.lembrete-btn-editar');
+        if (btn) {
+            btn.removeAttribute('onclick');
+            btn.classList.remove('text-purple-500', 'hover:text-purple-700', 'dark:text-purple-300');
+            btn.classList.add('text-emerald-600', 'dark:text-emerald-400');
+            btn.setAttribute('title', 'Salvar');
+            btn.setAttribute('aria-label', 'Salvar lembrete');
+            btn.innerHTML = '<span aria-hidden="true">✓</span>';
+            btn.addEventListener('mousedown', function(ev) { ev.preventDefault(); });
+            btn.addEventListener('click', function(ev) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                _confirmarEdicaoInline(card, true);
+            });
+        }
+
+        function onKey(ev) {
+            if (ev.key === 'Enter') {
+                ev.preventDefault();
+                ev.stopPropagation();
+                _confirmarEdicaoInline(card, true);
+            } else if (ev.key === 'Escape') {
+                ev.preventDefault();
+                ev.stopPropagation();
+                _fecharEdicaoInline(card);
+            }
+        }
+        function onBlur() {
+            setTimeout(function() {
+                if (!card.isConnected) return;
+                if (card.getAttribute('data-editando') !== '1') return;
+                if (card.getAttribute('data-salvando') === '1' || card.getAttribute('data-cancelando') === '1') return;
+                if (card.contains(document.activeElement)) return;
+                _confirmarEdicaoInline(card, false);
+            }, 0);
+        }
+        input.addEventListener('keydown', onKey);
+        hora.addEventListener('keydown', onKey);
+        input.addEventListener('focus', function() { input.style.borderBottomColor = '#a855f7'; });
+        input.addEventListener('blur', function() {
+            input.style.borderBottomColor = 'transparent';
+            onBlur();
+        });
+        hora.addEventListener('blur', onBlur);
+        input.focus();
+        if (typeof input.select === 'function') input.select();
+    }
+
+    window.editarLembrete = function(id, iso) {
+        var card = document.getElementById('lem-' + id);
+        var lem = _encontrarLembrete(iso, id);
+        if (!card || !lem || lem.tipo === 'recompra') return;
+        if (card.getAttribute('data-editando') === '1') {
+            var desc = card.querySelector('.lembrete-edit-desc');
+            if (desc) desc.focus();
+            return;
+        }
+        if (_lembreteInlineAberto && _lembreteInlineAberto !== card && _lembreteInlineAberto.isConnected) {
+            _confirmarEdicaoInline(_lembreteInlineAberto, false);
+        }
+        _abrirEdicaoInline(card, lem, iso);
     };
 
     window.fecharFormLembrete = function(iso) {
@@ -5388,8 +5576,7 @@ function ordenarVendasTabela(colIndex, tipo) {
         if (err) err.classList.add('hidden');
         if (btn) btn.disabled = true;
 
-        var editId = frm ? frm.getAttribute('data-edit-id') : '';
-        var parentId = (!editId && frm) ? (frm.getAttribute('data-parent-id') || '') : '';
+        var parentId = frm ? (frm.getAttribute('data-parent-id') || '') : '';
         var fd = new FormData();
         fd.append('data', iso);
         fd.append('descricao', descricao);
@@ -5398,8 +5585,7 @@ function ordenarVendasTabela(colIndex, tipo) {
         if (parentId) fd.append('parent_id', parentId);
         fd.append('csrf_token', CSRF_TOKEN);
 
-        var url = editId ? ('/lembretes/' + editId + '/editar') : '/lembretes/criar';
-        fetch(url, { method: 'POST', body: fd })
+        fetch('/lembretes/criar', { method: 'POST', body: fd, headers: _headersCsrfLembrete() })
             .then(function(r) { return r.json(); })
             .then(function(res) {
                 if (btn) btn.disabled = false;
@@ -5409,34 +5595,8 @@ function ordenarVendasTabela(colIndex, tipo) {
                 }
                 var salvo = _lembreteDaResposta(res);
                 if (!salvo.filhos) salvo.filhos = [];
-                if (editId) {
-                    var atual = _encontrarLembrete(iso, editId);
-                    if (atual) {
-                        atual.descricao = salvo.descricao;
-                        atual.time = salvo.time || '';
-                        atual.horario = salvo.time || '';
-                        atual.recurrence = salvo.recurrence;
-                        atual.recorrencia = salvo.recurrence;
-                        atual.concluido = salvo.concluido;
-                        if (!atual.parent_id) _ordenarLembretesDoDia(iso);
-                    } else {
-                        _inserirLembrete(iso, salvo);
-                    }
-                    var alvo = _encontrarLembrete(iso, editId) || salvo;
-                    var card = document.getElementById('lem-' + editId);
-                    if (card) {
-                        var tmpEdit = document.createElement('div');
-                        tmpEdit.innerHTML = _htmlLembrete(iso, alvo, alvo.parent_id ? 1 : 0);
-                        if (tmpEdit.firstElementChild) card.replaceWith(tmpEdit.firstElementChild);
-                    }
-                    if (!alvo.parent_id) {
-                        _reordenarNodosLembretes(iso);
-                        _iniciarDnDLembretes(iso);
-                    }
-                } else {
-                    _inserirLembrete(iso, salvo);
-                    _anexarNodoLembrete(iso, salvo, salvo.parent_id ? 1 : 0);
-                }
+                _inserirLembrete(iso, salvo);
+                _anexarNodoLembrete(iso, salvo, salvo.parent_id ? 1 : 0);
                 setLembretes[iso] = true;
 
                 fecharFormLembrete(iso);
