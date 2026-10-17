@@ -2776,6 +2776,23 @@ def limpar_sessao_anterior():
         db.session.remove()
 
 
+def _redirect_login_com_next():
+    """Redireciona para o login preservando a rota pretendida em ``next``.
+
+    Usado quando a sessão expira no meio de uma navegação GET (incluindo
+    deep links do widget). POST continua indo ao login sem ``next``, para
+    não reenviar a ação original depois da autenticação.
+    """
+    if request.method not in ('GET', 'HEAD'):
+        return redirect(url_for('auth.login'))
+    destino = request.full_path or '/'
+    if destino.endswith('?'):
+        destino = destino[:-1]
+    if destino and _is_safe_next_url(destino):
+        return redirect(url_for('auth.login', next=destino))
+    return redirect(url_for('auth.login'))
+
+
 @app.before_request
 def checar_expiracao_sessao():
     """Encerra sessões por inatividade (15 min) ou tempo absoluto (4 h)."""
@@ -2808,7 +2825,7 @@ def checar_expiracao_sessao():
         if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return jsonify({'session_expired': True, 'message': msg}), 401
         flash(msg, 'warning')
-        return redirect(url_for('auth.login'))
+        return _redirect_login_com_next()
 
     if agora - last_activity > tempo_inatividade_max:
         logout_user()
@@ -2820,7 +2837,7 @@ def checar_expiracao_sessao():
         if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return jsonify({'session_expired': True, 'message': msg}), 401
         flash(msg, 'warning')
-        return redirect(url_for('auth.login'))
+        return _redirect_login_com_next()
 
     session['last_activity'] = agora
 

@@ -127,11 +127,3 @@ private struct DeliveryProgressBar: View {
         .frame(height: 6)
     }
 }
-
-@main
-@available(iOS 16.1, *)
-struct DeliveryWidgetBundle: WidgetBundle {
-    var body: some Widget {
-        DeliveryActivityWidget()
-    }
-}

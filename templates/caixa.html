@@ -959,6 +959,20 @@ function abrirModalNovo() {
     abrirGavetaLancamento();
 }
 
+(function abrirNovoLancamentoPorDeepLink() {
+    function abrirSeSolicitado() {
+        try {
+            var params = new URLSearchParams(window.location.search);
+            if (params.get('acao') === 'novo') abrirModalNovo();
+        } catch (err) {}
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', abrirSeSolicitado);
+    } else {
+        abrirSeSolicitado();
+    }
+})();
+
 function abrirModalEditar(tr) {
     var form = document.getElementById('form-novo-lancamento-caixa') || document.getElementById('formLancamentoCaixa');
     var gaveta = document.getElementById('gaveta-lancamento');

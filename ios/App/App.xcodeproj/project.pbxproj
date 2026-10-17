@@ -19,6 +19,8 @@
 		A1AA0001220C412B000D30F8 /* DeliveryActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1AA0000220C412B000D30F8 /* DeliveryActivityAttributes.swift */; };
 		A1AA0003220C412B000D30F8 /* DeliveryActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1AA0000220C412B000D30F8 /* DeliveryActivityAttributes.swift */; };
 		A1AA0005220C412B000D30F8 /* DynamicIslandWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1AA0004220C412B000D30F8 /* DynamicIslandWidget.swift */; };
+		A1AA001C220C412B000D30F8 /* QuickActionsWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1AA001B220C412B000D30F8 /* QuickActionsWidget.swift */; };
+		A1AA001E220C412B000D30F8 /* DeliveryWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1AA001D220C412B000D30F8 /* DeliveryWidgetBundle.swift */; };
 		A1AA0007220C412B000D30F8 /* DeliveryWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A1AA0006220C412B000D30F8 /* DeliveryWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		A1AA0014220C412B000D30F8 /* DeliveryActivityPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1AA0013220C412B000D30F8 /* DeliveryActivityPlugin.swift */; };
 		A1AA0016220C412B000D30F8 /* MyViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1AA0015220C412B000D30F8 /* MyViewController.swift */; };
@@ -64,6 +66,8 @@
 		A1AA0004220C412B000D30F8 /* DynamicIslandWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynamicIslandWidget.swift; sourceTree = "<group>"; };
 		A1AA0006220C412B000D30F8 /* DeliveryWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = DeliveryWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1AA0008220C412B000D30F8 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A1AA001B220C412B000D30F8 /* QuickActionsWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickActionsWidget.swift; sourceTree = "<group>"; };
+		A1AA001D220C412B000D30F8 /* DeliveryWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryWidgetBundle.swift; sourceTree = "<group>"; };
 		A1AA0013220C412B000D30F8 /* DeliveryActivityPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeliveryActivityPlugin.swift; sourceTree = "<group>"; };
 		A1AA0015220C412B000D30F8 /* MyViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyViewController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -129,6 +133,8 @@
 		A1AA000C220C412B000D30F8 /* DeliveryWidget */ = {
 			isa = PBXGroup;
 			children = (
+				A1AA001D220C412B000D30F8 /* DeliveryWidgetBundle.swift */,
+				A1AA001B220C412B000D30F8 /* QuickActionsWidget.swift */,
 				A1AA0008220C412B000D30F8 /* Info.plist */,
 			);
 			path = DeliveryWidget;
@@ -261,6 +267,8 @@
 			files = (
 				A1AA0003220C412B000D30F8 /* DeliveryActivityAttributes.swift in Sources */,
 				A1AA0005220C412B000D30F8 /* DynamicIslandWidget.swift in Sources */,
+				A1AA001C220C412B000D30F8 /* QuickActionsWidget.swift in Sources */,
+				A1AA001E220C412B000D30F8 /* DeliveryWidgetBundle.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
