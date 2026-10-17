@@ -4368,6 +4368,26 @@ function ordenarVendasTabela(colIndex, tipo) {
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
+<script>
+(function () {
+    var empresas = ['DESTAK', 'PATY', 'SERVE BEM', 'ARMAZEM LACERDA'];
+    var cadastrados = {{ (todos_clientes or []) | map(attribute='nome_cliente') | list | tojson }};
+    var vistos = {};
+    var lista = [];
+    function incluir(nome) {
+        var limpo = String(nome == null ? '' : nome).replace(/\s+/g, ' ').trim();
+        if (!limpo || limpo.toUpperCase() === 'NENHUM') return;
+        var chave = limpo.toLocaleLowerCase();
+        if (vistos[chave]) return;
+        vistos[chave] = true;
+        lista.push(limpo);
+    }
+    empresas.forEach(incluir);
+    (cadastrados || []).forEach(incluir);
+    window.CLIENTES_SISTEMA = lista;
+})();
+</script>
+
 <!-- Split Calendar: calendário mensal + painel de detalhes (Entregas + Vencimentos) -->
 <script>
 (function() {
@@ -4442,6 +4462,241 @@ function ordenarVendasTabela(colIndex, tipo) {
         return String(str == null ? '' : str)
             .replace(/&/g, '&amp;').replace(/</g, '&lt;')
             .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    var _menuMencao = null;
+    var _menuMencaoInput = null;
+    var _menuMencaoItens = [];
+    var _menuMencaoIndice = 0;
+
+    function _normalizarBuscaMencao(texto) {
+        return String(texto == null ? '' : texto)
+            .toLocaleLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '');
+    }
+
+    function renderizarDescricaoComTags(texto) {
+        var bruto = String(texto == null ? '' : texto);
+        var re = /@\[([^\]\n]+)\]/g;
+        var html = '';
+        var ultimo = 0;
+        var achado;
+        while ((achado = re.exec(bruto)) !== null) {
+            html += esc(bruto.slice(ultimo, achado.index));
+            var nome = String(achado[1] || '').trim();
+            html += '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 border border-purple-200 dark:bg-purple-900/40 dark:text-purple-300 dark:border-purple-800 mr-1">@' +
+                esc(nome) + '</span>';
+            ultimo = achado.index + achado[0].length;
+        }
+        html += esc(bruto.slice(ultimo));
+        return html;
+    }
+    window.renderizarDescricaoComTags = renderizarDescricaoComTags;
+
+    function _tokenMencao(input) {
+        if (!input) return null;
+        var valor = input.value || '';
+        var caret = input.selectionStart;
+        if (caret == null || caret < 0) caret = valor.length;
+        var antes = valor.slice(0, caret);
+        var arroba = antes.lastIndexOf('@');
+        if (arroba < 0) return null;
+        var consulta = antes.slice(arroba + 1);
+        if (consulta.charAt(0) === '[' || consulta.indexOf(']') !== -1 || consulta.indexOf('\n') !== -1) return null;
+        return { inicio: arroba, consulta: consulta };
+    }
+
+    function _filtrarMencoes(consulta) {
+        var lista = window.CLIENTES_SISTEMA || [];
+        var q = _normalizarBuscaMencao(consulta);
+        var out = [];
+        for (var i = 0; i < lista.length && out.length < 8; i++) {
+            var nome = lista[i];
+            if (!q || _normalizarBuscaMencao(nome).indexOf(q) !== -1) out.push(nome);
+        }
+        return out;
+    }
+
+    function _classeItemMencao(ativo) {
+        var base = 'block w-full text-left px-3 py-1.5 text-sm cursor-pointer ';
+        if (ativo) {
+            return base + 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300';
+        }
+        return base + 'text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700';
+    }
+
+    function _fecharMenuMencao() {
+        if (_menuMencao) {
+            _menuMencao.classList.add('hidden');
+            _menuMencao.innerHTML = '';
+        }
+        _menuMencaoInput = null;
+        _menuMencaoItens = [];
+        _menuMencaoIndice = 0;
+    }
+
+    function _garantirMenuMencao() {
+        if (_menuMencao) return _menuMencao;
+        var menu = document.createElement('div');
+        menu.id = 'menu-mencao-lembrete';
+        menu.setAttribute('role', 'listbox');
+        menu.setAttribute('aria-label', 'Empresas e clientes');
+        menu.className = 'fixed z-[60] hidden overflow-y-auto rounded-lg border border-purple-200 dark:border-purple-800 bg-white dark:bg-gray-800 shadow-lg py-1';
+        menu.style.cssText = 'max-height:12rem;min-width:12rem;max-width:20rem;';
+        menu.addEventListener('mousedown', function (ev) { ev.preventDefault(); });
+        document.body.appendChild(menu);
+        _menuMencao = menu;
+        window.addEventListener('scroll', function () {
+            if (_menuMencaoInput && _menuMencao && !_menuMencao.classList.contains('hidden')) {
+                _posicionarMenuMencao(_menuMencaoInput);
+            }
+        }, true);
+        window.addEventListener('resize', function () {
+            if (_menuMencaoInput && _menuMencao && !_menuMencao.classList.contains('hidden')) {
+                _posicionarMenuMencao(_menuMencaoInput);
+            }
+        });
+        return menu;
+    }
+
+    function _posicionarMenuMencao(input) {
+        if (!_menuMencao || !input) return;
+        var rect = input.getBoundingClientRect();
+        var menu = _menuMencao;
+        var largura = Math.max(rect.width, 192);
+        var esquerda = Math.max(8, Math.min(rect.left, window.innerWidth - largura - 8));
+        menu.style.width = largura + 'px';
+        menu.style.left = esquerda + 'px';
+        menu.style.top = (rect.bottom + 4) + 'px';
+        var altura = menu.offsetHeight || 0;
+        if (altura && rect.bottom + 4 + altura > window.innerHeight - 8 && rect.top - altura - 4 > 8) {
+            menu.style.top = (rect.top - altura - 4) + 'px';
+        }
+    }
+
+    function _destacarItemMencao() {
+        if (!_menuMencao) return;
+        var botoes = _menuMencao.querySelectorAll('[data-mencao-item]');
+        for (var i = 0; i < botoes.length; i++) {
+            var ativo = i === _menuMencaoIndice;
+            botoes[i].className = _classeItemMencao(ativo);
+            botoes[i].setAttribute('aria-selected', ativo ? 'true' : 'false');
+            if (!ativo) continue;
+            var topo = botoes[i].offsetTop;
+            var base = topo + botoes[i].offsetHeight;
+            if (topo < _menuMencao.scrollTop) _menuMencao.scrollTop = topo;
+            else if (base > _menuMencao.scrollTop + _menuMencao.clientHeight) {
+                _menuMencao.scrollTop = base - _menuMencao.clientHeight;
+            }
+        }
+    }
+
+    function _abrirMenuMencao(input, itens) {
+        var menu = _garantirMenuMencao();
+        var anterior = _menuMencaoItens[_menuMencaoIndice];
+        _menuMencaoInput = input;
+        _menuMencaoItens = itens;
+        var idx = anterior ? itens.indexOf(anterior) : -1;
+        _menuMencaoIndice = idx >= 0 ? idx : 0;
+        menu.innerHTML = '';
+        itens.forEach(function (nome, i) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.setAttribute('role', 'option');
+            btn.setAttribute('data-mencao-item', String(i));
+            btn.className = _classeItemMencao(i === _menuMencaoIndice);
+            btn.setAttribute('aria-selected', i === _menuMencaoIndice ? 'true' : 'false');
+            btn.textContent = nome;
+            btn.addEventListener('mousedown', function (ev) { ev.preventDefault(); });
+            btn.addEventListener('click', function (ev) {
+                ev.preventDefault();
+                _aplicarMencao(input, nome);
+            });
+            menu.appendChild(btn);
+        });
+        menu.classList.remove('hidden');
+        _posicionarMenuMencao(input);
+    }
+
+    function _atualizarMenuMencao(input) {
+        var token = _tokenMencao(input);
+        if (!token) {
+            _fecharMenuMencao();
+            return;
+        }
+        var itens = _filtrarMencoes(token.consulta);
+        if (!itens.length) {
+            _fecharMenuMencao();
+            return;
+        }
+        _abrirMenuMencao(input, itens);
+    }
+
+    function _aplicarMencao(input, nome) {
+        if (!input) return;
+        var token = _tokenMencao(input);
+        if (!token) return;
+        var limpo = String(nome || '').replace(/[\[\]]/g, '').replace(/\s+/g, ' ').trim();
+        if (!limpo) return;
+        var valor = input.value || '';
+        var caret = input.selectionStart;
+        if (caret == null || caret < 0) caret = valor.length;
+        var depois = valor.slice(caret);
+        var marcacao = '@[' + limpo + ']';
+        if (depois.charAt(0) !== ' ') marcacao += ' ';
+        var novo = valor.slice(0, token.inicio) + marcacao + depois;
+        var limite = input.maxLength > 0 ? input.maxLength : 500;
+        if (novo.length > limite) novo = novo.slice(0, limite);
+        input.value = novo;
+        var pos = Math.min(token.inicio + marcacao.length, input.value.length);
+        _fecharMenuMencao();
+        input.focus();
+        if (typeof input.setSelectionRange === 'function') input.setSelectionRange(pos, pos);
+    }
+
+    function _onKeyMencao(ev) {
+        if (!_menuMencao || _menuMencao.classList.contains('hidden') || ev.target !== _menuMencaoInput) return;
+        if (!_menuMencaoItens.length) return;
+        if (ev.key === 'ArrowDown') {
+            ev.preventDefault();
+            ev.stopPropagation();
+            _menuMencaoIndice = Math.min(_menuMencaoItens.length - 1, _menuMencaoIndice + 1);
+            _destacarItemMencao();
+        } else if (ev.key === 'ArrowUp') {
+            ev.preventDefault();
+            ev.stopPropagation();
+            _menuMencaoIndice = Math.max(0, _menuMencaoIndice - 1);
+            _destacarItemMencao();
+        } else if (ev.key === 'Enter') {
+            ev.preventDefault();
+            ev.stopPropagation();
+            var escolhido = _menuMencaoItens[_menuMencaoIndice] || _menuMencaoItens[0];
+            if (escolhido) _aplicarMencao(ev.target, escolhido);
+        } else if (ev.key === 'Escape') {
+            ev.preventDefault();
+            ev.stopPropagation();
+            _fecharMenuMencao();
+        }
+    }
+
+    function ativarMencaoLembrete(input) {
+        if (!input || input.getAttribute('data-mencao') === '1') return;
+        input.setAttribute('data-mencao', '1');
+        input.setAttribute('autocomplete', 'off');
+        input.addEventListener('input', function () { _atualizarMenuMencao(input); });
+        input.addEventListener('click', function () { _atualizarMenuMencao(input); });
+        input.addEventListener('keyup', function (ev) {
+            if (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight' || ev.key === 'Home' || ev.key === 'End') {
+                _atualizarMenuMencao(input);
+            }
+        });
+        input.addEventListener('keydown', _onKeyMencao, true);
+        input.addEventListener('blur', function () {
+            setTimeout(function () {
+                if (_menuMencaoInput === input) _fecharMenuMencao();
+            }, 0);
+        });
     }
 
     function formatarTituloDia(iso) {
@@ -4665,6 +4920,7 @@ function ordenarVendasTabela(colIndex, tipo) {
 
         html += _htmlFraseDoDia(iso);
 
+        _fecharMenuMencao();
         if (!entregas.length && !boletos.length && !listaLembs.length) {
             // Adiciona mensagem de sem compromissos acima dos lembretes mas só se os 3 estiverem vazios
             displayConteudo.innerHTML =
@@ -4675,6 +4931,7 @@ function ordenarVendasTabela(colIndex, tipo) {
 
         // Foca o input se o formulário já estiver visível (reaberto ao trocar de dia)
         var inp = document.getElementById('input-lembrete-' + iso);
+        if (inp) ativarMencaoLembrete(inp);
         if (inp && document.getElementById('form-lembrete-' + iso) &&
             !document.getElementById('form-lembrete-' + iso).classList.contains('hidden')) {
             inp.focus();
@@ -4954,7 +5211,7 @@ function ordenarVendasTabela(colIndex, tipo) {
 
         return '<div class="' + cardCls + '" id="lem-' + lem.id + '" data-lem-id="' + lem.id + '" data-concluido="' + (concluido ? '1' : '0') + '">' +
             '<div class="min-w-0 flex-1 pr-1">' +
-                '<p class="lembrete-desc ' + textoCls + '">' + esc(lem.descricao) + '</p>' +
+                '<p class="lembrete-desc ' + textoCls + '">' + renderizarDescricaoComTags(lem.descricao) + '</p>' +
                 (meta ? '<p class="lembrete-meta mt-1 flex items-center gap-2 flex-wrap">' + meta + '</p>' : '') +
             '</div>' +
             '<div class="flex items-center justify-end gap-1 flex-wrap mt-0.5 no-drag" style="max-width:13.5rem">' +
@@ -5477,6 +5734,7 @@ function ordenarVendasTabela(colIndex, tipo) {
         }
         input.addEventListener('keydown', onKey);
         hora.addEventListener('keydown', onKey);
+        ativarMencaoLembrete(input);
         input.addEventListener('focus', function() { input.style.borderBottomColor = '#a855f7'; });
         input.addEventListener('blur', function() {
             input.style.borderBottomColor = 'transparent';
