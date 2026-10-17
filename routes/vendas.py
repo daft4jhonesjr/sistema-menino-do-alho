@@ -81,6 +81,7 @@ from services.config_helpers import (
 )
 from services.query_utils import filtro_ano_data_venda
 from services.files_utils import _deletar_cloudinary_seguro
+from services.pendencia_documental import texto_pendencia_documental
 from services.vendas_services import (
     _vendas_do_pedido, _apagar_lancamentos_caixa_por_vendas,
     _produto_com_lock,
@@ -1061,6 +1062,44 @@ def _load_csv_vendas_flexible(filepath):
     return df, False
 
 
+def _clientes_com_historico_nf(cliente_ids):
+    """Clientes que já faturaram com nota via boleto ou PATY/DESTAK.
+
+    Sinal de que o cliente costuma receber NF e boleto. A venda atual
+    entra na conta quando ela mesma já tem NF e esse perfil — o filtro
+    de forma isenta (DINHEIRO/PIX/etc.) continua na regra da tag.
+    """
+    ids = [cid for cid in set(cliente_ids or []) if cid]
+    if not ids:
+        return set()
+
+    nf_numero = and_(
+        Venda.nf.isnot(None),
+        func.trim(Venda.nf) != '',
+        func.trim(Venda.nf) != '-',
+    )
+    nf_arquivo = and_(
+        Venda.caminho_nf.isnot(None),
+        func.trim(Venda.caminho_nf) != '',
+    )
+    sinal_faturamento = or_(
+        func.upper(func.coalesce(Venda.forma_pagamento, '')).like('%BOLETO%'),
+        func.upper(func.coalesce(Venda.empresa_faturadora, '')).in_(('PATY', 'DESTAK')),
+    )
+    rows = (
+        query_tenant(Venda)
+        .with_entities(Venda.cliente_id)
+        .filter(
+            Venda.cliente_id.in_(ids),
+            or_(nf_numero, nf_arquivo),
+            sinal_faturamento,
+        )
+        .distinct()
+        .all()
+    )
+    return {cid for (cid,) in rows}
+
+
 # ============================================================
 # Rotas
 # ============================================================
@@ -1589,6 +1628,18 @@ def listar_vendas():
     # acidente herdado dos `v.caminho_boleto/nf = None` + `flush()` que
     # foram removidos acima — sem mutações pendentes não há nada para
     # commitar, e qualquer erro em SELECT é capturado pelo Flask.
+
+    # Tag de pendência documental (NF/boleto). Roda depois da herança de
+    # boleto entre transferências para não marcar filial que já recebeu
+    # o arquivo da matriz. A tag não é persistida: na próxima listagem
+    # ela some se `nf`/`caminho_nf` e `caminho_boleto` estiverem preenchidos.
+    _ids_clientes_pedidos = [p.get('cliente_id') for p in pedidos_agrupados]
+    _clientes_historico_nf = _clientes_com_historico_nf(_ids_clientes_pedidos)
+    for _pedido_doc in pedidos_agrupados:
+        _pedido_doc['pendencia_documental'] = texto_pendencia_documental(
+            _pedido_doc,
+            cliente_tem_historico_nf=_pedido_doc.get('cliente_id') in _clientes_historico_nf,
+        )
 
     # ``total_geral_a_receber`` já foi calculado acima via SQL sobre o
     # universo filtrado completo (sem LIMIT da listagem).

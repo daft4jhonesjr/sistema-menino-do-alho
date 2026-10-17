@@ -1,0 +1,5 @@
+{% if pedido.pendencia_documental %}
+<span data-sort-ignore
+      class="inline-flex items-center bg-amber-100 text-amber-800 border border-amber-300 text-xs px-2 py-0.5 rounded-full font-medium shadow-sm dark:bg-amber-900/50 dark:text-amber-200 dark:border-amber-700 whitespace-nowrap"
+      title="Pendência documental: {{ pedido.pendencia_documental }}">{{ pedido.pendencia_documental }}</span>
+{% endif %}

@@ -4212,7 +4212,7 @@ function _parseMoedaOrdenacaoVendas(texto) {
 // contamine a comparação.
 function _extrairTextoPrincipalVendas(celula) {
     var clone = celula.cloneNode(true);
-    clone.querySelectorAll('.block').forEach(function(el) { el.remove(); });
+    clone.querySelectorAll('.block, [data-sort-ignore]').forEach(function(el) { el.remove(); });
     return (clone.textContent || '').replace(/\s+/g, ' ').trim();
 }
 
