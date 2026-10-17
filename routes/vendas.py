@@ -56,7 +56,7 @@ from flask import (
     flash, jsonify, session, current_app, Response,
 )
 from flask_login import current_user
-from sqlalchemy import and_, asc, case, desc, func, or_
+from sqlalchemy import and_, asc, case, desc, func, nulls_last, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 import pandas as pd
@@ -290,11 +290,54 @@ def _lembrete_para_dict(lembrete, filhos=None):
     }
 
 
+def _horario_ordenacao_lembrete(horario):
+    """``HH:MM`` normalizado, ou vazio quando não há horário utilizável."""
+    txt = (horario or '').strip()
+    if re.match(r'^\d{2}:\d{2}$', txt):
+        return txt
+    return ''
+
+
+def _chave_ordenacao_lembrete_pai(item):
+    """Pais com horário primeiro (cedo → tarde); sem horário no fim; depois ``ordem``.
+
+    Espelha ``key=lambda x: (sem_horario, horario, ordem)``. O id desempata
+    registros com a mesma ordem.
+    """
+    if isinstance(item, dict):
+        horario = item.get('horario') or item.get('time') or ''
+        ordem = item.get('ordem') or 0
+        ident = item.get('id') or 0
+    else:
+        horario = getattr(item, 'horario', None) or ''
+        ordem = getattr(item, 'ordem', None) or 0
+        ident = getattr(item, 'id', None) or 0
+    horario = _horario_ordenacao_lembrete(horario)
+    try:
+        ordem = int(ordem or 0)
+    except (TypeError, ValueError):
+        ordem = 0
+    try:
+        ident = int(ident or 0)
+    except (TypeError, ValueError):
+        ident = 0
+    return (horario == '', horario, ordem, ident)
+
+
+def _ordenar_lembretes_pai(raizes):
+    """Ordena só a lista de raízes. Os ``filhos`` de cada pai permanecem no lugar."""
+    if not raizes:
+        return raizes
+    raizes.sort(key=_chave_ordenacao_lembrete_pai)
+    return raizes
+
+
 def _arvore_lembretes(lembretes):
     """Aninha sub-lembretes no master quando os dois estão no mesmo conjunto.
 
     Itens cujo pai não está no conjunto (outro dia, excluído) sobem como raiz
-    para não sumirem da agenda.
+    para não sumirem da agenda. As raízes (lembretes pai) saem ordenadas por
+    horário; a lista ``filhos`` de cada pai conserva a ordem em que chegou.
     """
     nos = {}
     for lem in lembretes:
@@ -307,7 +350,7 @@ def _arvore_lembretes(lembretes):
             nos[pai_id]['filhos'].append(no)
         else:
             raizes.append(no)
-    return raizes
+    return _ordenar_lembretes_pai(raizes)
 
 
 def _resolver_pai_lembrete():
@@ -1963,10 +2006,27 @@ def listar_vendas():
     try:
         _ano_lem = session.get('ano_ativo', datetime.now().year)
         _ini_lem, _fim_lem = filtro_ano_data_venda(_ano_lem, Lembrete.data)
+        # Pais (parent_id nulo): horário HH:MM crescente, vazios por último, depois ordem.
+        # Filhos não entram nessa chave de horário para a hierarquia seguir ``ordem``.
+        _horario_efetivo = case(
+            (or_(Lembrete.horario.is_(None), Lembrete.horario == ''), None),
+            else_=Lembrete.horario,
+        )
+        _horario_pai = case(
+            (Lembrete.parent_id.is_(None), _horario_efetivo),
+            else_=None,
+        )
         _lembs = (
             query_tenant(Lembrete)
             .filter(_ini_lem, _fim_lem)
-            .order_by(Lembrete.data.asc(), Lembrete.ordem.asc(), Lembrete.criado_em.asc())
+            .order_by(
+                Lembrete.data.asc(),
+                case((Lembrete.parent_id.is_(None), 0), else_=1).asc(),
+                nulls_last(_horario_pai.asc()),
+                Lembrete.ordem.asc(),
+                Lembrete.criado_em.asc(),
+                Lembrete.id.asc(),
+            )
             .all()
         )
         _por_dia = {}
