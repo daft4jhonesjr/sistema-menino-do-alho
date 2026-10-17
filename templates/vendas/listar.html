@@ -315,7 +315,21 @@
 
     <aside class="md:col-span-5 xl:col-span-4 bg-white dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 rounded-xl p-5 flex flex-col h-full min-h-[400px] shadow-sm"
            aria-label="Detalhes das entregas do dia selecionado">
-        <h3 id="display-data-titulo" class="text-lg font-bold text-gray-900 dark:text-white mb-4 border-b border-gray-200 dark:border-gray-700 pb-2">Selecione um dia</h3>
+        <div class="flex items-center justify-center gap-1 mb-4 border-b border-gray-200 dark:border-gray-700 pb-2">
+            <button id="btn-dia-anterior" type="button"
+                    class="btn-dia-anterior w-11 h-11 min-w-[44px] min-h-[44px] flex-shrink-0 flex items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 active:bg-gray-200 dark:active:bg-gray-600 transition-colors cursor-pointer touch-manipulation"
+                    aria-label="Dia anterior"
+                    title="Dia anterior">
+                <i data-lucide="chevron-left" class="w-4 h-4 pointer-events-none"></i>
+            </button>
+            <h3 id="display-data-titulo" class="text-sm sm:text-lg font-bold text-gray-900 dark:text-white text-center flex-1 min-w-0 leading-tight px-1">Selecione um dia</h3>
+            <button id="btn-dia-proximo" type="button"
+                    class="btn-dia-proximo w-11 h-11 min-w-[44px] min-h-[44px] flex-shrink-0 flex items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 active:bg-gray-200 dark:active:bg-gray-600 transition-colors cursor-pointer touch-manipulation"
+                    aria-label="Próximo dia"
+                    title="Próximo dia">
+                <i data-lucide="chevron-right" class="w-4 h-4 pointer-events-none"></i>
+            </button>
+        </div>
         <div id="display-conteudo" class="flex-1 overflow-y-auto space-y-3 max-h-[480px]">
             <p class="text-gray-500 dark:text-gray-400 text-sm italic">Clique em um dia no calendário para ver os detalhes das entregas pendentes.</p>
         </div>
@@ -4452,8 +4466,10 @@ function ordenarVendasTabela(colIndex, tipo) {
     }
 
     var celulaSelecionada = null;
+    var isoSelecionado = null;
 
     function selecionarDia(celula, iso) {
+        isoSelecionado = iso;
         if (celulaSelecionada) {
             celulaSelecionada.className = celulaSelecionada.className
                 .replace(/\s*ring-2\s+ring-inset\s+ring-emerald-500\s+bg-emerald-50\/60\s+dark:bg-emerald-900\/20/g, '');
@@ -5528,7 +5544,7 @@ function ordenarVendasTabela(colIndex, tipo) {
     var calMes = hoje.getMonth(); // 0-based
 
     // ---- Função principal de renderização ----
-    function renderMes(ano, mes) {
+    function renderMes(ano, mes, isoPreferido) {
         calAno = ano;
         calMes = mes;
 
@@ -5549,6 +5565,7 @@ function ordenarVendasTabela(colIndex, tipo) {
         }
 
         var celulaHoje = null;
+        var celulaAlvo = null;
 
         for (var dia = 1; dia <= totalDiasMes; dia++) {
             (function(diaAtual) {
@@ -5616,12 +5633,43 @@ function ordenarVendasTabela(colIndex, tipo) {
                 });
 
                 if (isHoje) celulaHoje = cel;
+                if (isoPreferido && iso === isoPreferido) celulaAlvo = cel;
                 grid.appendChild(cel);
             })(dia);
         }
 
-        // Auto-seleciona hoje se estiver no mês atual.
-        if (celulaHoje) selecionarDia(celulaHoje, isoHoje);
+        // Dia pedido pela navegação do painel tem prioridade sobre o destaque de hoje.
+        if (isoPreferido) {
+            selecionarDia(celulaAlvo, isoPreferido);
+        } else if (celulaHoje) {
+            selecionarDia(celulaHoje, isoHoje);
+        }
+    }
+
+    function deslocarIso(iso, deltaDias) {
+        var base = String(iso || isoHoje).split('-');
+        var data = new Date(
+            parseInt(base[0], 10),
+            parseInt(base[1], 10) - 1,
+            parseInt(base[2], 10)
+        );
+        if (isNaN(data.getTime())) data = new Date(hoje.getTime());
+        data.setDate(data.getDate() + deltaDias);
+        return {
+            iso: toISO(data.getFullYear(), data.getMonth(), data.getDate()),
+            ano: data.getFullYear(),
+            mes: data.getMonth()
+        };
+    }
+
+    function navegarDia(deltaDias) {
+        var alvo = deslocarIso(isoSelecionado || isoHoje, deltaDias);
+        if (alvo.ano !== calAno || alvo.mes !== calMes) {
+            renderMes(alvo.ano, alvo.mes, alvo.iso);
+            return;
+        }
+        var celula = grid.querySelector('[data-iso="' + alvo.iso + '"]');
+        selecionarDia(celula, alvo.iso);
     }
 
     // --- Botões de navegação ---
@@ -5641,6 +5689,15 @@ function ordenarVendasTabela(colIndex, tipo) {
             if (m > 11) { m = 0; a++; }
             renderMes(a, m);
         });
+    }
+
+    var btnDiaAnterior = document.getElementById('btn-dia-anterior');
+    var btnDiaProximo = document.getElementById('btn-dia-proximo');
+    if (btnDiaAnterior) {
+        btnDiaAnterior.addEventListener('click', function() { navegarDia(-1); });
+    }
+    if (btnDiaProximo) {
+        btnDiaProximo.addEventListener('click', function() { navegarDia(1); });
     }
 
     // Render inicial no mês atual.
