@@ -12,6 +12,25 @@
 (function (global) {
     'use strict';
 
+    // Depuração global no WebView: identifica script/linha do "JS Eval error".
+    if (typeof global.addEventListener === 'function' && !global.__meninodoalhoJsErrorHook) {
+        global.__meninodoalhoJsErrorHook = true;
+        global.addEventListener('error', function (event) {
+            console.error(
+                'JS Global Error:',
+                event && event.message,
+                'em',
+                event && event.filename,
+                'linha:',
+                event && event.lineno
+            );
+        });
+        global.addEventListener('unhandledrejection', function (event) {
+            var reason = event && event.reason;
+            console.error('JS Unhandled Rejection:', reason);
+        });
+    }
+
     var CHAVE_LAUNCH = 'meninodoalho_deep_link_launch';
     var listenerRegistrado = false;
 
@@ -58,7 +77,7 @@
             if (url.protocol !== 'meninodoalho:') return;
 
             var rota = rotaDoDeepLink(data.url);
-            if (!rota) return;
+            if (!rota || rota === '/') return;
 
             var atual = global.location.pathname + global.location.search + global.location.hash;
             if (global.location.pathname === '/login') {
@@ -72,8 +91,30 @@
                 return;
             }
             global.location.href = rota;
+        } catch (e) {
+            console.error('[DeepLink] Falha ao processar URL:', e);
+        }
+    }
+
+    function pluginAppDisponivel(cap) {
+        if (!cap) return false;
+        try {
+            if (typeof cap.isPluginAvailable === 'function') {
+                return !!cap.isPluginAvailable('App');
+            }
         } catch (err) {
-            console.error('Erro ao processar Deep Link do Widget:', err);
+            return false;
+        }
+        return !!(cap.Plugins && cap.Plugins.App);
+    }
+
+    function obterPluginApp(cap) {
+        if (!pluginAppDisponivel(cap)) return null;
+        try {
+            return (cap.Plugins && cap.Plugins.App) || null;
+        } catch (err) {
+            console.warn('[Capacitor] Erro ao acessar Plugins.App:', err);
+            return null;
         }
     }
 
@@ -81,9 +122,19 @@
         if (!App || typeof App.addListener !== 'function' || listenerRegistrado) return;
         listenerRegistrado = true;
 
-        App.addListener('appUrlOpen', function (data) {
-            navegar(data);
-        });
+        try {
+            App.addListener('appUrlOpen', function (data) {
+                try {
+                    navegar(data);
+                } catch (e) {
+                    console.error('[DeepLink] Falha no handler appUrlOpen:', e);
+                }
+            });
+        } catch (err) {
+            listenerRegistrado = false;
+            console.warn('[Capacitor] Erro ao registrar listener do App:', err);
+            return;
+        }
 
         if (typeof App.getLaunchUrl !== 'function') return;
         Promise.resolve(App.getLaunchUrl()).then(function (res) {
@@ -93,28 +144,46 @@
                 if (global.sessionStorage) global.sessionStorage.setItem(CHAVE_LAUNCH, res.url);
             } catch (err) {}
             navegar(res);
-        }).catch(function () {});
+        }).catch(function (err) {
+            console.warn('[Capacitor] getLaunchUrl falhou:', err);
+        });
     }
 
     function tentarRegistrar() {
-        var cap = global.Capacitor;
-        var App = cap && cap.Plugins && cap.Plugins.App;
-        if (!App) return false;
-        registrar(App);
-        return true;
+        try {
+            var cap = global.Capacitor;
+            if (!cap) return false;
+            var App = obterPluginApp(cap);
+            if (!App) return false;
+            registrar(App);
+            return listenerRegistrado;
+        } catch (err) {
+            console.warn('[Capacitor] Erro ao registrar listener do App:', err);
+            return false;
+        }
+    }
+
+    function iniciarDeepLinks() {
+        if (!global.Capacitor) return;
+
+        if (!tentarRegistrar()) {
+            var tentativas = 0;
+            var timer = global.setInterval(function () {
+                tentativas += 1;
+                if (tentarRegistrar() || tentativas > 20) global.clearInterval(timer);
+            }, 250);
+        }
     }
 
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = { rotaDoDeepLink: rotaDoDeepLink, mesmoDestino: mesmoDestino };
     }
 
-    if (!global.Capacitor) return;
-
-    if (!tentarRegistrar()) {
-        var tentativas = 0;
-        var timer = global.setInterval(function () {
-            tentativas += 1;
-            if (tentarRegistrar() || tentativas > 20) global.clearInterval(timer);
-        }, 250);
+    // Aguarda DOM quando ainda estiver carregando; no WebView Capacitor o bridge
+    // pode aparecer um pouco depois — o poll em iniciarDeepLinks cobre isso.
+    if (global.document && global.document.readyState === 'loading') {
+        global.document.addEventListener('DOMContentLoaded', iniciarDeepLinks);
+    } else {
+        iniciarDeepLinks();
     }
 })(typeof window !== 'undefined' ? window : globalThis);
