@@ -276,6 +276,7 @@
      data-detalhes-pendentes='{{ (detalhes_entrega_pendente or {})|tojson }}'
      data-pendentes='{{ (datas_entrega_pendente or [])|tojson }}'
      data-vencimentos='{{ (vencimentos_por_data or {})|tojson }}'
+     data-orcamentos='{{ (orcamentos_por_data or {})|tojson }}'
      data-lembretes='{{ (lembretes_por_data or {})|tojson }}'
      data-csrf='{{ csrf_token() }}'>
 
@@ -4441,6 +4442,7 @@ function ordenarVendasTabela(colIndex, tipo) {
 
     var detalhesPendentes = _parseAttr('data-detalhes-pendentes', {});
     var vencimentos       = _parseAttr('data-vencimentos', {});
+    var orcamentos        = _parseAttr('data-orcamentos', {});
     var lembretes         = _parseAttr('data-lembretes', {});
     var CSRF_TOKEN        = wrap.getAttribute('data-csrf') || '';
 
@@ -4467,6 +4469,8 @@ function ordenarVendasTabela(colIndex, tipo) {
     }
     var setVencimentos = {};
     Object.keys(vencimentos).forEach(function(d) { setVencimentos[d] = true; });
+    var setOrcamentos = {};
+    Object.keys(orcamentos).forEach(function(d) { setOrcamentos[d] = true; });
     var setLembretes = {};
     Object.keys(lembretes).forEach(function(d) { setLembretes[d] = true; });
 
@@ -4506,6 +4510,7 @@ function ordenarVendasTabela(colIndex, tipo) {
 
         var entregas     = detalhesPendentes[iso] || [];
         var boletos      = vencimentos[iso]        || [];
+        var itensOrc     = orcamentos[iso]         || [];
         var listaLembs   = lembretes[iso]          || [];
 
         var html = '';
@@ -4607,6 +4612,27 @@ function ordenarVendasTabela(colIndex, tipo) {
             html += '</div>';
         }
 
+        // ─── Orçamento (despesas recorrentes) ───────────────────────
+        if (itensOrc.length) {
+            html += '<div class="mb-4">' +
+                '<p class="text-sm font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 mb-2 flex items-center gap-1"><span>📋</span> Despesas de Orçamento</p>' +
+                '<div class="space-y-2">';
+            itensOrc.forEach(function(item) {
+                var meta = [];
+                if (item.categoria) meta.push(esc(item.categoria));
+                if (item.forma_pagamento) meta.push(esc(item.forma_pagamento));
+                html += '<div class="bg-gray-50 dark:bg-gray-700/30 p-3 rounded-lg border-l-4 border-rose-500">' +
+                    '<p class="font-semibold text-sm text-gray-900 dark:text-white leading-snug">' +
+                        esc(item.titulo || item.descricao || 'Orçamento') +
+                    '</p>' +
+                    (meta.length
+                        ? '<p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">' + meta.join(' · ') + '</p>'
+                        : '') +
+                '</div>';
+            });
+            html += '</div></div>';
+        }
+
         // ─── Radar e Lembretes em blocos independentes ─────────────
         var radarLembs = listaLembs.filter(function(l) { return l && l.tipo === 'recompra'; });
         var manuaisLembs = _ordenarLembretesPai(
@@ -4703,10 +4729,10 @@ function ordenarVendasTabela(colIndex, tipo) {
 
         html += _htmlFraseDoDia(iso);
 
-        if (!entregas.length && !boletos.length && !listaLembs.length) {
-            // Adiciona mensagem de sem compromissos acima dos lembretes mas só se os 3 estiverem vazios
+        if (!entregas.length && !boletos.length && !itensOrc.length && !listaLembs.length) {
+            // Adiciona mensagem de sem compromissos acima dos lembretes mas só se os 4 estiverem vazios
             displayConteudo.innerHTML =
-                '<p class="text-gray-500 dark:text-gray-400 text-sm italic mb-4">Sem entregas ou boletos para este dia.</p>' + html;
+                '<p class="text-gray-500 dark:text-gray-400 text-sm italic mb-4">Sem entregas, boletos ou orçamento para este dia.</p>' + html;
         } else {
             displayConteudo.innerHTML = html;
         }
@@ -5657,6 +5683,7 @@ function ordenarVendasTabela(colIndex, tipo) {
                 var isHoje     = iso === isoHoje;
                 var temEntrega = !!setPendentes[iso];
                 var temBoleto  = !!setVencimentos[iso];
+                var temOrc     = !!setOrcamentos[iso];
                 var temRadar   = _diaTemRadar(iso);
                 var temLembreteManual = _diaTemLembreteManual(iso);
                 var temLembrete = temRadar || temLembreteManual;
@@ -5664,6 +5691,7 @@ function ordenarVendasTabela(colIndex, tipo) {
                 var tooltips = [];
                 if (temEntrega)  tooltips.push('entrega(s) pendente(s)');
                 if (temBoleto)   tooltips.push('boleto(s) a vencer');
+                if (temOrc)      tooltips.push('despesa(s) de orçamento');
                 if (temRadar)    tooltips.push('radar de recompra');
                 if (temLembreteManual) tooltips.push('lembrete(s)');
 
@@ -5696,6 +5724,17 @@ function ordenarVendasTabela(colIndex, tipo) {
                         '<span>💰 Boleto</span>' +
                         '<span class="bg-red-500 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full shadow-sm flex-shrink-0">' + qtd + '</span>';
                     cel.appendChild(barBol);
+                }
+                if (temOrc) {
+                    var qtdOrc = (orcamentos[iso] || []).length;
+                    var barOrc = document.createElement('div');
+                    barOrc.className = 'mt-0.5 w-full text-[10px] bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 rounded px-1 flex items-center justify-between gap-1';
+                    barOrc.innerHTML =
+                        '<span>📋 Orçamento</span>' +
+                        (qtdOrc > 1
+                            ? '<span class="bg-rose-500 text-white text-[10px] font-bold min-w-[1.25rem] h-5 px-1 flex items-center justify-center rounded-full shadow-sm flex-shrink-0">' + qtdOrc + '</span>'
+                            : '');
+                    cel.appendChild(barOrc);
                 }
                 if (temRadar) {
                     var barRadar = document.createElement('div');
