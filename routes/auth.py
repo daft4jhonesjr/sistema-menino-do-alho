@@ -671,17 +671,6 @@ def configuracoes():
         flash('Configurações de notificação atualizadas com sucesso!', 'success')
         return redirect(url_for('auth.configuracoes'))
 
-    # Lê as últimas 100 linhas do log de erros críticos para exibição server-side.
-    erros_log_content = 'Nenhum erro crítico registrado ainda.'
-    if current_user.is_admin():
-        try:
-            if os.path.exists(_logs_file):
-                with open(_logs_file, 'r', encoding='utf-8') as f:
-                    linhas = f.readlines()
-                erros_log_content = ''.join(linhas[-100:]) if linhas else 'Log de erros vazio.'
-        except Exception as e:
-            erros_log_content = f'Não foi possível ler o log de erros: {str(e)}'
-
     config = None
     try:
         config = get_config()
@@ -692,7 +681,6 @@ def configuracoes():
         'configuracoes.html',
         usuario=usuario,
         config=config,
-        erros_log_content=erros_log_content,
     )
 
 
