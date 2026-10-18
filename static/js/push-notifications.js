@@ -33,7 +33,7 @@
         try {
             var Cap = global.Capacitor;
             if (Cap && typeof Cap.getPlatform === 'function') {
-                return Cap.getPlatform() || 'web';
+                return String(Cap.getPlatform() || 'web').toLowerCase();
             }
         } catch (err) {
             console.warn('[Push] Falha ao detectar plataforma:', err);
@@ -41,14 +41,65 @@
         return 'web';
     }
 
+    function ehMetodoNaoImplementado(err) {
+        var code = err && err.code ? String(err.code) : '';
+        var message = err && err.message ? String(err.message) : String(err || '');
+        var texto = (code + ' ' + message).toUpperCase();
+        return texto.indexOf('UNIMPLEMENTED') !== -1 || texto.indexOf('NOT IMPLEMENTED') !== -1;
+    }
+
+    var _avisouLocalIndisponivel = false;
+
+    /**
+     * LocalNotifications só pode ser chamado no shell nativo e com o plugin
+     * registrado. No iOS, createChannel existe no proxy e a ponte responde
+     * UNIMPLEMENTED; requestPermissions/schedule também rejeitam assim quando
+     * o alvo nativo não foi ligado ao app.
+     */
+    function localNotificationsDisponivel() {
+        try {
+            var Cap = global.Capacitor;
+            if (!Cap || typeof Cap.isNativePlatform !== 'function' || !Cap.isNativePlatform()) {
+                return false;
+            }
+            if (typeof Cap.isPluginAvailable !== 'function' || !Cap.isPluginAvailable('LocalNotifications')) {
+                if (!_avisouLocalIndisponivel) {
+                    _avisouLocalIndisponivel = true;
+                    console.info('[Push] LocalNotifications não está registrado neste app (isPluginAvailable=false). requestPermissions e schedule não serão chamados.');
+                }
+                return false;
+            }
+            var Local = Cap.Plugins && Cap.Plugins.LocalNotifications;
+            if (!Local || typeof Local.requestPermissions !== 'function' || typeof Local.schedule !== 'function') {
+                if (!_avisouLocalIndisponivel) {
+                    _avisouLocalIndisponivel = true;
+                    console.info('[Push] LocalNotifications sem requestPermissions/schedule. Nenhuma chamada nativa será feita.');
+                }
+                return false;
+            }
+            return true;
+        } catch (err) {
+            if (!_avisouLocalIndisponivel) {
+                _avisouLocalIndisponivel = true;
+                console.warn('[Push] Falha ao consultar LocalNotifications:', err);
+            }
+            return false;
+        }
+    }
+
+    function obterLocalNotifications() {
+        if (!localNotificationsDisponivel()) return null;
+        var plugins = getCapacitorPlugins();
+        return plugins && plugins.LocalNotifications ? plugins.LocalNotifications : null;
+    }
+
     /**
      * createChannel é exclusivo do Android no Capacitor LocalNotifications.
-     * No iOS o proxy JS expõe o método, mas a ponte nativa responde
-     * UNIMPLEMENTED — e isso pode virar "JS Eval error" no WKWebView.
+     * No iOS o método nativo chama unimplemented().
      */
     async function criarCanalAndroid(Local, canal) {
-        var platform = getCapacitorPlatform();
-        if (platform !== 'android') return;
+        if (getCapacitorPlatform() !== 'android') return;
+        if (!localNotificationsDisponivel()) return;
         if (!Local || typeof Local.createChannel !== 'function') return;
         try {
             await Local.createChannel(canal || {
@@ -120,9 +171,9 @@
                 return true;
             }
 
-            if (plugins && plugins.LocalNotifications) {
-                var Local = plugins.LocalNotifications;
-                var localPerm = await Local.requestPermissions();
+            var LocalAtivar = obterLocalNotifications();
+            if (LocalAtivar) {
+                var localPerm = await LocalAtivar.requestPermissions();
                 var display = (localPerm && (localPerm.display || localPerm.granted)) || '';
                 if (String(display).toLowerCase() !== 'granted') {
                     if (onStatus) {
@@ -275,13 +326,16 @@
     var TEST_ICON = '/static/images/icon-192x192.png';
 
     async function dispararTesteNativoCapacitor() {
-        var plugins = getCapacitorPlugins();
-        if (!plugins) {
-            throw new Error('Plugins nativos do Capacitor não estão disponíveis.');
+        var Local = obterLocalNotifications();
+        if (!Local) {
+            console.info('[Push] Teste nativo ignorado: LocalNotifications indisponível.');
+            if ('Notification' in global && typeof Notification.requestPermission === 'function') {
+                return dispararTesteWeb();
+            }
+            return false;
         }
 
-        if (plugins.LocalNotifications) {
-            var Local = plugins.LocalNotifications;
+        try {
             var localPerm = await Local.requestPermissions();
             var display = (localPerm && (localPerm.display || localPerm.granted)) || '';
             if (String(display).toLowerCase() !== 'granted') {
@@ -307,15 +361,15 @@
                 }]
             });
             console.log('Auditoria: Notificação nativa agendada via LocalNotifications.');
-            return;
+            return true;
+        } catch (err) {
+            if (!ehMetodoNaoImplementado(err)) throw err;
+            console.warn('[Push] LocalNotifications não implementado neste dispositivo. Fallback web.', err);
+            if ('Notification' in global && typeof Notification.requestPermission === 'function') {
+                return dispararTesteWeb();
+            }
+            return false;
         }
-
-        // Fallback: API Notification no WebView, se existir.
-        if ('Notification' in global && typeof Notification.requestPermission === 'function') {
-            return dispararTesteWeb();
-        }
-
-        throw new Error('Nenhum plugin de notificação local disponível neste app.');
     }
 
     async function dispararTesteWeb() {
@@ -367,7 +421,10 @@
         console.log('Auditoria: Iniciando teste de notificação.',
             isCapacitorNative() ? '(Capacitor)' : '(Web)');
         if (isCapacitorNative()) {
-            await dispararTesteNativoCapacitor();
+            var ok = await dispararTesteNativoCapacitor();
+            if (ok === false) {
+                throw new Error('LocalNotifications não está disponível neste app e o fallback web não pôde exibir a notificação.');
+            }
         } else {
             await dispararTesteWeb();
         }
@@ -383,35 +440,39 @@
         var icon = opcoes.icon || TEST_ICON;
         var tag = opcoes.tag || ('menino-alho-' + Date.now());
 
-        if (isCapacitorNative()) {
-            var plugins = getCapacitorPlugins();
-            if (plugins && plugins.LocalNotifications) {
-                var Local = plugins.LocalNotifications;
-                var permStatus = await Local.checkPermissions();
-                if (!permStatus || String(permStatus.display || '').toLowerCase() !== 'granted') {
-                    permStatus = await Local.requestPermissions();
+        if (isCapacitorNative() && localNotificationsDisponivel()) {
+            var LocalExibir = obterLocalNotifications();
+            if (LocalExibir) {
+                try {
+                    var permStatus = await LocalExibir.checkPermissions();
+                    if (!permStatus || String(permStatus.display || '').toLowerCase() !== 'granted') {
+                        permStatus = await LocalExibir.requestPermissions();
+                    }
+                    if (!permStatus || String(permStatus.display || '').toLowerCase() !== 'granted') {
+                        throw new Error('Permissão de notificação negada no dispositivo.');
+                    }
+                    await criarCanalAndroid(LocalExibir, {
+                        id: 'menino_alho_alertas',
+                        name: 'Alertas do Sistema',
+                        importance: 5,
+                        visibility: 1,
+                        sound: 'default'
+                    });
+                    var notifId = Math.floor((Date.now() + Math.random() * 1000) % 2147483647);
+                    await LocalExibir.schedule({
+                        notifications: [{
+                            id: notifId,
+                            title: titulo,
+                            body: corpo,
+                            channelId: 'menino_alho_alertas',
+                            schedule: { at: new Date(Date.now() + 500) }
+                        }]
+                    });
+                    return true;
+                } catch (err) {
+                    if (!ehMetodoNaoImplementado(err)) throw err;
+                    console.warn('[Push] LocalNotifications não implementado. Fallback web.', err);
                 }
-                if (!permStatus || String(permStatus.display || '').toLowerCase() !== 'granted') {
-                    throw new Error('Permissão de notificação negada no dispositivo.');
-                }
-                await criarCanalAndroid(Local, {
-                    id: 'menino_alho_alertas',
-                    name: 'Alertas do Sistema',
-                    importance: 5,
-                    visibility: 1,
-                    sound: 'default'
-                });
-                var notifId = Math.floor((Date.now() + Math.random() * 1000) % 2147483647);
-                await Local.schedule({
-                    notifications: [{
-                        id: notifId,
-                        title: titulo,
-                        body: corpo,
-                        channelId: 'menino_alho_alertas',
-                        schedule: { at: new Date(Date.now() + 500) }
-                    }]
-                });
-                return true;
             }
         }
 
@@ -535,11 +596,13 @@
 
         // --- Capacitor (iOS/Android): schedule nativo confiável em background ---
         if (isCapacitorNative()) {
-            var plugins = getCapacitorPlugins();
-            if (!plugins || !plugins.LocalNotifications) {
+            if (!localNotificationsDisponivel()) {
+                return { ok: false, motivo: 'plugin_indisponivel' };
+            }
+            var Local = obterLocalNotifications();
+            if (!Local) {
                 return { ok: false, motivo: 'sem_local_notifications' };
             }
-            var Local = plugins.LocalNotifications;
 
             try {
                 var permStatus = await Local.checkPermissions();
@@ -662,23 +725,17 @@
      */
     async function inicializarNotificacoesLocais() {
         try {
-            var platform = getCapacitorPlatform();
-            var plugins = getCapacitorPlugins();
-            var Local = plugins && plugins.LocalNotifications;
-
-            // createChannel é exclusivo do Android no Capacitor LocalNotifications
-            if (platform === 'android' && Local && Local.createChannel) {
-                try {
-                    await Local.createChannel({
-                        id: 'default',
-                        name: 'Notificações Gerais',
-                        importance: 5,
-                        visibility: 1
-                    });
-                } catch (channelErr) {
-                    console.warn('[Push] Falha ao criar canal no Android:', channelErr);
-                }
+            if (!localNotificationsDisponivel()) {
+                return { ok: false, motivo: 'plugin_indisponivel' };
             }
+
+            var LocalBoot = obterLocalNotifications();
+            await criarCanalAndroid(LocalBoot, {
+                id: 'default',
+                name: 'Notificações Gerais',
+                importance: 5,
+                visibility: 1
+            });
 
             if (global.document && global.document.hidden) {
                 return { ok: false, motivo: 'aba_em_background' };
@@ -692,25 +749,19 @@
     }
 
     function bootNotificacoesLocais() {
-        try {
-            if (!global.Capacitor || typeof global.Capacitor.isPluginAvailable !== 'function') {
-                return;
-            }
-            if (!global.Capacitor.isPluginAvailable('LocalNotifications')) {
-                return;
-            }
-        } catch (err) {
-            console.error('[Push] Erro na inicialização:', err);
-            return;
-        }
-
         // O bridge do Capacitor pode ainda não estar pronto no mesmo tick
         // de DOMContentLoaded; a aba também pode ir para segundo plano.
         global.setTimeout(function() {
-            if (global.document && global.document.hidden) return;
-            inicializarNotificacoesLocais().catch(function(err) {
+            try {
+                if (global.document && global.document.hidden) return;
+                if (!isCapacitorNative()) return;
+                if (!localNotificationsDisponivel()) return;
+                inicializarNotificacoesLocais().catch(function(err) {
+                    console.error('[Push] Erro na inicialização:', err);
+                });
+            } catch (err) {
                 console.error('[Push] Erro na inicialização:', err);
-            });
+            }
         }, 1500);
     }
 
@@ -725,6 +776,7 @@
     global.MeninoAlhoPush = {
         isSupported: isSupported,
         isCapacitorNative: isCapacitorNative,
+        localNotificationsDisponivel: localNotificationsDisponivel,
         urlBase64ToUint8Array: urlBase64ToUint8Array,
         ativar: ativar,
         desativar: desativar,
