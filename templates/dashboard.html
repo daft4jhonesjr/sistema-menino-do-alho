@@ -905,6 +905,7 @@
                 </p>
             </div>
             <div class="flex flex-wrap items-center gap-2">
+                {{ dashboard_layout_toggle() }}
                 <label for="filtro-cidade-bairro" class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Cidade</label>
                 <select id="filtro-cidade-bairro"
                         class="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm px-3 py-2 focus:ring-2 focus:ring-emerald-500 min-w-[10rem]">
@@ -974,6 +975,28 @@
         cidadesCarregadas = true;
     }
 
+    function renderGradeBairro(bairros) {
+        return bairros.map(function(p) {
+            return '<div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-4 border-l-4 border-l-emerald-500">' +
+                '<h4 class="text-sm font-bold text-gray-900 dark:text-gray-100 mb-3">' + esc(p.bairro) + '</h4>' +
+                '<dl class="grid grid-cols-2 gap-x-3 gap-y-2 text-xs text-gray-600 dark:text-gray-400">' +
+                    '<div><dt class="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500">Qtd pedidos</dt>' +
+                    '<dd class="font-medium text-gray-800 dark:text-gray-200">' + fmtNum(p.total_pedidos, 0) + '</dd></div>' +
+                    '<div><dt class="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500">Volume (cx)</dt>' +
+                    '<dd class="font-medium text-gray-800 dark:text-gray-200">' + fmtNum(p.volume_total, 0) + '</dd></div>' +
+                    '<div><dt class="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500">Preço médio/cx</dt>' +
+                    '<dd class="font-semibold text-cyan-600 dark:text-cyan-300 valor-financeiro">' + fmtMoeda(p.preco_medio) + '</dd></div>' +
+                    '<div><dt class="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500">Faturamento</dt>' +
+                    '<dd class="font-medium text-gray-800 dark:text-gray-200 valor-financeiro">' + fmtMoeda(p.faturamento_total) + '</dd></div>' +
+                    '<div><dt class="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500">Lucro total</dt>' +
+                    '<dd class="font-bold text-emerald-600 dark:text-emerald-400 valor-financeiro">' + fmtMoeda(p.lucro_total) + '</dd></div>' +
+                    '<div><dt class="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500">Margem real</dt>' +
+                    '<dd class="font-bold ' + esc(p.margem_cls || 'text-gray-400') + '">' + fmtNum(p.margem_real_media, 1) + '%</dd></div>' +
+                '</dl>' +
+            '</div>';
+        }).join('');
+    }
+
     function render(data) {
         var bairros = (data && data.bairros) || [];
         var totais = (data && data.totais) || {};
@@ -996,34 +1019,57 @@
         var margemTot = Number(totais.margem_real_media) || 0;
         var margemTotCls = margemTot >= 12 ? 'text-emerald-400' : (margemTot >= 8 ? 'text-yellow-400' : 'text-red-400');
 
+        var cards = renderGradeBairro(bairros);
+        var cardTotal = '<div class="col-span-full bg-gray-50 dark:bg-gray-900/40 rounded-xl border border-gray-200 dark:border-gray-700 p-4">' +
+            '<h4 class="text-sm font-bold text-gray-900 dark:text-gray-100 mb-2">TOTAL</h4>' +
+            '<dl class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">' +
+                '<div><dt class="text-gray-500 dark:text-gray-400">Pedidos</dt><dd class="font-semibold">' + fmtNum(totais.total_pedidos, 0) + '</dd></div>' +
+                '<div><dt class="text-gray-500 dark:text-gray-400">Volume</dt><dd class="font-semibold">' + fmtNum(totais.volume_total, 0) + '</dd></div>' +
+                '<div><dt class="text-gray-500 dark:text-gray-400">Preço médio</dt><dd class="font-semibold text-cyan-600 valor-financeiro">' + fmtMoeda(totais.preco_medio) + '</dd></div>' +
+                '<div><dt class="text-gray-500 dark:text-gray-400">Faturamento</dt><dd class="font-semibold valor-financeiro">' + fmtMoeda(totais.faturamento_total) + '</dd></div>' +
+                '<div><dt class="text-gray-500 dark:text-gray-400">Lucro</dt><dd class="font-semibold text-emerald-600 valor-financeiro">' + fmtMoeda(totais.lucro_total) + '</dd></div>' +
+                '<div><dt class="text-gray-500 dark:text-gray-400">Margem</dt><dd class="font-bold ' + margemTotCls + '">' + fmtNum(margemTot, 1) + '%</dd></div>' +
+            '</dl></div>';
+
         conteudo.innerHTML =
-            '<div class="overflow-x-auto">' +
-                '<table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">' +
-                    '<thead class="bg-gray-50 dark:bg-gray-900/60">' +
-                        '<tr>' +
-                            '<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Bairro</th>' +
-                            '<th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Qtd Pedidos</th>' +
-                            '<th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Volume (cx)</th>' +
-                            '<th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Preço Médio/cx</th>' +
-                            '<th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Faturamento</th>' +
-                            '<th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Lucro Total</th>' +
-                            '<th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Margem Real</th>' +
-                        '</tr>' +
-                    '</thead>' +
-                    '<tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">' + rows + '</tbody>' +
-                    '<tfoot class="bg-gray-50 dark:bg-gray-900/40">' +
-                        '<tr class="font-bold">' +
-                            '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">TOTAL</td>' +
-                            '<td class="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">' + fmtNum(totais.total_pedidos, 0) + '</td>' +
-                            '<td class="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">' + fmtNum(totais.volume_total, 0) + '</td>' +
-                            '<td class="px-4 py-3 text-sm text-right text-cyan-600 dark:text-cyan-300 valor-financeiro">' + fmtMoeda(totais.preco_medio) + '</td>' +
-                            '<td class="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100 valor-financeiro">' + fmtMoeda(totais.faturamento_total) + '</td>' +
-                            '<td class="px-4 py-3 text-sm text-right text-emerald-600 dark:text-emerald-400 valor-financeiro">' + fmtMoeda(totais.lucro_total) + '</td>' +
-                            '<td class="px-4 py-3 text-sm text-right ' + margemTotCls + '">' + fmtNum(margemTot, 1) + '%</td>' +
-                        '</tr>' +
-                    '</tfoot>' +
-                '</table>' +
+            '<div class="view-lista block">' +
+                '<div class="overflow-x-auto">' +
+                    '<table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">' +
+                        '<thead class="bg-gray-50 dark:bg-gray-900/60">' +
+                            '<tr>' +
+                                '<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Bairro</th>' +
+                                '<th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Qtd Pedidos</th>' +
+                                '<th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Volume (cx)</th>' +
+                                '<th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Preço Médio/cx</th>' +
+                                '<th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Faturamento</th>' +
+                                '<th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Lucro Total</th>' +
+                                '<th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Margem Real</th>' +
+                            '</tr>' +
+                        '</thead>' +
+                        '<tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">' + rows + '</tbody>' +
+                        '<tfoot class="bg-gray-50 dark:bg-gray-900/40">' +
+                            '<tr class="font-bold">' +
+                                '<td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">TOTAL</td>' +
+                                '<td class="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">' + fmtNum(totais.total_pedidos, 0) + '</td>' +
+                                '<td class="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">' + fmtNum(totais.volume_total, 0) + '</td>' +
+                                '<td class="px-4 py-3 text-sm text-right text-cyan-600 dark:text-cyan-300 valor-financeiro">' + fmtMoeda(totais.preco_medio) + '</td>' +
+                                '<td class="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100 valor-financeiro">' + fmtMoeda(totais.faturamento_total) + '</td>' +
+                                '<td class="px-4 py-3 text-sm text-right text-emerald-600 dark:text-emerald-400 valor-financeiro">' + fmtMoeda(totais.lucro_total) + '</td>' +
+                                '<td class="px-4 py-3 text-sm text-right ' + margemTotCls + '">' + fmtNum(margemTot, 1) + '%</td>' +
+                            '</tr>' +
+                        '</tfoot>' +
+                    '</table>' +
+                '</div>' +
+            '</div>' +
+            '<div class="view-grade hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">' +
+                cards + cardTotal +
             '</div>';
+
+        if (typeof window.aplicarLayoutDashboard === 'function') {
+            var saved = 'lista';
+            try { saved = localStorage.getItem('dashboardLayoutPreference') || 'lista'; } catch (e) {}
+            window.aplicarLayoutDashboard(saved);
+        }
     }
 
     function carregar() {
