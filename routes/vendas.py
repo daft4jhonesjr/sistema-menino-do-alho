@@ -2063,9 +2063,14 @@ def listar_vendas():
 
     # Itens de orçamento pessoal (vencimento recorrente mensal no ano ativo).
     orcamentos_por_data = {}
-    orcamento_total = 0.0
+    orcamento_agrupado = {}
     try:
         from services.calendario_ics import agrupar_orcamentos_por_data
+        from services.orcamento_utils import (
+            agrupar_orcamento_por_dia_vencimento,
+            ids_pagos_no_mes,
+            mes_ano_atual,
+        )
 
         _eid_orc = empresa_id_atual()
         if _eid_orc:
@@ -2073,16 +2078,21 @@ def listar_vendas():
             _ini_orc = date(int(_ano_orc), 1, 1)
             _fim_orc = date(int(_ano_orc), 12, 31)
             orcamentos_por_data = agrupar_orcamentos_por_data(_eid_orc, _ini_orc, _fim_orc)
-            _soma_orc = (
+            _itens_orc = (
                 query_tenant(ItemOrcamento)
-                .with_entities(func.coalesce(func.sum(ItemOrcamento.valor), 0))
-                .scalar()
+                .filter(ItemOrcamento.data_vencimento.isnot(None))
+                .order_by(ItemOrcamento.data_vencimento.asc(), ItemOrcamento.descricao.asc())
+                .all()
             )
-            orcamento_total = float(_soma_orc or 0)
+            _mes_comp = mes_ano_atual()
+            _pagos = ids_pagos_no_mes([i.id for i in _itens_orc], _mes_comp)
+            orcamento_agrupado = dict(agrupar_orcamento_por_dia_vencimento(
+                _itens_orc, _pagos, mes_ano=_mes_comp,
+            ))
     except Exception:
         db.session.rollback()
         orcamentos_por_data = {}
-        orcamento_total = 0.0
+        orcamento_agrupado = {}
 
     # Lembretes manuais do operador para o calendário (qualquer data do ano ativo).
     lembretes_por_data = {}
@@ -2172,7 +2182,7 @@ def listar_vendas():
         detalhes_entrega_pendente=detalhes_entrega_pendente,
         vencimentos_por_data=vencimentos_por_data,
         orcamentos_por_data=orcamentos_por_data,
-        orcamento_total=orcamento_total,
+        orcamento_agrupado=orcamento_agrupado,
         lembretes_por_data=lembretes_por_data,
         webcal_url=_webcal_url_calendario(),
         frase_do_dia=frase_do_dia(),

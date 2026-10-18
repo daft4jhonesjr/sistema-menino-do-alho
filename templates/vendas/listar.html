@@ -277,7 +277,7 @@
      data-pendentes='{{ (datas_entrega_pendente or [])|tojson }}'
      data-vencimentos='{{ (vencimentos_por_data or {})|tojson }}'
      data-orcamentos='{{ (orcamentos_por_data or {})|tojson }}'
-     data-orcamento-total='{{ orcamento_total|default(0)|tojson }}'
+     data-orcamento-agrupado='{{ (orcamento_agrupado or {})|tojson }}'
      data-lembretes='{{ (lembretes_por_data or {})|tojson }}'
      data-csrf='{{ csrf_token() }}'>
 
@@ -4444,7 +4444,7 @@ function ordenarVendasTabela(colIndex, tipo) {
     var detalhesPendentes = _parseAttr('data-detalhes-pendentes', {});
     var vencimentos       = _parseAttr('data-vencimentos', {});
     var orcamentos        = _parseAttr('data-orcamentos', {});
-    var orcamentoTotalMensal = _parseAttr('data-orcamento-total', 0);
+    var orcamentoAgrupado = _parseAttr('data-orcamento-agrupado', {});
     var lembretes         = _parseAttr('data-lembretes', {});
     var CSRF_TOKEN        = wrap.getAttribute('data-csrf') || '';
 
@@ -4482,6 +4482,15 @@ function ordenarVendasTabela(colIndex, tipo) {
             var pago = !!(data.pago != null ? data.pago : data.item && data.item.pago);
             if (iso && orcamentos[iso]) {
                 orcamentos[iso].forEach(function(it) {
+                    if (String(it.item_id) === String(itemId)) {
+                        it.is_pago = pago;
+                        it.pago = pago;
+                    }
+                });
+            }
+            var diaKey = iso && iso.length >= 10 ? String(parseInt(iso.slice(8, 10), 10)) : '';
+            if (diaKey && orcamentoAgrupado[diaKey] && orcamentoAgrupado[diaKey].itens) {
+                orcamentoAgrupado[diaKey].itens.forEach(function(it) {
                     if (String(it.item_id) === String(itemId)) {
                         it.is_pago = pago;
                         it.pago = pago;
@@ -4697,50 +4706,74 @@ function ordenarVendasTabela(colIndex, tipo) {
             html += '</div>';
         }
 
-        // ─── Orçamento (despesas recorrentes) ───────────────────────
-        if (itensOrc.length) {
-            var mesAnoOrc = iso.length >= 7 ? iso.substring(0, 7) : '';
-            html += '<div class="mb-4">' +
-                '<div class="flex flex-wrap items-center justify-between gap-2 mb-2">' +
-                    '<p class="text-sm font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-1"><span>📋</span> Despesas de Orçamento</p>' +
-                    '<p class="text-xs sm:text-sm font-bold text-gray-800 dark:text-gray-100">' +
-                        'Total mensal: <span class="text-rose-600 dark:text-rose-400 tabular-nums">' + esc(fmtBRLCal(orcamentoTotalMensal)) + '</span>' +
+        // ─── Orçamento (despesas recorrentes, agrupadas por dia de vencimento) ──
+        var diaVencCal = iso.length >= 10 ? parseInt(iso.slice(8, 10), 10) : 0;
+        var grupoOrcDia = diaVencCal ? (orcamentoAgrupado[String(diaVencCal)] || null) : null;
+        var itensOrcPorId = {};
+        itensOrc.forEach(function(it) {
+            if (it && it.item_id != null) itensOrcPorId[String(it.item_id)] = it;
+        });
+
+        function _htmlCardDespesaOrcamento(item, mesAnoOrc) {
+            var merged = item || {};
+            var occ = itensOrcPorId[String(merged.item_id != null ? merged.item_id : merged.id)] || null;
+            if (occ) {
+                merged = Object.assign({}, merged, {
+                    is_pago: occ.is_pago,
+                    pago: occ.pago,
+                    mes_ano: occ.mes_ano || mesAnoOrc,
+                    titulo: occ.titulo || merged.titulo,
+                    valor: occ.valor || merged.valor,
+                });
+            }
+            var pago = !!(merged.is_pago != null ? merged.is_pago : merged.pago);
+            var itemId = merged.item_id != null ? merged.item_id : merged.id;
+            var mesComp = merged.mes_ano || mesAnoOrc;
+            var meta = [];
+            if (merged.categoria) meta.push(esc(merged.categoria));
+            if (merged.forma_pagamento) meta.push(esc(merged.forma_pagamento));
+            var strikeCls = pago ? ' line-through text-gray-400 dark:text-gray-500' : '';
+            var btnPagoCls = pago
+                ? ' text-emerald-600 bg-emerald-500/15'
+                : ' text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400';
+            return '<div class="bg-gray-50 dark:bg-gray-700/30 p-3 rounded-lg border-l-4 border-rose-500 flex items-start gap-2" data-orc-item-id="' + esc(String(itemId)) + '">' +
+                '<div class="flex-1 min-w-0">' +
+                    '<p class="orc-agenda-titulo font-semibold text-sm text-gray-900 dark:text-white leading-snug' + strikeCls + '">' +
+                        esc(merged.titulo || merged.descricao || 'Orçamento') +
                     '</p>' +
+                    (merged.valor
+                        ? '<p class="orc-agenda-valor text-sm font-bold text-rose-600 dark:text-rose-400 mt-1 tabular-nums' + strikeCls + '">' + esc(merged.valor) + '</p>'
+                        : '') +
+                    (meta.length
+                        ? '<p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">' + meta.join(' · ') + '</p>'
+                        : '') +
                 '</div>' +
-                '<div class="space-y-2">';
-            itensOrc.forEach(function(item) {
-                var pago = !!(item.is_pago != null ? item.is_pago : item.pago);
-                var itemId = item.item_id != null ? item.item_id : '';
-                var mesComp = item.mes_ano || mesAnoOrc;
-                var meta = [];
-                if (item.categoria) meta.push(esc(item.categoria));
-                if (item.forma_pagamento) meta.push(esc(item.forma_pagamento));
-                var strikeCls = pago ? ' line-through text-gray-400 dark:text-gray-500' : '';
-                var btnPagoCls = pago
-                    ? ' text-emerald-600 bg-emerald-500/15'
-                    : ' text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400';
-                html += '<div class="bg-gray-50 dark:bg-gray-700/30 p-3 rounded-lg border-l-4 border-rose-500 flex items-start gap-2" data-orc-item-id="' + esc(String(itemId)) + '">' +
-                    '<div class="flex-1 min-w-0">' +
-                        '<p class="orc-agenda-titulo font-semibold text-sm text-gray-900 dark:text-white leading-snug' + strikeCls + '">' +
-                            esc(item.titulo || item.descricao || 'Orçamento') +
-                        '</p>' +
-                        (item.valor
-                            ? '<p class="orc-agenda-valor text-sm font-bold text-rose-600 dark:text-rose-400 mt-1 tabular-nums' + strikeCls + '">' + esc(item.valor) + '</p>'
-                            : '') +
-                        (meta.length
-                            ? '<p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">' + meta.join(' · ') + '</p>'
-                            : '') +
-                    '</div>' +
-                    '<button type="button" class="btn-toggle-pagamento-orcamento shrink-0 p-2 rounded-lg transition-colors' + btnPagoCls + '" ' +
-                        'data-id="' + esc(String(itemId)) + '" data-mes-ano="' + esc(mesComp) + '" data-pago="' + (pago ? '1' : '0') + '" ' +
-                        'title="' + (pago ? 'Desmarcar como pago' : 'Marcar como pago') + '" aria-label="' + (pago ? 'Desmarcar como pago' : 'Marcar como pago') + '" aria-pressed="' + (pago ? 'true' : 'false') + '">' +
-                        '<svg class="w-5 h-5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">' +
-                            '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>' +
-                        '</svg>' +
-                    '</button>' +
-                '</div>';
+                '<button type="button" class="btn-toggle-pagamento-orcamento shrink-0 p-2 rounded-lg transition-colors' + btnPagoCls + '" ' +
+                    'data-id="' + esc(String(itemId)) + '" data-mes-ano="' + esc(mesComp) + '" data-pago="' + (pago ? '1' : '0') + '" ' +
+                    'title="' + (pago ? 'Desmarcar como pago' : 'Marcar como pago') + '" aria-label="' + (pago ? 'Desmarcar como pago' : 'Marcar como pago') + '" aria-pressed="' + (pago ? 'true' : 'false') + '">' +
+                    '<svg class="w-5 h-5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">' +
+                        '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>' +
+                    '</svg>' +
+                '</button>' +
+            '</div>';
+        }
+
+        if (grupoOrcDia && grupoOrcDia.itens && grupoOrcDia.itens.length) {
+            var mesAnoOrc = iso.length >= 7 ? iso.substring(0, 7) : '';
+            var totalDia = grupoOrcDia.total_dia != null ? grupoOrcDia.total_dia : 0;
+            html += '<div class="mb-4">' +
+                '<p class="text-sm font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 mb-3 flex items-center gap-1"><span>📋</span> Despesas de Orçamento</p>' +
+                '<div class="space-y-4">' +
+                    '<div>' +
+                        '<div class="flex flex-wrap items-center justify-between gap-2 pb-2 mb-2 border-b border-rose-200 dark:border-rose-800/60">' +
+                            '<span class="text-sm font-bold text-gray-900 dark:text-white">Dia ' + esc(String(diaVencCal)) + '</span>' +
+                            '<span class="text-sm font-bold text-rose-600 dark:text-rose-400 tabular-nums">Total: ' + esc(fmtBRLCal(totalDia)) + '</span>' +
+                        '</div>' +
+                        '<div class="space-y-2">';
+            grupoOrcDia.itens.forEach(function(item) {
+                html += _htmlCardDespesaOrcamento(item, mesAnoOrc);
             });
-            html += '</div></div>';
+            html += '</div></div></div></div>';
         }
 
         // ─── Radar e Lembretes em blocos independentes ─────────────
@@ -4839,7 +4872,8 @@ function ordenarVendasTabela(colIndex, tipo) {
 
         html += _htmlFraseDoDia(iso);
 
-        if (!entregas.length && !boletos.length && !itensOrc.length && !listaLembs.length) {
+        var temDespesasOrc = !!(grupoOrcDia && grupoOrcDia.itens && grupoOrcDia.itens.length);
+        if (!entregas.length && !boletos.length && !temDespesasOrc && !listaLembs.length) {
             // Adiciona mensagem de sem compromissos acima dos lembretes mas só se os 4 estiverem vazios
             displayConteudo.innerHTML =
                 '<p class="text-gray-500 dark:text-gray-400 text-sm italic mb-4">Sem entregas, boletos ou orçamento para este dia.</p>' + html;
