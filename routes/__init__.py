@@ -56,6 +56,7 @@ Estado atual:
                            /caixa/{salvar_gaveta,obter_gaveta},
                            /api/orcamento, /api/orcamento/<id>/editar,
                            /api/orcamento/<id>/toggle-pagamento
+                           /api/orcamento/<id>/toggle_pagamento
     * ``financeiro_bp``  → /api/balanco/dados-atuais, /api/balanco/exportar-csv
     * ``push_bp``        → /api/push/subscribe, /api/push/unsubscribe,
                            /api/push/vapid-public-key, /api/vapid-public-key (legado),

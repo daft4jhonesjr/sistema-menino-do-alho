@@ -62,7 +62,7 @@ from sqlalchemy.orm import joinedload
 import pandas as pd
 from werkzeug.utils import secure_filename
 
-from models import db, Cliente, Produto, Venda, Documento, LancamentoCaixa, Lembrete
+from models import db, Cliente, Produto, Venda, Documento, LancamentoCaixa, Lembrete, ItemOrcamento
 from quotes import frase_do_dia, FRASES
 from services.auth_utils import (
     tenant_required, admin_required, _is_ajax,
@@ -2063,6 +2063,7 @@ def listar_vendas():
 
     # Itens de orçamento pessoal (vencimento recorrente mensal no ano ativo).
     orcamentos_por_data = {}
+    orcamento_total = 0.0
     try:
         from services.calendario_ics import agrupar_orcamentos_por_data
 
@@ -2072,9 +2073,16 @@ def listar_vendas():
             _ini_orc = date(int(_ano_orc), 1, 1)
             _fim_orc = date(int(_ano_orc), 12, 31)
             orcamentos_por_data = agrupar_orcamentos_por_data(_eid_orc, _ini_orc, _fim_orc)
+            _soma_orc = (
+                query_tenant(ItemOrcamento)
+                .with_entities(func.coalesce(func.sum(ItemOrcamento.valor), 0))
+                .scalar()
+            )
+            orcamento_total = float(_soma_orc or 0)
     except Exception:
         db.session.rollback()
         orcamentos_por_data = {}
+        orcamento_total = 0.0
 
     # Lembretes manuais do operador para o calendário (qualquer data do ano ativo).
     lembretes_por_data = {}
@@ -2164,6 +2172,7 @@ def listar_vendas():
         detalhes_entrega_pendente=detalhes_entrega_pendente,
         vencimentos_por_data=vencimentos_por_data,
         orcamentos_por_data=orcamentos_por_data,
+        orcamento_total=orcamento_total,
         lembretes_por_data=lembretes_por_data,
         webcal_url=_webcal_url_calendario(),
         frase_do_dia=frase_do_dia(),
