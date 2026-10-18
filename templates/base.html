@@ -408,8 +408,11 @@
         }
 
         #ptr-indicador {
+            --ptr-safe-top: env(safe-area-inset-top, 0px);
+            --ptr-extra-top: 12px;
             position: fixed;
-            top: 0;
+            /* Ancora abaixo da Dynamic Island / status bar + folga extra */
+            top: calc(var(--ptr-safe-top) + var(--ptr-extra-top));
             left: 50%;
             z-index: 60;
             width: 44px;
@@ -422,7 +425,8 @@
             border: 1px solid #374151;
             color: #34d399;
             box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(52, 211, 153, 0.08);
-            transform: translate(-50%, -64px);
+            /* Recolhido acima do âncora (safe area + extra) */
+            transform: translate(-50%, calc(-100% - 20px));
             opacity: 0;
             pointer-events: none;
             will-change: transform, opacity;
@@ -488,17 +492,45 @@
             var isPulling = false;
             var TRIGGER_DISTANCE = 65; // Distância super curta e fácil de atingir
 
-            var PTR_OCULTO_Y = -64;
-            var PTR_ATIVO_Y = 16;
-            var PTR_MAX_Y = 72;
+            // O CSS ancora o indicador em top: calc(env(safe-area-inset-top) + 12px).
+            // Os offsets abaixo são relativos a esse âncora (não à borda física da tela).
+            var PTR_TAMANHO = 44;
+            var PTR_OCULTO_Y = -(PTR_TAMANHO + 20); // totalmente acima da safe area
+            var PTR_ATIVO_Y = 0; // resting: logo abaixo da Dynamic Island / status bar
+            var PTR_MAX_Y = 56;
             var PTR_GRAUS_POR_PX = 3;
+
+            var lerSafeAreaTop = function() {
+                var estilos = getComputedStyle(ptrIndicador);
+                var raw = estilos.getPropertyValue('--ptr-safe-top').trim() || '0px';
+                var valor = parseFloat(raw);
+                if (!isNaN(valor)) return valor;
+                // Fallback: medir via elemento temporário (Safari às vezes devolve a keyword)
+                var sonda = document.createElement('div');
+                sonda.style.cssText = 'position:fixed;visibility:hidden;padding-top:env(safe-area-inset-top,0px)';
+                document.documentElement.appendChild(sonda);
+                valor = parseFloat(getComputedStyle(sonda).paddingTop) || 0;
+                sonda.remove();
+                return valor;
+            };
 
             var getScrollTop = function() {
                 return scrollArea === window ? window.scrollY : scrollArea.scrollTop;
             };
 
             var posicionarIndicador = function(y) {
+                // translateY relativo ao âncora CSS (já inclui safe-area-inset-top + 12px)
                 ptrIndicador.style.transform = 'translate(-50%, ' + y + 'px)';
+            };
+
+            // Garante que o teto do arraste também respeite a safe area (nunca sobe para cima dela).
+            var yArraste = function(visualDistance) {
+                var y = PTR_OCULTO_Y + visualDistance * 1.6;
+                var safeTop = lerSafeAreaTop();
+                // Em dispositivos com inset grande, permite um pouco mais de descida visual
+                // sem ultrapassar o máximo relativo ao âncora.
+                var maxY = PTR_MAX_Y + Math.min(safeTop * 0.15, 8);
+                return Math.min(y, maxY);
             };
 
             var resetUI = function() {
@@ -582,7 +614,7 @@
 
                     var visualDistance = pullDistance * 0.5;
                     var progresso = Math.min(pullDistance / TRIGGER_DISTANCE, 1);
-                    var y = Math.min(PTR_OCULTO_Y + visualDistance * 1.6, PTR_MAX_Y);
+                    var y = yArraste(visualDistance);
                     var angulo = (pullDistance * PTR_GRAUS_POR_PX) % 360;
 
                     posicionarIndicador(y);
