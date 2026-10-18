@@ -1749,7 +1749,16 @@ def listar_vendas():
     clientes = query_tenant(Cliente).filter(Cliente.ativo.is_(True)).order_by(Cliente.nome_cliente).limit(500).all()
     produtos = query_tenant(Produto).filter(Produto.estoque_atual > 0).order_by(Produto.nome_produto).limit(500).all()
     todos_clientes = query_tenant(Cliente).order_by(Cliente.nome_cliente).limit(500).all()
-    todos_produtos = query_tenant(Produto).order_by(Produto.nome_produto).limit(500).all()
+    # Modal de edição: com estoque (>0) primeiro; zerados no fim; A–Z em cada grupo.
+    todos_produtos = (
+        query_tenant(Produto)
+        .order_by(
+            case((Produto.estoque_atual > 0, 0), else_=1),
+            Produto.nome_produto,
+        )
+        .limit(500)
+        .all()
+    )
 
     # Agregações dos gráficos: universo filtrado COMPLETO (sem o LIMIT
     # da listagem), para bater com o rodapé / Dashboard.
@@ -3539,10 +3548,14 @@ def editar_venda(id):
     clientes = query_tenant(Cliente).order_by(Cliente.nome_cliente).limit(1000).all()
     # Na edição: só produtos com estoque > 0, mas sempre inclui o produto
     # já vinculado à venda (mesmo com estoque 0) para manter a seleção ativa.
+    # Ordenação: com estoque primeiro; zerados no fim; A–Z em cada grupo.
     produtos = (
         query_tenant(Produto)
         .filter(or_(Produto.estoque_atual > 0, Produto.id == venda.produto_id))
-        .order_by(Produto.nome_produto)
+        .order_by(
+            case((Produto.estoque_atual > 0, 0), else_=1),
+            Produto.nome_produto,
+        )
         .limit(1000)
         .all()
     )
