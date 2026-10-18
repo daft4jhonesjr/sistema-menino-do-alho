@@ -5891,6 +5891,19 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+
+    // Deep link do rodapé / atalhos: /vendas?acao=nova_venda abre o modal
+    // e limpa a URL para não reabrir no F5.
+    try {
+        var paramsAcao = new URLSearchParams(window.location.search);
+        if (paramsAcao.get('acao') === 'nova_venda') {
+            abrirModalNovaVenda();
+            paramsAcao.delete('acao');
+            var queryLimpa = paramsAcao.toString();
+            var urlLimpa = window.location.pathname + (queryLimpa ? '?' + queryLimpa : '') + window.location.hash;
+            window.history.replaceState({}, document.title, urlLimpa);
+        }
+    } catch (_) {}
 });
 
 function toggleAnaliseVendas(event) {
