@@ -692,8 +692,43 @@ class Configuracao(db.Model):
     codigo_cadastro = db.Column(db.String(100), nullable=False, default='alho123')
     # Ponto de partida das rotas logísticas (Google Maps / OSRM). Ex.: "Rua X, 100, Petrolina, PE"
     endereco_deposito = db.Column(db.String(255), nullable=True)
+    timeout_inatividade_min = db.Column(
+        db.Integer,
+        nullable=False,
+        default=15,
+        server_default='15',
+    )
+    timeout_sessao_max_horas = db.Column(
+        db.Integer,
+        nullable=False,
+        default=4,
+        server_default='4',
+    )
 
     empresa = db.relationship('Empresa', backref=db.backref('configuracoes', lazy='dynamic'))
+
+    TIMEOUT_INATIVIDADE_PADRAO_MIN = 15
+    TIMEOUT_SESSAO_PADRAO_HORAS = 4
+
+    def timeout_inatividade_min_efetivo(self):
+        """Minutos de inatividade até logout (fallback 15)."""
+        val = getattr(self, 'timeout_inatividade_min', None)
+        if val is None:
+            return self.TIMEOUT_INATIVIDADE_PADRAO_MIN
+        try:
+            return int(val)
+        except (TypeError, ValueError):
+            return self.TIMEOUT_INATIVIDADE_PADRAO_MIN
+
+    def timeout_sessao_max_horas_efetivo(self):
+        """Horas máximas de uso contínuo (fallback 4)."""
+        val = getattr(self, 'timeout_sessao_max_horas', None)
+        if val is None:
+            return self.TIMEOUT_SESSAO_PADRAO_HORAS
+        try:
+            return int(val)
+        except (TypeError, ValueError):
+            return self.TIMEOUT_SESSAO_PADRAO_HORAS
 
     def __repr__(self):
         return f'<Configuracao id={self.id}>'

@@ -2793,9 +2793,22 @@ def _redirect_login_com_next():
     return redirect(url_for('auth.login'))
 
 
+def _limites_expiracao_sessao():
+    """Retorna (segundos_inatividade, segundos_absoluto) do tenant atual."""
+    padrao_inat = Configuracao.TIMEOUT_INATIVIDADE_PADRAO_MIN * 60
+    padrao_abs = Configuracao.TIMEOUT_SESSAO_PADRAO_HORAS * 60 * 60
+    try:
+        config = get_config()
+        min_inat = config.timeout_inatividade_min_efetivo()
+        horas_abs = config.timeout_sessao_max_horas_efetivo()
+        return min_inat * 60, horas_abs * 60 * 60
+    except Exception:
+        return padrao_inat, padrao_abs
+
+
 @app.before_request
 def checar_expiracao_sessao():
-    """Encerra sessões por inatividade (15 min) ou tempo absoluto (4 h)."""
+    """Encerra sessões por inatividade ou tempo absoluto (configurável por tenant)."""
     if not current_user.is_authenticated:
         return
 
@@ -2804,8 +2817,14 @@ def checar_expiracao_sessao():
         return
 
     agora = datetime.now(timezone.utc).timestamp()
-    tempo_inatividade_max = 15 * 60
-    tempo_absoluto_max = 4 * 60 * 60
+    tempo_inatividade_max, tempo_absoluto_max = _limites_expiracao_sessao()
+    try:
+        config = get_config()
+        min_inat_msg = config.timeout_inatividade_min_efetivo()
+        horas_abs_msg = config.timeout_sessao_max_horas_efetivo()
+    except Exception:
+        min_inat_msg = Configuracao.TIMEOUT_INATIVIDADE_PADRAO_MIN
+        horas_abs_msg = Configuracao.TIMEOUT_SESSAO_PADRAO_HORAS
 
     if 'login_time' not in session:
         session['login_time'] = agora
@@ -2819,7 +2838,7 @@ def checar_expiracao_sessao():
         logout_user()
         session.clear()
         msg = (
-            'Sua sessão atingiu o limite máximo de 4 horas de uso contínuo. '
+            f'Sua sessão atingiu o limite máximo de {horas_abs_msg} hora(s) de uso contínuo. '
             'Faça login novamente.'
         )
         if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -2831,7 +2850,7 @@ def checar_expiracao_sessao():
         logout_user()
         session.clear()
         msg = (
-            'Sua sessão expirou por 15 minutos de inatividade. '
+            f'Sua sessão expirou por {min_inat_msg} minuto(s) de inatividade. '
             'Por favor, faça login novamente.'
         )
         if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -3536,6 +3555,24 @@ def inject_onesignal_config():
             or ''
         ).strip(),
     }
+
+
+@app.context_processor
+def inject_session_timeout_config():
+    """Limites de expiração de sessão para templates e JS (por tenant)."""
+    if not current_user.is_authenticated:
+        return {}
+    try:
+        config = get_config()
+        return {
+            'timeout_inatividade_min': config.timeout_inatividade_min_efetivo(),
+            'timeout_sessao_max_horas': config.timeout_sessao_max_horas_efetivo(),
+        }
+    except Exception:
+        return {
+            'timeout_inatividade_min': Configuracao.TIMEOUT_INATIVIDADE_PADRAO_MIN,
+            'timeout_sessao_max_horas': Configuracao.TIMEOUT_SESSAO_PADRAO_HORAS,
+        }
 
 
 @app.context_processor
@@ -4566,6 +4603,18 @@ if not os.environ.get('SKIP_DB_BOOTSTRAP'):
         # Migração: endereço do depósito (ponto de partida das rotas logísticas)
         try:
             _adicionar_coluna_se_ausente('configuracoes', 'endereco_deposito', 'VARCHAR(255)')
+        except (OperationalError, Exception):
+            db.session.rollback()
+        try:
+            _adicionar_coluna_se_ausente(
+                'configuracoes', 'timeout_inatividade_min', 'INTEGER NOT NULL DEFAULT 15',
+            )
+        except (OperationalError, Exception):
+            db.session.rollback()
+        try:
+            _adicionar_coluna_se_ausente(
+                'configuracoes', 'timeout_sessao_max_horas', 'INTEGER NOT NULL DEFAULT 4',
+            )
         except (OperationalError, Exception):
             db.session.rollback()
         # Migração: soft-completion de lembretes do calendário
