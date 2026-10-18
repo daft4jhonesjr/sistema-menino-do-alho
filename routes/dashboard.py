@@ -17,6 +17,7 @@ Rotas extraídas do legado ``app.py``:
 * ``GET  /api/dashboard/detalhes_mes/<ano>/<mes>``   — drill-down do gráfico mensal
 * ``POST /api/frases/votar``                         — like/dislike da Frase do Dia
 * ``GET  /api/frases/voto``                          — voto atual do tenant na frase
+* ``GET  /api/dashboard/clima``                      — temperatura atual (Open-Meteo)
 
 Helpers exclusivos:
 
@@ -63,6 +64,7 @@ from services.cache_utils import _dashboard_cache_key
 from services.error_utils import erro_json
 from services.query_utils import filtro_ano_data_venda
 from services.config_helpers import get_hoje_brasil, registrar_log, _EXTERNAL_TIMEOUT
+from services.clima import obter_clima_atual
 
 
 dashboard_bp = Blueprint('dashboard', __name__)
@@ -1473,6 +1475,31 @@ def api_radar_recompra():
             'radar_ativos': [],
             'radar_inativos': [],
             'limite_dias_inativo': LIMITE_DIAS_RADAR_INATIVO,
+        }), 200
+
+
+@dashboard_bp.route('/api/dashboard/clima')
+def api_dashboard_clima():
+    """Temperatura atual no endereço do depósito (Open-Meteo).
+
+    Lazy: o card do Dashboard busca via fetch após o paint. Cache
+    server-side ~45 min por tenant + endereço (ver ``services.clima``).
+    Falhas da API externa retornam 200 com ``ok: false`` para não
+    quebrar o layout do card.
+    """
+    try:
+        emp_id = None
+        try:
+            emp_id = empresa_id_atual()
+        except Exception:
+            emp_id = getattr(current_user, 'empresa_id', None)
+        payload = obter_clima_atual(empresa_id=emp_id)
+        return jsonify(payload), 200
+    except Exception:
+        current_app.logger.exception('Falha ao obter clima do dashboard')
+        return jsonify({
+            'ok': False,
+            'mensagem': 'Não foi possível obter o clima agora.',
         }), 200
 
 

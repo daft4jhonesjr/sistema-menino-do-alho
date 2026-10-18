@@ -64,4 +64,5 @@ Mapa rápido:
     * ``services.config_helpers``  → get_config, get_hoje_brasil,
                                       _logs_file, _EXTERNAL_TIMEOUT,
                                       registrar_log
+    * ``services.clima``           → obter_clima_atual (Open-Meteo + cache)
 """
