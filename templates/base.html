@@ -406,15 +406,59 @@
             pointer-events: none;
             transition: filter 0.3s ease, opacity 0.3s ease;
         }
+
+        #ptr-indicador {
+            position: fixed;
+            top: 0;
+            left: 50%;
+            z-index: 60;
+            width: 44px;
+            height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 9999px;
+            background: #1f2937;
+            border: 1px solid #374151;
+            color: #34d399;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(52, 211, 153, 0.08);
+            transform: translate(-50%, -64px);
+            opacity: 0;
+            pointer-events: none;
+            will-change: transform, opacity;
+            transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.35s ease;
+        }
+        #ptr-indicador.ptr-arrastando {
+            transition: none;
+        }
+        #ptr-indicador.ptr-pronto {
+            color: #6ee7b7;
+            border-color: rgba(52, 211, 153, 0.5);
+        }
+        #ptr-engrenagem {
+            width: 24px;
+            height: 24px;
+            --ptr-angulo: 0deg;
+        }
+        #ptr-indicador.ptr-atualizando #ptr-engrenagem {
+            animation: ptr-girar 0.8s infinite linear;
+        }
+        @keyframes ptr-girar {
+            from { transform: rotate(var(--ptr-angulo)); }
+            to { transform: rotate(calc(var(--ptr-angulo) + 360deg)); }
+        }
+        @media (min-width: 768px) {
+            #ptr-indicador { display: none; }
+        }
     </style>
     {% block head_extras %}{% endblock %}
 </head>
 <body class="bg-emerald-50 text-gray-800 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-500 min-h-screen flex flex-col">
-    <div id="ptr-indicador" class="hidden md:hidden fixed top-0 left-0 w-full flex justify-center items-end pb-3 h-16 bg-transparent text-emerald-600 font-medium text-sm z-50 transform -translate-y-full pointer-events-none transition-transform duration-300">
-        <div class="flex items-center gap-2 bg-white px-4 py-2 rounded-full shadow-md">
-            <span id="ptr-icone" class="transition-transform duration-300">↓</span>
-            <span id="ptr-texto">Puxe para atualizar</span>
-        </div>
+    <div id="ptr-indicador" role="status" aria-live="polite" aria-label="Puxe para atualizar">
+        <svg id="ptr-engrenagem" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+            <circle cx="12" cy="12" r="3"/>
+        </svg>
     </div>
     <script>
     var _scrollPosAnteModal = 0;
@@ -435,9 +479,8 @@
             if (window.innerWidth >= 768) return;
 
             var ptrIndicador = document.getElementById('ptr-indicador');
-            var ptrIcone = document.getElementById('ptr-icone');
-            var ptrTexto = document.getElementById('ptr-texto');
-            if (!ptrIndicador || !ptrIcone || !ptrTexto) return;
+            var ptrEngrenagem = document.getElementById('ptr-engrenagem');
+            if (!ptrIndicador || !ptrEngrenagem) return;
 
             var scrollArea = document.querySelector('main.overflow-y-auto') || window;
             var startY = 0;
@@ -445,16 +488,64 @@
             var isPulling = false;
             var TRIGGER_DISTANCE = 65; // Distância super curta e fácil de atingir
 
+            var PTR_OCULTO_Y = -64;
+            var PTR_ATIVO_Y = 16;
+            var PTR_MAX_Y = 72;
+            var PTR_GRAUS_POR_PX = 3;
+
             var getScrollTop = function() {
                 return scrollArea === window ? window.scrollY : scrollArea.scrollTop;
             };
 
+            var posicionarIndicador = function(y) {
+                ptrIndicador.style.transform = 'translate(-50%, ' + y + 'px)';
+            };
+
             var resetUI = function() {
-                ptrIndicador.style.transform = 'translateY(-100%)';
-                ptrTexto.innerText = 'Puxe para atualizar';
-                ptrIcone.style.transform = 'rotate(0deg)';
+                ptrIndicador.classList.remove('ptr-arrastando', 'ptr-pronto', 'ptr-atualizando');
+                ptrIndicador.style.opacity = '';
+                posicionarIndicador(PTR_OCULTO_Y);
+                ptrIndicador.setAttribute('aria-label', 'Puxe para atualizar');
+                ptrEngrenagem.style.transform = 'rotate(0deg)';
+                ptrEngrenagem.style.setProperty('--ptr-angulo', '0deg');
                 isPulling = false;
             };
+
+            // Volta do bfcache (botão voltar no iOS/Safari) não pode manter o indicador travado.
+            window.addEventListener('pageshow', function(e) {
+                if (e.persisted) resetUI();
+            });
+
+            // O refresh é um reload completo: a página recarregada exibe a engrenagem
+            // girando e a recolhe suavemente quando termina de carregar.
+            var PTR_FLAG_FINALIZAR = 'ptr-finalizar';
+            var vindoDeRefresh = false;
+            try {
+                vindoDeRefresh = sessionStorage.getItem(PTR_FLAG_FINALIZAR) === '1';
+                sessionStorage.removeItem(PTR_FLAG_FINALIZAR);
+            } catch (err) {}
+
+            if (vindoDeRefresh) {
+                ptrIndicador.classList.add('ptr-arrastando', 'ptr-atualizando');
+                ptrIndicador.style.opacity = '1';
+                ptrIndicador.setAttribute('aria-label', 'Atualizando...');
+                posicionarIndicador(PTR_ATIVO_Y);
+                void ptrIndicador.offsetHeight;
+                ptrIndicador.classList.remove('ptr-arrastando');
+
+                var finalizarRefresh = function() {
+                    setTimeout(function() {
+                        posicionarIndicador(PTR_OCULTO_Y);
+                        ptrIndicador.style.opacity = '0';
+                        setTimeout(resetUI, 400);
+                    }, 350);
+                };
+                if (document.readyState === 'complete') {
+                    finalizarRefresh();
+                } else {
+                    window.addEventListener('load', finalizarRefresh, { once: true });
+                }
+            }
 
             var toqueDentroDeModal = function(target) {
                 if (!target || !target.closest) return false;
@@ -471,7 +562,7 @@
                     startY = e.touches[0].clientY;
                     currentY = startY;
                     isPulling = true;
-                    ptrIndicador.style.transition = 'none';
+                    ptrIndicador.classList.add('ptr-arrastando');
                 }
             }, { passive: true });
 
@@ -490,15 +581,18 @@
                     if (e.cancelable) e.preventDefault();
 
                     var visualDistance = pullDistance * 0.5;
-                    ptrIndicador.style.transform = 'translateY(' + (visualDistance - 64) + 'px)';
+                    var progresso = Math.min(pullDistance / TRIGGER_DISTANCE, 1);
+                    var y = Math.min(PTR_OCULTO_Y + visualDistance * 1.6, PTR_MAX_Y);
+                    var angulo = (pullDistance * PTR_GRAUS_POR_PX) % 360;
 
-                    if (pullDistance >= TRIGGER_DISTANCE) {
-                        ptrTexto.innerText = 'Solte para atualizar';
-                        ptrIcone.style.transform = 'rotate(180deg)';
-                    } else {
-                        ptrTexto.innerText = 'Puxe para atualizar';
-                        ptrIcone.style.transform = 'rotate(0deg)';
-                    }
+                    posicionarIndicador(y);
+                    ptrIndicador.style.opacity = String(0.35 + progresso * 0.65);
+                    ptrEngrenagem.style.transform = 'rotate(' + angulo + 'deg)';
+                    ptrEngrenagem.style.setProperty('--ptr-angulo', angulo + 'deg');
+
+                    var pronto = pullDistance >= TRIGGER_DISTANCE;
+                    ptrIndicador.classList.toggle('ptr-pronto', pronto);
+                    ptrIndicador.setAttribute('aria-label', pronto ? 'Solte para atualizar' : 'Puxe para atualizar');
                 }
             }, { passive: false });
 
@@ -506,14 +600,17 @@
             var handleEnd = function() {
                 if (!isPulling) return;
 
-                ptrIndicador.style.transition = 'transform 0.3s ease-out';
+                ptrIndicador.classList.remove('ptr-arrastando');
                 var pullDistance = currentY - startY;
 
                 // Se puxou o suficiente, atualiza
                 if (pullDistance >= TRIGGER_DISTANCE) {
-                    ptrTexto.innerText = 'Atualizando...';
-                    ptrIcone.innerHTML = '⏳';
-                    ptrIndicador.style.transform = 'translateY(16px)';
+                    ptrIndicador.setAttribute('aria-label', 'Atualizando...');
+                    ptrIndicador.style.opacity = '1';
+                    posicionarIndicador(PTR_ATIVO_Y);
+                    ptrEngrenagem.style.transform = '';
+                    ptrIndicador.classList.add('ptr-atualizando');
+                    try { sessionStorage.setItem(PTR_FLAG_FINALIZAR, '1'); } catch (err) {}
 
                     // Força o reload pulando o cache
                     setTimeout(function() { window.location.reload(true); }, 300);
