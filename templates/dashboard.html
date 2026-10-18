@@ -356,9 +356,19 @@
 
 <!-- Radar de Recompra (lazy-loaded via /api/dashboard/radar_recompra) -->
 <section class="mb-8" id="radar-recompra-section" data-radar-endpoint="{{ url_for('dashboard.api_radar_recompra') }}">
-    <h3 class="text-xl font-bold text-emerald-700 mb-4 flex items-center">
-        <i data-lucide="radio" class="w-5 h-5 mr-2"></i>Radar de Recompra
-    </h3>
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <h3 class="text-xl font-bold text-emerald-700 flex items-center">
+            <i data-lucide="radio" class="w-5 h-5 mr-2"></i>Radar de Recompra
+        </h3>
+        <div class="flex items-center bg-gray-200 dark:bg-gray-700 rounded-lg p-1" title="Alternar visualização" id="radar-view-toggle">
+            <button type="button" id="btn-radar-lista" class="p-2 rounded-md text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-600 shadow-sm transition-all" title="Visualização em lista">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+            </button>
+            <button type="button" id="btn-radar-grade" class="p-2 rounded-md text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-600 transition-all" title="Visualização em cards">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
+            </button>
+        </div>
+    </div>
     <div id="radar-recompra-container">
         <p class="text-gray-500 dark:text-gray-400 py-6 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-center" id="radar-recompra-loading">
             <span class="inline-block animate-pulse">Calculando radar de recompra…</span>
@@ -380,6 +390,34 @@
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
+    function renderGradeRadar(alertas) {
+        if (!alertas || !alertas.length) {
+            return '<p class="col-span-full text-gray-500 dark:text-gray-400 py-6 text-center">Nenhum cliente nesta aba no momento.</p>';
+        }
+        return alertas.map(a => `
+            <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-4 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition border-l-4 border-l-emerald-500">
+                <div class="flex items-start justify-between gap-2 mb-3">
+                    <h4 class="text-sm font-bold text-gray-900 dark:text-gray-100 leading-tight">${escapeHtml(a.cliente_nome)}</h4>
+                    <span class="px-3 py-1 text-xs font-semibold rounded-full shrink-0 ${escapeHtml(a.cor)}">${escapeHtml(a.status)}</span>
+                </div>
+                <p class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">${escapeHtml(a.produto)}</p>
+                <dl class="grid grid-cols-2 gap-x-3 gap-y-2 text-xs text-gray-600 dark:text-gray-400">
+                    <div>
+                        <dt class="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500">Última compra</dt>
+                        <dd class="font-medium text-gray-800 dark:text-gray-200">${escapeHtml(a.ultima_venda)} <span class="text-gray-400">(${escapeHtml(a.qtd_ultima)} cx)</span></dd>
+                    </div>
+                    <div>
+                        <dt class="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500">Consumo/dia</dt>
+                        <dd class="font-mono font-medium text-gray-800 dark:text-gray-200">${escapeHtml(a.consumo_dia)} cx</dd>
+                    </div>
+                    <div class="col-span-2">
+                        <dt class="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500">Duração (dias)</dt>
+                        <dd class="font-semibold text-gray-800 dark:text-gray-200">${escapeHtml(a.duracao_dias)}</dd>
+                    </div>
+                </dl>
+            </div>`).join('');
+    }
+
     function renderTabelaRadar(alertas) {
         if (!alertas || !alertas.length) {
             return '<p class="text-gray-500 dark:text-gray-400 py-6 text-center">Nenhum cliente nesta aba no momento.</p>';
@@ -418,6 +456,8 @@
         const tabInativos = document.getElementById('radar-tab-inativos');
         const panelAtivos = document.getElementById('radar-panel-ativos');
         const panelInativos = document.getElementById('radar-panel-inativos');
+        const gradeAtivos = document.getElementById('radar-grade-ativos');
+        const gradeInativos = document.getElementById('radar-grade-inativos');
         if (!tabAtivos || !tabInativos || !panelAtivos || !panelInativos) return;
 
         const ativaClasses = 'text-emerald-600 dark:text-emerald-400 border-emerald-500 bg-emerald-50/50 dark:bg-emerald-900/20';
@@ -428,12 +468,70 @@
             tabInativos.className = 'flex-1 py-2.5 text-sm font-bold border-b-2 transition-all ' + ativaClasses;
             panelAtivos.classList.add('hidden');
             panelInativos.classList.remove('hidden');
+            if (gradeAtivos) gradeAtivos.classList.add('hidden');
+            if (gradeInativos) gradeInativos.classList.remove('hidden');
         } else {
             tabAtivos.className = 'flex-1 py-2.5 text-sm font-bold border-b-2 transition-all ' + ativaClasses;
             tabInativos.className = 'flex-1 py-2.5 text-sm font-bold border-b-2 transition-all ' + inativaClasses;
             panelAtivos.classList.remove('hidden');
             panelInativos.classList.add('hidden');
+            if (gradeAtivos) gradeAtivos.classList.remove('hidden');
+            if (gradeInativos) gradeInativos.classList.add('hidden');
         }
+    }
+
+    var radarViewActiveClasses = ['bg-white', 'dark:bg-gray-600', 'shadow', 'text-emerald-600', 'dark:text-emerald-400'];
+    var radarViewInactiveClasses = ['text-gray-600', 'dark:text-gray-300'];
+
+    function aplicarVisualizacaoRadar(modo) {
+        var lista = document.getElementById('view-lista');
+        var grade = document.getElementById('view-grade');
+        var btnLista = document.getElementById('btn-radar-lista');
+        var btnGrade = document.getElementById('btn-radar-grade');
+        if (!lista || !grade) return;
+        var view = modo === 'grade' ? 'grade' : 'lista';
+        if (view === 'grade') {
+            lista.classList.add('hidden');
+            lista.classList.remove('block');
+            grade.classList.remove('hidden');
+            if (btnGrade) {
+                radarViewActiveClasses.forEach(function(c) { btnGrade.classList.add(c); });
+                radarViewInactiveClasses.forEach(function(c) { btnGrade.classList.remove(c); });
+            }
+            if (btnLista) {
+                radarViewActiveClasses.forEach(function(c) { btnLista.classList.remove(c); });
+                radarViewInactiveClasses.forEach(function(c) { btnLista.classList.add(c); });
+            }
+        } else {
+            grade.classList.add('hidden');
+            lista.classList.remove('hidden');
+            lista.classList.add('block');
+            if (btnLista) {
+                radarViewActiveClasses.forEach(function(c) { btnLista.classList.add(c); });
+                radarViewInactiveClasses.forEach(function(c) { btnLista.classList.remove(c); });
+            }
+            if (btnGrade) {
+                radarViewActiveClasses.forEach(function(c) { btnGrade.classList.remove(c); });
+                radarViewInactiveClasses.forEach(function(c) { btnGrade.classList.add(c); });
+            }
+        }
+        try { localStorage.setItem('viewPreference', view); } catch (e) {}
+    }
+
+    function initRadarViewToggle() {
+        var btnLista = document.getElementById('btn-radar-lista');
+        var btnGrade = document.getElementById('btn-radar-grade');
+        if (btnLista && !btnLista.dataset.viewBound) {
+            btnLista.dataset.viewBound = '1';
+            btnLista.addEventListener('click', function() { aplicarVisualizacaoRadar('lista'); });
+        }
+        if (btnGrade && !btnGrade.dataset.viewBound) {
+            btnGrade.dataset.viewBound = '1';
+            btnGrade.addEventListener('click', function() { aplicarVisualizacaoRadar('grade'); });
+        }
+        var saved = 'lista';
+        try { saved = localStorage.getItem('viewPreference') || 'lista'; } catch (e) {}
+        aplicarVisualizacaoRadar(saved);
     }
 
     function render(data) {
@@ -453,13 +551,20 @@
                     Inativos (+60 dias) (${inativos.length})
                 </button>
             </div>
-            <div id="radar-panel-ativos">${renderTabelaRadar(ativos)}</div>
-            <div id="radar-panel-inativos" class="hidden">${renderTabelaRadar(inativos)}</div>`;
+            <div id="view-lista" class="block">
+                <div id="radar-panel-ativos">${renderTabelaRadar(ativos)}</div>
+                <div id="radar-panel-inativos" class="hidden">${renderTabelaRadar(inativos)}</div>
+            </div>
+            <div id="view-grade" class="hidden grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                <div id="radar-grade-ativos" class="contents">${renderGradeRadar(ativos)}</div>
+                <div id="radar-grade-inativos" class="hidden contents">${renderGradeRadar(inativos)}</div>
+            </div>`;
 
         const tabAtivos = document.getElementById('radar-tab-ativos');
         const tabInativos = document.getElementById('radar-tab-inativos');
         if (tabAtivos) tabAtivos.addEventListener('click', function() { mudarAbaRadar('ativos'); });
         if (tabInativos) tabInativos.addEventListener('click', function() { mudarAbaRadar('inativos'); });
+        initRadarViewToggle();
     }
     function carregar() {
         fetch(url, { credentials: 'same-origin' })
@@ -467,6 +572,7 @@
             .then(data => render(data))
             .catch(() => { cont.innerHTML = '<p class="text-gray-500 dark:text-gray-400 py-6 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-center">Não foi possível carregar o radar de recompra agora.</p>'; });
     }
+    initRadarViewToggle();
     if ('requestIdleCallback' in window) {
         requestIdleCallback(carregar, { timeout: 1500 });
     } else {
