@@ -2161,7 +2161,13 @@
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             // Agenda (não dispara agora): horários escolhidos em Configurações.
-            // Capacitor → LocalNotifications; Web → CRON + Web Push no servidor.
+            // Capacitor → push-notifications.js (LocalNotifications após o DOM;
+            // createChannel só no Android). Web → CRON + Web Push no servidor.
+            if (window.MeninoAlhoPush &&
+                typeof window.MeninoAlhoPush.isCapacitorNative === 'function' &&
+                window.MeninoAlhoPush.isCapacitorNative()) {
+                return;
+            }
             if (localStorage.getItem('menino_alho_device_notif') !== 'true') return;
             if (!window.MeninoAlhoPush || typeof window.MeninoAlhoPush.agendarNotificacoesLocais !== 'function') {
                 return;

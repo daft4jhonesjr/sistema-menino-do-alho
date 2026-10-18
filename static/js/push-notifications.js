@@ -29,6 +29,39 @@
         return (Cap && Cap.Plugins) ? Cap.Plugins : null;
     }
 
+    function getCapacitorPlatform() {
+        try {
+            var Cap = global.Capacitor;
+            if (Cap && typeof Cap.getPlatform === 'function') {
+                return Cap.getPlatform() || 'web';
+            }
+        } catch (err) {
+            console.warn('[Push] Falha ao detectar plataforma:', err);
+        }
+        return 'web';
+    }
+
+    /**
+     * createChannel é exclusivo do Android no Capacitor LocalNotifications.
+     * No iOS o proxy JS expõe o método, mas a ponte nativa responde
+     * UNIMPLEMENTED — e isso pode virar "JS Eval error" no WKWebView.
+     */
+    async function criarCanalAndroid(Local, canal) {
+        var platform = getCapacitorPlatform();
+        if (platform !== 'android') return;
+        if (!Local || typeof Local.createChannel !== 'function') return;
+        try {
+            await Local.createChannel(canal || {
+                id: 'default',
+                name: 'Notificações Gerais',
+                importance: 5,
+                visibility: 1
+            });
+        } catch (channelErr) {
+            console.warn('[Push] Falha ao criar canal no Android:', channelErr);
+        }
+    }
+
     function urlBase64ToUint8Array(base64String) {
         var padding = '='.repeat((4 - (base64String.length % 4)) % 4);
         var base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
@@ -255,19 +288,13 @@
                 throw new Error('Permissão de notificações negada nas configurações do aparelho.');
             }
 
-            if (typeof Local.createChannel === 'function') {
-                try {
-                    await Local.createChannel({
-                        id: 'menino_alho_teste',
-                        name: 'Testes',
-                        importance: 5,
-                        visibility: 1,
-                        sound: 'default'
-                    });
-                } catch (channelErr) {
-                    console.warn('[Push] createChannel (opcional):', channelErr);
-                }
-            }
+            await criarCanalAndroid(Local, {
+                id: 'menino_alho_teste',
+                name: 'Testes',
+                importance: 5,
+                visibility: 1,
+                sound: 'default'
+            });
 
             var notifId = Math.floor(Date.now() % 2147483647);
             await Local.schedule({
@@ -367,17 +394,13 @@
                 if (!permStatus || String(permStatus.display || '').toLowerCase() !== 'granted') {
                     throw new Error('Permissão de notificação negada no dispositivo.');
                 }
-                if (typeof Local.createChannel === 'function') {
-                    try {
-                        await Local.createChannel({
-                            id: 'menino_alho_alertas',
-                            name: 'Alertas do Sistema',
-                            importance: 5,
-                            visibility: 1,
-                            sound: 'default'
-                        });
-                    } catch (channelErr) { /* canal opcional */ }
-                }
+                await criarCanalAndroid(Local, {
+                    id: 'menino_alho_alertas',
+                    name: 'Alertas do Sistema',
+                    importance: 5,
+                    visibility: 1,
+                    sound: 'default'
+                });
                 var notifId = Math.floor((Date.now() + Math.random() * 1000) % 2147483647);
                 await Local.schedule({
                     notifications: [{
@@ -518,86 +541,87 @@
             }
             var Local = plugins.LocalNotifications;
 
-            var permStatus = await Local.checkPermissions();
-            if (!permStatus || String(permStatus.display || '').toLowerCase() !== 'granted') {
-                permStatus = await Local.requestPermissions();
-            }
-            if (!permStatus || String(permStatus.display || '').toLowerCase() !== 'granted') {
-                throw new Error('Permissão de notificação negada no dispositivo.');
-            }
-
-            if (typeof Local.createChannel === 'function') {
-                try {
-                    await Local.createChannel({
-                        id: 'menino_alho_alertas',
-                        name: 'Alertas do Sistema',
-                        importance: 5,
-                        visibility: 1,
-                        sound: 'default'
-                    });
-                } catch (channelErr) { /* opcional */ }
-            }
-
-            // A) Cancela agendamentos anteriores dos IDs fixos
             try {
-                await Local.cancel({
-                    notifications: IDS_AGENDAMENTO_FIXOS.map(function(id) {
-                        return { id: id };
-                    })
+                var permStatus = await Local.checkPermissions();
+                if (!permStatus || String(permStatus.display || '').toLowerCase() !== 'granted') {
+                    permStatus = await Local.requestPermissions();
+                }
+                if (!permStatus || String(permStatus.display || '').toLowerCase() !== 'granted') {
+                    throw new Error('Permissão de notificação negada no dispositivo.');
+                }
+
+                await criarCanalAndroid(Local, {
+                    id: 'menino_alho_alertas',
+                    name: 'Alertas do Sistema',
+                    importance: 5,
+                    visibility: 1,
+                    sound: 'default'
                 });
-            } catch (cancelErr) {
-                console.warn('[Push] cancel agendamentos:', cancelErr);
-            }
 
-            var paraAgendar = [];
-            for (var i = 0; i < agendamentos.length; i++) {
-                var item = agendamentos[i];
-                if (!item || !item.ativo || !item.titulo) continue;
-                var hm = _parseHorario(item.horario);
-                var notif = {
-                    id: item.id_local || IDS_AGENDAMENTO_FIXOS[i],
-                    title: item.titulo,
-                    body: item.mensagem || '',
-                    channelId: 'menino_alho_alertas',
-                    extra: { tipo: item.tipo, url: item.link || '/' }
-                };
-                // Preferência: recorrência diária no horário escolhido
-                if (item.recorrente_diario) {
-                    notif.schedule = {
-                        on: { hour: hm.hour, minute: hm.minute },
-                        repeats: true,
-                        allowWhileIdle: true
-                    };
-                } else {
-                    notif.schedule = {
-                        at: _proximaOcorrencia(hm.hour, hm.minute),
-                        allowWhileIdle: true
-                    };
-                }
-                paraAgendar.push(notif);
-            }
-
-            if (paraAgendar.length) {
+                // A) Cancela agendamentos anteriores dos IDs fixos
                 try {
-                    await Local.schedule({ notifications: paraAgendar });
-                } catch (schedErr) {
-                    // Fallback: algumas versões do plugin exigem `at` em vez de `on`
-                    console.warn('[Push] schedule repeats falhou, tentando at:', schedErr);
-                    paraAgendar = paraAgendar.map(function(n) {
-                        var hm2 = (n.schedule && n.schedule.on) ? n.schedule.on : { hour: 8, minute: 0 };
-                        return Object.assign({}, n, {
-                            schedule: {
-                                at: _proximaOcorrencia(hm2.hour, hm2.minute),
-                                allowWhileIdle: true
-                            }
-                        });
+                    await Local.cancel({
+                        notifications: IDS_AGENDAMENTO_FIXOS.map(function(id) {
+                            return { id: id };
+                        })
                     });
-                    await Local.schedule({ notifications: paraAgendar });
+                } catch (cancelErr) {
+                    console.warn('[Push] cancel agendamentos:', cancelErr);
                 }
-            }
 
-            console.log('[Push] Agendadas', paraAgendar.length, 'notificações locais.');
-            return { ok: true, plataforma: 'capacitor', agendadas: paraAgendar.length };
+                var paraAgendar = [];
+                for (var i = 0; i < agendamentos.length; i++) {
+                    var item = agendamentos[i];
+                    if (!item || !item.ativo || !item.titulo) continue;
+                    var hm = _parseHorario(item.horario);
+                    var notif = {
+                        id: item.id_local || IDS_AGENDAMENTO_FIXOS[i],
+                        title: item.titulo,
+                        body: item.mensagem || '',
+                        channelId: 'menino_alho_alertas',
+                        extra: { tipo: item.tipo, url: item.link || '/' }
+                    };
+                    // Preferência: recorrência diária no horário escolhido
+                    if (item.recorrente_diario) {
+                        notif.schedule = {
+                            on: { hour: hm.hour, minute: hm.minute },
+                            repeats: true,
+                            allowWhileIdle: true
+                        };
+                    } else {
+                        notif.schedule = {
+                            at: _proximaOcorrencia(hm.hour, hm.minute),
+                            allowWhileIdle: true
+                        };
+                    }
+                    paraAgendar.push(notif);
+                }
+
+                if (paraAgendar.length) {
+                    try {
+                        await Local.schedule({ notifications: paraAgendar });
+                    } catch (schedErr) {
+                        // Fallback: algumas versões do plugin exigem `at` em vez de `on`
+                        console.warn('[Push] schedule repeats falhou, tentando at:', schedErr);
+                        paraAgendar = paraAgendar.map(function(n) {
+                            var hm2 = (n.schedule && n.schedule.on) ? n.schedule.on : { hour: 8, minute: 0 };
+                            return Object.assign({}, n, {
+                                schedule: {
+                                    at: _proximaOcorrencia(hm2.hour, hm2.minute),
+                                    allowWhileIdle: true
+                                }
+                            });
+                        });
+                        await Local.schedule({ notifications: paraAgendar });
+                    }
+                }
+
+                console.log('[Push] Agendadas', paraAgendar.length, 'notificações locais.');
+                return { ok: true, plataforma: 'capacitor', agendadas: paraAgendar.length };
+            } catch (err) {
+                console.error('[Push] Erro na inicialização:', err);
+                return { ok: false, motivo: 'erro_agendamento' };
+            }
         }
 
         // --- WEB / PWA ---
@@ -632,6 +656,72 @@
         return agendarNotificacoesLocais();
     }
 
+    /**
+     * Boot nativo: canal Android + permissões + schedule.
+     * Erros ficam contidos para não derrubar o WebView (JS Eval error).
+     */
+    async function inicializarNotificacoesLocais() {
+        try {
+            var platform = getCapacitorPlatform();
+            var plugins = getCapacitorPlugins();
+            var Local = plugins && plugins.LocalNotifications;
+
+            // createChannel é exclusivo do Android no Capacitor LocalNotifications
+            if (platform === 'android' && Local && Local.createChannel) {
+                try {
+                    await Local.createChannel({
+                        id: 'default',
+                        name: 'Notificações Gerais',
+                        importance: 5,
+                        visibility: 1
+                    });
+                } catch (channelErr) {
+                    console.warn('[Push] Falha ao criar canal no Android:', channelErr);
+                }
+            }
+
+            if (global.document && global.document.hidden) {
+                return { ok: false, motivo: 'aba_em_background' };
+            }
+
+            return await agendarNotificacoesLocais();
+        } catch (err) {
+            console.error('[Push] Erro na inicialização:', err);
+            return { ok: false, motivo: 'erro_inicializacao' };
+        }
+    }
+
+    function bootNotificacoesLocais() {
+        try {
+            if (!global.Capacitor || typeof global.Capacitor.isPluginAvailable !== 'function') {
+                return;
+            }
+            if (!global.Capacitor.isPluginAvailable('LocalNotifications')) {
+                return;
+            }
+        } catch (err) {
+            console.error('[Push] Erro na inicialização:', err);
+            return;
+        }
+
+        // O bridge do Capacitor pode ainda não estar pronto no mesmo tick
+        // de DOMContentLoaded; a aba também pode ir para segundo plano.
+        global.setTimeout(function() {
+            if (global.document && global.document.hidden) return;
+            inicializarNotificacoesLocais().catch(function(err) {
+                console.error('[Push] Erro na inicialização:', err);
+            });
+        }, 1500);
+    }
+
+    if (global.document && typeof global.document.addEventListener === 'function') {
+        if (global.document.readyState === 'loading') {
+            global.document.addEventListener('DOMContentLoaded', bootNotificacoesLocais);
+        } else {
+            bootNotificacoesLocais();
+        }
+    }
+
     global.MeninoAlhoPush = {
         isSupported: isSupported,
         isCapacitorNative: isCapacitorNative,
@@ -642,6 +732,7 @@
         dispararTeste: dispararTeste,
         exibirNotificacaoLocal: exibirNotificacaoLocal,
         agendarNotificacoesLocais: agendarNotificacoesLocais,
+        inicializarNotificacoesLocais: inicializarNotificacoesLocais,
         verificarPendenciasENotificar: verificarPendenciasENotificar
     };
 })(window);
