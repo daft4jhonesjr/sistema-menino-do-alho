@@ -262,7 +262,7 @@
                 <span class="font-bold text-slate-600 dark:text-slate-300 uppercase text-xs tracking-wider">Semana: {{ semana.periodo }}</span>
                 <span class="font-bold text-emerald-600 dark:text-emerald-400 text-sm">Total da Semana: {{ semana.total_semana | formato_moeda }}</span>
             </div>
-            <div class="bg-white dark:bg-gray-800 rounded-b-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-hidden">
+            <div class="container-lista-resumo-semana bg-white dark:bg-gray-800 rounded-b-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-hidden">
                 <div class="overflow-x-auto">
                     <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                         <thead class="bg-gray-50 dark:bg-gray-900/50">
@@ -288,6 +288,20 @@
                             {% endfor %}
                         </tbody>
                     </table>
+                </div>
+            </div>
+            <div class="container-cards-resumo-semana hidden rounded-b-xl border border-gray-200 dark:border-gray-700 border-t-0 bg-transparent p-4 pt-3">
+                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {% for item in semana.entregas %}
+                    <article class="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-4 shadow-sm dark:shadow-lg flex flex-col gap-3">
+                        <p class="text-xs text-gray-500 dark:text-gray-400">{{ item.data }}</p>
+                        <h4 class="font-bold text-lg text-gray-900 dark:text-white truncate" title="{{ item.cliente_nome }}">{{ item.cliente_nome }}</h4>
+                        <span class="inline-flex self-start items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300" title="{{ item.produtos|join(', ') }}">
+                            {{ item.qtd_itens }} un. · {{ item.produtos|length }} item(ns)
+                        </span>
+                        <p class="text-base font-bold text-emerald-600 dark:text-emerald-400 mt-auto pt-1">{{ item.total | formato_moeda }}</p>
+                    </article>
+                    {% endfor %}
                 </div>
             </div>
         </div>
@@ -394,6 +408,8 @@ function mudarVisualizacaoLogistica(tipo) {
     var btnCards = document.getElementById('btn-view-cards');
     var listas = document.querySelectorAll('.container-lista-logistica');
     var cards = document.querySelectorAll('.container-cards-logistica');
+    var listasResumo = document.querySelectorAll('.container-lista-resumo-semana');
+    var cardsResumo = document.querySelectorAll('.container-cards-resumo-semana');
     if (!listas.length || !cards.length) return;
 
     var activeClasses = ['bg-white', 'dark:bg-gray-700', 'text-emerald-600', 'dark:text-emerald-400', 'shadow'];
@@ -413,11 +429,15 @@ function mudarVisualizacaoLogistica(tipo) {
     if (tipo === 'cards') {
         listas.forEach(function(el) { el.classList.add('hidden'); });
         cards.forEach(function(el) { el.classList.remove('hidden'); });
+        listasResumo.forEach(function(el) { el.classList.add('hidden'); });
+        cardsResumo.forEach(function(el) { el.classList.remove('hidden'); });
         ativar(btnCards);
         desativar(btnLista);
     } else {
         cards.forEach(function(el) { el.classList.add('hidden'); });
         listas.forEach(function(el) { el.classList.remove('hidden'); });
+        cardsResumo.forEach(function(el) { el.classList.add('hidden'); });
+        listasResumo.forEach(function(el) { el.classList.remove('hidden'); });
         ativar(btnLista);
         desativar(btnCards);
         tipo = 'lista';
