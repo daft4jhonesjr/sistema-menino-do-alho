@@ -144,7 +144,7 @@ def _exigir_tenant_em_todas_rotas():
 # ============================================================
 @vendas_bp.route('/api/calendario/feed.ics', methods=['GET'])
 def calendario_feed_ics():
-    """Exporta entregas, boletos e lembretes (mês atual + futuro) em ICS.
+    """Exporta entregas, boletos, lembretes e orçamento (mês atual + futuro) em ICS.
 
     Autenticação: ``?token={empresa_id}.{hmac}`` — o cliente de calendário
     não envia cookies Flask-Login.
@@ -2061,6 +2061,21 @@ def listar_vendas():
         db.session.rollback()
         vencimentos_por_data = {}
 
+    # Itens de orçamento pessoal (vencimento recorrente mensal no ano ativo).
+    orcamentos_por_data = {}
+    try:
+        from services.calendario_ics import agrupar_orcamentos_por_data
+
+        _eid_orc = empresa_id_atual()
+        if _eid_orc:
+            _ano_orc = session.get('ano_ativo', datetime.now().year)
+            _ini_orc = date(int(_ano_orc), 1, 1)
+            _fim_orc = date(int(_ano_orc), 12, 31)
+            orcamentos_por_data = agrupar_orcamentos_por_data(_eid_orc, _ini_orc, _fim_orc)
+    except Exception:
+        db.session.rollback()
+        orcamentos_por_data = {}
+
     # Lembretes manuais do operador para o calendário (qualquer data do ano ativo).
     lembretes_por_data = {}
     try:
@@ -2148,6 +2163,7 @@ def listar_vendas():
         datas_entrega_pendente=datas_entrega_pendente,
         detalhes_entrega_pendente=detalhes_entrega_pendente,
         vencimentos_por_data=vencimentos_por_data,
+        orcamentos_por_data=orcamentos_por_data,
         lembretes_por_data=lembretes_por_data,
         webcal_url=_webcal_url_calendario(),
         frase_do_dia=frase_do_dia(),

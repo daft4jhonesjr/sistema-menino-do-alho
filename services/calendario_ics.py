@@ -1,4 +1,4 @@
-"""Geração do feed ICS (Webcal) do calendário de entregas/boletos/lembretes.
+"""Geração do feed ICS (Webcal) do calendário de entregas/boletos/lembretes/orçamento.
 
 O Apple Calendar / Google Calendar sincronizam via GET periódico sem cookies
 de sessão Flask. Por isso o feed é autenticado por token HMAC por tenant:
@@ -10,6 +10,7 @@ no banco e sem vazar dados entre tenants.
 """
 from __future__ import annotations
 
+import calendar
 import hashlib
 import hmac
 from datetime import date, datetime, timedelta
@@ -20,7 +21,7 @@ from icalendar import Calendar, Event
 from sqlalchemy.orm import joinedload
 from sqlalchemy import func
 
-from models import Venda, Lembrete, Empresa
+from models import Venda, Lembrete, Empresa, ItemOrcamento
 
 
 def gerar_token_calendario(empresa_id: int) -> str:
@@ -52,10 +53,12 @@ def validar_token_calendario(token: str | None) -> int | None:
 
 
 def montar_feed_ics(empresa_id: int, inicio: date | None = None) -> bytes:
-    """Consulta entregas, boletos e lembretes a partir de ``inicio`` e monta ICS."""
+    """Consulta entregas, boletos, lembretes e orçamento a partir de ``inicio`` e monta ICS."""
     if inicio is None:
         hoje = date.today()
         inicio = date(hoje.year, hoje.month, 1)
+
+    fim_ics = _fim_horizonte_feed(inicio)
 
     empresa = Empresa.query.filter_by(id=empresa_id, ativo=True).first()
     nome_cal = (empresa.nome_fantasia if empresa else None) or 'Menino do Alho'
@@ -72,6 +75,7 @@ def montar_feed_ics(empresa_id: int, inicio: date | None = None) -> bytes:
     _adicionar_entregas(cal, empresa_id, inicio)
     _adicionar_boletos(cal, empresa_id, inicio)
     _adicionar_lembretes(cal, empresa_id, inicio)
+    _adicionar_orcamentos(cal, empresa_id, inicio, fim_ics)
 
     return cal.to_ical()
 
@@ -101,6 +105,90 @@ def _as_date(value) -> date | None:
     if isinstance(value, date):
         return value
     return None
+
+
+def _fim_horizonte_feed(inicio: date, meses: int = 24) -> date:
+    """Último dia do mês ``meses`` meses à frente do mês de ``inicio`` (inclusivo)."""
+    y, m = inicio.year, inicio.month
+    for _ in range(max(meses - 1, 0)):
+        m += 1
+        if m > 12:
+            m = 1
+            y += 1
+    return date(y, m, calendar.monthrange(y, m)[1])
+
+
+def _iter_meses_entre(inicio: date, fim: date):
+    """Gera pares (ano, mês) do mês de ``inicio`` até o de ``fim`` (inclusivos)."""
+    y, m = inicio.year, inicio.month
+    fy, fm = fim.year, fim.month
+    while (y, m) <= (fy, fm):
+        yield y, m
+        m += 1
+        if m > 12:
+            m = 1
+            y += 1
+
+
+def _projeta_dia_mensal(data_base: date, ano: int, mes: int) -> date:
+    """Projeta o dia de ``data_base`` em outro mês/ano (ajusta meses curtos)."""
+    ultimo = calendar.monthrange(ano, mes)[1]
+    return date(ano, mes, min(data_base.day, ultimo))
+
+
+def _titulo_evento_orcamento(item: ItemOrcamento) -> str:
+    desc = (item.descricao or 'Item').strip()
+    return f'[Orçamento] {desc} - {_fmt_moeda(item.valor)}'
+
+
+def _query_itens_orcamento_agenda(empresa_id: int) -> list[ItemOrcamento]:
+    return (
+        ItemOrcamento.query
+        .filter(
+            ItemOrcamento.empresa_id == empresa_id,
+            ItemOrcamento.data_vencimento.isnot(None),
+        )
+        .order_by(ItemOrcamento.descricao.asc(), ItemOrcamento.id.asc())
+        .all()
+    )
+
+
+def agrupar_orcamentos_por_data(
+    empresa_id: int,
+    inicio: date,
+    fim: date,
+) -> dict[str, list[dict]]:
+    """Mapa ISO → eventos de orçamento (projeção mensal recorrente no intervalo)."""
+    if fim < inicio:
+        return {}
+
+    resultado: dict[str, list[dict]] = {}
+    for item in _query_itens_orcamento_agenda(empresa_id):
+        base = _as_date(item.data_vencimento)
+        if not base:
+            continue
+        desc = (item.descricao or 'Item').strip()
+        valor_fmt = _fmt_moeda(item.valor)
+        titulo = _titulo_evento_orcamento(item)
+        cat = (item.categoria or '').strip()
+        forma = (item.forma_pagamento or '').strip()
+        for y, m in _iter_meses_entre(inicio, fim):
+            dia = _projeta_dia_mensal(base, y, m)
+            if dia < inicio or dia > fim:
+                continue
+            iso = dia.isoformat()
+            resultado.setdefault(iso, []).append({
+                'titulo': titulo,
+                'valor': valor_fmt,
+                'descricao': desc,
+                'categoria': cat,
+                'forma_pagamento': forma,
+                'item_id': item.id,
+            })
+
+    for itens in resultado.values():
+        itens.sort(key=lambda x: (x.get('descricao') or '', x.get('item_id') or 0))
+    return dict(sorted(resultado.items()))
 
 
 def _add_all_day(cal: Calendar, *, uid: str, dia: date, summary: str, description: str = '') -> None:
@@ -296,3 +384,33 @@ def _adicionar_lembretes(cal: Calendar, empresa_id: int, inicio: date) -> None:
             summary=f"[LEMBRETE] {titulo}",
             description=descricao,
         )
+
+
+def _adicionar_orcamentos(
+    cal: Calendar,
+    empresa_id: int,
+    inicio: date,
+    fim: date,
+) -> None:
+    for iso, ocorrencias in agrupar_orcamentos_por_data(empresa_id, inicio, fim).items():
+        for occ in ocorrencias:
+            dia = date.fromisoformat(iso)
+            item_id = occ.get('item_id')
+            desc = occ.get('descricao') or 'Item'
+            cat = occ.get('categoria') or ''
+            forma = occ.get('forma_pagamento') or ''
+            linhas = [f'Despesa de orçamento\nValor: {occ.get("valor") or _fmt_moeda(0)}']
+            if cat:
+                linhas.append(f'Categoria: {cat}')
+            if forma:
+                linhas.append(f'Forma: {forma}')
+            event = Event()
+            event.add('uid', f'orcamento-{item_id}-{iso}@menino-do-alho')
+            event.add('dtstamp', datetime.utcnow())
+            event.add('dtstart', dia)
+            event.add('dtend', dia + timedelta(days=1))
+            event.add('summary', occ.get('titulo') or f'[Orçamento] {desc}')
+            event.add('description', '\n'.join(linhas))
+            event.add('categories', ['Orçamento', 'Despesa'])
+            event.add('transp', 'TRANSPARENT')
+            cal.add_component(event)
