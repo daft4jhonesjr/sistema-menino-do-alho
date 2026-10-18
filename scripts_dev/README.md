@@ -47,6 +47,19 @@ POSTGRES_URL="postgresql://user:pass@host/db?sslmode=require" \
     python scripts_dev/migrar_dados.py
 ```
 
+## auditar_valor_estoque.py
+
+Diagnóstico read-only do ativo **Valor em Estoque** do Balanço Rápido
+(`estoque_atual × preco_custo`, saldo > 0, custo > 0). Lista lotes do
+maior valor para o menor e marca anomalias de saldo
+(`estoque ≠ entrada − vendas − devoluções`).
+
+```bash
+EMPRESA_ID=1 python scripts_dev/auditar_valor_estoque.py
+EMPRESA_ID=1 LIMITE=30 CSV_OUT=/tmp/estoque.csv \
+    python scripts_dev/auditar_valor_estoque.py
+```
+
 ## Pasta irmã: `scripts_seed/`
 
 Operações destrutivas no banco (`drop_all + create_all`) ficam em

@@ -22,11 +22,12 @@ from flask import (
 from flask_login import current_user
 from sqlalchemy import and_, case, func, or_
 
-from models import db, ContagemGaveta, Fornecedor, LancamentoCaixa, Produto, Venda
+from models import db, ContagemGaveta, Fornecedor, LancamentoCaixa, Venda
 from routes.caixa import _limpar_valor_moeda
 from services.auth_utils import tenant_required, _checar_permissao_ou_redirecionar
 from services.config_helpers import get_hoje_brasil
 from services.db_utils import empresa_id_atual, query_tenant
+from services.estoque_valoracao import total_valor_estoque
 
 financeiro_bp = Blueprint('financeiro', __name__)
 
@@ -198,15 +199,13 @@ def _saldo_pix_livro_caixa() -> float:
 
 
 def _total_valor_estoque() -> float:
-    """Soma financeira do estoque: ``estoque_atual * preco_custo`` por produto."""
-    eid = empresa_id_atual()
-    valor_expr = func.coalesce(Produto.estoque_atual, 0) * func.coalesce(Produto.preco_custo, 0)
-    q = db.session.query(func.coalesce(func.sum(valor_expr), 0)).filter(
-        func.coalesce(Produto.estoque_atual, 0) > 0,
-    )
-    if eid is not None:
-        q = q.filter(Produto.empresa_id == eid)
-    return round(float(q.scalar() or 0), 2)
+    """Soma financeira do estoque físico do tenant (ativo do balanço).
+
+    Delegado a ``services.estoque_valoracao.total_valor_estoque``:
+    ``SUM(estoque_atual * preco_custo)`` só com saldo > 0 e custo > 0.
+    Fail-closed sem ``empresa_id`` (não soma outros tenants).
+    """
+    return total_valor_estoque(empresa_id_atual())
 
 
 def _listar_fornecedores_balanco() -> list:
