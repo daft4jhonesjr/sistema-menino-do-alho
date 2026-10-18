@@ -636,6 +636,46 @@ def configuracoes():
             flash('Endereço do depósito atualizado com sucesso!', 'success')
             return redirect(url_for('auth.configuracoes'))
 
+        if secao == 'sessao':
+            try:
+                config = get_config()
+                raw_inat = (request.form.get('timeout_inatividade_min') or '').strip()
+                raw_horas = (request.form.get('timeout_sessao_max_horas') or '').strip()
+                try:
+                    min_inat = int(raw_inat)
+                    horas_sess = int(raw_horas)
+                except (TypeError, ValueError):
+                    flash(
+                        'Informe valores numéricos válidos para os tempos de sessão.',
+                        'error',
+                    )
+                    return redirect(url_for('auth.configuracoes'))
+                if not (5 <= min_inat <= 120):
+                    flash(
+                        'Inatividade deve estar entre 5 e 120 minutos.',
+                        'error',
+                    )
+                    return redirect(url_for('auth.configuracoes'))
+                if not (1 <= horas_sess <= 24):
+                    flash(
+                        'Tempo máximo de uso contínuo deve estar entre 1 e 24 horas.',
+                        'error',
+                    )
+                    return redirect(url_for('auth.configuracoes'))
+                config.timeout_inatividade_min = min_inat
+                config.timeout_sessao_max_horas = horas_sess
+                db.session.commit()
+            except Exception as exc:
+                db.session.rollback()
+                current_app.logger.error(
+                    'Falha ao salvar tempos de sessão (usuario_id=%s): %s',
+                    getattr(usuario, 'id', None), exc, exc_info=True,
+                )
+                flash('Erro ao salvar a segurança da sessão. Tente novamente.', 'error')
+                return redirect(url_for('auth.configuracoes'))
+            flash('Configurações de segurança da sessão atualizadas!', 'success')
+            return redirect(url_for('auth.configuracoes'))
+
         from services.notificacoes_pendencias import normalizar_horario
 
         try:
@@ -677,10 +717,18 @@ def configuracoes():
     except Exception:
         current_app.logger.exception('Falha ao carregar Configuracao em /configuracoes')
 
+    timeout_inatividade_min = Configuracao.TIMEOUT_INATIVIDADE_PADRAO_MIN
+    timeout_sessao_max_horas = Configuracao.TIMEOUT_SESSAO_PADRAO_HORAS
+    if config is not None:
+        timeout_inatividade_min = config.timeout_inatividade_min_efetivo()
+        timeout_sessao_max_horas = config.timeout_sessao_max_horas_efetivo()
+
     return render_template(
         'configuracoes.html',
         usuario=usuario,
         config=config,
+        timeout_inatividade_min=timeout_inatividade_min,
+        timeout_sessao_max_horas=timeout_sessao_max_horas,
     )
 
 
