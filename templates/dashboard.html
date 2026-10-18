@@ -226,10 +226,8 @@
         var cidade = (data.cidade || '').trim();
         var uf = (data.uf || '').trim();
         var labelCidade = cidade;
-        if (uf && uf.length <= 3) {
-            labelCidade = cidade + (uf ? ', ' + uf : '');
-        } else if (uf && uf.toLowerCase() !== cidade.toLowerCase()) {
-            labelCidade = cidade + ' — ' + uf;
+        if (uf && uf.toLowerCase() !== cidade.toLowerCase()) {
+            labelCidade = cidade + (uf.length <= 3 ? ', ' + uf : ' — ' + uf);
         }
         var elCidade = document.getElementById('clima-dashboard-cidade');
         var elTemp = document.getElementById('clima-dashboard-temp');
