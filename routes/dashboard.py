@@ -1253,6 +1253,7 @@ def api_dashboard_detalhes(filtro):
                 'data': venda.data_venda.strftime('%d/%m/%Y'),
                 'valor': valor_exibido,
                 'status': venda.situacao,
+                'empresa_faturadora': (venda.empresa_faturadora or 'NENHUM').strip() or 'NENHUM',
             })
         return jsonify({
             'vendas': vendas_lista,

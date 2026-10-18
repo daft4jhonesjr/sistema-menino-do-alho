@@ -1222,46 +1222,65 @@
 <!-- Modal Detalhes por Filtro (Pendente, Pago, PATY, DESTAK, Avulsas) -->
 <div id="modal-dashboard-detalhes-overlay" class="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-4 hidden" onclick="fecharModalDashboard()" role="dialog" aria-modal="true">
     <div id="modal-dashboard-detalhes" class="bg-white dark:bg-gray-800 rounded-xl shadow-xl dark:shadow-none border border-gray-200 dark:border-gray-700 max-w-4xl w-full max-h-[85vh] overflow-hidden flex flex-col" onclick="event.stopPropagation()">
-        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between flex-shrink-0">
-            <h3 id="modal-dashboard-detalhes-titulo" class="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center">
-                <i data-lucide="list" class="w-5 h-5 mr-2"></i>Detalhamento
+        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between flex-shrink-0 gap-3">
+            <h3 id="modal-dashboard-detalhes-titulo" class="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center min-w-0 flex-1">
+                <i data-lucide="list" class="w-5 h-5 mr-2 shrink-0"></i>Detalhamento
             </h3>
-            <button type="button" onclick="fecharModalDashboard()" class="p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200 transition" aria-label="Fechar">
-                <i data-lucide="x" class="w-5 h-5"></i>
-            </button>
+            <div class="flex items-center gap-2 shrink-0">
+                {{ dashboard_layout_toggle() }}
+                <button type="button" onclick="fecharModalDashboard()" class="p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200 transition" aria-label="Fechar">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
         </div>
         <div id="scroll-container-detalhes" class="flex-1 overflow-auto p-6">
             <div id="modal-dashboard-detalhes-loading" class="text-center py-12 text-gray-500 dark:text-gray-400 hidden">
                 Carregando...
             </div>
-            <div id="modal-dashboard-detalhes-conteudo" class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                    <thead class="bg-gray-50 dark:bg-gray-700">
-                        <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">ID</th>
-                            <th onclick="ordenarTabelaDetalhes(1, 'texto')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-200 select-none" title="Ordenar por Cliente" data-sort-col="1">
-                                Cliente <span class="sort-indicator opacity-50" aria-hidden="true">↕</span>
-                            </th>
-                            <th onclick="ordenarTabelaDetalhes(2, 'texto')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-200 select-none" title="Ordenar por Descrição" data-sort-col="2">
-                                Descrição <span class="sort-indicator opacity-50" aria-hidden="true">↕</span>
-                            </th>
-                            <th onclick="ordenarTabelaDetalhes(3, 'data')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-200 select-none" title="Ordenar por Data" data-sort-col="3">
-                                Data <span class="sort-indicator opacity-50" aria-hidden="true">↕</span>
-                            </th>
-                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Valor</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tabela-detalhes-body" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                    </tbody>
-                </table>
-                <div id="sentinela-detalhes" class="w-full text-center py-4 hidden">
+            <div id="modal-dashboard-detalhes-conteudo">
+                <div class="view-lista block">
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                            <thead class="bg-gray-50 dark:bg-gray-700">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">ID</th>
+                                    <th onclick="ordenarTabelaDetalhes(1, 'texto')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-200 select-none" title="Ordenar por Cliente" data-sort-col="1">
+                                        Cliente <span class="sort-indicator opacity-50" aria-hidden="true">↕</span>
+                                    </th>
+                                    <th onclick="ordenarTabelaDetalhes(2, 'texto')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-200 select-none" title="Ordenar por Descrição" data-sort-col="2">
+                                        Descrição <span class="sort-indicator opacity-50" aria-hidden="true">↕</span>
+                                    </th>
+                                    <th onclick="ordenarTabelaDetalhes(3, 'data')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-200 select-none" title="Ordenar por Data" data-sort-col="3">
+                                        Data <span class="sort-indicator opacity-50" aria-hidden="true">↕</span>
+                                    </th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Valor</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabela-detalhes-body" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="sentinela-detalhes" class="w-full text-center py-4 hidden">
+                        <div class="inline-flex items-center gap-2 text-gray-500 dark:text-gray-400">
+                            <svg class="animate-spin h-5 w-5 text-emerald-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <span class="text-sm font-medium">Carregando mais...</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="view-grade hidden">
+                    <div id="tabela-detalhes-grade" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
+                    <div id="sentinela-detalhes-grade" class="w-full text-center py-4 hidden">
                     <div class="inline-flex items-center gap-2 text-gray-500 dark:text-gray-400">
                         <svg class="animate-spin h-5 w-5 text-emerald-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
                         <span class="text-sm font-medium">Carregando mais...</span>
+                    </div>
                     </div>
                 </div>
             </div>
@@ -1663,6 +1682,112 @@ window.fecharModalDetalhesMes = function() {
 };
 
 var _detalhesSortState = { col: null, dir: 'asc' };
+var _detalhesVendasAtual = [];
+
+function _classeStatusDetalhes(status) {
+    return status === 'PAGO'
+        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
+        : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300';
+}
+
+function _escHtmlDetalhes(texto) {
+    return String(texto == null ? '' : texto)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function _criarLinhaDetalhesTabela(venda, index) {
+    var tr = document.createElement('tr');
+    tr.className = (index % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-700');
+    var sitClass = _classeStatusDetalhes(venda.status);
+    tr.innerHTML =
+        '<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">' + _escHtmlDetalhes(venda.id) + '</td>' +
+        '<td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">' + _escHtmlDetalhes(venda.cliente || '-') + '</td>' +
+        '<td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">' + _escHtmlDetalhes(venda.descricao || '-') + '</td>' +
+        '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">' + _escHtmlDetalhes(venda.data || '-') + '</td>' +
+        '<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100 text-right valor-financeiro">' + formatoMoeda(venda.valor) + '</td>' +
+        '<td class="px-6 py-4 whitespace-nowrap"><span class="px-3 py-1 text-xs font-semibold rounded-full ' + sitClass + '">' + _escHtmlDetalhes(venda.status || '-') + '</span></td>';
+    return tr;
+}
+
+function _criarCardDetalhesGrade(venda) {
+    var card = document.createElement('div');
+    card.setAttribute('data-detalhe-item', '1');
+    card.className = 'bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-4 border-l-4 border-l-emerald-500';
+    var sitClass = _classeStatusDetalhes(venda.status);
+    var empresa = venda.empresa_faturadora || venda.empresa || 'NENHUM';
+    card.innerHTML =
+        '<div class="flex items-start justify-between gap-2 mb-2">' +
+            '<h4 class="text-sm font-bold text-gray-900 dark:text-gray-100 leading-tight">' + _escHtmlDetalhes(venda.cliente || '-') + '</h4>' +
+            '<span class="px-2 py-0.5 text-[10px] font-semibold rounded-full shrink-0 ' + sitClass + '">' + _escHtmlDetalhes(venda.status || '-') + '</span>' +
+        '</div>' +
+        '<p class="text-xs text-gray-500 dark:text-gray-400 mb-3">' + _escHtmlDetalhes(venda.descricao || '-') + '</p>' +
+        '<dl class="space-y-2 text-sm">' +
+            '<div class="flex justify-between gap-2">' +
+                '<dt class="text-gray-500 dark:text-gray-400">Data</dt>' +
+                '<dd class="font-medium text-gray-900 dark:text-gray-100">' + _escHtmlDetalhes(venda.data || '-') + '</dd>' +
+            '</div>' +
+            '<div class="flex justify-between gap-2">' +
+                '<dt class="text-gray-500 dark:text-gray-400">Valor</dt>' +
+                '<dd class="font-semibold text-gray-900 dark:text-gray-100 valor-financeiro">' + formatoMoeda(venda.valor) + '</dd>' +
+            '</div>' +
+            '<div class="flex justify-between gap-2">' +
+                '<dt class="text-gray-500 dark:text-gray-400">Empresa faturadora</dt>' +
+                '<dd class="font-medium text-gray-800 dark:text-gray-200 text-right">' + _escHtmlDetalhes(empresa) + '</dd>' +
+            '</div>' +
+        '</dl>' +
+        '<p class="text-[10px] text-gray-400 dark:text-gray-500 mt-3">ID #' + _escHtmlDetalhes(venda.id) + '</p>';
+    return card;
+}
+
+function _renderDetalhesDashboard(vendas) {
+    var tbody = document.getElementById('tabela-detalhes-body');
+    var grade = document.getElementById('tabela-detalhes-grade');
+    if (!tbody || !grade) return;
+    tbody.innerHTML = '';
+    grade.innerHTML = '';
+    if (!vendas || !vendas.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">Nenhuma venda encontrada para este filtro.</td></tr>';
+        grade.innerHTML = '<p class="col-span-full text-center text-gray-500 dark:text-gray-400 py-8">Nenhuma venda encontrada para este filtro.</p>';
+        return;
+    }
+    vendas.forEach(function(venda, index) {
+        tbody.appendChild(_criarLinhaDetalhesTabela(venda, index));
+        grade.appendChild(_criarCardDetalhesGrade(venda));
+    });
+}
+
+function _ordenarVendasDetalhes(vendas, colIndex, tipo, dir) {
+    var fator = dir === 'asc' ? 1 : -1;
+    return vendas.slice().sort(function(a, b) {
+        if (colIndex === 0) {
+            return ((Number(a.id) || 0) - (Number(b.id) || 0)) * fator;
+        }
+        if (colIndex === 1) {
+            return String(a.cliente || '').localeCompare(String(b.cliente || ''), 'pt-BR', { sensitivity: 'base', numeric: true }) * fator;
+        }
+        if (colIndex === 2) {
+            return String(a.descricao || '').localeCompare(String(b.descricao || ''), 'pt-BR', { sensitivity: 'base', numeric: true }) * fator;
+        }
+        if (colIndex === 3) {
+            return (_parseDataBrParaOrdenacao(a.data) - _parseDataBrParaOrdenacao(b.data)) * fator;
+        }
+        if (colIndex === 4) {
+            return ((Number(a.valor) || 0) - (Number(b.valor) || 0)) * fator;
+        }
+        if (colIndex === 5) {
+            return String(a.status || '').localeCompare(String(b.status || ''), 'pt-BR', { sensitivity: 'base' }) * fator;
+        }
+        return 0;
+    });
+}
+
+function _reaplicarLayoutDetalhesModal() {
+    if (typeof window.aplicarLayoutDashboard !== 'function') return;
+    var saved = 'lista';
+    try { saved = localStorage.getItem('dashboardLayoutPreference') || 'lista'; } catch (e) {}
+    window.aplicarLayoutDashboard(saved);
+}
 
 function _parseDataBrParaOrdenacao(texto) {
     var m = String(texto || '').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
@@ -1692,13 +1817,7 @@ function _atualizarIndicadoresSortDetalhes(colAtiva, dir) {
 }
 
 function ordenarTabelaDetalhes(colIndex, tipo) {
-    var tbody = document.getElementById('tabela-detalhes-body');
-    if (!tbody) return;
-
-    var linhas = Array.prototype.slice.call(tbody.querySelectorAll('tr')).filter(function(tr) {
-        return !tr.querySelector('td[colspan]');
-    });
-    if (linhas.length < 2) return;
+    if (!_detalhesVendasAtual.length) return;
 
     if (_detalhesSortState.col === colIndex) {
         _detalhesSortState.dir = _detalhesSortState.dir === 'asc' ? 'desc' : 'asc';
@@ -1707,30 +1826,12 @@ function ordenarTabelaDetalhes(colIndex, tipo) {
         _detalhesSortState.dir = 'asc';
     }
     var dir = _detalhesSortState.dir;
-    var fator = dir === 'asc' ? 1 : -1;
-
-    linhas.sort(function(a, b) {
-        var celA = a.children[colIndex];
-        var celB = b.children[colIndex];
-        var textoA = celA ? (celA.textContent || '').trim() : '';
-        var textoB = celB ? (celB.textContent || '').trim() : '';
-
-        if (tipo === 'data') {
-            return (_parseDataBrParaOrdenacao(textoA) - _parseDataBrParaOrdenacao(textoB)) * fator;
-        }
-        return textoA.localeCompare(textoB, 'pt-BR', { sensitivity: 'base', numeric: true }) * fator;
-    });
-
-    var fragment = document.createDocumentFragment();
-    linhas.forEach(function(tr, index) {
-        tr.className = (index % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-700');
-        tr.classList.remove('hidden', 'linha-paginada');
-        fragment.appendChild(tr);
-    });
-    tbody.appendChild(fragment);
-
+    _detalhesVendasAtual = _ordenarVendasDetalhes(_detalhesVendasAtual, colIndex, tipo, dir);
+    _renderDetalhesDashboard(_detalhesVendasAtual);
     _atualizarIndicadoresSortDetalhes(colIndex, dir);
     inicializarScrollInfinito('tabela-detalhes-body', 'sentinela-detalhes', 'scroll-container-detalhes');
+    inicializarScrollInfinitoItens('tabela-detalhes-grade', '[data-detalhe-item]', 'sentinela-detalhes-grade', 'scroll-container-detalhes');
+    _reaplicarLayoutDetalhesModal();
 }
 window.ordenarTabelaDetalhes = ordenarTabelaDetalhes;
 
@@ -1751,8 +1852,13 @@ window.abrirModalDashboard = function(filtro, titulo) {
         _atualizarIndicadoresSortDetalhes(null, 'asc');
 
         tituloEl.innerHTML = '<i data-lucide="list" class="w-5 h-5 mr-2"></i>' + titulo;
+        _detalhesVendasAtual = [];
         tbody.innerHTML = '';
+        var gradeEl = document.getElementById('tabela-detalhes-grade');
+        if (gradeEl) gradeEl.innerHTML = '';
         var sentinela = document.getElementById('sentinela-detalhes');
+        var sentinelaGrade = document.getElementById('sentinela-detalhes-grade');
+        if (sentinelaGrade) sentinelaGrade.classList.add('hidden');
         if (sentinela) sentinela.classList.add('hidden');
         if (_observersAtivos['sentinela-detalhes']) {
             _observersAtivos['sentinela-detalhes'].disconnect();
@@ -1770,30 +1876,18 @@ window.abrirModalDashboard = function(filtro, titulo) {
                 conteudo.classList.remove('hidden');
 
                 if (data.erro) {
-                    tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">' + data.erro + '</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">' + _escHtmlDetalhes(data.erro) + '</td></tr>';
+                    if (gradeEl) gradeEl.innerHTML = '<p class="col-span-full text-center text-gray-500 dark:text-gray-400 py-8">' + _escHtmlDetalhes(data.erro) + '</p>';
+                    _reaplicarLayoutDetalhesModal();
                     if (typeof lucide !== 'undefined') lucide.createIcons();
                     return;
                 }
 
-                var vendas = data.vendas || [];
-                if (vendas.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">Nenhuma venda encontrada para este filtro.</td></tr>';
-                } else {
-                    vendas.forEach(function(venda, index) {
-                        var tr = document.createElement('tr');
-                        tr.className = (index % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-700');
-                        var sitClass = venda.status === 'PAGO' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300';
-                        tr.innerHTML =
-                            '<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">' + venda.id + '</td>' +
-                            '<td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">' + (venda.cliente || '-') + '</td>' +
-                            '<td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">' + (venda.descricao || '-') + '</td>' +
-                            '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">' + (venda.data || '-') + '</td>' +
-                            '<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100 text-right valor-financeiro">' + formatoMoeda(venda.valor) + '</td>' +
-                            '<td class="px-6 py-4 whitespace-nowrap"><span class="px-3 py-1 text-xs font-semibold rounded-full ' + sitClass + '">' + (venda.status || '-') + '</span></td>';
-                        tbody.appendChild(tr);
-                    });
-                }
+                _detalhesVendasAtual = data.vendas || [];
+                _renderDetalhesDashboard(_detalhesVendasAtual);
                 inicializarScrollInfinito('tabela-detalhes-body', 'sentinela-detalhes', 'scroll-container-detalhes');
+                inicializarScrollInfinitoItens('tabela-detalhes-grade', '[data-detalhe-item]', 'sentinela-detalhes-grade', 'scroll-container-detalhes');
+                _reaplicarLayoutDetalhesModal();
                 if (typeof lucide !== 'undefined') lucide.createIcons();
             })
             .catch(function(error) {
@@ -1814,20 +1908,18 @@ window.fecharModalDashboard = function() {
 
 var ITENS_POR_PAGINA = 20;
 var _observersAtivos = {};
-function inicializarScrollInfinito(tbodyId, sentinelaId, scrollContainerId) {
-    var tbody = document.getElementById(tbodyId);
-    var sentinela = document.getElementById(sentinelaId);
-    if (!tbody || !sentinela) return;
+function _configurarScrollInfinitoItens(container, itemSelector, sentinela, sentinelaId, scrollContainerId) {
+    if (!container || !sentinela) return;
 
     if (_observersAtivos[sentinelaId]) {
         _observersAtivos[sentinelaId].disconnect();
         delete _observersAtivos[sentinelaId];
     }
 
-    var linhas = tbody.querySelectorAll('tr');
+    var linhas = container.querySelectorAll(itemSelector);
     var totalOcultar = 0;
     linhas.forEach(function(linha, index) {
-        if (linha.querySelector('td[colspan]')) return;
+        if (linha.querySelector && linha.querySelector('td[colspan]')) return;
         if (index >= ITENS_POR_PAGINA) {
             linha.classList.add('hidden', 'linha-paginada');
             totalOcultar++;
@@ -1850,11 +1942,11 @@ function inicializarScrollInfinito(tbodyId, sentinelaId, scrollContainerId) {
 
     var observer = new IntersectionObserver(function(entries) {
         if (!entries[0].isIntersecting) return;
-        var ocultas = tbody.querySelectorAll('tr.linha-paginada.hidden');
+        var ocultas = container.querySelectorAll(itemSelector + '.linha-paginada.hidden');
         for (var i = 0; i < ITENS_POR_PAGINA && i < ocultas.length; i++) {
             ocultas[i].classList.remove('hidden');
         }
-        var restantes = tbody.querySelectorAll('tr.linha-paginada.hidden');
+        var restantes = container.querySelectorAll(itemSelector + '.linha-paginada.hidden');
         if (restantes.length === 0) {
             sentinela.classList.add('hidden');
             observer.disconnect();
@@ -1864,6 +1956,20 @@ function inicializarScrollInfinito(tbodyId, sentinelaId, scrollContainerId) {
 
     observer.observe(sentinela);
     _observersAtivos[sentinelaId] = observer;
+}
+
+function inicializarScrollInfinito(tbodyId, sentinelaId, scrollContainerId) {
+    var tbody = document.getElementById(tbodyId);
+    var sentinela = document.getElementById(sentinelaId);
+    if (!tbody || !sentinela) return;
+    _configurarScrollInfinitoItens(tbody, 'tr', sentinela, sentinelaId, scrollContainerId);
+}
+
+function inicializarScrollInfinitoItens(containerId, itemSelector, sentinelaId, scrollContainerId) {
+    var container = document.getElementById(containerId);
+    var sentinela = document.getElementById(sentinelaId);
+    if (!container || !sentinela) return;
+    _configurarScrollInfinitoItens(container, itemSelector, sentinela, sentinelaId, scrollContainerId);
 }
 
 window.abrirModalPrejuizo = function() {
@@ -2077,12 +2183,13 @@ function votarFrase(tipo, elemento) {
     window.aplicarLayoutDashboard = aplicarLayoutDashboard;
 
     function bindDashboardLayoutButtons() {
-        document.querySelectorAll('.js-dashboard-layout-btn').forEach(function(btn) {
-            if (btn.dataset.layoutBound === '1') return;
-            btn.dataset.layoutBound = '1';
-            btn.addEventListener('click', function() {
-                aplicarLayoutDashboard(btn.getAttribute('data-dashboard-layout'));
-            });
+        if (document.documentElement.dataset.dashboardLayoutDelegation === '1') return;
+        document.documentElement.dataset.dashboardLayoutDelegation = '1';
+        document.addEventListener('click', function(ev) {
+            var btn = ev.target.closest('.js-dashboard-layout-btn');
+            if (!btn) return;
+            ev.preventDefault();
+            aplicarLayoutDashboard(btn.getAttribute('data-dashboard-layout'));
         });
     }
 
