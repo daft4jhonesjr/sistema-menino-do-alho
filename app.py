@@ -3097,21 +3097,61 @@ _DIAS_SEMANA_CAIXA = (
 )
 
 
-@app.template_filter('data_com_dia_semana')
-def data_com_dia_semana(value):
-    """Formata data como ``DD/MM/YYYY (segunda)``."""
-    if value is None:
+def _normalizar_data_calendario(value):
+    """Extrai ``date`` de calendário sem deslocar o dia por fuso horário.
+
+    Strings ``YYYY-MM-DD`` / ``DD/MM/YYYY`` são parseadas pelos componentes
+    (nunca via ``datetime`` UTC), evitando o clássico “voltar 1 dia”.
+    """
+    if value is None or value == '':
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        s = value.strip()
+        m_iso = re.match(r'^(\d{4})-(\d{2})-(\d{2})', s)
+        if m_iso:
+            try:
+                return date(int(m_iso.group(1)), int(m_iso.group(2)), int(m_iso.group(3)))
+            except ValueError:
+                return None
+        m_br = re.match(r'^(\d{1,2})/(\d{1,2})/(\d{4})$', s)
+        if m_br:
+            try:
+                return date(int(m_br.group(3)), int(m_br.group(2)), int(m_br.group(1)))
+            except ValueError:
+                return None
+        parsed, _ = _parse_data_flex(s)
+        return parsed
+    if hasattr(value, 'date') and callable(getattr(value, 'date', None)):
+        try:
+            return value.date()
+        except Exception:
+            return None
+    return None
+
+
+def formatar_data_com_dia_semana(value):
+    """Formata data como ``DD/MM/YYYY (sábado)`` — dia em minúsculo, sem ``-feira``."""
+    data = _normalizar_data_calendario(value)
+    if data is None:
         return ''
-    data = value.date() if hasattr(value, 'date') and callable(value.date) else value
     try:
-        weekday = data.weekday()
-        dia = _DIAS_SEMANA_CAIXA[weekday]
+        dia = _DIAS_SEMANA_CAIXA[data.weekday()]
         return f"{data.strftime('%d/%m/%Y')} ({dia})"
     except Exception:
         try:
             return data.strftime('%d/%m/%Y')
         except Exception:
             return str(value or '')
+
+
+@app.template_filter('data_com_dia_semana')
+def data_com_dia_semana(value):
+    """Formata data como ``DD/MM/YYYY (segunda)``."""
+    return formatar_data_com_dia_semana(value)
 
 
 @app.template_filter('extrair_lote_caixa')
