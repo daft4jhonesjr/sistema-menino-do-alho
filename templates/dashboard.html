@@ -1,11 +1,5 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard - Menino do Alho{% endblock %}
-
-{% block head_extras %}
-{% endblock %}
-
-{% block content %}
 {% macro dashboard_layout_toggle() %}
 <div class="flex items-center bg-gray-200 dark:bg-gray-700 rounded-lg p-1 shrink-0" title="Alternar visualização">
     <button type="button" data-dashboard-layout="lista" class="js-dashboard-layout-btn p-2 rounded-md text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-600 shadow-sm transition-all" title="Visualização em lista">
@@ -16,6 +10,13 @@
     </button>
 </div>
 {% endmacro %}
+
+{% block title %}Dashboard - Menino do Alho{% endblock %}
+
+{% block head_extras %}
+{% endblock %}
+
+{% block content %}
 <div class="mb-6 flex flex-col items-stretch sm:flex-row sm:justify-between sm:items-start gap-4">
     <div>
         <h2 class="text-3xl font-bold text-emerald-700 dark:text-emerald-400 mb-2">Dashboard</h2>
