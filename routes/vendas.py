@@ -2349,20 +2349,10 @@ def exportar_relatorio_vendas():
     )
 
 
-# Mapeamento manual de ``date.weekday()`` (0=Segunda ... 6=Domingo) para
-# nome do dia em português. Não usamos ``strftime('%A')`` porque o locale
-# do servidor (Render) é en_US por padrão — sem ``locale.setlocale``
-# explícito (que exigiria o pacote de locale instalado no container),
-# ``%A`` renderizaria "Saturday" em vez de "Sábado".
-_DIAS_SEMANA_PT = (
-    'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo',
-)
-
-
 def _formatar_data_com_dia_semana(data_venda):
-    """Retorna ``DD/MM/YYYY (Dia da Semana)`` a partir de um date/datetime."""
-    dia_semana = _DIAS_SEMANA_PT[data_venda.weekday()]
-    return f"{data_venda.strftime('%d/%m/%Y')} ({dia_semana})"
+    """Retorna ``DD/MM/YYYY (sábado)`` — utilitário compartilhado de ``app``."""
+    from app import formatar_data_com_dia_semana
+    return formatar_data_com_dia_semana(data_venda)
 
 
 def _agrupar_pedidos_logistica(vendas, ordem_log=None):
