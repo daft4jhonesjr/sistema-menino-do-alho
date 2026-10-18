@@ -176,6 +176,32 @@
     .dark .lembrete-card-sub[data-concluido="0"] {
         background-color: rgba(88, 28, 135, 0.34);
     }
+    /* Barras de evento no calendário: ícone + texto separados (mobile = só ícone) */
+    .cal-bar-event {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        min-width: 0;
+    }
+    .cal-bar-event .cal-event-text {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    @media screen and (max-width: 768px) {
+        #calendar-grid .cal-bar-event {
+            justify-content: center;
+            padding-left: 0.25rem;
+            padding-right: 0.25rem;
+        }
+        #calendar-grid .cal-event-text {
+            display: none;
+        }
+        #calendar-grid .cal-event-badge {
+            display: none;
+        }
+    }
 </style>
 <script>
 (function() {
@@ -4569,6 +4595,16 @@ function ordenarVendasTabela(colIndex, tipo) {
             .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
+    var CAL_BAR_EVENT = 'cal-bar-event flex items-center gap-1 min-w-0';
+
+    function htmlCalBarEvent(emoji, label, badgeHtml) {
+        return (
+            '<span class="cal-event-icon flex-shrink-0" aria-hidden="true">' + emoji + '</span>' +
+            '<span class="cal-event-text">' + esc(label) + '</span>' +
+            (badgeHtml || '')
+        );
+    }
+
     function formatarTituloDia(iso) {
         var p = iso.split('-');
         if (p.length !== 3) return iso;
@@ -4938,8 +4974,8 @@ function ordenarVendasTabela(colIndex, tipo) {
         if (temPendente) {
             if (!bar) {
                 var newBar = document.createElement('div');
-                newBar.className = 'mt-1 w-full text-left text-[10px] bg-orange-500/20 text-orange-600 dark:text-orange-400 rounded px-1 truncate cal-bar-entrega';
-                newBar.textContent = '🚚 Entrega';
+                newBar.className = 'mt-1 w-full text-left text-[10px] bg-orange-500/20 text-orange-600 dark:text-orange-400 rounded px-1 cal-bar-entrega ' + CAL_BAR_EVENT;
+                newBar.innerHTML = htmlCalBarEvent('🚚', 'Entrega');
                 // Insere após o número do dia (primeiro filho)
                 var first = cel.firstElementChild;
                 if (first && first.nextSibling) cel.insertBefore(newBar, first.nextSibling);
@@ -5731,8 +5767,8 @@ function ordenarVendasTabela(colIndex, tipo) {
         if (temRadar) {
             if (!barRadar) {
                 var newRadar = document.createElement('div');
-                newRadar.className = 'mt-0.5 w-full text-left text-[10px] bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 rounded px-1 truncate cal-bar-radar';
-                newRadar.textContent = '📡 Radar';
+                newRadar.className = 'mt-0.5 w-full text-left text-[10px] bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 rounded px-1 cal-bar-radar ' + CAL_BAR_EVENT;
+                newRadar.innerHTML = htmlCalBarEvent('📡', 'Radar');
                 cel.appendChild(newRadar);
             }
         } else if (barRadar) {
@@ -5742,9 +5778,9 @@ function ordenarVendasTabela(colIndex, tipo) {
         if (temManual) {
             if (!bar) {
                 var newBar = document.createElement('div');
-                newBar.className = 'mt-0.5 w-full text-left text-[10px] bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded px-1 truncate cal-bar-lembrete';
+                newBar.className = 'mt-0.5 w-full text-left text-[10px] bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded px-1 cal-bar-lembrete ' + CAL_BAR_EVENT;
                 newBar.setAttribute('data-iso-lem', iso);
-                newBar.textContent = '📌 Lembrete';
+                newBar.innerHTML = htmlCalBarEvent('📌', 'Lembrete');
                 cel.appendChild(newBar);
             }
         } else if (bar) {
@@ -5822,41 +5858,45 @@ function ordenarVendasTabela(colIndex, tipo) {
 
                 if (temEntrega) {
                     var barEnt = document.createElement('div');
-                    barEnt.className = 'mt-1 w-full text-left text-[10px] bg-orange-500/20 text-orange-600 dark:text-orange-400 rounded px-1 truncate cal-bar-entrega';
-                    barEnt.textContent = '🚚 Entrega';
+                    barEnt.className = 'mt-1 w-full text-left text-[10px] bg-orange-500/20 text-orange-600 dark:text-orange-400 rounded px-1 cal-bar-entrega ' + CAL_BAR_EVENT;
+                    barEnt.innerHTML = htmlCalBarEvent('🚚', 'Entrega');
                     cel.appendChild(barEnt);
                 }
                 if (temBoleto) {
                     var qtd = (vencimentos[iso] || []).length;
                     var barBol = document.createElement('div');
-                    barBol.className = 'mt-0.5 w-full text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded px-1 flex items-center justify-between gap-1';
-                    barBol.innerHTML =
-                        '<span>💰 Boleto</span>' +
-                        '<span class="bg-red-500 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full shadow-sm flex-shrink-0">' + qtd + '</span>';
+                    barBol.className = 'mt-0.5 w-full text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded px-1 justify-between ' + CAL_BAR_EVENT;
+                    barBol.innerHTML = htmlCalBarEvent(
+                        '💰',
+                        'Boleto',
+                        '<span class="cal-event-badge bg-red-500 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full shadow-sm flex-shrink-0">' + qtd + '</span>'
+                    );
                     cel.appendChild(barBol);
                 }
                 if (temOrc) {
                     var qtdOrc = (orcamentos[iso] || []).length;
                     var barOrc = document.createElement('div');
-                    barOrc.className = 'mt-0.5 w-full text-[10px] bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 rounded px-1 flex items-center justify-between gap-1';
-                    barOrc.innerHTML =
-                        '<span>📋 Orçamento</span>' +
-                        (qtdOrc > 1
-                            ? '<span class="bg-rose-500 text-white text-[10px] font-bold min-w-[1.25rem] h-5 px-1 flex items-center justify-center rounded-full shadow-sm flex-shrink-0">' + qtdOrc + '</span>'
-                            : '');
+                    barOrc.className = 'mt-0.5 w-full text-[10px] bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 rounded px-1 justify-between ' + CAL_BAR_EVENT;
+                    barOrc.innerHTML = htmlCalBarEvent(
+                        '📋',
+                        'Orçamento',
+                        qtdOrc > 1
+                            ? '<span class="cal-event-badge bg-rose-500 text-white text-[10px] font-bold min-w-[1.25rem] h-5 px-1 flex items-center justify-center rounded-full shadow-sm flex-shrink-0">' + qtdOrc + '</span>'
+                            : ''
+                    );
                     cel.appendChild(barOrc);
                 }
                 if (temRadar) {
                     var barRadar = document.createElement('div');
-                    barRadar.className = 'mt-0.5 w-full text-left text-[10px] bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 rounded px-1 truncate cal-bar-radar';
-                    barRadar.textContent = '📡 Radar';
+                    barRadar.className = 'mt-0.5 w-full text-left text-[10px] bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 rounded px-1 cal-bar-radar ' + CAL_BAR_EVENT;
+                    barRadar.innerHTML = htmlCalBarEvent('📡', 'Radar');
                     cel.appendChild(barRadar);
                 }
                 if (temLembreteManual) {
                     var barLem = document.createElement('div');
-                    barLem.className = 'mt-0.5 w-full text-left text-[10px] bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded px-1 truncate cal-bar-lembrete';
+                    barLem.className = 'mt-0.5 w-full text-left text-[10px] bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded px-1 cal-bar-lembrete ' + CAL_BAR_EVENT;
                     barLem.setAttribute('data-iso-lem', iso);
-                    barLem.textContent = '📌 Lembrete';
+                    barLem.innerHTML = htmlCalBarEvent('📌', 'Lembrete');
                     cel.appendChild(barLem);
                 }
 
