@@ -21,7 +21,7 @@ from icalendar import Calendar, Event
 from sqlalchemy.orm import joinedload
 from sqlalchemy import func
 
-from models import Venda, Lembrete, Empresa, ItemOrcamento
+from models import db, Venda, Lembrete, Empresa, ItemOrcamento, PagamentoOrcamento
 
 
 def gerar_token_calendario(empresa_id: int) -> str:
@@ -153,6 +153,28 @@ def _query_itens_orcamento_agenda(empresa_id: int) -> list[ItemOrcamento]:
     )
 
 
+def _pagamentos_orcamento_no_intervalo(
+    item_ids: list[int],
+    inicio: date,
+    fim: date,
+) -> set[tuple[int, str]]:
+    """Conjunto de (item_id, mes_ano) marcados como pagos no intervalo."""
+    if not item_ids:
+        return set()
+    meses = {f'{y:04d}-{m:02d}' for y, m in _iter_meses_entre(inicio, fim)}
+    if not meses:
+        return set()
+    rows = (
+        db.session.query(PagamentoOrcamento.item_id, PagamentoOrcamento.mes_ano)
+        .filter(
+            PagamentoOrcamento.item_id.in_(item_ids),
+            PagamentoOrcamento.mes_ano.in_(meses),
+        )
+        .all()
+    )
+    return {(int(r[0]), str(r[1])) for r in rows}
+
+
 def agrupar_orcamentos_por_data(
     empresa_id: int,
     inicio: date,
@@ -162,8 +184,11 @@ def agrupar_orcamentos_por_data(
     if fim < inicio:
         return {}
 
+    itens = _query_itens_orcamento_agenda(empresa_id)
+    pagos = _pagamentos_orcamento_no_intervalo([i.id for i in itens], inicio, fim)
+
     resultado: dict[str, list[dict]] = {}
-    for item in _query_itens_orcamento_agenda(empresa_id):
+    for item in itens:
         base = _as_date(item.data_vencimento)
         if not base:
             continue
@@ -176,6 +201,7 @@ def agrupar_orcamentos_por_data(
             dia = _projeta_dia_mensal(base, y, m)
             if dia < inicio or dia > fim:
                 continue
+            mes_ano = f'{y:04d}-{m:02d}'
             iso = dia.isoformat()
             resultado.setdefault(iso, []).append({
                 'titulo': titulo,
@@ -184,6 +210,7 @@ def agrupar_orcamentos_por_data(
                 'categoria': cat,
                 'forma_pagamento': forma,
                 'item_id': item.id,
+                'pago': (item.id, mes_ano) in pagos,
             })
 
     for itens in resultado.values():
@@ -404,12 +431,17 @@ def _adicionar_orcamentos(
                 linhas.append(f'Categoria: {cat}')
             if forma:
                 linhas.append(f'Forma: {forma}')
+            if occ.get('pago'):
+                linhas.append('Status: Pago')
+            titulo_ics = occ.get('titulo') or f'[Orçamento] {desc}'
+            if occ.get('pago'):
+                titulo_ics = f'[PAGO] {titulo_ics}'
             event = Event()
             event.add('uid', f'orcamento-{item_id}-{iso}@menino-do-alho')
             event.add('dtstamp', datetime.utcnow())
             event.add('dtstart', dia)
             event.add('dtend', dia + timedelta(days=1))
-            event.add('summary', occ.get('titulo') or f'[Orçamento] {desc}')
+            event.add('summary', titulo_ics)
             event.add('description', '\n'.join(linhas))
             event.add('categories', ['Orçamento', 'Despesa'])
             event.add('transp', 'TRANSPARENT')

@@ -4618,15 +4618,21 @@ function ordenarVendasTabela(colIndex, tipo) {
                 '<p class="text-sm font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 mb-2 flex items-center gap-1"><span>📋</span> Despesas de Orçamento</p>' +
                 '<div class="space-y-2">';
             itensOrc.forEach(function(item) {
+                var pago = !!item.pago;
                 var meta = [];
                 if (item.categoria) meta.push(esc(item.categoria));
                 if (item.forma_pagamento) meta.push(esc(item.forma_pagamento));
-                html += '<div class="bg-gray-50 dark:bg-gray-700/30 p-3 rounded-lg border-l-4 border-rose-500">' +
-                    '<p class="font-semibold text-sm text-gray-900 dark:text-white leading-snug">' +
-                        esc(item.titulo || item.descricao || 'Orçamento') +
+                var textoCls = pago ? 'line-through opacity-70' : '';
+                var borderCls = pago ? 'border-emerald-500' : 'border-rose-500';
+                var badgePago = pago
+                    ? '<span class="ml-2 px-2 py-0.5 text-[10px] font-bold bg-emerald-500/20 text-emerald-500 dark:text-emerald-400 rounded whitespace-nowrap no-underline" style="text-decoration:none">PAGO</span>'
+                    : '';
+                html += '<div class="bg-gray-50 dark:bg-gray-700/30 p-3 rounded-lg border-l-4 ' + borderCls + '">' +
+                    '<p class="font-semibold text-sm text-gray-900 dark:text-white leading-snug flex items-center flex-wrap ' + textoCls + '">' +
+                        esc(item.titulo || item.descricao || 'Orçamento') + badgePago +
                     '</p>' +
                     (meta.length
-                        ? '<p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">' + meta.join(' · ') + '</p>'
+                        ? '<p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 ' + textoCls + '">' + meta.join(' · ') + '</p>'
                         : '') +
                 '</div>';
             });
@@ -5726,13 +5732,19 @@ function ordenarVendasTabela(colIndex, tipo) {
                     cel.appendChild(barBol);
                 }
                 if (temOrc) {
-                    var qtdOrc = (orcamentos[iso] || []).length;
+                    var listaOrc = orcamentos[iso] || [];
+                    var qtdOrc = listaOrc.length;
+                    var todosOrcPagos = qtdOrc > 0 && listaOrc.every(function(o) { return o && o.pago; });
                     var barOrc = document.createElement('div');
-                    barOrc.className = 'mt-0.5 w-full text-[10px] bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 rounded px-1 flex items-center justify-between gap-1';
+                    barOrc.className = 'mt-0.5 w-full text-[10px] rounded px-1 flex items-center justify-between gap-1 ' +
+                        (todosOrcPagos
+                            ? 'bg-emerald-100/80 dark:bg-emerald-900/25 text-emerald-700 dark:text-emerald-300 line-through opacity-80'
+                            : 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300');
                     barOrc.innerHTML =
                         '<span>📋 Orçamento</span>' +
                         (qtdOrc > 1
-                            ? '<span class="bg-rose-500 text-white text-[10px] font-bold min-w-[1.25rem] h-5 px-1 flex items-center justify-center rounded-full shadow-sm flex-shrink-0">' + qtdOrc + '</span>'
+                            ? '<span class="' + (todosOrcPagos ? 'bg-emerald-600' : 'bg-rose-500') +
+                                ' text-white text-[10px] font-bold min-w-[1.25rem] h-5 px-1 flex items-center justify-center rounded-full shadow-sm flex-shrink-0 no-underline" style="text-decoration:none">' + qtdOrc + '</span>'
                             : '');
                     cel.appendChild(barOrc);
                 }
