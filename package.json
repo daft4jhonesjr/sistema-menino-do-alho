@@ -5,7 +5,8 @@
   "scripts": {
     "build:css": "tailwindcss -i ./static/css/input.css -o ./static/css/output.css --minify",
     "watch:css": "tailwindcss -i ./static/css/input.css -o ./static/css/output.css --watch",
-    "ios:check-local-notifications": "bash scripts/verificar-ios-local-notifications.sh"
+    "ios:check-local-notifications": "bash scripts/verificar-ios-local-notifications.sh",
+    "ios:setup-pods": "bash scripts_dev/setup_ios_pods.sh"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.0",
