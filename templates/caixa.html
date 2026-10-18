@@ -460,17 +460,50 @@
                 </div>
                 <div class="min-w-0">
                     <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Categoria</label>
-                    <select name="categoria" id="categoria_lancamento" required class="w-full min-w-0 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-800 dark:text-white shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
-                        {% for cat in categorias_caixa %}
-                        <option value="{{ cat }}">{{ cat }}</option>
-                        {% else %}
-                        <option value="Entrada Cliente">Entrada Cliente</option>
-                        <option value="Saída Pessoal">Saída Pessoal</option>
-                        <option value="Saída Fornecedor">Saída Fornecedor</option>
-                        <option value="Fundo de Caixa (Entrada)">Fundo de Caixa (Entrada)</option>
-                        <option value="Fundo de Caixa (Saída)">Fundo de Caixa (Saída)</option>
-                        {% endfor %}
-                    </select>
+                    <input type="hidden" name="categoria" id="categoria_input" value="Entrada Cliente" required>
+                    <div id="categoria-chips" class="grid grid-cols-2 gap-2" role="group" aria-label="Selecionar categoria">
+                        <button type="button"
+                                class="categoria-chip group flex flex-col items-start gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2.5 text-left text-sm font-medium text-emerald-900 transition-all hover:bg-emerald-100 ring-2 ring-emerald-500"
+                                data-categoria="Entrada Cliente"
+                                data-ring="ring-emerald-500"
+                                data-tipo="entrada"
+                                aria-pressed="true">
+                            <span>📥 Entrada Cliente</span>
+                            <span class="inline-flex items-center rounded-md bg-emerald-200/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-800">Recebimento</span>
+                        </button>
+                        <button type="button"
+                                class="categoria-chip group flex flex-col items-start gap-1 rounded-lg border border-red-300 bg-red-50 px-3 py-2.5 text-left text-sm font-medium text-red-900 transition-all hover:bg-red-100"
+                                data-categoria="Saída Pessoal"
+                                data-ring="ring-red-500"
+                                data-tipo="saida"
+                                aria-pressed="false">
+                            <span>💸 Saída Pessoal</span>
+                        </button>
+                        <button type="button"
+                                class="categoria-chip group flex flex-col items-start gap-1 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2.5 text-left text-sm font-medium text-rose-900 transition-all hover:bg-rose-100"
+                                data-categoria="Saída Fornecedor"
+                                data-ring="ring-rose-500"
+                                data-tipo="saida"
+                                aria-pressed="false">
+                            <span>📦 Saída Fornecedor</span>
+                        </button>
+                        <button type="button"
+                                class="categoria-chip group flex flex-col items-start gap-1 rounded-lg border border-teal-300 bg-teal-50 px-3 py-2.5 text-left text-sm font-medium text-teal-900 transition-all hover:bg-teal-100"
+                                data-categoria="Fundo de Caixa (Entrada)"
+                                data-ring="ring-teal-500"
+                                data-tipo="entrada"
+                                aria-pressed="false">
+                            <span>🏦 Fundo (Entrada)</span>
+                        </button>
+                        <button type="button"
+                                class="categoria-chip group flex flex-col items-start gap-1 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-left text-sm font-medium text-amber-900 transition-all hover:bg-amber-100 col-span-2 sm:col-span-1"
+                                data-categoria="Fundo de Caixa (Saída)"
+                                data-ring="ring-amber-500"
+                                data-tipo="saida"
+                                aria-pressed="false">
+                            <span>🏦 Fundo (Saída)</span>
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -762,10 +795,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
     window.resetModoSplit = ativarModoSimples;
 
-    // Auto-atualizar Tipo conforme Categoria (Entrada Cliente -> ENTRADA, Saída* -> SAIDA)
-    var catSelect = document.getElementById('categoria_lancamento');
-    if (catSelect) {
-        catSelect.addEventListener('change', function() { atualizarTipoPorCategoria(this, 'tipo_lancamento_hidden'); });
+    // Chips de categoria: seleção visual + sync do input oculto / tipo / botão Salvar
+    var chipsRoot = document.getElementById('categoria-chips');
+    if (chipsRoot) {
+        chipsRoot.querySelectorAll('.categoria-chip').forEach(function(chip) {
+            chip.addEventListener('click', function() {
+                selecionarCategoriaChip(chip.getAttribute('data-categoria'));
+            });
+        });
+        // Estado inicial alinhado ao valor padrão do input oculto
+        var catInputInit = document.getElementById('categoria_input');
+        if (catInputInit) selecionarCategoriaChip(catInputInit.value || 'Entrada Cliente');
     }
 
     // Trava anti-duplo clique no submit do modal de lançamento
@@ -882,12 +922,53 @@ window.addEventListener('pageshow', function(event) {
 function atualizarTipoPorCategoria(categoriaSelect, tipoInputId) {
     var tipoInput = document.getElementById(tipoInputId);
     if (!tipoInput) return;
-    var valor = (categoriaSelect.value || '').toLowerCase();
+    var valor = (categoriaSelect && categoriaSelect.value != null ? categoriaSelect.value : categoriaSelect || '').toLowerCase();
     if (valor.indexOf('entrada') >= 0) {
         tipoInput.value = 'ENTRADA';
     } else if (valor.indexOf('saída') >= 0 || valor.indexOf('saida') >= 0) {
         tipoInput.value = 'SAIDA';
     }
+}
+
+var CATEGORIA_CHIP_RING_CLASSES = [
+    'ring-2', 'ring-emerald-500', 'ring-red-500', 'ring-rose-500', 'ring-teal-500', 'ring-amber-500'
+];
+
+function atualizarCorBtnSalvarLancamento(categoria) {
+    var btn = document.getElementById('btnSalvarLancamento');
+    if (!btn) return;
+    var valor = (categoria || '').toLowerCase();
+    var isEntrada = valor.indexOf('entrada') >= 0;
+    btn.classList.remove(
+        'bg-emerald-600', 'hover:bg-emerald-700',
+        'bg-red-600', 'hover:bg-red-700',
+        'bg-rose-600', 'hover:bg-rose-700'
+    );
+    if (isEntrada) {
+        btn.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+    } else {
+        btn.classList.add('bg-red-600', 'hover:bg-red-700');
+    }
+}
+
+function selecionarCategoriaChip(categoria) {
+    var input = document.getElementById('categoria_input');
+    var chips = document.querySelectorAll('#categoria-chips .categoria-chip');
+    var valor = categoria || 'Entrada Cliente';
+    if (input) input.value = valor;
+
+    chips.forEach(function(chip) {
+        var ring = chip.getAttribute('data-ring') || 'ring-emerald-500';
+        CATEGORIA_CHIP_RING_CLASSES.forEach(function(cls) { chip.classList.remove(cls); });
+        var ativo = chip.getAttribute('data-categoria') === valor;
+        chip.setAttribute('aria-pressed', ativo ? 'true' : 'false');
+        if (ativo) {
+            chip.classList.add('ring-2', ring);
+        }
+    });
+
+    atualizarTipoPorCategoria({ value: valor }, 'tipo_lancamento_hidden');
+    atualizarCorBtnSalvarLancamento(valor);
 }
 window.CAIXA_ADD_URL = "{{ url_for('caixa.adicionar_caixa') }}";
 window.CAIXA_EDIT_URL_BASE = "{{ url_for('caixa.editar_lancamento_caixa', id=0) }}".replace('/0', '');
@@ -949,9 +1030,13 @@ function abrirModalNovo() {
     form.querySelector('[name="data"]').value = window.DATA_HOJE;
     form.querySelector('[name="descricao"]').value = '';
     form.querySelector('[name="valor"]').value = '';
-    form.querySelector('[name="categoria"]').value = 'Entrada Cliente';
-    var tipoInput = form.querySelector('[name="tipo"]');
-    if (tipoInput) tipoInput.value = 'ENTRADA';
+    if (typeof selecionarCategoriaChip === 'function') {
+        selecionarCategoriaChip('Entrada Cliente');
+    } else {
+        form.querySelector('[name="categoria"]').value = 'Entrada Cliente';
+        var tipoInput = form.querySelector('[name="tipo"]');
+        if (tipoInput) tipoInput.value = 'ENTRADA';
+    }
     if (typeof window.resetModoSplit === 'function') window.resetModoSplit();
     document.querySelectorAll('.split-only').forEach(function(el) { el.style.display = ''; });
     var hiddenId = document.getElementById('editLancamentoId');
@@ -995,15 +1080,13 @@ function abrirModalEditar(tr) {
     form.querySelector('[name="valor"]').value = valorStr.replace('.', ',');
     var tipoInput = form.querySelector('[name="tipo"]');
     if (tipoInput) tipoInput.value = tipo;
-    var catSelect = form.querySelector('[name="categoria"]');
-    if (catSelect) {
-        if (!Array.prototype.find.call(catSelect.options, function(o) { return o.value === categoria; })) {
-            var opt = document.createElement('option');
-            opt.value = categoria;
-            opt.textContent = categoria;
-            catSelect.appendChild(opt);
-        }
-        catSelect.value = categoria;
+    if (typeof selecionarCategoriaChip === 'function') {
+        selecionarCategoriaChip(categoria || 'Entrada Cliente');
+        // Preserva tipo original do lançamento (pode divergir do inferido pela categoria)
+        if (tipoInput) tipoInput.value = tipo;
+    } else {
+        var catSelect = form.querySelector('[name="categoria"]');
+        if (catSelect) catSelect.value = categoria;
     }
     var formaSelect = form.querySelector('[name="forma_pagamento"]');
     if (formaSelect) {
