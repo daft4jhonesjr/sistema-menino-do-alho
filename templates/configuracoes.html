@@ -767,11 +767,17 @@ document.addEventListener('DOMContentLoaded', function() {
         return 'prompt';
     }
 
+    function localNotifPronto() {
+        return window.MeninoAlhoPush &&
+            typeof window.MeninoAlhoPush.localNotificationsDisponivel === 'function' &&
+            window.MeninoAlhoPush.localNotificationsDisponivel();
+    }
+
     async function consultarEstadoNotificacoes() {
         try {
             if (isCapacitorNative()) {
                 var plugins = getCapacitorPlugins();
-                if (plugins && plugins.LocalNotifications && typeof plugins.LocalNotifications.checkPermissions === 'function') {
+                if (localNotifPronto() && plugins && plugins.LocalNotifications && typeof plugins.LocalNotifications.checkPermissions === 'function') {
                     var check = await plugins.LocalNotifications.checkPermissions();
                     var display = (check && (check.display || check.permission)) || 'prompt';
                     if (display === 'granted') return 'granted';
@@ -855,29 +861,33 @@ document.addEventListener('DOMContentLoaded', function() {
 
     async function solicitarPermissaoNotificacoes() {
         try {
-            if (isCapacitorNative()) {
+            if (isCapacitorNative() && localNotifPronto()) {
                 var plugins = getCapacitorPlugins();
                 if (plugins && plugins.LocalNotifications && typeof plugins.LocalNotifications.requestPermissions === 'function') {
-                    var result = await plugins.LocalNotifications.requestPermissions();
-                    var display = (result && (result.display || result.permission)) || 'denied';
-                    if (display === 'granted') {
-                        localStorage.setItem('menino_alho_device_notif', 'true');
-                        if (window.MeninoAlhoPush && typeof window.MeninoAlhoPush.ativar === 'function') {
-                            await window.MeninoAlhoPush.ativar({ onStatus: function() {} });
+                    try {
+                        var result = await plugins.LocalNotifications.requestPermissions();
+                        var display = (result && (result.display || result.permission)) || 'denied';
+                        if (display === 'granted') {
+                            localStorage.setItem('menino_alho_device_notif', 'true');
+                            if (window.MeninoAlhoPush && typeof window.MeninoAlhoPush.ativar === 'function') {
+                                await window.MeninoAlhoPush.ativar({ onStatus: function() {} });
+                            }
+                            toastPerm('Notificações autorizadas!', 'success');
+                            if (toggleNotif) toggleNotif.checked = true;
+                            atualizarEstadoNotificacoes();
+                            await atualizarEstadosPermissoesUI();
+                            return true;
                         }
-                        toastPerm('Notificações autorizadas!', 'success');
-                        if (toggleNotif) toggleNotif.checked = true;
-                        atualizarEstadoNotificacoes();
+                        localStorage.setItem('menino_alho_device_notif', 'false');
+                        await avisarPermissaoBloqueada(
+                            'Notificações bloqueadas',
+                            'Ative as notificações em Ajustes → Menino do Alho → Notificações.'
+                        );
                         await atualizarEstadosPermissoesUI();
-                        return true;
+                        return false;
+                    } catch (nativeErr) {
+                        console.warn('[Permissões] LocalNotifications indisponível, usando fallback:', nativeErr);
                     }
-                    localStorage.setItem('menino_alho_device_notif', 'false');
-                    await avisarPermissaoBloqueada(
-                        'Notificações bloqueadas',
-                        'Ative as notificações em Ajustes → Menino do Alho → Notificações.'
-                    );
-                    await atualizarEstadosPermissoesUI();
-                    return false;
                 }
             }
 
