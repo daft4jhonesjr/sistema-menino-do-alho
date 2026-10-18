@@ -3537,7 +3537,15 @@ def editar_venda(id):
             return redirect(request.referrer or url_for('vendas.listar_vendas'))
 
     clientes = query_tenant(Cliente).order_by(Cliente.nome_cliente).limit(1000).all()
-    produtos = query_tenant(Produto).order_by(Produto.nome_produto).limit(1000).all()
+    # Na edição: só produtos com estoque > 0, mas sempre inclui o produto
+    # já vinculado à venda (mesmo com estoque 0) para manter a seleção ativa.
+    produtos = (
+        query_tenant(Produto)
+        .filter(or_(Produto.estoque_atual > 0, Produto.id == venda.produto_id))
+        .order_by(Produto.nome_produto)
+        .limit(1000)
+        .all()
+    )
     venda_nf = venda.nf if venda.nf else ''
     return render_template('vendas/formulario.html', venda=venda, venda_nf=venda_nf, clientes=clientes, produtos=produtos)
 

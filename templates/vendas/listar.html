@@ -1223,7 +1223,7 @@
                             {% for p in todos_produtos %}
                             {% set nome_lower = p.nome_produto|lower %}
                             {% if 'alho' in nome_lower %}{% set emoji = '🧄' %}{% elif 'cafe' in nome_lower or 'café' in nome_lower %}{% set emoji = '☕' %}{% elif 'sacola' in nome_lower %}{% set emoji = '🛍️' %}{% else %}{% set emoji = '📦' %}{% endif %}
-                            <option value="{{ p.id }}">{{ emoji }} {{ p.nome_produto }} (Estoque: {{ p.estoque_atual }})</option>
+                            <option value="{{ p.id }}" data-estoque="{{ p.estoque_atual }}">{{ emoji }} {{ p.nome_produto }} (Estoque: {{ p.estoque_atual }})</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -2049,7 +2049,22 @@ function loadingBotaoEditarVenda(formElement) {
             }
 
             elCliente.value = clienteId;
+
+            // Lista só produtos com estoque > 0; mantém o produto já salvo na venda
+            // (mesmo com estoque 0) para não perder a seleção ativa na edição.
+            Array.prototype.forEach.call(elProduto.options, function(opt) {
+                if (!opt.value) {
+                    opt.hidden = false;
+                    opt.disabled = false;
+                    return;
+                }
+                var estoque = Number(opt.getAttribute('data-estoque') || 0);
+                var manter = (estoque > 0) || (String(opt.value) === String(produtoId));
+                opt.hidden = !manter;
+                opt.disabled = !manter;
+            });
             elProduto.value = produtoId;
+
             elQtd.value = qtd;
             elPreco.value = (typeof formatarMoedaParaExibir === 'function' ? formatarMoedaParaExibir(preco) : preco) || preco;
             if (elNf) elNf.value = nf;
