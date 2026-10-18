@@ -237,7 +237,7 @@
 
                 <div id="menu-dropdown-acoes" class="hidden origin-top-right absolute right-0 mt-2 w-64 sm:w-48 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 z-50">
                     <div class="py-1">
-                        <a href="#" id="btn-menu-lancar-venda" class="group flex items-center px-4 py-3 sm:py-2 text-base sm:text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
+                        <a href="{{ url_for('vendas.nova_venda') }}" id="btn-menu-lancar-venda" class="group flex items-center px-4 py-3 sm:py-2 text-base sm:text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
                             🛒&nbsp;Lançar Venda
                         </a>
                         <a href="#" id="btn-menu-relatorio" class="group flex items-center px-4 py-3 sm:py-2 text-base sm:text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
@@ -5911,12 +5911,9 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Opção "Lançar Venda" no dropdown
-    if (btnMenuLancarVenda) {
-        btnMenuLancarVenda.addEventListener('click', function(e) {
-            e.preventDefault();
-            if (menuDropdown) menuDropdown.classList.add('hidden');
-            abrirModalNovaVenda();
+    if (btnMenuLancarVenda && menuDropdown) {
+        btnMenuLancarVenda.addEventListener('click', function() {
+            menuDropdown.classList.add('hidden');
         });
     }
 
