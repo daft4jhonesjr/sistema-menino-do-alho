@@ -2489,7 +2489,7 @@ def logistica():
     has_next_pendentes = len(pedidos_pendentes) > per_page
     has_next_entregues = len(pedidos_entregues) > per_page
 
-    # Resumo das últimas 3 semanas + semana atual (segunda a domingo, ordem crescente).
+    # Resumo das últimas 3 semanas + semana atual (segunda a domingo).
     hoje = get_hoje_brasil()
     segunda_atual = hoje - timedelta(days=hoje.weekday())
     inicio_periodo = segunda_atual - timedelta(weeks=3)
@@ -2545,7 +2545,7 @@ def logistica():
     entregues_semana = [semana_dict[k] for k in semana_keys]
     total_semana = sum(p['total'] for p in entregues_semana)
 
-    # Agrupa entregas por semana (segunda a domingo), da mais antiga para a mais recente.
+    # Agrupa entregas por semana (segunda a domingo); exibição da mais recente para a mais antiga.
     from collections import OrderedDict
     semanas_map = OrderedDict()
     for item in entregues_semana:
@@ -2563,10 +2563,13 @@ def logistica():
         semanas_map[periodo]['entregas'].append(item)
         semanas_map[periodo]['total_semana'] += float(item['total'] or 0)
 
-    semanas_agrupadas = []
-    for bloco in semanas_map.values():
+    semanas_agrupadas = sorted(
+        semanas_map.values(),
+        key=lambda bloco: bloco['_segunda'],
+        reverse=True,
+    )
+    for bloco in semanas_agrupadas:
         bloco.pop('_segunda', None)
-        semanas_agrupadas.append(bloco)
 
     return render_template(
         'logistica.html',
