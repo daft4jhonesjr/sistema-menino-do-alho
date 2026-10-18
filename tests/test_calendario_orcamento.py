@@ -1,7 +1,12 @@
 """Projeção mensal de vencimentos de orçamento na agenda."""
 from datetime import date
 
-from services.calendario_ics import _projeta_dia_mensal, _iter_meses_entre, _fmt_moeda
+from services.calendario_ics import (
+    _projeta_dia_mensal,
+    _iter_meses_entre,
+    _fmt_moeda,
+    agrupar_orcamentos_por_data,
+)
 
 
 def test_projeta_dia_mensal_ajusta_fevereiro():

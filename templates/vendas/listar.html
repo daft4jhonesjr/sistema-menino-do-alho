@@ -277,6 +277,7 @@
      data-pendentes='{{ (datas_entrega_pendente or [])|tojson }}'
      data-vencimentos='{{ (vencimentos_por_data or {})|tojson }}'
      data-orcamentos='{{ (orcamentos_por_data or {})|tojson }}'
+     data-orcamento-total='{{ orcamento_total|default(0)|tojson }}'
      data-lembretes='{{ (lembretes_por_data or {})|tojson }}'
      data-csrf='{{ csrf_token() }}'>
 
@@ -4443,8 +4444,92 @@ function ordenarVendasTabela(colIndex, tipo) {
     var detalhesPendentes = _parseAttr('data-detalhes-pendentes', {});
     var vencimentos       = _parseAttr('data-vencimentos', {});
     var orcamentos        = _parseAttr('data-orcamentos', {});
+    var orcamentoTotalMensal = _parseAttr('data-orcamento-total', 0);
     var lembretes         = _parseAttr('data-lembretes', {});
     var CSRF_TOKEN        = wrap.getAttribute('data-csrf') || '';
+
+    function fmtBRLCal(num) {
+        var n = Number(num);
+        if (!isFinite(n)) n = 0;
+        return 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function csrfHeadersJson() {
+        var h = { 'Content-Type': 'application/json', Accept: 'application/json' };
+        if (CSRF_TOKEN) {
+            h['X-CSRFToken'] = CSRF_TOKEN;
+            h['X-CSRF-Token'] = CSRF_TOKEN;
+        }
+        return h;
+    }
+
+    async function togglePagamentoOrcamentoAgenda(itemId, mesAno, iso, btn) {
+        if (!itemId) return;
+        if (btn) btn.disabled = true;
+        try {
+            var resp = await fetch(
+                '/api/orcamento/' + encodeURIComponent(itemId) + '/toggle_pagamento',
+                {
+                    method: 'POST',
+                    headers: csrfHeadersJson(),
+                    body: JSON.stringify({ mes_ano: mesAno || (iso ? iso.substring(0, 7) : '') }),
+                }
+            );
+            var data = await resp.json().catch(function() { return null; });
+            if (!resp.ok || !data || data.ok === false) {
+                throw new Error((data && data.mensagem) || ('HTTP ' + resp.status));
+            }
+            var pago = !!(data.pago != null ? data.pago : data.item && data.item.pago);
+            if (iso && orcamentos[iso]) {
+                orcamentos[iso].forEach(function(it) {
+                    if (String(it.item_id) === String(itemId)) {
+                        it.is_pago = pago;
+                        it.pago = pago;
+                    }
+                });
+            }
+            var row = displayConteudo && displayConteudo.querySelector('[data-orc-item-id="' + itemId + '"]');
+            if (row) {
+                var tituloEl = row.querySelector('.orc-agenda-titulo');
+                var valorEl = row.querySelector('.orc-agenda-valor');
+                var strike = 'line-through text-gray-400 dark:text-gray-500';
+                if (tituloEl) {
+                    tituloEl.classList.toggle('line-through', pago);
+                    tituloEl.classList.toggle('text-gray-400', pago);
+                    tituloEl.classList.toggle('dark:text-gray-500', pago);
+                }
+                if (valorEl) {
+                    valorEl.classList.toggle('line-through', pago);
+                    valorEl.classList.toggle('text-gray-400', pago);
+                    valorEl.classList.toggle('dark:text-gray-500', pago);
+                    if (!pago) {
+                        valorEl.classList.remove('text-rose-600', 'dark:text-rose-400');
+                        valorEl.classList.add('text-rose-600', 'dark:text-rose-400');
+                    }
+                }
+                if (btn) {
+                    btn.setAttribute('data-pago', pago ? '1' : '0');
+                    btn.setAttribute('aria-pressed', pago ? 'true' : 'false');
+                    btn.title = pago ? 'Desmarcar como pago' : 'Marcar como pago';
+                    btn.classList.toggle('text-emerald-600', pago);
+                    btn.classList.toggle('bg-emerald-500/15', pago);
+                    btn.classList.toggle('text-gray-400', !pago);
+                    btn.classList.toggle('hover:text-emerald-600', !pago);
+                }
+            } else if (celulaSelecionada && iso) {
+                selecionarDia(celulaSelecionada, iso);
+            }
+        } catch (err) {
+            var msg = (err && err.message) ? err.message : 'Erro desconhecido';
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({ icon: 'error', title: 'Pagamento', text: msg, timer: 3500, showConfirmButton: false });
+            } else {
+                alert(msg);
+            }
+        } finally {
+            if (btn) btn.disabled = false;
+        }
+    }
 
     function _htmlFraseDoDia(iso) {
         var frase = obterFrasePorData(iso);
@@ -4614,20 +4699,45 @@ function ordenarVendasTabela(colIndex, tipo) {
 
         // ─── Orçamento (despesas recorrentes) ───────────────────────
         if (itensOrc.length) {
+            var mesAnoOrc = iso.length >= 7 ? iso.substring(0, 7) : '';
             html += '<div class="mb-4">' +
-                '<p class="text-sm font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 mb-2 flex items-center gap-1"><span>📋</span> Despesas de Orçamento</p>' +
+                '<div class="flex flex-wrap items-center justify-between gap-2 mb-2">' +
+                    '<p class="text-sm font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-1"><span>📋</span> Despesas de Orçamento</p>' +
+                    '<p class="text-xs sm:text-sm font-bold text-gray-800 dark:text-gray-100">' +
+                        'Total mensal: <span class="text-rose-600 dark:text-rose-400 tabular-nums">' + esc(fmtBRLCal(orcamentoTotalMensal)) + '</span>' +
+                    '</p>' +
+                '</div>' +
                 '<div class="space-y-2">';
             itensOrc.forEach(function(item) {
+                var pago = !!(item.is_pago != null ? item.is_pago : item.pago);
+                var itemId = item.item_id != null ? item.item_id : '';
+                var mesComp = item.mes_ano || mesAnoOrc;
                 var meta = [];
                 if (item.categoria) meta.push(esc(item.categoria));
                 if (item.forma_pagamento) meta.push(esc(item.forma_pagamento));
-                html += '<div class="bg-gray-50 dark:bg-gray-700/30 p-3 rounded-lg border-l-4 border-rose-500">' +
-                    '<p class="font-semibold text-sm text-gray-900 dark:text-white leading-snug">' +
-                        esc(item.titulo || item.descricao || 'Orçamento') +
-                    '</p>' +
-                    (meta.length
-                        ? '<p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">' + meta.join(' · ') + '</p>'
-                        : '') +
+                var strikeCls = pago ? ' line-through text-gray-400 dark:text-gray-500' : '';
+                var btnPagoCls = pago
+                    ? ' text-emerald-600 bg-emerald-500/15'
+                    : ' text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400';
+                html += '<div class="bg-gray-50 dark:bg-gray-700/30 p-3 rounded-lg border-l-4 border-rose-500 flex items-start gap-2" data-orc-item-id="' + esc(String(itemId)) + '">' +
+                    '<div class="flex-1 min-w-0">' +
+                        '<p class="orc-agenda-titulo font-semibold text-sm text-gray-900 dark:text-white leading-snug' + strikeCls + '">' +
+                            esc(item.titulo || item.descricao || 'Orçamento') +
+                        '</p>' +
+                        (item.valor
+                            ? '<p class="orc-agenda-valor text-sm font-bold text-rose-600 dark:text-rose-400 mt-1 tabular-nums' + strikeCls + '">' + esc(item.valor) + '</p>'
+                            : '') +
+                        (meta.length
+                            ? '<p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">' + meta.join(' · ') + '</p>'
+                            : '') +
+                    '</div>' +
+                    '<button type="button" class="btn-toggle-pagamento-orcamento shrink-0 p-2 rounded-lg transition-colors' + btnPagoCls + '" ' +
+                        'data-id="' + esc(String(itemId)) + '" data-mes-ano="' + esc(mesComp) + '" data-pago="' + (pago ? '1' : '0') + '" ' +
+                        'title="' + (pago ? 'Desmarcar como pago' : 'Marcar como pago') + '" aria-label="' + (pago ? 'Desmarcar como pago' : 'Marcar como pago') + '" aria-pressed="' + (pago ? 'true' : 'false') + '">' +
+                        '<svg class="w-5 h-5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">' +
+                            '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>' +
+                        '</svg>' +
+                    '</button>' +
                 '</div>';
             });
             html += '</div></div>';
@@ -5821,6 +5931,17 @@ function ordenarVendasTabela(colIndex, tipo) {
     }
     if (btnDiaProximo) {
         btnDiaProximo.addEventListener('click', function() { navegarDia(1); });
+    }
+
+    if (displayConteudo) {
+        displayConteudo.addEventListener('click', function(ev) {
+            var btn = ev.target.closest('.btn-toggle-pagamento-orcamento');
+            if (!btn || !isoSelecionado) return;
+            ev.preventDefault();
+            var itemId = btn.getAttribute('data-id');
+            var mesAno = btn.getAttribute('data-mes-ano') || isoSelecionado.substring(0, 7);
+            togglePagamentoOrcamentoAgenda(itemId, mesAno, isoSelecionado, btn);
+        });
     }
 
     // Render inicial no mês atual.

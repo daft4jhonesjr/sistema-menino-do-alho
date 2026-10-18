@@ -21,7 +21,7 @@ from icalendar import Calendar, Event
 from sqlalchemy.orm import joinedload
 from sqlalchemy import func
 
-from models import Venda, Lembrete, Empresa, ItemOrcamento
+from models import Venda, Lembrete, Empresa, ItemOrcamento, PagamentoOrcamento
 
 
 def gerar_token_calendario(empresa_id: int) -> str:
@@ -162,13 +162,32 @@ def agrupar_orcamentos_por_data(
     if fim < inicio:
         return {}
 
+    itens = _query_itens_orcamento_agenda(empresa_id)
+    item_ids = [i.id for i in itens]
+    meses_competencia = {f'{y:04d}-{m:02d}' for y, m in _iter_meses_entre(inicio, fim)}
+    pagos: set[tuple[int, str]] = set()
+    if item_ids and meses_competencia:
+        rows = (
+            PagamentoOrcamento.query
+            .filter(
+                PagamentoOrcamento.item_id.in_(item_ids),
+                PagamentoOrcamento.mes_ano.in_(meses_competencia),
+            )
+            .all()
+        )
+        pagos = {(r.item_id, r.mes_ano) for r in rows}
+
     resultado: dict[str, list[dict]] = {}
-    for item in _query_itens_orcamento_agenda(empresa_id):
+    for item in itens:
         base = _as_date(item.data_vencimento)
         if not base:
             continue
         desc = (item.descricao or 'Item').strip()
         valor_fmt = _fmt_moeda(item.valor)
+        try:
+            valor_num = float(item.valor or 0)
+        except (TypeError, ValueError):
+            valor_num = 0.0
         titulo = _titulo_evento_orcamento(item)
         cat = (item.categoria or '').strip()
         forma = (item.forma_pagamento or '').strip()
@@ -177,13 +196,19 @@ def agrupar_orcamentos_por_data(
             if dia < inicio or dia > fim:
                 continue
             iso = dia.isoformat()
+            mes_ano = f'{y:04d}-{m:02d}'
+            is_pago = (item.id, mes_ano) in pagos
             resultado.setdefault(iso, []).append({
                 'titulo': titulo,
                 'valor': valor_fmt,
+                'valor_num': valor_num,
                 'descricao': desc,
                 'categoria': cat,
                 'forma_pagamento': forma,
                 'item_id': item.id,
+                'mes_ano': mes_ano,
+                'is_pago': is_pago,
+                'pago': is_pago,
             })
 
     for itens in resultado.values():

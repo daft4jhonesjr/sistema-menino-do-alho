@@ -866,6 +866,7 @@ def _item_orcamento_dict(item, pago=False):
         'forma_pagamento': _sanitizar_forma_pagamento(item.forma_pagamento),
         'data_vencimento': data_venc.isoformat() if data_venc else None,
         'pago': bool(pago),
+        'is_pago': bool(pago),
     }
 
 
@@ -1057,6 +1058,7 @@ def deletar_item_orcamento(item_id):
 
 
 @caixa_bp.route('/api/orcamento/<int:item_id>/toggle-pagamento', methods=['POST'])
+@caixa_bp.route('/api/orcamento/<int:item_id>/toggle_pagamento', methods=['POST'])
 def toggle_pagamento_orcamento(item_id):
     """Alterna o status de pago do item na competência informada (ou mês atual).
 
