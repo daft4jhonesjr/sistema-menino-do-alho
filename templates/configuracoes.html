@@ -507,8 +507,15 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             if (ok && typeof window.MeninoAlhoPush.agendarNotificacoesLocais === 'function') {
                 try {
-                    await window.MeninoAlhoPush.agendarNotificacoesLocais();
-                    mostrarStatus('ativo', '✅ Notificações ativas e horários agendados.');
+                    var agenda = await window.MeninoAlhoPush.agendarNotificacoesLocais();
+                    var falhouAgenda = agenda && agenda.ok === false &&
+                        agenda.motivo !== 'cooldown_ativo' &&
+                        agenda.motivo !== 'aba_em_background';
+                    if (falhouAgenda) {
+                        console.warn('[Notif] agendar após ativar:', agenda.motivo);
+                    } else {
+                        mostrarStatus('ativo', '✅ Notificações ativas e horários agendados.');
+                    }
                 } catch (agErr) {
                     console.warn('[Notif] agendar após ativar:', agErr);
                 }
