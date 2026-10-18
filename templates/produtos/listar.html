@@ -1604,7 +1604,9 @@ function fecharModalNovoFornecedor() {
         form.setAttribute('data-produto-id', String(p.id));
 
         document.getElementById('edit_preco_custo').value = p.preco_custo != null ? p.preco_custo : '';
-        document.getElementById('edit_quantidade_entrada').value = p.quantidade_entrada != null ? p.quantidade_entrada : 0;
+        // Campo = quantidade ADICIONAL (padrão 0). Nunca pré-preencher com o
+        // total histórico do lote — isso reinflava estoque_atual a cada save.
+        document.getElementById('edit_quantidade_entrada').value = 0;
         document.getElementById('edit_data_chegada').value = p.data_chegada || '';
         if (editMarca) editMarca.value = p.marca || '';
         if (editCaminhoneiro) editCaminhoneiro.value = p.caminhoneiro || '';

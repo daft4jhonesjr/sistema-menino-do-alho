@@ -1275,11 +1275,17 @@ def editar_produto(id):
             else:
                 nome_produto = gerar_nome_produto(tipo_upper, nacionalidade, marca, data_chegada, tamanho)
 
-            if quantidade_entrada > 0:
+            # "quantidade_entrada" no formulário de edição = quantidade ADICIONAL
+            # (não o total histórico). Precisa somar em estoque_atual E no
+            # acumulado quantidade_entrada para manter a identidade:
+            # entrada ≈ estoque + vendido + devolvido.
+            qtd_adicional = quantidade_entrada
+            if qtd_adicional > 0:
                 produto = _produto_com_lock(produto.id)
                 if produto is None:
                     return _erro_validacao('Não foi possível localizar o produto para atualizar o estoque.', 404)
-                produto.estoque_atual += quantidade_entrada
+                produto.estoque_atual = int(produto.estoque_atual or 0) + qtd_adicional
+                produto.quantidade_entrada = int(produto.quantidade_entrada or 0) + qtd_adicional
 
             produto.tipo = tipo_upper
             produto.nacionalidade = nacionalidade
@@ -1721,7 +1727,14 @@ def importar_produtos():
                             continue
                         produto_existente = query_tenant(Produto).filter_by(nome_produto=nome_produto).first()
                         if produto_existente:
-                            produto_existente.estoque_atual += quantidade
+                            # Reimportação do mesmo nome: soma saldo e rastreia
+                            # a entrada acumulada (evita estoque > entrada - baixas).
+                            produto_existente.estoque_atual = (
+                                int(produto_existente.estoque_atual or 0) + quantidade
+                            )
+                            produto_existente.quantidade_entrada = (
+                                int(produto_existente.quantidade_entrada or 0) + quantidade
+                            )
                             produto_existente.preco_custo = Decimal(str(preco_custo_valor))
                             produto_existente.fornecedor = fornecedor_valor
                             produto_existente.caminhoneiro = caminhoneiro_valor

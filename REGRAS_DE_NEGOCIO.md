@@ -31,7 +31,9 @@ Regras por tipo:
 | BACALHAU | Marca padrão `NORGY`, fornecedor padrão `ARMAZEM LACERDA`. Tamanho só `7/9`, `10/12`, `13/15`, `16/20` ou `DESFIADO`. Nome: `BACALHAU MARCA TAMANHO`, sem data |
 | Demais | Nacionalidade ou tamanho vazios viram `N/A`. Tipo desconhecido no cadastro da empresa vira `OUTROS` |
 
-Na importação, linha idêntica (mesmo nome, mesma `data_chegada`, mesma quantidade e mesmo fornecedor) é ignorada. Se já existe o mesmo `nome_produto`, a quantidade é **somada** a `estoque_atual` e custo, fornecedor e caminhoneiro são **substituídos**. `quantidade_entrada` desse lote antigo não muda.
+Na importação, linha idêntica (mesmo nome, mesma `data_chegada`, mesma quantidade e mesmo fornecedor) é ignorada. Se já existe o mesmo `nome_produto`, a quantidade é **somada** a `estoque_atual` e a `quantidade_entrada`; custo, fornecedor e caminhoneiro são **substituídos**.
+
+Na edição de lote, o campo de quantidade é **adicional** (padrão 0): se > 0, soma em `estoque_atual` e em `quantidade_entrada`. O Balanço Rápido (Valor em Estoque) usa só lotes com `estoque_atual > 0` e `preco_custo > 0`: `Σ (estoque_atual × preco_custo)` — nunca `preco_venda`.
 
 ### Controle (FIFO)
 
