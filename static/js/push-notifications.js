@@ -51,40 +51,52 @@
     var _avisouLocalIndisponivel = false;
 
     /**
-     * LocalNotifications só pode ser chamado no shell nativo e com o plugin
-     * registrado. No iOS, createChannel existe no proxy e a ponte responde
-     * UNIMPLEMENTED; requestPermissions/schedule também rejeitam assim quando
-     * o alvo nativo não foi ligado ao app.
+     * Checagem oficial do Capacitor antes de requestPermissions/schedule.
+     * Fora do shell nativo (desktop/PWA) retorna false e o fluxo segue para Web Push.
      */
-    function localNotificationsDisponivel() {
+    function isLocalNotificationsAvailable() {
         try {
             var Cap = global.Capacitor;
-            if (!Cap || typeof Cap.isNativePlatform !== 'function' || !Cap.isNativePlatform()) {
-                return false;
-            }
-            if (typeof Cap.isPluginAvailable !== 'function' || !Cap.isPluginAvailable('LocalNotifications')) {
-                if (!_avisouLocalIndisponivel) {
-                    _avisouLocalIndisponivel = true;
-                    console.info('[Push] LocalNotifications não está registrado neste app (isPluginAvailable=false). requestPermissions e schedule não serão chamados.');
-                }
-                return false;
-            }
-            var Local = Cap.Plugins && Cap.Plugins.LocalNotifications;
-            if (!Local || typeof Local.requestPermissions !== 'function' || typeof Local.schedule !== 'function') {
-                if (!_avisouLocalIndisponivel) {
-                    _avisouLocalIndisponivel = true;
-                    console.info('[Push] LocalNotifications sem requestPermissions/schedule. Nenhuma chamada nativa será feita.');
-                }
-                return false;
-            }
-            return true;
+            return typeof Cap !== 'undefined' &&
+                Cap &&
+                Cap.isPluginAvailable &&
+                typeof Cap.isPluginAvailable === 'function' &&
+                Cap.isPluginAvailable('LocalNotifications');
         } catch (err) {
-            if (!_avisouLocalIndisponivel) {
-                _avisouLocalIndisponivel = true;
-                console.warn('[Push] Falha ao consultar LocalNotifications:', err);
-            }
             return false;
         }
+    }
+
+    function avisarLocalNotificationsIndisponivel(contexto) {
+        if (_avisouLocalIndisponivel) return;
+        _avisouLocalIndisponivel = true;
+        console.warn(
+            '[Push] LocalNotifications indisponível' +
+            (contexto ? ' (' + contexto + ')' : '') +
+            '. Agendamento e permissões locais ignorados. ' +
+            'No Mac: npm run ios:setup-pods && npx cap sync ios.'
+        );
+    }
+
+    /**
+     * Só invoca métodos nativos no shell Capacitor com plugin registrado.
+     * Não bloqueia Web Push em navegador (isCapacitorNative() === false).
+     */
+    function localNotificationsDisponivel() {
+        if (!isCapacitorNative()) {
+            return false;
+        }
+        if (!isLocalNotificationsAvailable()) {
+            avisarLocalNotificationsIndisponivel('isPluginAvailable=false');
+            return false;
+        }
+        var Cap = global.Capacitor;
+        var Local = Cap && Cap.Plugins && Cap.Plugins.LocalNotifications;
+        if (!Local || typeof Local.requestPermissions !== 'function' || typeof Local.schedule !== 'function') {
+            avisarLocalNotificationsIndisponivel('proxy JS incompleto');
+            return false;
+        }
+        return true;
     }
 
     function obterLocalNotifications() {
@@ -421,9 +433,14 @@
         console.log('Auditoria: Iniciando teste de notificação.',
             isCapacitorNative() ? '(Capacitor)' : '(Web)');
         if (isCapacitorNative()) {
+            if (!isLocalNotificationsAvailable()) {
+                avisarLocalNotificationsIndisponivel('dispararTeste');
+                return false;
+            }
             var ok = await dispararTesteNativoCapacitor();
             if (ok === false) {
-                throw new Error('LocalNotifications não está disponível neste app e o fallback web não pôde exibir a notificação.');
+                console.warn('[Push] Teste nativo ignorado (LocalNotifications indisponível ou fallback web indisponível).');
+                return false;
             }
         } else {
             await dispararTesteWeb();
@@ -597,7 +614,7 @@
         // --- Capacitor (iOS/Android): schedule nativo confiável em background ---
         if (isCapacitorNative()) {
             if (!localNotificationsDisponivel()) {
-                return { ok: false, motivo: 'plugin_indisponivel' };
+                return { ok: false, motivo: 'plugin_indisponivel', web_push_intacto: true };
             }
             var Local = obterLocalNotifications();
             if (!Local) {
@@ -755,7 +772,9 @@
             try {
                 if (global.document && global.document.hidden) return;
                 if (!isCapacitorNative()) return;
-                if (!localNotificationsDisponivel()) return;
+                if (!localNotificationsDisponivel()) {
+                    return;
+                }
                 inicializarNotificacoesLocais().catch(function(err) {
                     console.error('[Push] Erro na inicialização:', err);
                 });
@@ -776,6 +795,7 @@
     global.MeninoAlhoPush = {
         isSupported: isSupported,
         isCapacitorNative: isCapacitorNative,
+        isLocalNotificationsAvailable: isLocalNotificationsAvailable,
         localNotificationsDisponivel: localNotificationsDisponivel,
         urlBase64ToUint8Array: urlBase64ToUint8Array,
         ativar: ativar,

@@ -768,8 +768,11 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function localNotifPronto() {
-        return window.MeninoAlhoPush &&
-            typeof window.MeninoAlhoPush.localNotificationsDisponivel === 'function' &&
+        if (!window.MeninoAlhoPush) return false;
+        if (typeof window.MeninoAlhoPush.isLocalNotificationsAvailable === 'function') {
+            return window.MeninoAlhoPush.isLocalNotificationsAvailable();
+        }
+        return typeof window.MeninoAlhoPush.localNotificationsDisponivel === 'function' &&
             window.MeninoAlhoPush.localNotificationsDisponivel();
     }
 
