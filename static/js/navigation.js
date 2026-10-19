@@ -96,8 +96,10 @@
   }
 
   /**
-   * Fecha drawer/menu lateral ao deslizar da esquerda para a direita (iOS / Capacitor).
-   * @param {{ panel: Element, backdrop?: Element|null, isOpen: function(): boolean, onClose: function() }} options
+   * Fecha drawer/menu lateral ao deslizar no sentido de fecho (iOS / Capacitor).
+   * Drawer à esquerda: swipe direita → esquerda (translationX negativo).
+   * Drawer à direita: swipe esquerda → direita (translationX positivo).
+   * @param {{ panel: Element, backdrop?: Element|null, isOpen: function(): boolean, onClose: function(), drawerPosition?: 'left'|'right', minDeltaX?: number }} options
    */
   function setupDrawerSwipeToClose(options) {
     if (!options || !options.panel || typeof options.onClose !== 'function') return;
@@ -106,6 +108,7 @@
     var backdrop = options.backdrop || null;
     var isOpen = options.isOpen || function () { return true; };
     var onClose = options.onClose;
+    var drawerPosition = options.drawerPosition === 'right' ? 'right' : 'left';
     var minDeltaX = typeof options.minDeltaX === 'number' ? options.minDeltaX : 50;
 
     function alvoIgnoraSwipe(target) {
@@ -146,7 +149,9 @@
           var touch = e.changedTouches[0];
           var diffX = touch.screenX - startX;
           var diffY = touch.screenY - startY;
-          if (Math.abs(diffX) > Math.abs(diffY) && diffX > minDeltaX) {
+          var fechaPorSwipe =
+            drawerPosition === 'left' ? diffX < -minDeltaX : diffX > minDeltaX;
+          if (Math.abs(diffX) > Math.abs(diffY) && fechaPorSwipe) {
             onClose();
           }
         },
