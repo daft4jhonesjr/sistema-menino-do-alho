@@ -353,22 +353,23 @@
     </div>
 </div>
 
-<!-- Modal Novo Cliente -->
-<div id="modal-novo-cliente-wrap" class="fixed inset-0 z-[100] hidden" aria-hidden="true">
-    <div class="fixed inset-0 bg-black/50 z-[100]" id="modal-novo-cliente-overlay"></div>
-    <div class="fixed inset-0 z-[100] flex items-center justify-center p-4 pointer-events-none">
-    <div class="pointer-events-auto relative w-full max-w-2xl max-h-[min(90vh,calc(100dvh-2rem))] flex flex-col bg-white dark:bg-gray-800 rounded-xl shadow-sm dark:shadow-none border border-gray-200 dark:border-gray-700 overflow-hidden" onclick="event.stopPropagation()">
-        <div class="shrink-0 flex justify-between items-center px-8 py-5 bg-emerald-700 text-white">
-            <h3 class="text-xl font-bold flex items-center">
+<!-- Drawer Novo Cliente (padrão Nova Venda) -->
+<div id="modal-novo-cliente-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
+    <div class="fixed inset-0 z-50 bg-black/50 transition-opacity" id="modal-novo-cliente-overlay"></div>
+    <div id="modal-novo-cliente-panel"
+         class="fixed inset-y-0 right-0 w-full max-w-md bg-white dark:bg-gray-800 shadow-xl flex flex-col h-full transform transition-transform duration-300 translate-x-full z-[60] border-l border-gray-200 dark:border-gray-700"
+         role="dialog" aria-modal="true" aria-labelledby="modal-novo-cliente-titulo" onclick="event.stopPropagation()">
+        <div class="shrink-0 flex justify-between items-center px-6 py-4 bg-emerald-700 text-white" style="padding-top: max(1rem, env(safe-area-inset-top));">
+            <h3 id="modal-novo-cliente-titulo" class="text-xl font-bold flex items-center">
                 <i data-lucide="users" class="w-5 h-5 mr-2"></i>Novo Cliente
             </h3>
-            <button type="button" class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-emerald-600 text-white font-bold transition" id="modal-novo-cliente-fechar" title="Fechar">
+            <button type="button" class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-emerald-600 text-white font-bold transition min-w-[44px] min-h-[44px] touch-manipulation" id="modal-novo-cliente-fechar" title="Fechar (Esc)" aria-label="Fechar">
                 <i data-lucide="x" class="w-5 h-5"></i>
             </button>
         </div>
-        <div class="overflow-y-auto flex-1 min-h-0 p-8">
+        <form id="form-novo-cliente" action="{{ url_for('clientes.novo_cliente') }}" method="POST" class="flex flex-col flex-1 min-h-0">
+            <div class="flex-1 overflow-y-auto p-8 min-h-0">
             <div id="modal-novo-cliente-erro" class="hidden mb-4 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl text-red-800 dark:text-red-300 text-sm"></div>
-            <form id="form-novo-cliente" action="{{ url_for('clientes.novo_cliente') }}" method="POST">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="mb-5">
                     <label for="modal-nome_cliente" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Nome Cliente <span class="text-red-500">*</span></label>
@@ -460,17 +461,16 @@
                         </div>
                     </div>
                 </div>
-                <div class="flex gap-4">
-                    <button type="submit" class="bg-emerald-700 text-white px-6 py-2.5 rounded-xl hover:bg-emerald-600 transition flex items-center font-medium" id="modal-novo-cliente-salvar">
-                        <i data-lucide="check" class="w-4 h-4 mr-2"></i>Salvar
-                    </button>
-                    <button type="button" class="bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-6 py-2.5 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 transition flex items-center font-medium" id="modal-novo-cliente-cancelar">
-                        <i data-lucide="x" class="w-4 h-4 mr-2"></i>Cancelar
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
+            </div>
+            <div class="shrink-0 flex flex-col sm:flex-row gap-3 p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 pb-[max(1rem,env(safe-area-inset-bottom))]">
+                <button type="submit" class="w-full sm:w-auto bg-emerald-700 text-white px-6 py-2.5 rounded-xl hover:bg-emerald-600 transition flex items-center justify-center font-medium min-h-[44px] touch-manipulation" id="modal-novo-cliente-salvar">
+                    <i data-lucide="check" class="w-4 h-4 mr-2"></i>Salvar
+                </button>
+                <button type="button" class="w-full sm:w-auto bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-6 py-2.5 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 transition flex items-center justify-center font-medium min-h-[44px] touch-manipulation" id="modal-novo-cliente-cancelar">
+                    <i data-lucide="x" class="w-4 h-4 mr-2"></i>Cancelar
+                </button>
+            </div>
+        </form>
     </div>
 </div>
 
@@ -800,6 +800,7 @@ window.padronizarClientesMaiusculo = function() {
 
 (function() {
     var wrap = document.getElementById('modal-novo-cliente-wrap');
+    var panel = document.getElementById('modal-novo-cliente-panel');
     var btnAbrir = document.getElementById('btn-abrir-modal-novo-cliente');
     var overlay = document.getElementById('modal-novo-cliente-overlay');
     var btnFechar = document.getElementById('modal-novo-cliente-fechar');
@@ -820,16 +821,37 @@ window.padronizarClientesMaiusculo = function() {
     function abrir() {
         var menuNovoCliente = document.getElementById('dropdown-novo-cliente-menu');
         if (menuNovoCliente) menuNovoCliente.classList.add('hidden');
-        if (wrap) {
+        if (wrap && panel) {
             wrap.classList.remove('hidden');
+            wrap.setAttribute('aria-hidden', 'false');
+            panel.classList.remove('hidden');
+            panel.classList.add('translate-x-full');
+            panel.classList.remove('translate-x-0');
+            panel.offsetHeight;
+            panel.classList.remove('translate-x-full');
+            panel.classList.add('translate-x-0');
+            panel.setAttribute('aria-hidden', 'false');
             travarFundo();
         }
         resetBtnSalvar();
         if (typeof lucide !== 'undefined') lucide.createIcons();
     }
     function fechar() {
+        if (panel) {
+            panel.classList.remove('translate-x-0');
+            panel.classList.add('translate-x-full');
+            panel.setAttribute('aria-hidden', 'true');
+        }
         if (wrap) {
-            wrap.classList.add('hidden');
+            setTimeout(function() {
+                if (!panel || panel.classList.contains('translate-x-full')) {
+                    wrap.classList.add('hidden');
+                    wrap.setAttribute('aria-hidden', 'true');
+                    if (panel) panel.classList.add('hidden');
+                    if (typeof liberarFundo === 'function') liberarFundo();
+                }
+            }, 300);
+        } else if (typeof liberarFundo === 'function') {
             liberarFundo();
         }
         erroDiv.classList.add('hidden');
@@ -841,6 +863,12 @@ window.padronizarClientesMaiusculo = function() {
     if (overlay) overlay.addEventListener('click', fechar);
     if (btnFechar) btnFechar.addEventListener('click', fechar);
     if (btnCancelar) btnCancelar.addEventListener('click', fechar);
+    document.addEventListener('keydown', function(e) {
+        if (e.key !== 'Escape') return;
+        if (wrap && !wrap.classList.contains('hidden') && panel && !panel.classList.contains('translate-x-full')) {
+            fechar();
+        }
+    });
 
     if (form) {
         form.addEventListener('submit', function(e) {
