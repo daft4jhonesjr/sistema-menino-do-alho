@@ -186,25 +186,56 @@
             position: relative;
             z-index: 0;
         }
-        /* Menu mobile: links colapsáveis */
+        /* Menu mobile: overlay (não empurra o conteúdo) */
         @media (max-width: 767px) {
             nav#site-nav > div.w-full {
                 padding-left: 16px;
                 padding-right: 16px;
             }
+            body.site-nav-mobile-open {
+                overflow: hidden;
+            }
+            #site-nav-mobile-backdrop {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100vh;
+                height: 100dvh;
+                z-index: 9998;
+                background: rgba(0, 0, 0, 0.45);
+                -webkit-tap-highlight-color: transparent;
+            }
+            #site-nav-mobile-backdrop:not(.is-visible) {
+                display: none !important;
+                pointer-events: none;
+            }
+            #site-nav-mobile-backdrop.is-visible {
+                display: block;
+                pointer-events: auto;
+            }
             #site-nav-links {
                 display: none;
-                width: 100%;
-                flex-direction: column;
-                align-items: stretch;
-                gap: 0.25rem;
-                padding-top: 0.25rem;
-                border-top: 1px solid rgba(255, 255, 255, 0.12);
-                margin-top: 0.25rem;
                 box-sizing: border-box;
             }
             #site-nav.site-nav-mobile-open #site-nav-links {
                 display: flex;
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: min(100%, 20rem);
+                height: 100vh;
+                height: 100dvh;
+                z-index: 9999;
+                flex-direction: column;
+                align-items: stretch;
+                gap: 0.25rem;
+                margin: 0;
+                padding: env(safe-area-inset-top) 0.75rem env(safe-area-inset-bottom);
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+                background-color: rgb(4 120 87); /* emerald-700 */
+                box-shadow: 4px 0 24px rgba(0, 0, 0, 0.25);
             }
             #site-nav-links a {
                 display: flex;
@@ -212,6 +243,9 @@
                 max-width: 100%;
                 box-sizing: border-box;
                 justify-content: flex-start;
+            }
+            .site-nav-mobile-drawer-header {
+                flex-shrink: 0;
             }
             #user-menu-button span.pointer-events-none {
                 display: none;
@@ -746,6 +780,13 @@
                     Menu
                 </button>
                 <div id="site-nav-links" class="order-3 md:order-none gap-1 items-center md:flex md:flex-wrap md:justify-center">
+                <div class="site-nav-mobile-drawer-header md:hidden flex items-center justify-between gap-2 px-1 py-2 mb-1 border-b border-white/15">
+                    <span class="text-emerald-50 font-semibold text-sm tracking-wide">Menu principal</span>
+                    <button type="button" id="btn-mobile-nav-close-panel" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-emerald-50 hover:bg-white/10 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400" aria-label="Fechar menu">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                        Fechar
+                    </button>
+                </div>
                 {% if current_user.nivel_acesso in ['admin', 'master'] or 'dashboard' in current_user.permissoes_lista %}
                 <a href="{{ url_for('dashboard.dashboard') }}" class="px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors text-sm {% if request.endpoint == 'dashboard.dashboard' %}bg-white/20 text-white font-medium{% else %}text-emerald-50 hover:bg-white/10 hover:text-white{% endif %}">
                     <i data-lucide="layout-dashboard" class="w-4 h-4"></i>Dashboard
@@ -861,6 +902,7 @@
             </div>
         </div>
     </nav>
+    <div id="site-nav-mobile-backdrop" class="hidden md:hidden" aria-hidden="true" role="presentation"></div>
 
     <!-- Main Content -->
     <main class="w-full px-2 md:px-4 lg:px-6 xl:px-8 py-6 pb-16 flex-1 animate-in fade-in duration-200">
@@ -1812,27 +1854,45 @@
         }
     }
     
-    // Menu mobile (hambúrguer)
+    // Menu mobile (hambúrguer + overlay)
     (function() {
         var nav = document.getElementById('site-nav');
         var toggle = document.getElementById('btn-mobile-nav-toggle');
         var links = document.getElementById('site-nav-links');
+        var backdrop = document.getElementById('site-nav-mobile-backdrop');
+        var btnFecharPainel = document.getElementById('btn-mobile-nav-close-panel');
         var iconMenu = document.getElementById('icon-mobile-nav-menu');
         var iconClose = document.getElementById('icon-mobile-nav-close');
         if (!nav || !toggle || !links) return;
 
         function fecharNavMobile() {
             nav.classList.remove('site-nav-mobile-open');
+            document.body.classList.remove('site-nav-mobile-open');
             toggle.setAttribute('aria-expanded', 'false');
             if (iconMenu) iconMenu.classList.remove('hidden');
             if (iconClose) iconClose.classList.add('hidden');
+            if (backdrop) {
+                backdrop.classList.remove('is-visible');
+                backdrop.classList.add('hidden');
+                backdrop.setAttribute('aria-hidden', 'true');
+            }
         }
 
         function abrirNavMobile() {
+            if (window.innerWidth >= 768) return;
             nav.classList.add('site-nav-mobile-open');
+            document.body.classList.add('site-nav-mobile-open');
             toggle.setAttribute('aria-expanded', 'true');
             if (iconMenu) iconMenu.classList.add('hidden');
             if (iconClose) iconClose.classList.remove('hidden');
+            if (backdrop) {
+                backdrop.classList.remove('hidden');
+                backdrop.classList.add('is-visible');
+                backdrop.setAttribute('aria-hidden', 'false');
+            }
+            if (typeof lucide !== 'undefined' && lucide.createIcons) {
+                try { lucide.createIcons(); } catch (err) {}
+            }
         }
 
         toggle.addEventListener('click', function(e) {
@@ -1844,6 +1904,19 @@
             }
         });
 
+        if (btnFecharPainel) {
+            btnFecharPainel.addEventListener('click', function(e) {
+                e.stopPropagation();
+                fecharNavMobile();
+            });
+        }
+
+        if (backdrop) {
+            backdrop.addEventListener('click', function() {
+                fecharNavMobile();
+            });
+        }
+
         links.querySelectorAll('a[href]').forEach(function(link) {
             link.addEventListener('click', function() {
                 if (window.innerWidth < 768) fecharNavMobile();
@@ -1852,7 +1925,11 @@
 
         document.addEventListener('click', function(e) {
             if (window.innerWidth >= 768) return;
-            if (!nav.contains(e.target)) fecharNavMobile();
+            if (!nav.classList.contains('site-nav-mobile-open')) return;
+            var alvo = e.target;
+            if (nav.contains(alvo)) return;
+            if (backdrop && backdrop.contains(alvo)) return;
+            fecharNavMobile();
         });
 
         window.addEventListener('resize', function() {
@@ -1860,34 +1937,51 @@
         });
 
         document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') fecharNavMobile();
+            if (e.key === 'Escape' && nav.classList.contains('site-nav-mobile-open')) {
+                fecharNavMobile();
+            }
         });
 
-        // Swipe da esquerda para a direita abre o menu (mobile / Capacitor iOS)
+        // Swipe: borda esquerda → direita abre; com menu aberto, ↔ fecha (padrão iOS)
         var SWIPE_BORDA_MAX_X = 48;
         var SWIPE_MIN_DELTA_X = 72;
         var SWIPE_MAX_DELTA_Y = 64;
         var swipeAtivo = false;
+        var swipeModo = null;
         var swipeStartX = 0;
         var swipeStartY = 0;
 
         var toqueDentroDeModalNav = function(target) {
             if (!target || !target.closest) return false;
+            if (target.closest('#site-nav-links, #site-nav-mobile-backdrop')) return false;
             return !!target.closest('.fixed.z-50, .fixed.z-\\[9998\\], .fixed.z-\\[9999\\], [role="dialog"], .modal-container, .bg-black\\/50, .bg-black\\/60, #gaveta-contagem, #gaveta-orcamento, #gaveta-lancamento, #gaveta-balanco, #modal-nova-entrada-wrap, #modal-nova-entrada-overlay, #modal-editar-produto-wrap, #modal-editar-produto-overlay, #modal-devolver-produto-wrap, #container-nova-venda, #modal-novo-cliente-wrap, #modal-novo-cliente-panel');
         };
 
-        var podeAbrirMenuPorSwipe = function() {
-            return window.innerWidth < 768
-                && !nav.classList.contains('site-nav-mobile-open')
-                && !document.body.classList.contains('modal-aberto');
+        var podeUsarSwipeMenuNav = function() {
+            return window.innerWidth < 768 && !document.body.classList.contains('modal-aberto');
+        };
+
+        var gestoHorizontalValido = function(deltaX, deltaY) {
+            return Math.abs(deltaY) <= SWIPE_MAX_DELTA_Y && Math.abs(deltaX) > Math.abs(deltaY);
         };
 
         document.addEventListener('touchstart', function(e) {
-            if (!podeAbrirMenuPorSwipe()) return;
+            if (!podeUsarSwipeMenuNav()) return;
             if (toqueDentroDeModalNav(e.target)) return;
             if (!e.touches || !e.touches.length) return;
             var touch = e.touches[0];
-            if (touch.clientX > SWIPE_BORDA_MAX_X) return;
+            var menuAberto = nav.classList.contains('site-nav-mobile-open');
+
+            if (menuAberto) {
+                var alvo = e.target;
+                var noOverlay = links.contains(alvo) || (backdrop && backdrop.contains(alvo));
+                if (!noOverlay) return;
+                swipeModo = 'fechar';
+            } else {
+                if (touch.clientX > SWIPE_BORDA_MAX_X) return;
+                swipeModo = 'abrir';
+            }
+
             swipeStartX = touch.clientX;
             swipeStartY = touch.clientY;
             swipeAtivo = true;
@@ -1896,23 +1990,36 @@
         var finalizarSwipeMenu = function(e) {
             if (!swipeAtivo) return;
             swipeAtivo = false;
-            if (!podeAbrirMenuPorSwipe()) return;
-            if (!e.changedTouches || !e.changedTouches.length) return;
+            if (!podeUsarSwipeMenuNav()) {
+                swipeModo = null;
+                return;
+            }
+            if (!e.changedTouches || !e.changedTouches.length) {
+                swipeModo = null;
+                return;
+            }
             var touch = e.changedTouches[0];
             var deltaX = touch.clientX - swipeStartX;
             var deltaY = touch.clientY - swipeStartY;
-            if (
-                deltaX >= SWIPE_MIN_DELTA_X
-                && Math.abs(deltaY) <= SWIPE_MAX_DELTA_Y
-                && deltaX > Math.abs(deltaY)
-            ) {
-                abrirNavMobile();
+            if (!gestoHorizontalValido(deltaX, deltaY)) {
+                swipeModo = null;
+                return;
             }
+
+            if (swipeModo === 'abrir' && !nav.classList.contains('site-nav-mobile-open')) {
+                if (deltaX >= SWIPE_MIN_DELTA_X) abrirNavMobile();
+            } else if (swipeModo === 'fechar' && nav.classList.contains('site-nav-mobile-open')) {
+                if (deltaX >= SWIPE_MIN_DELTA_X || deltaX <= -SWIPE_MIN_DELTA_X) {
+                    fecharNavMobile();
+                }
+            }
+            swipeModo = null;
         };
 
         document.addEventListener('touchend', finalizarSwipeMenu, { passive: true });
         document.addEventListener('touchcancel', function() {
             swipeAtivo = false;
+            swipeModo = null;
         }, { passive: true });
     })();
 
