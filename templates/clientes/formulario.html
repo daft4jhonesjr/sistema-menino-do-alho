@@ -3,6 +3,7 @@
 {% block title %}{% if cliente %}Editar{% else %}Novo{% endif %} Cliente - Menino do Alho{% endblock %}
 
 {% block content %}
+<div class="relative z-10">
 <div class="mb-6">
     <h2 class="text-3xl font-bold text-verde-floresta mb-2">
         {% if cliente %}Editar Cliente{% else %}Novo Cliente{% endif %}
@@ -207,6 +208,7 @@
             </a>
         </div>
     </form>
+</div>
 </div>
 {% endblock %}
 
