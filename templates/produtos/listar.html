@@ -542,8 +542,8 @@
 
 <!-- Overlay + Gaveta de Ações (Nova Entrada e demais) -->
 <div id="modal-nova-entrada-overlay" class="fixed inset-0 z-[9998] hidden bg-black/50 transition-opacity" aria-hidden="true"></div>
-<div id="modal-nova-entrada-wrap" class="fixed inset-y-0 right-0 z-[9999] hidden w-full max-w-md h-full translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col transform" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="gaveta-nova-entrada-titulo" data-acao="">
-    <div class="flex items-center justify-between px-5 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))] border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 shrink-0">
+<div id="modal-nova-entrada-wrap" class="fixed inset-y-0 right-0 z-[9999] hidden w-full max-w-md h-full translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col transform" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="gaveta-nova-entrada-titulo" data-acao="" data-swipe-dismiss data-swipe-backdrop="#modal-nova-entrada-overlay" data-swipe-close-click="#modal-nova-entrada-fechar">
+    <div data-swipe-handle class="flex items-center justify-between px-5 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))] border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 shrink-0">
         <div>
             <h3 id="gaveta-nova-entrada-titulo" class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                 <span id="gaveta-acoes-icone-wrap" class="inline-flex">
@@ -1189,8 +1189,8 @@ function fecharModalNovoFornecedor() {
 <!-- Modal Editar Produto -->
 <!-- Overlay + Gaveta Editar Produto -->
 <div id="modal-editar-produto-overlay" class="fixed inset-0 z-[9998] hidden bg-black/50 transition-opacity" aria-hidden="true"></div>
-<div id="modal-editar-produto-wrap" class="fixed inset-y-0 right-0 z-[9999] hidden w-full max-w-md h-full translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col pointer-events-auto transform" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="gaveta-editar-produto-titulo">
-    <div class="flex items-center justify-between px-5 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))] border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 shrink-0">
+<div id="modal-editar-produto-wrap" class="fixed inset-y-0 right-0 z-[9999] hidden w-full max-w-md h-full translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col pointer-events-auto transform" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="gaveta-editar-produto-titulo" data-swipe-dismiss data-swipe-backdrop="#modal-editar-produto-overlay" data-swipe-close="fecharGavetaEditarProduto">
+    <div data-swipe-handle class="flex items-center justify-between px-5 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))] border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 shrink-0">
         <div>
             <h3 id="gaveta-editar-produto-titulo" class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                 <i data-lucide="pencil" class="w-5 h-5 text-emerald-600 dark:text-emerald-400"></i>
@@ -2238,44 +2238,6 @@ window.getTipoConfigPorSelect = function(selectEl) {
     if (overlay) overlay.addEventListener('click', fechar);
     if (btnFechar) btnFechar.addEventListener('click', fechar);
     if (btnCancelar) btnCancelar.addEventListener('click', fechar);
-
-    if (wrap) {
-        var SWIPE_MIN_DX = 80;
-        var SWIPE_BORDA_ESQUERDA = 60;
-        var swipeStartX = null;
-        var swipeStartY = null;
-
-        wrap.addEventListener('touchstart', function(e) {
-            if (e.touches.length !== 1) {
-                swipeStartX = null;
-                return;
-            }
-            var t = e.touches[0];
-            swipeStartX = t.clientX;
-            swipeStartY = t.clientY;
-            // Borda esquerda relativa à gaveta, que no desktop não encosta na lateral da tela.
-            var swipeDaBorda = (t.clientX - wrap.getBoundingClientRect().left) < SWIPE_BORDA_ESQUERDA;
-            // Fora da borda, arrastos sobre campos de texto/range servem para selecionar ou ajustar valor.
-            if (!swipeDaBorda && e.target.closest && e.target.closest('input, textarea, select, [contenteditable="true"]')) {
-                swipeStartX = null;
-            }
-        }, { passive: true });
-
-        wrap.addEventListener('touchend', function(e) {
-            if (swipeStartX === null || !e.changedTouches.length) return;
-            var t = e.changedTouches[0];
-            var deltaX = t.clientX - swipeStartX;
-            var deltaY = t.clientY - swipeStartY;
-            swipeStartX = null;
-            if (deltaX > SWIPE_MIN_DX && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
-                fechar();
-            }
-        }, { passive: true });
-
-        wrap.addEventListener('touchcancel', function() {
-            swipeStartX = null;
-        }, { passive: true });
-    }
 
     document.addEventListener('keydown', function(e) {
         if (e.key !== 'Escape') return;

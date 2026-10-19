@@ -741,7 +741,7 @@
 
             var toqueDentroDeModal = function(target) {
                 if (!target || !target.closest) return false;
-                return !!target.closest('.fixed.z-50, .fixed.z-\\[9998\\], .fixed.z-\\[9999\\], [role="dialog"], .modal-container, .bg-black\\/50, .bg-black\\/60, #site-nav-mobile-backdrop, #site-nav-links, #gaveta-contagem, #gaveta-orcamento, #gaveta-lancamento, #gaveta-balanco, #logistica-drawer-overlay, #logistica-drawer-panel, #modal-nova-entrada-wrap, #modal-nova-entrada-overlay, #modal-editar-produto-wrap, #modal-editar-produto-overlay, #modal-devolver-produto-wrap, #container-nova-venda, #modal-importar-vendas-wrap, #modal-novo-cliente-wrap, #modal-novo-cliente-panel');
+                return !!target.closest('[data-swipe-dismiss], .fixed.z-50, .fixed.z-\\[9998\\], .fixed.z-\\[9999\\], [role="dialog"], .modal-container, .bg-black\\/50, .bg-black\\/60, #site-nav-mobile-backdrop, #site-nav-links, #gaveta-contagem, #gaveta-orcamento, #gaveta-lancamento, #gaveta-balanco, #logistica-drawer-overlay, #logistica-drawer-panel, #modal-nova-entrada-wrap, #modal-nova-entrada-overlay, #modal-editar-produto-wrap, #modal-editar-produto-overlay, #modal-devolver-produto-wrap, #container-nova-venda, #modal-importar-vendas-wrap, #modal-novo-cliente-wrap, #modal-novo-cliente-panel');
             };
 
             // Início do toque
@@ -984,8 +984,8 @@
     {% if current_user.is_authenticated and (current_user.nivel_acesso in ['admin', 'master'] or 'logistica' in current_user.permissoes_lista) %}
     <!-- Overlay + Gaveta lateral direita: Logística (sem sair da página) -->
     <div id="logistica-drawer-overlay" class="fixed inset-0 z-[9998] hidden bg-black/45 dark:bg-black/55" aria-hidden="true" role="presentation"></div>
-    <aside id="logistica-drawer-panel" class="fixed inset-y-0 right-0 z-[9999] hidden flex flex-col h-full max-h-[100dvh] bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 translate-x-full transform" role="dialog" aria-modal="true" aria-labelledby="logistica-drawer-titulo" aria-hidden="true">
-        <header class="flex items-center justify-between gap-2 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 shrink-0">
+    <aside id="logistica-drawer-panel" class="fixed inset-y-0 right-0 z-[9999] hidden flex flex-col h-full max-h-[100dvh] bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 translate-x-full transform" role="dialog" aria-modal="true" aria-labelledby="logistica-drawer-titulo" aria-hidden="true" data-swipe-dismiss data-swipe-backdrop="#logistica-drawer-overlay" data-swipe-close="fecharGavetaLogistica">
+        <header data-swipe-handle class="flex items-center justify-between gap-2 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 shrink-0">
             <div class="min-w-0">
                 <h2 id="logistica-drawer-titulo" class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                     <i data-lucide="truck" class="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0"></i>
@@ -1016,8 +1016,8 @@
     {% if current_user.is_authenticated %}
     <!-- Overlay + Gaveta: Balanço Patrimonial Rápido -->
     <div id="gaveta-balanco-overlay" class="fixed inset-0 z-50 hidden bg-black/50" onclick="fecharGavetaBalanco()" aria-hidden="true"></div>
-    <div id="gaveta-balanco" class="fixed inset-y-0 right-0 z-50 hidden w-full max-w-md translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col h-full" role="dialog" aria-modal="true" aria-labelledby="modal-balanco-titulo" aria-hidden="true">
-        <div class="flex items-center justify-between px-5 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))] border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 shrink-0">
+    <div id="gaveta-balanco" class="fixed inset-y-0 right-0 z-50 hidden w-full max-w-md translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col h-full" role="dialog" aria-modal="true" aria-labelledby="modal-balanco-titulo" aria-hidden="true" data-swipe-dismiss data-swipe-backdrop="#gaveta-balanco-overlay" data-swipe-close="fecharGavetaBalanco">
+        <div data-swipe-handle class="flex items-center justify-between px-5 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))] border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 shrink-0">
             <div>
                 <h3 id="modal-balanco-titulo" class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                     <i data-lucide="scale" class="w-5 h-5 text-emerald-600 dark:text-emerald-400"></i>
@@ -2125,6 +2125,7 @@
     <script>(function(){ if (typeof lucide !== 'undefined') lucide.createIcons(); })();</script>
     <script src="{{ url_for('static', filename='js/ios-drag-drop.js') }}"></script>
     <script src="{{ url_for('static', filename='js/navigation.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/swipe-dismiss.js') }}"></script>
     {% if current_user.is_authenticated and (current_user.nivel_acesso in ['admin', 'master'] or 'logistica' in current_user.permissoes_lista) %}
     <script src="{{ url_for('static', filename='js/logistica-drawer.js') }}"></script>
     {% endif %}
@@ -2157,6 +2158,7 @@
             canStartOpenGesture: function() {
                 if (window.innerWidth >= 768) return false;
                 if (document.body.classList.contains('modal-aberto')) return false;
+                if (document.body.classList.contains('swipe-dismiss-dragging')) return false;
                 if (typeof window.isSiteNavMobileOpen === 'function' && window.isSiteNavMobileOpen()) {
                     return false;
                 }
@@ -2165,7 +2167,7 @@
             shouldIgnoreTouchTarget: function(target) {
                 if (!target || !target.closest) return false;
                 if (target.closest('#site-nav-links, #site-nav-mobile-backdrop')) return false;
-                return !!target.closest('.fixed.z-50, .fixed.z-\\[9998\\], .fixed.z-\\[9999\\], [role="dialog"], .modal-container, .bg-black\\/50, .bg-black\\/60, #gaveta-contagem, #gaveta-orcamento, #gaveta-lancamento, #gaveta-balanco, #logistica-drawer-overlay, #logistica-drawer-panel, #modal-nova-entrada-wrap, #modal-nova-entrada-overlay, #modal-editar-produto-wrap, #modal-editar-produto-overlay, #modal-devolver-produto-wrap, #container-nova-venda, #modal-importar-vendas-wrap, #modal-novo-cliente-wrap, #modal-novo-cliente-panel');
+                return !!target.closest('[data-swipe-dismiss], .fixed.z-50, .fixed.z-\\[9998\\], .fixed.z-\\[9999\\], [role="dialog"], .modal-container, .bg-black\\/50, .bg-black\\/60, #gaveta-contagem, #gaveta-orcamento, #gaveta-lancamento, #gaveta-balanco, #logistica-drawer-overlay, #logistica-drawer-panel, #modal-nova-entrada-wrap, #modal-nova-entrada-overlay, #modal-editar-produto-wrap, #modal-editar-produto-overlay, #modal-devolver-produto-wrap, #container-nova-venda, #modal-importar-vendas-wrap, #modal-novo-cliente-wrap, #modal-novo-cliente-panel');
             }
         });
     })();
