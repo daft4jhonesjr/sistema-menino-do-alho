@@ -222,6 +222,30 @@
     }
     window.mostrarLoadingDeFiltro = mostrarLoadingDeFiltro;
 
+    window.confirmarSincronizacaoApple = function(event, targetUrl) {
+        if (event) event.preventDefault();
+        if (typeof Swal === 'undefined') {
+            if (targetUrl) window.location.href = targetUrl;
+            return;
+        }
+        Swal.fire({
+            title: 'Sincronizar com Apple?',
+            text: 'Deseja abrir seu app Calendário para importar as entregas e vencimentos? Seu navegador poderá pedir uma confirmação em seguida.',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#10b981',
+            cancelButtonColor: '#64748b',
+            confirmButtonText: 'Sim, sincronizar',
+            cancelButtonText: 'Agora não',
+            background: '#1e293b',
+            color: '#f8fafc'
+        }).then(function(result) {
+            if (result.isConfirmed && targetUrl) {
+                window.location.href = targetUrl;
+            }
+        });
+    };
+
     function ehLinkDeFiltro(link) {
         if (!link || !link.href) return false;
         if (link.classList.contains('js-filtro-navegacao') || link.id === 'btn-limpar-filtro') return true;
@@ -276,6 +300,7 @@
     </div>
     {% if webcal_url %}
     <a href="{{ webcal_url }}"
+       onclick="confirmarSincronizacaoApple(event, '{{ webcal_url }}')"
        class="inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-emerald-700 dark:hover:text-emerald-400 border border-gray-200 dark:border-gray-600 hover:border-emerald-300 dark:hover:border-emerald-600 rounded-lg px-2.5 py-1.5 transition-colors bg-white/60 dark:bg-gray-900/40"
        title="Assinar este calendário no Apple Calendar (iPhone/Mac)">
         <span aria-hidden="true">🗓️</span>
