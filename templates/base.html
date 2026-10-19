@@ -555,7 +555,57 @@
         @media (min-width: 768px) {
             #ptr-indicador { display: none; }
         }
+
+        #page-loading-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.4);
+            -webkit-backdrop-filter: blur(2px);
+            backdrop-filter: blur(2px);
+            cursor: progress;
+        }
+        #page-loading-overlay.is-visible {
+            display: flex;
+        }
+        #page-loading-overlay .page-loading-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 1.25rem 1.75rem;
+            border-radius: 1rem;
+            background: #047857; /* emerald-700 */
+            border: 1px solid rgba(52, 211, 153, 0.35);
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(52, 211, 153, 0.08);
+            color: #ecfdf5; /* emerald-50 */
+        }
+        .dark #page-loading-overlay .page-loading-card {
+            background: #1f2937;
+            border-color: #374151;
+        }
+        #page-loading-engrenagem {
+            width: 48px;
+            height: 48px;
+            color: #6ee7b7; /* emerald-300 */
+            animation: spin 1s linear infinite;
+        }
+        #page-loading-overlay .page-loading-texto {
+            font-size: 0.875rem;
+            font-weight: 600;
+            letter-spacing: 0.025em;
+        }
+        @keyframes spin {
+            100% { transform: rotate(360deg); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            #page-loading-engrenagem { animation-duration: 2.5s; }
+        }
     </style>
+    <script src="{{ url_for('static', filename='js/page-loading.js') }}"></script>
     {% block head_extras %}{% endblock %}
 </head>
 <body class="app-shell bg-emerald-50 text-gray-800 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-500 min-h-dvh flex flex-col">
@@ -564,6 +614,15 @@
             <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
             <circle cx="12" cy="12" r="3"/>
         </svg>
+    </div>
+    <div id="page-loading-overlay" role="status" aria-live="polite" aria-hidden="true">
+        <div class="page-loading-card">
+            <svg id="page-loading-engrenagem" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+                <circle cx="12" cy="12" r="3"/>
+            </svg>
+            <span class="page-loading-texto">Carregando…</span>
+        </div>
     </div>
     <script>
     var _scrollPosAnteModal = 0;
