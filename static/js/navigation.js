@@ -95,82 +95,6 @@
     navigate(destino);
   }
 
-  /**
-   * Fecha drawer/menu lateral ao deslizar no sentido de fecho (iOS / Capacitor).
-   * Drawer à esquerda: swipe direita → esquerda (translationX negativo).
-   * Drawer à direita: swipe esquerda → direita (translationX positivo).
-   * @param {{ panel: Element, backdrop?: Element|null, isOpen: function(): boolean, onClose: function(), drawerPosition?: 'left'|'right', minDeltaX?: number }} options
-   */
-  function setupDrawerSwipeToClose(options) {
-    if (!options || !options.panel || typeof options.onClose !== 'function') return;
-
-    var panel = options.panel;
-    var backdrop = options.backdrop || null;
-    var isOpen = options.isOpen || function () { return true; };
-    var onClose = options.onClose;
-    var drawerPosition = options.drawerPosition === 'right' ? 'right' : 'left';
-    var minDeltaX = typeof options.minDeltaX === 'number' ? options.minDeltaX : 50;
-
-    function alvoIgnoraSwipe(target) {
-      if (!target || !target.closest) return false;
-      return !!target.closest(
-        'input, textarea, select, button, [contenteditable="true"], label[for]'
-      );
-    }
-
-    function registrarSwipeFechar(el) {
-      if (!el) return;
-
-      var startX = 0;
-      var startY = 0;
-      var rastreando = false;
-
-      el.addEventListener(
-        'touchstart',
-        function (e) {
-          if (!isOpen()) return;
-          if (alvoIgnoraSwipe(e.target)) return;
-          if (!e.touches || !e.touches.length) return;
-          var touch = e.touches[0];
-          startX = touch.screenX;
-          startY = touch.screenY;
-          rastreando = true;
-        },
-        { passive: true }
-      );
-
-      el.addEventListener(
-        'touchend',
-        function (e) {
-          if (!rastreando) return;
-          rastreando = false;
-          if (!isOpen()) return;
-          if (!e.changedTouches || !e.changedTouches.length) return;
-          var touch = e.changedTouches[0];
-          var diffX = touch.screenX - startX;
-          var diffY = touch.screenY - startY;
-          var fechaPorSwipe =
-            drawerPosition === 'left' ? diffX < -minDeltaX : diffX > minDeltaX;
-          if (Math.abs(diffX) > Math.abs(diffY) && fechaPorSwipe) {
-            onClose();
-          }
-        },
-        { passive: true }
-      );
-
-      el.addEventListener(
-        'touchcancel',
-        function () {
-          rastreando = false;
-        },
-        { passive: true }
-      );
-    }
-
-    registrarSwipeFechar(panel);
-    registrarSwipeFechar(backdrop);
-  }
-
   var DRAWER_DRAG_TRANSITION = 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
   var DRAWER_DRAG_VELOCITY = 0.35;
 
@@ -188,6 +112,7 @@
    *   openThreshold?: number,
    *   closeThreshold?: number,
    *   draggingBodyClass?: string,
+   *   closeGesture?: boolean,
    *   canStartOpenGesture?: function(): boolean,
    *   shouldIgnoreTouchTarget?: function(Element): boolean
    * }} options
@@ -534,6 +459,7 @@
       beginCloseGesture(e.touches[0]);
     }
 
+    if (options.closeGesture === false) return;
     panel.addEventListener('touchstart', onCloseTouchStart, { passive: true });
     if (backdrop) {
       backdrop.addEventListener('touchstart', onCloseTouchStart, { passive: true });
@@ -543,7 +469,6 @@
   global.MeninoAlhoNavigation = {
     navigate: navigate,
     FALLBACK_MS: FALLBACK_MS,
-    setupDrawerSwipeToClose: setupDrawerSwipeToClose,
     setupDrawerInteractiveDrag: setupDrawerInteractiveDrag
   };
 

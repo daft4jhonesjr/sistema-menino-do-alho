@@ -352,8 +352,8 @@
 
 <div id="modal-relatorio-vendas-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
     <div class="fixed inset-0 bg-black/50" id="modal-relatorio-vendas-overlay"></div>
-    <div id="modal-relatorio-vendas-panel" class="fixed inset-y-0 right-0 w-full max-w-md bg-white dark:bg-gray-800 shadow-xl dark:shadow-none border-l border-gray-200 dark:border-gray-700 h-full flex flex-col z-50 transform transition-transform duration-300 translate-x-full" onclick="event.stopPropagation()">
-        <div class="modal-relatorio-vendas-header flex-shrink-0 flex justify-between items-center bg-emerald-700 text-white pb-5" style="padding-top: max(16px, env(safe-area-inset-top)); padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right));">
+    <div id="modal-relatorio-vendas-panel" class="fixed inset-y-0 right-0 w-full max-w-md bg-white dark:bg-gray-800 shadow-xl dark:shadow-none border-l border-gray-200 dark:border-gray-700 h-full flex flex-col z-50 transform transition-transform duration-300 translate-x-full" onclick="event.stopPropagation()" data-swipe-dismiss data-swipe-backdrop="#modal-relatorio-vendas-overlay" data-swipe-close-click="#modal-relatorio-vendas-fechar">
+        <div data-swipe-handle class="modal-relatorio-vendas-header flex-shrink-0 flex justify-between items-center bg-emerald-700 text-white pb-5" style="padding-top: max(16px, env(safe-area-inset-top)); padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right));">
             <h3 class="text-xl font-bold flex items-center">
                 <i data-lucide="file-spreadsheet" class="w-5 h-5 mr-2"></i>Gerador de Relatorio Personalizado
             </h3>
@@ -446,8 +446,8 @@
 {% if current_user.is_authenticated and current_user.is_admin() %}
 <div id="modal-importar-vendas-wrap" class="fixed inset-0 z-[9999] hidden" aria-hidden="true" role="presentation">
     <div class="fixed inset-0 bg-black/60 z-[9998]" id="modal-importar-vendas-overlay" aria-hidden="true"></div>
-    <div id="modal-importar-vendas-panel" class="fixed inset-y-0 right-0 z-[9999] w-full sm:max-w-2xl max-w-[100vw] bg-white dark:bg-gray-900 shadow-2xl border-l border-gray-200 dark:border-gray-700 h-full max-h-[100dvh] flex flex-col transform transition-transform duration-300 translate-x-full" role="dialog" aria-modal="true" aria-labelledby="modal-importar-vendas-titulo" onclick="event.stopPropagation()">
-        <div class="flex-shrink-0 flex justify-between items-center bg-emerald-700 text-white px-5 py-4" style="padding-top: max(1rem, env(safe-area-inset-top));">
+    <div id="modal-importar-vendas-panel" class="fixed inset-y-0 right-0 z-[9999] w-full sm:max-w-2xl max-w-[100vw] bg-white dark:bg-gray-900 shadow-2xl border-l border-gray-200 dark:border-gray-700 h-full max-h-[100dvh] flex flex-col transform transition-transform duration-300 translate-x-full" role="dialog" aria-modal="true" aria-labelledby="modal-importar-vendas-titulo" onclick="event.stopPropagation()" data-swipe-dismiss data-swipe-backdrop="#modal-importar-vendas-overlay" data-swipe-close="fecharModalImportarVendas">
+        <div data-swipe-handle class="flex-shrink-0 flex justify-between items-center bg-emerald-700 text-white px-5 py-4" style="padding-top: max(1rem, env(safe-area-inset-top));">
             <h3 id="modal-importar-vendas-titulo" class="text-xl font-bold flex items-center gap-2">
                 <i data-lucide="upload" class="w-5 h-5"></i>Importar Lista
             </h3>
@@ -505,8 +505,8 @@
     <!-- Backdrop: click fora fecha o drawer -->
     <div class="fixed inset-0 bg-black/60 z-[9998] transition-opacity" id="nova-venda-backdrop" onclick="fecharModalNovaVenda()"></div>
     <!-- Drawer lateral direito -->
-    <div id="nova-venda-panel" class="fixed inset-y-0 right-0 w-full max-w-3xl flex flex-col h-full bg-white dark:bg-gray-900 shadow-2xl border-l border-gray-200 dark:border-gray-700 z-[9999] transform transition-transform duration-300">
-        <div class="relative z-[9999] flex items-center justify-between px-6 py-4 bg-emerald-700 text-white flex-shrink-0" style="padding-top: max(1rem, env(safe-area-inset-top))">
+    <div id="nova-venda-panel" class="fixed inset-y-0 right-0 w-full max-w-3xl flex flex-col h-full bg-white dark:bg-gray-900 shadow-2xl border-l border-gray-200 dark:border-gray-700 z-[9999] transform transition-transform duration-300" data-swipe-dismiss data-swipe-backdrop="#nova-venda-backdrop" data-swipe-close="fecharModalNovaVenda">
+        <div data-swipe-handle class="relative z-[9999] flex items-center justify-between px-6 py-4 bg-emerald-700 text-white flex-shrink-0" style="padding-top: max(1rem, env(safe-area-inset-top))">
             <h2 class="text-xl font-bold flex items-center gap-2 pointer-events-none">
                 <i data-lucide="shopping-cart" class="w-5 h-5"></i> Nova Venda
             </h2>
@@ -6104,31 +6104,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Swipe esquerda → direita fecha o drawer (iOS / Capacitor)
-    var novaVendaPanel = document.getElementById('nova-venda-panel');
-    var touchstartX = 0;
-    var touchendX = 0;
-    var SWIPE_FECHAR_NOVA_VENDA_MIN = 70;
-    if (novaVendaPanel) {
-        novaVendaPanel.addEventListener('touchstart', function(event) {
-            if (!event.changedTouches || !event.changedTouches.length) return;
-            touchstartX = event.changedTouches[0].screenX;
-        }, { passive: true });
-        novaVendaPanel.addEventListener('touchend', function(event) {
-            if (!containerVenda || containerVenda.classList.contains('hidden')) return;
-            if (!event.changedTouches || !event.changedTouches.length) return;
-            touchendX = event.changedTouches[0].screenX;
-            if (touchendX - touchstartX > SWIPE_FECHAR_NOVA_VENDA_MIN) {
-                var btnFechar = document.getElementById('btn-fechar-nova-venda');
-                if (btnFechar) {
-                    btnFechar.click();
-                } else {
-                    fecharModalNovaVenda();
-                }
-            }
-        }, { passive: true });
-    }
-
     if (btnMenuRelatorio) {
         btnMenuRelatorio.addEventListener('click', function(e) {
             e.preventDefault();
@@ -6318,22 +6293,6 @@ function toggleAnaliseVendas(event) {
     if (btnFechar) btnFechar.addEventListener('click', fechar);
     if (btnCancelar) btnCancelar.addEventListener('click', fechar);
 
-    if (panel && window.MeninoAlhoNavigation && window.MeninoAlhoNavigation.setupDrawerSwipeToClose) {
-        window.MeninoAlhoNavigation.setupDrawerSwipeToClose({
-            panel: panel,
-            backdrop: overlay,
-            drawerPosition: 'right',
-            minDeltaX: 70,
-            isOpen: function() {
-                return wrap && !wrap.classList.contains('hidden');
-            },
-            onClose: function() {
-                if (btnFechar) btnFechar.click();
-                else fechar();
-            }
-        });
-    }
-
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') fechar();
     });
@@ -6437,19 +6396,6 @@ function toggleAnaliseVendas(event) {
     if (overlay) overlay.addEventListener('click', fechar);
     if (btnFechar) btnFechar.addEventListener('click', fechar);
     if (btnCancelar) btnCancelar.addEventListener('click', fechar);
-
-    if (panel && window.MeninoAlhoNavigation && window.MeninoAlhoNavigation.setupDrawerSwipeToClose) {
-        window.MeninoAlhoNavigation.setupDrawerSwipeToClose({
-            panel: panel,
-            backdrop: overlay,
-            drawerPosition: 'right',
-            minDeltaX: 70,
-            isOpen: function() {
-                return !wrap.classList.contains('hidden');
-            },
-            onClose: fechar
-        });
-    }
 
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape' && !wrap.classList.contains('hidden')) fechar();

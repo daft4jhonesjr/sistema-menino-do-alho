@@ -331,7 +331,7 @@
       drawerPosition: 'right',
       edgeWidth: 45,
       openThreshold: 0.3,
-      closeThreshold: 0.3,
+      closeGesture: false,
       draggingBodyClass: 'logistica-drawer-dragging',
       isOpen: isOpen,
       onOpen: abrirDrawer,
@@ -348,7 +348,7 @@
         if (!target || !target.closest) return false;
         if (target.closest('#logistica-drawer-panel, #logistica-drawer-overlay')) return false;
         return !!target.closest(
-          '.fixed.z-50, .fixed.z-\\[9998\\], .fixed.z-\\[9999\\], [role="dialog"], .modal-container, .bg-black\\/50, .bg-black\\/60, #site-nav-mobile-backdrop, #site-nav-links, #gaveta-contagem, #gaveta-orcamento, #gaveta-lancamento, #gaveta-balanco, #modal-nova-entrada-wrap, #modal-nova-entrada-overlay, #modal-editar-produto-wrap, #modal-editar-produto-overlay, #modal-devolver-produto-wrap, #container-nova-venda, #modal-novo-cliente-wrap, #modal-novo-cliente-panel'
+          '[data-swipe-dismiss], .fixed.z-50, .fixed.z-\\[9998\\], .fixed.z-\\[9999\\], [role="dialog"], .modal-container, .bg-black\\/50, .bg-black\\/60, #site-nav-mobile-backdrop, #site-nav-links, #gaveta-contagem, #gaveta-orcamento, #gaveta-lancamento, #gaveta-balanco, #modal-nova-entrada-wrap, #modal-nova-entrada-overlay, #modal-editar-produto-wrap, #modal-editar-produto-overlay, #modal-devolver-produto-wrap, #container-nova-venda, #modal-novo-cliente-wrap, #modal-novo-cliente-panel'
         );
       }
     });

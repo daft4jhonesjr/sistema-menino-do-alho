@@ -180,3 +180,14 @@ body.logistica-drawer-open,
 body.logistica-drawer-dragging {
   overflow: hidden;
 }
+
+/* Swipe-to-dismiss dos painéis laterais direitos (static/js/swipe-dismiss.js) */
+.swipe-dismiss-panel [data-swipe-handle] {
+  touch-action: pan-y;
+}
+
+body.swipe-dismiss-dragging {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}

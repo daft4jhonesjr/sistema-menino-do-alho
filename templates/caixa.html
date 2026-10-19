@@ -363,8 +363,8 @@
 
 <!-- Overlay + Gaveta de Orçamento Pessoal -->
 <div id="gaveta-orcamento-overlay" class="fixed inset-0 z-[60] hidden bg-black/50 transition-opacity" onclick="fecharGavetaOrcamento()" aria-hidden="true"></div>
-<div id="gaveta-orcamento" class="fixed inset-y-0 right-0 z-[60] hidden w-full max-w-md h-full translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col transform" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="gaveta-orcamento-titulo">
-    <div class="flex items-center justify-between px-5 pb-4 pt-[calc(env(safe-area-inset-top,0px)+1rem)] border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80">
+<div id="gaveta-orcamento" class="fixed inset-y-0 right-0 z-[60] hidden w-full max-w-md h-full translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col transform" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="gaveta-orcamento-titulo" data-swipe-dismiss data-swipe-backdrop="#gaveta-orcamento-overlay" data-swipe-close="fecharGavetaOrcamento">
+    <div data-swipe-handle class="flex items-center justify-between px-5 pb-4 pt-[calc(env(safe-area-inset-top,0px)+1rem)] border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80">
         <div>
             <h3 id="gaveta-orcamento-titulo" class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                 <i data-lucide="wallet" class="w-5 h-5 text-emerald-600 dark:text-emerald-400"></i>
@@ -433,8 +433,8 @@
 
 <!-- Overlay + Gaveta Novo/Editar Lançamento -->
 <div id="gaveta-lancamento-overlay" class="fixed inset-0 z-[60] hidden bg-black/50 transition-opacity" onclick="fecharGavetaLancamento()" aria-hidden="true"></div>
-<div id="gaveta-lancamento" class="fixed inset-y-0 right-0 z-[60] hidden w-full max-w-md h-full translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col transform" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="modalLancamentoTitulo">
-    <div class="flex items-center justify-between px-5 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))] border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 shrink-0">
+<div id="gaveta-lancamento" class="fixed inset-y-0 right-0 z-[60] hidden w-full max-w-md h-full translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col transform" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="modalLancamentoTitulo" data-swipe-dismiss data-swipe-backdrop="#gaveta-lancamento-overlay" data-swipe-close="fecharGavetaLancamento">
+    <div data-swipe-handle class="flex items-center justify-between px-5 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))] border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 shrink-0">
         <div>
             <h3 id="modalLancamentoTitulo" class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                 <i data-lucide="receipt" class="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0"></i>
@@ -1020,51 +1020,6 @@ function fecharGavetaLancamento() {
     if (typeof liberarFundo === 'function') liberarFundo();
 }
 
-(function registrarSwipeFecharGavetaLancamento() {
-    var SWIPE_MIN_X = 80;
-    var SWIPE_BORDA_ESQUERDA = 50;
-    var startX = null;
-    var startY = null;
-
-    function registrar() {
-        var gaveta = document.getElementById('gaveta-lancamento');
-        if (!gaveta) return;
-
-        gaveta.addEventListener('touchstart', function(e) {
-            if (e.touches.length !== 1) { startX = null; return; }
-            var toque = e.touches[0];
-            // Relativo à borda esquerda da gaveta, que no desktop não fica em x=0 da viewport.
-            var bordaEsquerda = gaveta.getBoundingClientRect().left;
-            if (toque.clientX - bordaEsquerda > SWIPE_BORDA_ESQUERDA) { startX = null; return; }
-            startX = toque.clientX;
-            startY = toque.clientY;
-        }, { passive: true });
-
-        gaveta.addEventListener('touchend', function(e) {
-            if (startX === null || !e.changedTouches.length) return;
-            var toque = e.changedTouches[0];
-            var deltaX = toque.clientX - startX;
-            var deltaY = toque.clientY - startY;
-            startX = null;
-            startY = null;
-            if (deltaX > SWIPE_MIN_X && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
-                fecharGavetaLancamento();
-            }
-        }, { passive: true });
-
-        gaveta.addEventListener('touchcancel', function() {
-            startX = null;
-            startY = null;
-        }, { passive: true });
-    }
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', registrar);
-    } else {
-        registrar();
-    }
-})();
-
 function abrirModalNovo() {
     var form = document.getElementById('form-novo-lancamento-caixa') || document.getElementById('formLancamentoCaixa');
     var gaveta = document.getElementById('gaveta-lancamento');
@@ -1509,8 +1464,8 @@ document.addEventListener('keydown', function(e) {
 
 <!-- Overlay + Gaveta Contagem de Gaveta (Dinheiro + Cheques) -->
 <div id="gaveta-contagem-overlay" class="fixed inset-0 z-[60] hidden bg-black/50 transition-opacity" onclick="fecharGavetaContagem()" aria-hidden="true"></div>
-<div id="gaveta-contagem" class="fixed inset-y-0 right-0 z-[60] hidden w-full max-w-md h-full translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col transform" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="gaveta-contagem-titulo">
-    <div class="flex items-center justify-between px-5 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))] border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 shrink-0">
+<div id="gaveta-contagem" class="fixed inset-y-0 right-0 z-[60] hidden w-full max-w-md h-full translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col transform" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="gaveta-contagem-titulo" data-swipe-dismiss data-swipe-backdrop="#gaveta-contagem-overlay" data-swipe-close="fecharGavetaContagem">
+    <div data-swipe-handle class="flex items-center justify-between px-5 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))] border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 shrink-0">
         <div>
             <h3 id="gaveta-contagem-titulo" class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                 <i data-lucide="banknote" class="w-5 h-5 text-emerald-600 dark:text-emerald-400"></i>
