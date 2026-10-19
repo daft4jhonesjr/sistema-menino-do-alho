@@ -1,0 +1,117 @@
+{# Conteúdo do formulário de importação (página dedicada ou gaveta na listagem). #}
+{% set em_gaveta = em_gaveta|default(false) %}
+
+<div id="importar-vendas-feedback" class="{% if not (erros_detalhados is defined and erros_detalhados) %}hidden{% endif %} mb-4">
+{% if erros_detalhados is defined and erros_detalhados %}
+<div class="bg-red-50 dark:bg-red-900/20 border-2 border-red-300 dark:border-red-800 rounded-lg p-5 shadow-sm" id="import-feedback-box">
+    <div class="flex items-start">
+        <div class="flex-shrink-0">
+            <i class="fas fa-exclamation-triangle text-red-600 dark:text-red-400 text-2xl"></i>
+        </div>
+        <div class="ml-4 flex-1 min-w-0">
+            <h3 class="text-lg font-bold text-red-800 dark:text-red-300 mb-2">Ops! Encontramos alguns probleminhas</h3>
+            {% if sucesso is defined and sucesso > 0 %}
+            <p class="text-red-700 dark:text-red-400 mb-3">Importação parcial: <strong>{{ sucesso }}</strong> nova(s) venda(s) importada(s).{% if ignorados|default(0) > 0 %} <strong>{{ ignorados }}</strong> ignorada(s) (duplicadas).{% endif %} <strong>{{ erros }}</strong> erro(s). Corrija os itens abaixo e importe novamente.</p>
+            {% else %}
+            <p class="text-red-700 dark:text-red-400 mb-3"><strong>{{ erros }}</strong> erro(s) encontrado(s).{% if ignorados|default(0) > 0 %} <strong>{{ ignorados }}</strong> ignorada(s) (duplicadas).{% endif %} Confira as mensagens abaixo, ajuste sua planilha e importe novamente.</p>
+            {% endif %}
+            <ul id="importar-vendas-erros-lista" class="space-y-2 max-h-64 overflow-y-auto pr-2">
+                {% for msg in erros_detalhados %}
+                <li class="text-sm text-red-800 dark:text-red-300 flex items-start"><span class="text-red-500 mr-2 flex-shrink-0">•</span> {{ msg }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+</div>
+{% else %}
+<div id="import-feedback-box-dynamic"></div>
+{% endif %}
+</div>
+
+<div class="{% if not em_gaveta %}bg-white dark:bg-gray-800 rounded-lg shadow-md dark:shadow-none border border-transparent dark:border-gray-700 p-6 max-w-2xl{% endif %}">
+    <form id="form-importar-vendas" method="POST" enctype="multipart/form-data" action="{{ url_for('vendas.importar_vendas') }}" data-ajax="{{ '1' if em_gaveta else '0' }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div class="mb-4">
+            <label for="arquivo-importar-vendas" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Selecione o arquivo <span class="text-red-500">*</span>
+            </label>
+            <input type="file" id="arquivo-importar-vendas" name="arquivo"
+                   accept=".xlsx,.xls,.csv"
+                   required
+                   class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-emerald-50 file:text-emerald-700 dark:file:bg-emerald-900/30 dark:file:text-emerald-400 hover:file:bg-emerald-100 dark:hover:file:bg-emerald-800/40">
+            <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                Formatos aceitos: .xlsx, .xls, .csv
+            </p>
+        </div>
+
+        <div class="mb-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+            <h3 class="font-semibold text-blue-900 dark:text-blue-400 mb-2">
+                <i class="fas fa-info-circle mr-2"></i>Formato esperado:
+            </h3>
+            <ul class="text-sm text-blue-800 dark:text-blue-300 space-y-1">
+                <li>• <strong>cliente</strong> ou <strong>nome_cliente</strong> (obrigatório): Nome do cliente cadastrado</li>
+                <li>• <strong>cnpj</strong> (opcional): CNPJ do cliente (alternativa ao nome)</li>
+                <li>• <strong>produto</strong> ou <strong>nome_produto</strong> (obrigatório): Nome completo do produto</li>
+                <li>• <strong>quantidade</strong> ou <strong>quantidade_venda</strong> (obrigatório): Quantidade vendida</li>
+                <li>• <strong>preco_venda</strong> ou <strong>preco</strong> (obrigatório): Preço de venda unitário</li>
+                <li>• <strong>nf</strong> ou <strong>nota_fiscal</strong> (opcional): Número da nota fiscal</li>
+                <li>• <strong>data_venda</strong> ou <strong>data</strong> (opcional): Data da venda</li>
+                <li>• <strong>empresa_faturadora</strong> (opcional): DESTAK, PATY ou NENHUM (vendas sem nota fiscal)</li>
+                <li>• <strong>situacao</strong> (opcional): PENDENTE ou PAGO</li>
+                <li>• <strong>forma_pagamento</strong> (opcional): Dinheiro, Pix, Boleto, Cheque, etc.</li>
+            </ul>
+            <p class="mt-3 text-sm text-blue-900 dark:text-blue-300 font-semibold">
+                <i class="fas fa-exclamation-triangle mr-2"></i>
+                Importante: O sistema validará se o cliente e produto existem, e se há estoque suficiente antes de importar.
+            </p>
+        </div>
+
+        <div id="preview-container" class="mb-6 hidden">
+            <h3 class="text-lg font-semibold text-emerald-700 dark:text-emerald-400 mb-3">
+                <i class="fas fa-eye mr-2"></i>Pré-visualização dos Dados
+            </h3>
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md dark:shadow-none overflow-hidden border border-gray-200 dark:border-gray-700">
+                <div class="overflow-x-auto">
+                    <table id="preview-table" class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                        <thead class="bg-gray-50 dark:bg-gray-900/50">
+                            <tr id="preview-header"></tr>
+                        </thead>
+                        <tbody id="preview-body" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700"></tbody>
+                    </table>
+                </div>
+                <div class="px-4 py-2 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-200 dark:border-gray-700">
+                    <p class="text-xs text-gray-600 dark:text-gray-400">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        Mostrando as primeiras <span id="preview-row-count">5</span> linhas do arquivo
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex flex-col gap-4">
+            <div class="flex flex-col sm:flex-row gap-3">
+                <button type="submit" id="btn-importar-vendas" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-md transition-colors flex items-center justify-center">
+                    <i data-lucide="upload" class="w-4 h-4 mr-2"></i>Importar
+                </button>
+                {% if em_gaveta %}
+                <button type="button" id="btn-cancelar-importar-vendas-gaveta" class="px-4 py-2 bg-gray-300 dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-medium rounded-md hover:bg-gray-400 dark:hover:bg-gray-600 transition-colors flex items-center justify-center">
+                    <i data-lucide="x" class="w-4 h-4 mr-2"></i>Cancelar
+                </button>
+                {% else %}
+                <a href="{{ url_for('vendas.listar_vendas') }}" class="px-4 py-2 bg-gray-300 dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-medium rounded-md hover:bg-gray-400 dark:hover:bg-gray-600 transition-colors flex items-center justify-center">
+                    <i data-lucide="x" class="w-4 h-4 mr-2"></i>Cancelar
+                </a>
+                {% endif %}
+            </div>
+            <div id="loading-importacao" class="hidden">
+                <p class="text-emerald-600 dark:text-emerald-400 mb-1 font-bold flex items-center gap-2">
+                    <i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>
+                    Lendo planilha e verificando duplicatas... Aguarde.
+                </p>
+                <div class="h-4 w-full rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+                    <div class="h-full bg-emerald-500 rounded-full animate-pulse" style="width: 100%"></div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>

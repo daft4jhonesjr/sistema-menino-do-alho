@@ -259,9 +259,9 @@
                 📄&nbsp;Gerar Relatório
             </button>
             {% if current_user.is_authenticated and current_user.is_admin() %}
-            <a href="{{ url_for('vendas.importar_vendas') }}" id="btn-menu-importar" class="inline-flex w-full items-center justify-center gap-1.5 px-4 py-3 rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-base sm:text-sm font-medium text-gray-700 dark:text-gray-200 shadow-sm hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-300 dark:hover:border-emerald-700 hover:text-emerald-800 dark:hover:text-emerald-300 transition-colors">
+            <button type="button" id="btn-menu-importar" class="inline-flex w-full items-center justify-center gap-1.5 px-4 py-3 rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-base sm:text-sm font-medium text-gray-700 dark:text-gray-200 shadow-sm hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-300 dark:hover:border-emerald-700 hover:text-emerald-800 dark:hover:text-emerald-300 transition-colors">
                 📥&nbsp;Importar Lista
-            </a>
+            </button>
             {% endif %}
         </div>
     </div>
@@ -442,6 +442,29 @@
             </form>
     </div>
 </div>
+
+{% if current_user.is_authenticated and current_user.is_admin() %}
+<div id="modal-importar-vendas-wrap" class="fixed inset-0 z-[9999] hidden" aria-hidden="true" role="presentation">
+    <div class="fixed inset-0 bg-black/60 z-[9998]" id="modal-importar-vendas-overlay" aria-hidden="true"></div>
+    <div id="modal-importar-vendas-panel" class="fixed inset-y-0 right-0 z-[9999] w-full sm:max-w-2xl max-w-[100vw] bg-white dark:bg-gray-900 shadow-2xl border-l border-gray-200 dark:border-gray-700 h-full max-h-[100dvh] flex flex-col transform transition-transform duration-300 translate-x-full" role="dialog" aria-modal="true" aria-labelledby="modal-importar-vendas-titulo" onclick="event.stopPropagation()">
+        <div class="flex-shrink-0 flex justify-between items-center bg-emerald-700 text-white px-5 py-4" style="padding-top: max(1rem, env(safe-area-inset-top));">
+            <h3 id="modal-importar-vendas-titulo" class="text-xl font-bold flex items-center gap-2">
+                <i data-lucide="upload" class="w-5 h-5"></i>Importar Lista
+            </h3>
+            <button type="button" class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-emerald-600 text-white transition flex-shrink-0" id="modal-importar-vendas-fechar" title="Fechar (Esc)" aria-label="Fechar">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+        <div id="modal-importar-vendas-scroll" class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain p-5">
+            {% with em_gaveta=true %}
+            {% include 'vendas/_importar_vendas_body.html' %}
+            {% endwith %}
+        </div>
+    </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="{{ url_for('static', filename='js/vendas-importar-form.js') }}"></script>
+{% endif %}
 
 <div id="bulk-delete-toast" class="hidden mb-4 p-4 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-200 flex items-center shadow-sm">
     <i data-lucide="check-circle" class="w-5 h-5 mr-3 flex-shrink-0"></i>
@@ -6115,6 +6138,16 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    var btnMenuImportar = document.getElementById('btn-menu-importar');
+    if (btnMenuImportar) {
+        btnMenuImportar.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (typeof abrirModalImportarVendas === 'function') {
+                abrirModalImportarVendas();
+            }
+        });
+    }
+
     // Deep link do rodapé / atalhos: /vendas?acao=nova_venda abre o modal
     // e limpa a URL para não reabrir no F5.
     try {
@@ -6314,6 +6347,113 @@ function toggleAnaliseVendas(event) {
             }
         });
     }
+})();
+
+// Gaveta: Importar Lista de Vendas
+(function() {
+    var wrap = document.getElementById('modal-importar-vendas-wrap');
+    if (!wrap) return;
+    var overlay = document.getElementById('modal-importar-vendas-overlay');
+    var panel = document.getElementById('modal-importar-vendas-panel');
+    var btnFechar = document.getElementById('modal-importar-vendas-fechar');
+    var btnCancelar = document.getElementById('btn-cancelar-importar-vendas-gaveta');
+    var DRAWER_ANIM_MS = 300;
+    var formInited = false;
+
+    function resetFormulario() {
+        var form = wrap.querySelector('#form-importar-vendas');
+        if (form) form.reset();
+        var preview = wrap.querySelector('#preview-container');
+        if (preview) preview.classList.add('hidden');
+        var feedback = wrap.querySelector('#importar-vendas-feedback');
+        if (feedback) {
+            feedback.classList.add('hidden');
+            feedback.innerHTML = '<div id="import-feedback-box-dynamic"></div>';
+        }
+        var loading = wrap.querySelector('#loading-importacao');
+        if (loading) loading.classList.add('hidden');
+    }
+
+    function abrir() {
+        wrap.classList.remove('hidden');
+        wrap.setAttribute('aria-hidden', 'false');
+        if (panel) {
+            panel.classList.add('translate-x-full');
+            panel.classList.remove('translate-x-0');
+            requestAnimationFrame(function() {
+                requestAnimationFrame(function() {
+                    panel.classList.remove('translate-x-full');
+                    panel.classList.add('translate-x-0');
+                });
+            });
+        }
+        if (!formInited && typeof initImportarVendasForm === 'function') {
+            initImportarVendasForm(wrap, {
+                ajax: true,
+                onSuccess: function(data) {
+                    fechar();
+                    if (typeof Swal !== 'undefined') {
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Importação concluída',
+                            text: data.mensagem || 'Vendas importadas com sucesso.',
+                            confirmButtonColor: '#047857',
+                        }).then(function() {
+                            window.location.reload();
+                        });
+                    } else {
+                        window.location.reload();
+                    }
+                }
+            });
+            formInited = true;
+        }
+        if (typeof travarFundo === 'function') travarFundo();
+        if (typeof lucide !== 'undefined') { try { lucide.createIcons(); } catch (_) {} }
+    }
+
+    function fechar() {
+        if (wrap.classList.contains('hidden')) return;
+        if (panel) {
+            panel.classList.add('translate-x-full');
+            panel.classList.remove('translate-x-0');
+            setTimeout(function() {
+                wrap.classList.add('hidden');
+                wrap.setAttribute('aria-hidden', 'true');
+                resetFormulario();
+                if (typeof liberarFundo === 'function') liberarFundo();
+            }, DRAWER_ANIM_MS);
+            return;
+        }
+        wrap.classList.add('hidden');
+        wrap.setAttribute('aria-hidden', 'true');
+        resetFormulario();
+        if (typeof liberarFundo === 'function') liberarFundo();
+    }
+
+    window.abrirModalImportarVendas = abrir;
+    window.fecharModalImportarVendas = fechar;
+
+    if (overlay) overlay.addEventListener('click', fechar);
+    if (btnFechar) btnFechar.addEventListener('click', fechar);
+    if (btnCancelar) btnCancelar.addEventListener('click', fechar);
+
+    if (panel && window.MeninoAlhoNavigation && window.MeninoAlhoNavigation.setupDrawerSwipeToClose) {
+        window.MeninoAlhoNavigation.setupDrawerSwipeToClose({
+            panel: panel,
+            backdrop: overlay,
+            drawerPosition: 'right',
+            minDeltaX: 70,
+            isOpen: function() {
+                return !wrap.classList.contains('hidden');
+            },
+            onClose: fechar
+        });
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && !wrap.classList.contains('hidden')) fechar();
+    });
 })();
 
 // Excluir item individual da gaveta de detalhes

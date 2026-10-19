@@ -4537,6 +4537,51 @@ def vendas_deletar_massa():
         )
 
 
+def _resposta_importar_vendas(
+    *,
+    sucesso_redirect=False,
+    mensagem=None,
+    flash_categoria='success',
+    erros_detalhados=None,
+    sucesso=0,
+    erros=0,
+    ignorados=0,
+    aviso_vazio=False,
+):
+    """Resposta HTML (página) ou JSON (gaveta AJAX na listagem de vendas)."""
+    ajax = _is_ajax() or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    if ajax:
+        if sucesso_redirect:
+            return jsonify({'ok': True, 'mensagem': mensagem or '', 'recarregar': True})
+        if aviso_vazio:
+            return jsonify({
+                'ok': False,
+                'mensagem': mensagem or 'A planilha estava vazia ou não encontramos dados válidos.',
+                'aviso': True,
+            })
+        return jsonify({
+            'ok': False,
+            'erros_detalhados': erros_detalhados or [],
+            'sucesso': sucesso,
+            'erros': erros,
+            'ignorados': ignorados,
+        })
+    if sucesso_redirect:
+        if mensagem:
+            flash(mensagem, flash_categoria)
+        return redirect(url_for('vendas.listar_vendas'))
+    if aviso_vazio:
+        flash(mensagem or 'A planilha estava vazia ou não encontramos dados válidos.', 'warning')
+        return redirect(url_for('vendas.listar_vendas'))
+    return render_template(
+        'vendas/importar.html',
+        erros_detalhados=erros_detalhados or [],
+        sucesso=sucesso,
+        erros=erros,
+        ignorados=ignorados,
+    )
+
+
 @vendas_bp.route('/vendas/importar', methods=['GET', 'POST'])
 def importar_vendas():
     """Importação de vendas via CSV/TSV/XLSX. Apenas admin do tenant."""
@@ -4544,10 +4589,18 @@ def importar_vendas():
     def _impl():
         if request.method == 'POST':
             if 'arquivo' not in request.files:
-                return render_template('vendas/importar.html', erros_detalhados=['Nenhum arquivo selecionado. Escolha um arquivo e tente novamente.'], sucesso=0, erros=1)
+                return _resposta_importar_vendas(
+                    erros_detalhados=['Nenhum arquivo selecionado. Escolha um arquivo e tente novamente.'],
+                    sucesso=0,
+                    erros=1,
+                )
             arquivo = request.files['arquivo']
             if arquivo.filename == '':
-                return render_template('vendas/importar.html', erros_detalhados=['Nenhum arquivo selecionado. Escolha um arquivo e tente novamente.'], sucesso=0, erros=1)
+                return _resposta_importar_vendas(
+                    erros_detalhados=['Nenhum arquivo selecionado. Escolha um arquivo e tente novamente.'],
+                    sucesso=0,
+                    erros=1,
+                )
             filepath = None
             try:
                 filename = secure_filename(arquivo.filename)
@@ -4557,7 +4610,11 @@ def importar_vendas():
                 if filename.endswith('.csv'):
                     df, is_raw = _load_csv_vendas_flexible(filepath)
                     if df is None:
-                        return render_template('vendas/importar.html', erros_detalhados=['O arquivo CSV/TSV está vazio ou não pôde ser lido.'], sucesso=0, erros=1)
+                        return _resposta_importar_vendas(
+                            erros_detalhados=['O arquivo CSV/TSV está vazio ou não pôde ser lido.'],
+                            sucesso=0,
+                            erros=1,
+                        )
                 else:
                     df = pd.read_excel(filepath)
                 if not is_raw:
@@ -4699,15 +4756,18 @@ def importar_vendas():
                 if filepath and os.path.exists(filepath):
                     os.remove(filepath)
                 if erros > 0:
-                    return render_template('vendas/importar.html', erros_detalhados=erros_detalhados, sucesso=vendas_novas, erros=erros, ignorados=vendas_ignoradas)
+                    return _resposta_importar_vendas(
+                        erros_detalhados=erros_detalhados,
+                        sucesso=vendas_novas,
+                        erros=erros,
+                        ignorados=vendas_ignoradas,
+                    )
                 if vendas_novas > 0 or vendas_ignoradas > 0:
                     mensagem = f'🎉 Tudo pronto! Salvamos {vendas_novas} vendas novas no sistema.'
                     if vendas_ignoradas > 0:
                         mensagem += f' Ah, e encontramos {vendas_ignoradas} vendas que já estavam cadastradas e pulamos elas para não duplicar nada! 😉'
-                    flash(mensagem, 'success')
-                else:
-                    flash('A planilha estava vazia ou não encontramos dados válidos.', 'warning')
-                return redirect(url_for('vendas.listar_vendas'))
+                    return _resposta_importar_vendas(sucesso_redirect=True, mensagem=mensagem)
+                return _resposta_importar_vendas(aviso_vazio=True)
             except Exception as e:
                 db.session.rollback()
                 if filepath and os.path.exists(filepath):
@@ -4715,7 +4775,11 @@ def importar_vendas():
                         os.remove(filepath)
                     except Exception:
                         pass
-                return render_template('vendas/importar.html', erros_detalhados=[f'Erro ao processar o arquivo: {str(e)}'], sucesso=0, erros=1)
+                return _resposta_importar_vendas(
+                    erros_detalhados=[f'Erro ao processar o arquivo: {str(e)}'],
+                    sucesso=0,
+                    erros=1,
+                )
         return render_template('vendas/importar.html')
 
     return _impl()
