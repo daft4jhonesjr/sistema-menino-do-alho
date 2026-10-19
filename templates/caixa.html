@@ -1020,6 +1020,51 @@ function fecharGavetaLancamento() {
     if (typeof liberarFundo === 'function') liberarFundo();
 }
 
+(function registrarSwipeFecharGavetaLancamento() {
+    var SWIPE_MIN_X = 80;
+    var SWIPE_BORDA_ESQUERDA = 50;
+    var startX = null;
+    var startY = null;
+
+    function registrar() {
+        var gaveta = document.getElementById('gaveta-lancamento');
+        if (!gaveta) return;
+
+        gaveta.addEventListener('touchstart', function(e) {
+            if (e.touches.length !== 1) { startX = null; return; }
+            var toque = e.touches[0];
+            // Relativo à borda esquerda da gaveta, que no desktop não fica em x=0 da viewport.
+            var bordaEsquerda = gaveta.getBoundingClientRect().left;
+            if (toque.clientX - bordaEsquerda > SWIPE_BORDA_ESQUERDA) { startX = null; return; }
+            startX = toque.clientX;
+            startY = toque.clientY;
+        }, { passive: true });
+
+        gaveta.addEventListener('touchend', function(e) {
+            if (startX === null || !e.changedTouches.length) return;
+            var toque = e.changedTouches[0];
+            var deltaX = toque.clientX - startX;
+            var deltaY = toque.clientY - startY;
+            startX = null;
+            startY = null;
+            if (deltaX > SWIPE_MIN_X && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
+                fecharGavetaLancamento();
+            }
+        }, { passive: true });
+
+        gaveta.addEventListener('touchcancel', function() {
+            startX = null;
+            startY = null;
+        }, { passive: true });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', registrar);
+    } else {
+        registrar();
+    }
+})();
+
 function abrirModalNovo() {
     var form = document.getElementById('form-novo-lancamento-caixa') || document.getElementById('formLancamentoCaixa');
     var gaveta = document.getElementById('gaveta-lancamento');
