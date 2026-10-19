@@ -629,7 +629,7 @@
 
             var toqueDentroDeModal = function(target) {
                 if (!target || !target.closest) return false;
-                return !!target.closest('.fixed.z-50, [role="dialog"], .modal-container, .bg-black\\/50, .bg-black\\/60, #gaveta-contagem, #gaveta-orcamento, #gaveta-lancamento, #gaveta-balanco, #modal-nova-entrada-wrap, #modal-editar-produto-wrap');
+                return !!target.closest('.fixed.z-50, [role="dialog"], .modal-container, .bg-black\\/50, .bg-black\\/60, #gaveta-contagem, #gaveta-orcamento, #gaveta-lancamento, #gaveta-balanco, #modal-nova-entrada-wrap, #modal-editar-produto-wrap, #container-nova-venda, #modal-novo-cliente-wrap, #modal-novo-cliente-panel');
             };
 
             // Início do toque
@@ -718,7 +718,7 @@
     </header>
 
     <!-- Navigation Bar -->
-    <nav class="bg-emerald-700 shadow-sm sticky top-0 z-30">
+    <nav class="bg-emerald-700 shadow-sm sticky top-0 z-40">
         <div class="w-full px-2 md:px-4 lg:px-6 xl:px-8">
             <div class="flex flex-wrap justify-center gap-1 py-2 items-center">
                 {% if current_user.nivel_acesso in ['admin', 'master'] or 'dashboard' in current_user.permissoes_lista %}
@@ -876,8 +876,8 @@
 
     {% if current_user.is_authenticated %}
     <!-- Overlay + Gaveta: Balanço Patrimonial Rápido -->
-    <div id="gaveta-balanco-overlay" class="fixed inset-0 z-[60] hidden bg-black/50" onclick="fecharGavetaBalanco()" aria-hidden="true"></div>
-    <div id="gaveta-balanco" class="fixed inset-y-0 right-0 z-[70] hidden w-full max-w-md translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col" role="dialog" aria-modal="true" aria-labelledby="modal-balanco-titulo" aria-hidden="true">
+    <div id="gaveta-balanco-overlay" class="fixed inset-0 z-50 hidden bg-black/50" onclick="fecharGavetaBalanco()" aria-hidden="true"></div>
+    <div id="gaveta-balanco" class="fixed inset-y-0 right-0 z-50 hidden w-full max-w-md translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col h-full" role="dialog" aria-modal="true" aria-labelledby="modal-balanco-titulo" aria-hidden="true">
         <div class="flex items-center justify-between px-5 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))] border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 shrink-0">
             <div>
                 <h3 id="modal-balanco-titulo" class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
