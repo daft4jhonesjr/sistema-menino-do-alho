@@ -541,8 +541,8 @@
 </div>
 
 <!-- Overlay + Gaveta de Ações (Nova Entrada e demais) -->
-<div id="modal-nova-entrada-overlay" class="fixed inset-0 z-50 hidden bg-black/50 transition-opacity" aria-hidden="true"></div>
-<div id="modal-nova-entrada-wrap" class="fixed inset-y-0 right-0 z-50 hidden w-full max-w-md h-full translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col transform" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="gaveta-nova-entrada-titulo" data-acao="">
+<div id="modal-nova-entrada-overlay" class="fixed inset-0 z-[9998] hidden bg-black/50 transition-opacity" aria-hidden="true"></div>
+<div id="modal-nova-entrada-wrap" class="fixed inset-y-0 right-0 z-[9999] hidden w-full max-w-md h-full translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col transform" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="gaveta-nova-entrada-titulo" data-acao="">
     <div class="flex items-center justify-between px-5 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))] border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 shrink-0">
         <div>
             <h3 id="gaveta-nova-entrada-titulo" class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
@@ -1188,8 +1188,8 @@ function fecharModalNovoFornecedor() {
 
 <!-- Modal Editar Produto -->
 <!-- Overlay + Gaveta Editar Produto -->
-<div id="modal-editar-produto-overlay" class="fixed inset-0 z-50 hidden bg-black/50 transition-opacity" aria-hidden="true"></div>
-<div id="modal-editar-produto-wrap" class="fixed inset-y-0 right-0 z-50 hidden w-full max-w-md h-full translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col pointer-events-auto transform" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="gaveta-editar-produto-titulo">
+<div id="modal-editar-produto-overlay" class="fixed inset-0 z-[9998] hidden bg-black/50 transition-opacity" aria-hidden="true"></div>
+<div id="modal-editar-produto-wrap" class="fixed inset-y-0 right-0 z-[9999] hidden w-full max-w-md h-full translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col pointer-events-auto transform" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="gaveta-editar-produto-titulo">
     <div class="flex items-center justify-between px-5 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))] border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 shrink-0">
         <div>
             <h3 id="gaveta-editar-produto-titulo" class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
@@ -1278,9 +1278,9 @@ function fecharModalNovoFornecedor() {
 </div>
 
 <!-- Modal Devolver ao Fornecedor -->
-<div id="modal-devolver-produto-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
-    <div class="fixed inset-0 bg-black/50" id="modal-devolver-produto-overlay"></div>
-    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-xl shadow-sm dark:shadow-none border border-gray-200 dark:border-gray-700 z-50" onclick="event.stopPropagation()">
+<div id="modal-devolver-produto-wrap" class="fixed inset-0 z-[9999] hidden" aria-hidden="true">
+    <div class="fixed inset-0 z-[9998] bg-black/50" id="modal-devolver-produto-overlay"></div>
+    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-xl shadow-sm dark:shadow-none border border-gray-200 dark:border-gray-700 z-[9999]" onclick="event.stopPropagation()">
         <div class="sticky top-0 flex justify-between items-center px-8 py-5 bg-amber-600 text-white rounded-t-xl z-10">
             <h3 class="text-xl font-bold flex items-center">
                 <i data-lucide="undo-2" class="w-5 h-5 mr-2"></i>Devolver ao Fornecedor
@@ -1329,6 +1329,9 @@ function fecharModalNovoFornecedor() {
     var btnsFechar = document.querySelectorAll('.modal-devolver-produto-fechar');
     var form = document.getElementById('form-devolver-produto');
     if (!wrap || !form) return;
+    if (wrap.parentElement !== document.body) {
+        document.body.appendChild(wrap);
+    }
     var actionBase = form.getAttribute('data-action-base') || '';
     var inputQtd = document.getElementById('devolver_quantidade');
     var inputMotivo = document.getElementById('devolver_motivo');
@@ -1893,6 +1896,12 @@ window.getTipoConfigPorSelect = function(selectEl) {
     var erroDiv = document.getElementById('modal-nova-entrada-erro');
     var btnSalvar = document.getElementById('modal-nova-entrada-salvar');
     var htmlOriginalBtnSalvar = btnSalvar ? btnSalvar.innerHTML : '';
+    if (wrap && wrap.parentElement !== document.body) {
+        document.body.appendChild(wrap);
+    }
+    if (overlay && overlay.parentElement !== document.body) {
+        document.body.appendChild(overlay);
+    }
     if (wrap) {
         wrap.classList.remove('translate-x-0');
         wrap.classList.add('translate-x-full', 'hidden');
@@ -1979,6 +1988,12 @@ window.getTipoConfigPorSelect = function(selectEl) {
 
     function abrir(acao) {
         if (!wrap) return;
+        if (wrap.parentElement !== document.body) {
+            document.body.appendChild(wrap);
+        }
+        if (overlay && overlay.parentElement !== document.body) {
+            document.body.appendChild(overlay);
+        }
         acao = acao || 'entrada';
         var jaAberta = !wrap.classList.contains('hidden') && !wrap.classList.contains('translate-x-full');
         aplicarPainel(acao);
