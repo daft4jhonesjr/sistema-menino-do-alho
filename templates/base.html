@@ -204,7 +204,8 @@
                 display: none;
                 box-sizing: border-box;
             }
-            body.site-nav-mobile-open #site-nav-links {
+            body.site-nav-mobile-open #site-nav-links,
+            body.site-nav-mobile-dragging #site-nav-links {
                 display: flex;
                 position: fixed;
                 top: 0;
@@ -222,6 +223,16 @@
                 touch-action: pan-y;
                 background-color: rgb(4 120 87); /* emerald-700 */
                 box-shadow: 4px 0 24px rgba(0, 0, 0, 0.25);
+                transform: translateX(0);
+                transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+                will-change: transform;
+            }
+            body.site-nav-mobile-dragging {
+                overflow: hidden;
+            }
+            #site-nav-mobile-backdrop.is-drag-preview {
+                display: block !important;
+                pointer-events: none;
             }
             #site-nav-links a {
                 display: flex;
@@ -676,7 +687,7 @@
 
             // Início do toque
             document.addEventListener('touchstart', function(e) {
-                if (toqueDentroDeModal(e.target) || document.body.classList.contains('modal-aberto') || document.body.classList.contains('site-nav-mobile-open')) {
+                if (toqueDentroDeModal(e.target) || document.body.classList.contains('modal-aberto') || document.body.classList.contains('site-nav-mobile-open') || document.body.classList.contains('site-nav-mobile-dragging')) {
                     isPulling = false;
                     return;
                 }
@@ -690,7 +701,7 @@
 
             // Movimento (PRECISA DE PASSIVE: FALSE para o preventDefault funcionar)
             document.addEventListener('touchmove', function(e) {
-                if (toqueDentroDeModal(e.target) || document.body.classList.contains('modal-aberto') || document.body.classList.contains('site-nav-mobile-open')) {
+                if (toqueDentroDeModal(e.target) || document.body.classList.contains('modal-aberto') || document.body.classList.contains('site-nav-mobile-open') || document.body.classList.contains('site-nav-mobile-dragging')) {
                     isPulling = false;
                     return;
                 }
@@ -1905,56 +1916,10 @@
         });
 
         window.fecharSiteNavMobile = fecharNavMobile;
+        window.abrirSiteNavMobile = abrirNavMobile;
         window.isSiteNavMobileOpen = function() {
             return nav.classList.contains('site-nav-mobile-open');
         };
-
-        // Swipe da borda esquerda → direita abre o menu (padrão iOS)
-        var SWIPE_BORDA_MAX_X = 48;
-        var SWIPE_ABRIR_MIN_DELTA_X = 72;
-        var SWIPE_MAX_DELTA_Y = 64;
-        var swipeAbrirAtivo = false;
-        var swipeAbrirStartX = 0;
-        var swipeAbrirStartY = 0;
-
-        var toqueDentroDeModalNav = function(target) {
-            if (!target || !target.closest) return false;
-            if (target.closest('#site-nav-links, #site-nav-mobile-backdrop')) return false;
-            return !!target.closest('.fixed.z-50, .fixed.z-\\[9998\\], .fixed.z-\\[9999\\], [role="dialog"], .modal-container, .bg-black\\/50, .bg-black\\/60, #gaveta-contagem, #gaveta-orcamento, #gaveta-lancamento, #gaveta-balanco, #modal-nova-entrada-wrap, #modal-nova-entrada-overlay, #modal-editar-produto-wrap, #modal-editar-produto-overlay, #modal-devolver-produto-wrap, #container-nova-venda, #modal-novo-cliente-wrap, #modal-novo-cliente-panel');
-        };
-
-        var podeUsarSwipeAbrirMenu = function() {
-            return window.innerWidth < 768
-                && !document.body.classList.contains('modal-aberto')
-                && !nav.classList.contains('site-nav-mobile-open');
-        };
-
-        document.addEventListener('touchstart', function(e) {
-            if (!podeUsarSwipeAbrirMenu()) return;
-            if (toqueDentroDeModalNav(e.target)) return;
-            if (!e.touches || !e.touches.length) return;
-            var touch = e.touches[0];
-            if (touch.screenX > SWIPE_BORDA_MAX_X) return;
-            swipeAbrirStartX = touch.screenX;
-            swipeAbrirStartY = touch.screenY;
-            swipeAbrirAtivo = true;
-        }, { passive: true });
-
-        document.addEventListener('touchend', function(e) {
-            if (!swipeAbrirAtivo) return;
-            swipeAbrirAtivo = false;
-            if (!podeUsarSwipeAbrirMenu()) return;
-            if (!e.changedTouches || !e.changedTouches.length) return;
-            var touch = e.changedTouches[0];
-            var diffX = touch.screenX - swipeAbrirStartX;
-            var diffY = touch.screenY - swipeAbrirStartY;
-            if (Math.abs(diffY) > SWIPE_MAX_DELTA_Y || Math.abs(diffX) <= Math.abs(diffY)) return;
-            if (diffX >= SWIPE_ABRIR_MIN_DELTA_X) abrirNavMobile();
-        }, { passive: true });
-
-        document.addEventListener('touchcancel', function() {
-            swipeAbrirAtivo = false;
-        }, { passive: true });
     })();
 
     // Dropdown Seletor de Ano
@@ -2068,22 +2033,41 @@
     (function() {
         var links = document.getElementById('site-nav-links');
         var backdrop = document.getElementById('site-nav-mobile-backdrop');
-        if (!links || !window.MeninoAlhoNavigation || !window.MeninoAlhoNavigation.setupDrawerSwipeToClose) return;
-        window.MeninoAlhoNavigation.setupDrawerSwipeToClose({
+        if (!links || !window.MeninoAlhoNavigation || !window.MeninoAlhoNavigation.setupDrawerInteractiveDrag) return;
+        window.MeninoAlhoNavigation.setupDrawerInteractiveDrag({
             panel: links,
             backdrop: backdrop,
             drawerPosition: 'left',
+            edgeWidth: 40,
+            draggingBodyClass: 'site-nav-mobile-dragging',
             isOpen: function() {
                 return window.innerWidth < 768
                     && typeof window.isSiteNavMobileOpen === 'function'
                     && window.isSiteNavMobileOpen();
+            },
+            onOpen: function() {
+                if (typeof window.abrirSiteNavMobile === 'function') {
+                    window.abrirSiteNavMobile();
+                }
             },
             onClose: function() {
                 if (typeof window.fecharSiteNavMobile === 'function') {
                     window.fecharSiteNavMobile();
                 }
             },
-            minDeltaX: 50
+            canStartOpenGesture: function() {
+                if (window.innerWidth >= 768) return false;
+                if (document.body.classList.contains('modal-aberto')) return false;
+                if (typeof window.isSiteNavMobileOpen === 'function' && window.isSiteNavMobileOpen()) {
+                    return false;
+                }
+                return true;
+            },
+            shouldIgnoreTouchTarget: function(target) {
+                if (!target || !target.closest) return false;
+                if (target.closest('#site-nav-links, #site-nav-mobile-backdrop')) return false;
+                return !!target.closest('.fixed.z-50, .fixed.z-\\[9998\\], .fixed.z-\\[9999\\], [role="dialog"], .modal-container, .bg-black\\/50, .bg-black\\/60, #gaveta-contagem, #gaveta-orcamento, #gaveta-lancamento, #gaveta-balanco, #modal-nova-entrada-wrap, #modal-nova-entrada-overlay, #modal-editar-produto-wrap, #modal-editar-produto-overlay, #modal-devolver-produto-wrap, #container-nova-venda, #modal-novo-cliente-wrap, #modal-novo-cliente-panel');
+            }
         });
     })();
     </script>
