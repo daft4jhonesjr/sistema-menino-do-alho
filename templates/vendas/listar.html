@@ -250,16 +250,19 @@
         <h2 class="text-3xl font-bold text-emerald-700 dark:text-emerald-400 mb-2">Vendas</h2>
         <p class="text-gray-600 dark:text-gray-400">Gerenciar vendas realizadas</p>
     </div>
-    <div class="w-full sm:w-auto">
-        <div class="flex items-center gap-2 flex-wrap">
-            <a href="{{ url_for('vendas.nova_venda') }}" id="btn-lancar-venda" class="inline-flex flex-1 sm:flex-none items-center justify-center gap-1.5 px-6 py-3 rounded-md border border-transparent bg-emerald-700 text-lg font-medium text-white shadow-sm hover:bg-emerald-800 transition-colors">
+    <div class="w-full sm:w-auto sm:min-w-[20rem]">
+        <div class="grid grid-cols-2 gap-3 w-full">
+            <button type="button" id="btn-toggle-nova-venda" class="inline-flex w-full items-center justify-center gap-1.5 px-4 py-3 rounded-md border border-transparent bg-emerald-800 text-base sm:text-lg font-medium text-white shadow-sm hover:bg-emerald-700 transition-colors">
+                💰&nbsp;Nova Venda
+            </button>
+            <a href="{{ url_for('vendas.nova_venda') }}" id="btn-lancar-venda" class="inline-flex w-full items-center justify-center gap-1.5 px-4 py-3 rounded-md border border-transparent bg-emerald-800 text-base sm:text-lg font-medium text-white shadow-sm hover:bg-emerald-700 transition-colors">
                 🛒&nbsp;Lançar Venda
             </a>
-            <button type="button" id="btn-menu-relatorio" class="inline-flex flex-1 sm:flex-none items-center justify-center gap-1.5 px-4 py-3 rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-base sm:text-sm font-medium text-gray-700 dark:text-gray-200 shadow-sm hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-300 dark:hover:border-emerald-700 hover:text-emerald-800 dark:hover:text-emerald-300 transition-colors">
+            <button type="button" id="btn-menu-relatorio" class="inline-flex w-full items-center justify-center gap-1.5 px-4 py-3 rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-base sm:text-sm font-medium text-gray-700 dark:text-gray-200 shadow-sm hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-300 dark:hover:border-emerald-700 hover:text-emerald-800 dark:hover:text-emerald-300 transition-colors">
                 📄&nbsp;Gerar Relatório
             </button>
             {% if current_user.is_authenticated and current_user.is_admin() %}
-            <a href="{{ url_for('vendas.importar_vendas') }}" id="btn-menu-importar" class="inline-flex flex-1 sm:flex-none items-center justify-center gap-1.5 px-4 py-3 rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-base sm:text-sm font-medium text-gray-700 dark:text-gray-200 shadow-sm hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-300 dark:hover:border-emerald-700 hover:text-emerald-800 dark:hover:text-emerald-300 transition-colors">
+            <a href="{{ url_for('vendas.importar_vendas') }}" id="btn-menu-importar" class="inline-flex w-full items-center justify-center gap-1.5 px-4 py-3 rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-base sm:text-sm font-medium text-gray-700 dark:text-gray-200 shadow-sm hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-300 dark:hover:border-emerald-700 hover:text-emerald-800 dark:hover:text-emerald-300 transition-colors">
                 📥&nbsp;Importar Lista
             </a>
             {% endif %}
@@ -6039,11 +6042,23 @@ window.abrirModalNovaVenda = function() {
 };
 
 document.addEventListener('DOMContentLoaded', function() {
+    const btnToggleForm = document.getElementById('btn-toggle-nova-venda');
     const btnMenuRelatorio = document.getElementById('btn-menu-relatorio');
     const containerVenda = document.getElementById('container-nova-venda');
 
     function abrirModalNovaVenda() { window.abrirModalNovaVenda(); }
     function fecharModalNovaVenda() { window.fecharModalNovaVenda(); }
+
+    if (btnToggleForm) {
+        btnToggleForm.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (containerVenda && containerVenda.classList.contains('hidden')) {
+                abrirModalNovaVenda();
+            } else {
+                fecharModalNovaVenda();
+            }
+        });
+    }
 
     // Capture: X / Cancelar / backdrop — evita bloqueio por stopPropagation no mobile
     document.addEventListener('click', function(e) {
