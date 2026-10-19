@@ -2315,6 +2315,19 @@ window.getTipoConfigPorSelect = function(selectEl) {
                 });
         });
     }
+
+    // Deep link do rodapé / atalhos: /produtos?acao=nova_entrada abre a gaveta
+    // e limpa a URL para não reabrir no F5.
+    try {
+        var paramsAcaoEntrada = new URLSearchParams(window.location.search);
+        if (paramsAcaoEntrada.get('acao') === 'nova_entrada') {
+            abrir('entrada');
+            paramsAcaoEntrada.delete('acao');
+            var queryLimpaEntrada = paramsAcaoEntrada.toString();
+            var urlLimpaEntrada = window.location.pathname + (queryLimpaEntrada ? '?' + queryLimpaEntrada : '') + window.location.hash;
+            window.history.replaceState({}, document.title, urlLimpaEntrada);
+        }
+    } catch (_) {}
 })();
 
 // Modal Corrigir Categoria (OUTROS)
