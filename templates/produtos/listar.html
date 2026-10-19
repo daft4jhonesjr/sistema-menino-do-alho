@@ -2238,6 +2238,45 @@ window.getTipoConfigPorSelect = function(selectEl) {
     if (overlay) overlay.addEventListener('click', fechar);
     if (btnFechar) btnFechar.addEventListener('click', fechar);
     if (btnCancelar) btnCancelar.addEventListener('click', fechar);
+
+    if (wrap) {
+        var SWIPE_MIN_DX = 80;
+        var SWIPE_BORDA_ESQUERDA = 60;
+        var swipeStartX = null;
+        var swipeStartY = null;
+
+        wrap.addEventListener('touchstart', function(e) {
+            if (e.touches.length !== 1) {
+                swipeStartX = null;
+                return;
+            }
+            var t = e.touches[0];
+            swipeStartX = t.clientX;
+            swipeStartY = t.clientY;
+            // Borda esquerda relativa à gaveta, que no desktop não encosta na lateral da tela.
+            var swipeDaBorda = (t.clientX - wrap.getBoundingClientRect().left) < SWIPE_BORDA_ESQUERDA;
+            // Fora da borda, arrastos sobre campos de texto/range servem para selecionar ou ajustar valor.
+            if (!swipeDaBorda && e.target.closest && e.target.closest('input, textarea, select, [contenteditable="true"]')) {
+                swipeStartX = null;
+            }
+        }, { passive: true });
+
+        wrap.addEventListener('touchend', function(e) {
+            if (swipeStartX === null || !e.changedTouches.length) return;
+            var t = e.changedTouches[0];
+            var deltaX = t.clientX - swipeStartX;
+            var deltaY = t.clientY - swipeStartY;
+            swipeStartX = null;
+            if (deltaX > SWIPE_MIN_DX && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
+                fechar();
+            }
+        }, { passive: true });
+
+        wrap.addEventListener('touchcancel', function() {
+            swipeStartX = null;
+        }, { passive: true });
+    }
+
     document.addEventListener('keydown', function(e) {
         if (e.key !== 'Escape') return;
         var modalTipo = document.getElementById('modalTipo');
