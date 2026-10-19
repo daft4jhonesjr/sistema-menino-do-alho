@@ -194,30 +194,17 @@
             body.site-nav-mobile-open {
                 overflow: hidden;
             }
-            #site-nav-mobile-backdrop {
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100vh;
-                height: 100dvh;
-                z-index: 9998;
-                background: rgba(0, 0, 0, 0.45);
-                -webkit-tap-highlight-color: transparent;
-            }
             #site-nav-mobile-backdrop:not(.is-visible) {
-                display: none !important;
                 pointer-events: none;
             }
             #site-nav-mobile-backdrop.is-visible {
-                display: block;
                 pointer-events: auto;
             }
             #site-nav-links {
                 display: none;
                 box-sizing: border-box;
             }
-            #site-nav.site-nav-mobile-open #site-nav-links {
+            body.site-nav-mobile-open #site-nav-links {
                 display: flex;
                 position: fixed;
                 top: 0;
@@ -225,7 +212,6 @@
                 width: min(100%, 20rem);
                 height: 100vh;
                 height: 100dvh;
-                z-index: 9999;
                 flex-direction: column;
                 align-items: stretch;
                 gap: 0.25rem;
@@ -257,7 +243,7 @@
             #btn-mobile-nav-toggle {
                 display: none !important;
             }
-            #site-nav-links {
+            #site-nav-links-desktop {
                 display: flex !important;
                 flex-wrap: wrap;
                 flex-direction: row;
@@ -266,6 +252,9 @@
                 border-top: none;
                 margin-top: 0;
                 padding-top: 0;
+            }
+            #site-nav-links {
+                display: none !important;
             }
         }
         /* --- KIT DE ACABAMENTO APPLE IOS --- */
@@ -778,52 +767,8 @@
                     <i data-lucide="x" class="w-5 h-5 hidden" id="icon-mobile-nav-close"></i>
                     Menu
                 </button>
-                <div id="site-nav-links" class="order-3 md:order-none gap-1 items-center md:flex md:flex-wrap md:justify-center">
-                <div class="site-nav-mobile-drawer-header md:hidden flex items-center justify-between gap-2 px-1 py-2 mb-1 border-b border-white/15">
-                    <span class="text-emerald-50 font-semibold text-sm tracking-wide">Menu principal</span>
-                    <button type="button" id="btn-mobile-nav-close-panel" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-emerald-50 hover:bg-white/10 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400" aria-label="Fechar menu">
-                        <i data-lucide="x" class="w-5 h-5"></i>
-                        Fechar
-                    </button>
-                </div>
-                {% if current_user.nivel_acesso in ['admin', 'master'] or 'dashboard' in current_user.permissoes_lista %}
-                <a href="{{ url_for('dashboard.dashboard') }}" class="px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors text-sm {% if request.endpoint == 'dashboard.dashboard' %}bg-white/20 text-white font-medium{% else %}text-emerald-50 hover:bg-white/10 hover:text-white{% endif %}">
-                    <i data-lucide="layout-dashboard" class="w-4 h-4"></i>Dashboard
-                </a>
-                {% endif %}
-                {% if current_user.nivel_acesso in ['admin', 'master'] or 'clientes' in current_user.permissoes_lista %}
-                <a href="{{ url_for('clientes.listar_clientes') }}" class="px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors text-sm {% if request.endpoint in ('clientes.listar_clientes', 'clientes.novo_cliente', 'clientes.editar_cliente') %}bg-white/20 text-white font-medium{% else %}text-emerald-50 hover:bg-white/10 hover:text-white{% endif %}">
-                    <i data-lucide="users" class="w-4 h-4"></i>Clientes
-                </a>
-                {% endif %}
-                {% if current_user.nivel_acesso in ['admin', 'master'] or 'produtos' in current_user.permissoes_lista %}
-                <a href="{{ url_for('produtos.listar_produtos') }}" class="px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors text-sm relative {% if request.endpoint in ('produtos.listar_produtos', 'produtos.novo_produto', 'produtos.editar_produto') %}bg-white/20 text-white font-medium{% else %}text-emerald-50 hover:bg-white/10 hover:text-white{% endif %}">
-                    <i data-lucide="package" class="w-4 h-4"></i>Entrada de Produtos
-                    {% if count_outros and count_outros > 0 %}
-                    <span class="ml-1.5 inline-flex items-center justify-center text-amber-300" title="{{ count_outros }} produto(s) em OUTROS sem categoria definida">
-                        <i data-lucide="alert-triangle" class="w-4 h-4"></i>
-                    </span>
-                    {% endif %}
-                </a>
-                {% endif %}
-                {% if current_user.nivel_acesso in ['admin', 'master'] or 'vendas' in current_user.permissoes_lista %}
-                <a href="{{ url_for('vendas.listar_vendas') }}" class="px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors text-sm {% if request.endpoint in ('vendas.listar_vendas', 'vendas.nova_venda', 'vendas.editar_venda') %}bg-white/20 text-white font-medium{% else %}text-emerald-50 hover:bg-white/10 hover:text-white{% endif %}">
-                    <i data-lucide="shopping-cart" class="w-4 h-4"></i>Vendas
-                </a>
-                {% endif %}
-                {% if current_user.nivel_acesso in ['admin', 'master'] or 'caixa' in current_user.permissoes_lista %}
-                <a href="{{ url_for('caixa.caixa') }}" class="px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors text-sm {% if request.endpoint == 'caixa.caixa' %}bg-white/20 text-white font-medium{% else %}text-emerald-50 hover:bg-white/10 hover:text-white{% endif %}">
-                    <i data-lucide="wallet" class="w-4 h-4"></i>Caixa Diário
-                </a>
-                {% endif %}
-                {% if current_user.nivel_acesso in ['admin', 'master'] or 'logistica' in current_user.permissoes_lista %}
-                <a href="{{ url_for('vendas.logistica') }}" class="relative px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors text-sm {% if request.endpoint == 'vendas.logistica' %}bg-white/20 text-white font-medium{% else %}text-emerald-50 hover:bg-white/10 hover:text-white{% endif %}">
-                    <i data-lucide="truck" class="w-4 h-4"></i>Logística
-                    {% if entregas_pendentes %}
-                    <span class="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 text-[10px] font-bold leading-none text-white bg-red-500 rounded-full ring-2 ring-emerald-700" title="{{ entregas_pendentes }} entrega(s) pendente(s)">{{ entregas_pendentes }}</span>
-                    {% endif %}
-                </a>
-                {% endif %}
+                <div id="site-nav-links-desktop" class="order-3 md:order-none gap-1 items-center hidden md:flex md:flex-wrap md:justify-center">
+                {% include '_site_nav_link_items.html' %}
                 </div>
 
                 <div id="site-nav-utils" class="order-2 md:order-none flex flex-wrap items-center justify-end gap-1 flex-shrink-0">
@@ -901,7 +846,17 @@
             </div>
         </div>
     </nav>
-    <div id="site-nav-mobile-backdrop" class="hidden md:hidden" aria-hidden="true" role="presentation"></div>
+    <div id="site-nav-mobile-backdrop" class="fixed inset-0 z-40 bg-black/50 hidden md:hidden" aria-hidden="true" role="presentation"></div>
+    <nav id="site-nav-links" class="z-50 md:hidden" aria-label="Menu principal">
+        <div class="site-nav-mobile-drawer-header flex items-center justify-between gap-2 px-1 py-2 mb-1 border-b border-white/15">
+            <span class="text-emerald-50 font-semibold text-sm tracking-wide">Menu principal</span>
+            <button type="button" id="btn-mobile-nav-close-panel" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-emerald-50 hover:bg-white/10 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400" aria-label="Fechar menu">
+                <i data-lucide="x" class="w-5 h-5"></i>
+                Fechar
+            </button>
+        </div>
+        {% include '_site_nav_link_items.html' %}
+    </nav>
 
     <!-- Main Content -->
     <main class="w-full px-2 md:px-4 lg:px-6 xl:px-8 py-6 pb-16 flex-1 animate-in fade-in duration-200">
@@ -1927,6 +1882,7 @@
             if (!nav.classList.contains('site-nav-mobile-open')) return;
             var alvo = e.target;
             if (nav.contains(alvo)) return;
+            if (links.contains(alvo)) return;
             if (backdrop && backdrop.contains(alvo)) return;
             fecharNavMobile();
         });
