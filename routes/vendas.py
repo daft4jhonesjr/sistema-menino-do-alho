@@ -1826,6 +1826,29 @@ def listar_vendas():
             'total': float(total_v or 0),
         }
 
+    # Pendentes por forma de pagamento (somente situacao == PENDENTE)
+    rows_pendentes_pagamento = (
+        _query_grafico_base()
+        .filter(func.upper(func.coalesce(Venda.situacao, '')) == 'PENDENTE')
+        .with_entities(
+            Venda.forma_pagamento,
+            func.count(Venda.id),
+            func.coalesce(
+                func.sum(case((_filtro_perda_grafico, _valor_total_expr), else_=0)),
+                0,
+            ),
+        )
+        .group_by(Venda.forma_pagamento)
+        .all()
+    )
+    dados_pendentes_pagamento = {}
+    for forma, count_v, total_v in rows_pendentes_pagamento:
+        forma_norm = str(forma or '').strip() or 'Não informado'
+        dados_pendentes_pagamento[forma_norm] = {
+            'count': int(count_v or 0),
+            'total': float(total_v or 0),
+        }
+
     # Fila de "Documentos Recém-Chegados" — migrada do Dashboard para
     # centralizar o fluxo de trabalho de vendas (boletos/NFs chegam e o
     # vendedor já os vincula/cria a venda sem trocar de página). Roda só
@@ -2165,6 +2188,7 @@ def listar_vendas():
         filtro_vencidos=filtro_vencidos,
         nfs_multiplas=nfs_multiplas,
         graficos_data=graficos_data,
+        dados_pendentes_pagamento=dados_pendentes_pagamento,
         total_geral_a_receber=total_geral_a_receber,
         documentos_recem_chegados=documentos_recem_chegados,
         documentos_pendentes=documentos_pendentes,

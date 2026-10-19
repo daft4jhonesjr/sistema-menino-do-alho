@@ -872,7 +872,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
         </svg>
     </button>
-    <div id="conteudo-analise-vendas" class="hidden md:grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div id="conteudo-analise-vendas" class="hidden md:grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
         <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 border border-gray-100 dark:border-gray-700">
             <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-400 text-center mb-4">Por Situação</h3>
             <div class="relative h-48 w-full"><canvas id="chartSituacao"></canvas></div>
@@ -884,6 +884,10 @@
         <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 border border-gray-100 dark:border-gray-700">
             <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-400 text-center mb-4">Por Empresa Faturadora</h3>
             <div class="relative h-48 w-full"><canvas id="chartEmpresa"></canvas></div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 border border-gray-100 dark:border-gray-700">
+            <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-400 text-center mb-4">Pendentes por Pagamento</h3>
+            <div class="relative h-48 w-full"><canvas id="graficoPendentes"></canvas></div>
         </div>
     </div>
 </div>
@@ -6241,6 +6245,8 @@ function toggleAnaliseVendas(event) {
     criarGrafico('chartSituacao', dados.situacao);
     criarGrafico('chartPagamento', dados.pagamento);
     criarGrafico('chartEmpresa', dados.empresa);
+    var dadosPendentes = {{ (dados_pendentes_pagamento or {}) | tojson | safe }};
+    criarGrafico('graficoPendentes', dadosPendentes);
 })();
 
 // Modal: Gerador de Relatorio Personalizado
