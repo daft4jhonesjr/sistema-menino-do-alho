@@ -681,12 +681,12 @@
 
             var toqueDentroDeModal = function(target) {
                 if (!target || !target.closest) return false;
-                return !!target.closest('.fixed.z-50, .fixed.z-\\[9998\\], .fixed.z-\\[9999\\], [role="dialog"], .modal-container, .bg-black\\/50, .bg-black\\/60, #gaveta-contagem, #gaveta-orcamento, #gaveta-lancamento, #gaveta-balanco, #modal-nova-entrada-wrap, #modal-nova-entrada-overlay, #modal-editar-produto-wrap, #modal-editar-produto-overlay, #modal-devolver-produto-wrap, #container-nova-venda, #modal-novo-cliente-wrap, #modal-novo-cliente-panel');
+                return !!target.closest('.fixed.z-50, .fixed.z-\\[9998\\], .fixed.z-\\[9999\\], [role="dialog"], .modal-container, .bg-black\\/50, .bg-black\\/60, #site-nav-mobile-backdrop, #site-nav-links, #gaveta-contagem, #gaveta-orcamento, #gaveta-lancamento, #gaveta-balanco, #modal-nova-entrada-wrap, #modal-nova-entrada-overlay, #modal-editar-produto-wrap, #modal-editar-produto-overlay, #modal-devolver-produto-wrap, #container-nova-venda, #modal-novo-cliente-wrap, #modal-novo-cliente-panel');
             };
 
             // Início do toque
             document.addEventListener('touchstart', function(e) {
-                if (toqueDentroDeModal(e.target) || document.body.classList.contains('modal-aberto')) {
+                if (toqueDentroDeModal(e.target) || document.body.classList.contains('modal-aberto') || document.body.classList.contains('site-nav-mobile-open')) {
                     isPulling = false;
                     return;
                 }
@@ -700,7 +700,7 @@
 
             // Movimento (PRECISA DE PASSIVE: FALSE para o preventDefault funcionar)
             document.addEventListener('touchmove', function(e) {
-                if (toqueDentroDeModal(e.target) || document.body.classList.contains('modal-aberto')) {
+                if (toqueDentroDeModal(e.target) || document.body.classList.contains('modal-aberto') || document.body.classList.contains('site-nav-mobile-open')) {
                     isPulling = false;
                     return;
                 }
