@@ -2,13 +2,7 @@
 <html lang="pt-BR" class="font-sans antialiased">
 <head>
     <meta charset="UTF-8">
-    <meta name="view-transition" content="same-origin">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <style>
-        /* Evita flash branco entre telas antes do CSS/Tailwind carregar (WKWebView / Safari) */
-        html { background-color: #ecfdf5; }
-        html.dark { background-color: #111827; }
-    </style>
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <script>
         window.getCsrfHeaders = function() {
@@ -172,9 +166,31 @@
     <style>
         html, body {
             width: 100%;
+            height: 100%;
             min-height: 100%;
         }
-
+        /* Shell da app: cabeçalho + nav empurram o conteúdo; scroll só no main */
+        body.app-shell {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            height: 100dvh;
+            max-height: 100dvh;
+            overflow: hidden;
+        }
+        body.app-shell > header,
+        body.app-shell > nav#site-nav {
+            flex-shrink: 0;
+        }
+        body.app-shell > main {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow-y: auto;
+            overflow-x: hidden;
+            -webkit-overflow-scrolling: touch;
+            position: relative;
+            z-index: 0;
+        }
         /* Menu mobile: links colapsáveis */
         @media (max-width: 767px) {
             #site-nav-links {
@@ -397,34 +413,22 @@
             navigation: auto;
         }
 
-        main {
-            view-transition-name: page-main;
-        }
-
-        ::view-transition-old(page-main) {
-            animation: 280ms cubic-bezier(0.32, 0.72, 0, 1) both iosMainFadeOut;
-        }
-
-        ::view-transition-new(page-main) {
-            animation: 280ms cubic-bezier(0.32, 0.72, 0, 1) both iosMainSlideIn;
-        }
-
         ::view-transition-old(root) {
-            animation-duration: 0ms;
+            animation: 250ms cubic-bezier(0.32, 0.72, 0, 1) both iosFadeOut;
         }
 
         ::view-transition-new(root) {
-            animation-duration: 0ms;
+            animation: 250ms cubic-bezier(0.32, 0.72, 0, 1) both iosSlideIn;
         }
 
-        @keyframes iosMainFadeOut {
-            from { opacity: 1; transform: translateX(0); }
-            to { opacity: 0; transform: translateX(-20px); }
+        @keyframes iosFadeOut {
+            from { opacity: 1; transform: scale(1); }
+            to { opacity: 0; transform: scale(0.98); }
         }
 
-        @keyframes iosMainSlideIn {
-            from { opacity: 0; transform: translateX(16px); }
-            to { opacity: 1; transform: translateX(0); }
+        @keyframes iosSlideIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         /* Nav e footer estáveis — nomes únicos (a API não permite o mesmo name em dois elementos) */
@@ -433,28 +437,6 @@
         }
         body > footer {
             view-transition-name: fixed-footer;
-        }
-
-        ::view-transition-old(fixed-nav),
-        ::view-transition-new(fixed-nav),
-        ::view-transition-old(fixed-footer),
-        ::view-transition-new(fixed-footer) {
-            animation: none;
-        }
-
-        /* Fallback JS (navigation.js) quando startViewTransition não existe */
-        main.page-nav-exit {
-            opacity: 0;
-            transform: translateX(-20px);
-            transition: opacity 300ms cubic-bezier(0.32, 0.72, 0, 1),
-                        transform 300ms cubic-bezier(0.32, 0.72, 0, 1);
-            pointer-events: none;
-        }
-        html.page-nav-exit-root body {
-            opacity: 0;
-            transform: translateX(-20px);
-            transition: opacity 300ms cubic-bezier(0.32, 0.72, 0, 1),
-                        transform 300ms cubic-bezier(0.32, 0.72, 0, 1);
         }
 
         /* Fallback de entrada quando View Transitions não está disponível */
@@ -471,19 +453,11 @@
                 navigation: none;
             }
             ::view-transition-old(root),
-            ::view-transition-new(root),
-            ::view-transition-old(page-main),
-            ::view-transition-new(page-main) {
+            ::view-transition-new(root) {
                 animation: none !important;
             }
             main.animate-in.fade-in {
                 animation: none !important;
-            }
-            main.page-nav-exit,
-            html.page-nav-exit-root body {
-                transition: none !important;
-                opacity: 1 !important;
-                transform: none !important;
             }
         }
     </style>
@@ -547,7 +521,7 @@
     </style>
     {% block head_extras %}{% endblock %}
 </head>
-<body class="bg-emerald-50 text-gray-800 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-500 min-h-screen flex flex-col">
+<body class="app-shell bg-emerald-50 text-gray-800 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-500 min-h-dvh flex flex-col overflow-hidden">
     <div id="ptr-indicador" role="status" aria-live="polite" aria-label="Puxe para atualizar">
         <svg id="ptr-engrenagem" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
@@ -760,7 +734,7 @@
     </header>
 
     <!-- Navigation Bar -->
-    <nav id="site-nav" class="bg-emerald-700 shadow-sm sticky top-0 z-40 flex-shrink-0">
+    <nav id="site-nav" class="bg-emerald-700 shadow-sm relative z-30 flex-shrink-0">
         <div class="w-full px-2 md:px-4 lg:px-6 xl:px-8 py-2">
             <div class="flex flex-wrap items-center justify-end md:justify-center gap-1">
                 <button type="button" id="btn-mobile-nav-toggle" class="md:hidden order-1 mr-auto inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-emerald-50 hover:bg-white/10 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400" aria-expanded="false" aria-controls="site-nav-links">
@@ -886,7 +860,7 @@
     </nav>
 
     <!-- Main Content -->
-    <main class="w-full min-w-0 px-2 md:px-4 lg:px-6 xl:px-8 py-6 pb-16 flex-1 animate-in fade-in duration-200">
+    <main class="w-full px-2 md:px-4 lg:px-6 xl:px-8 py-6 pb-16 flex-1 min-h-0 overflow-y-auto overflow-x-hidden animate-in fade-in duration-200">
         {% block content %}{% endblock %}
     </main>
     {% block modals %}{% endblock %}
@@ -1835,7 +1809,6 @@
         }
     }
     
-
     // Menu mobile (hambúrguer)
     (function() {
         var nav = document.getElementById('site-nav');
