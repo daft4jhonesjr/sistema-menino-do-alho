@@ -188,6 +188,10 @@
         }
         /* Menu mobile: links colapsáveis */
         @media (max-width: 767px) {
+            nav#site-nav > div.w-full {
+                padding-left: 16px;
+                padding-right: 16px;
+            }
             #site-nav-links {
                 display: none;
                 width: 100%;
@@ -197,12 +201,16 @@
                 padding-top: 0.25rem;
                 border-top: 1px solid rgba(255, 255, 255, 0.12);
                 margin-top: 0.25rem;
+                box-sizing: border-box;
             }
             #site-nav.site-nav-mobile-open #site-nav-links {
                 display: flex;
             }
             #site-nav-links a {
+                display: flex;
                 width: 100%;
+                max-width: 100%;
+                box-sizing: border-box;
                 justify-content: flex-start;
             }
             #user-menu-button span.pointer-events-none {
@@ -1854,6 +1862,58 @@
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') fecharNavMobile();
         });
+
+        // Swipe da esquerda para a direita abre o menu (mobile / Capacitor iOS)
+        var SWIPE_BORDA_MAX_X = 48;
+        var SWIPE_MIN_DELTA_X = 72;
+        var SWIPE_MAX_DELTA_Y = 64;
+        var swipeAtivo = false;
+        var swipeStartX = 0;
+        var swipeStartY = 0;
+
+        var toqueDentroDeModalNav = function(target) {
+            if (!target || !target.closest) return false;
+            return !!target.closest('.fixed.z-50, .fixed.z-\\[9998\\], .fixed.z-\\[9999\\], [role="dialog"], .modal-container, .bg-black\\/50, .bg-black\\/60, #gaveta-contagem, #gaveta-orcamento, #gaveta-lancamento, #gaveta-balanco, #modal-nova-entrada-wrap, #modal-nova-entrada-overlay, #modal-editar-produto-wrap, #modal-editar-produto-overlay, #modal-devolver-produto-wrap, #container-nova-venda, #modal-novo-cliente-wrap, #modal-novo-cliente-panel');
+        };
+
+        var podeAbrirMenuPorSwipe = function() {
+            return window.innerWidth < 768
+                && !nav.classList.contains('site-nav-mobile-open')
+                && !document.body.classList.contains('modal-aberto');
+        };
+
+        document.addEventListener('touchstart', function(e) {
+            if (!podeAbrirMenuPorSwipe()) return;
+            if (toqueDentroDeModalNav(e.target)) return;
+            if (!e.touches || !e.touches.length) return;
+            var touch = e.touches[0];
+            if (touch.clientX > SWIPE_BORDA_MAX_X) return;
+            swipeStartX = touch.clientX;
+            swipeStartY = touch.clientY;
+            swipeAtivo = true;
+        }, { passive: true });
+
+        var finalizarSwipeMenu = function(e) {
+            if (!swipeAtivo) return;
+            swipeAtivo = false;
+            if (!podeAbrirMenuPorSwipe()) return;
+            if (!e.changedTouches || !e.changedTouches.length) return;
+            var touch = e.changedTouches[0];
+            var deltaX = touch.clientX - swipeStartX;
+            var deltaY = touch.clientY - swipeStartY;
+            if (
+                deltaX >= SWIPE_MIN_DELTA_X
+                && Math.abs(deltaY) <= SWIPE_MAX_DELTA_Y
+                && deltaX > Math.abs(deltaY)
+            ) {
+                abrirNavMobile();
+            }
+        };
+
+        document.addEventListener('touchend', finalizarSwipeMenu, { passive: true });
+        document.addEventListener('touchcancel', function() {
+            swipeAtivo = false;
+        }, { passive: true });
     })();
 
     // Dropdown Seletor de Ano
