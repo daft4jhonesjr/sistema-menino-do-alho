@@ -8,7 +8,20 @@
         })();
     </script>
     <meta charset="UTF-8">
+    <meta name="view-transition" content="same-origin">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        html { background-color: #ecfdf5; }
+        html.dark { background-color: #111827; }
+        @view-transition { navigation: auto; }
+        main.page-nav-exit,
+        html.page-nav-exit-root body {
+            opacity: 0;
+            transform: translateX(-20px);
+            transition: opacity 300ms cubic-bezier(0.32, 0.72, 0, 1),
+                        transform 300ms cubic-bezier(0.32, 0.72, 0, 1);
+        }
+    </style>
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Login - Menino do Alho</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -17,6 +30,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/output.css') }}">
     <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="{{ url_for('static', filename='js/navigation.js') }}"></script>
     <script src="{{ url_for('static', filename='js/auth-session.js') }}"></script>
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </head>
@@ -355,7 +369,11 @@
         var destino = (window.MeninoAlhoAuth && window.MeninoAlhoAuth.normalizarUrlRedirect)
             ? window.MeninoAlhoAuth.normalizarUrlRedirect(data.redirect_url || '/dashboard')
             : (data.redirect_url || '/dashboard');
-        window.location.href = destino;
+        if (window.MeninoAlhoNavigation && typeof window.MeninoAlhoNavigation.navigate === 'function') {
+            window.MeninoAlhoNavigation.navigate(destino);
+        } else {
+            window.location.href = destino;
+        }
     }
 
     async function entrarComFaceId() {

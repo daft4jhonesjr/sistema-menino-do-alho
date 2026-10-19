@@ -52,7 +52,7 @@ from sqlalchemy import and_, case, desc, func, or_
 from sqlalchemy.orm import joinedload
 
 from extensions import cache
-from models import db, Cliente, Produto, Venda, Documento, LancamentoCaixa, VotoFrase
+from models import db, Cliente, Produto, Venda, Documento, LancamentoCaixa, VotoFrase, Fornecedor
 from services.auth_utils import (
     tenant_required, _e_admin_tenant, _usuario_pode_gerenciar_venda,
     _checar_permissao_ou_redirecionar,
@@ -818,26 +818,59 @@ def dashboard():
 
     faturamento_geral = sum(float(r.total or 0) for r in rows_faturamento)
 
-    faturamento_por_fornecedor = []
+    def _percentual_faturamento(total_f):
+        return (total_f / faturamento_geral * 100) if faturamento_geral > 0 else 0.0
+
+    totais_por_empresa = {}
     avulsas_info = {'total': 0.0, 'pago': 0.0, 'pendente': 0.0, 'percentual': 0.0}
     for row in rows_faturamento:
-        nome = (row.empresa or 'NENHUM').strip()
+        nome = (row.empresa or 'NENHUM').strip().upper()
         total_f = float(row.total or 0)
         pago_f = float(row.pago or 0)
         pendente_f = float(row.pendente or 0)
-        percentual_f = (total_f / faturamento_geral * 100) if faturamento_geral > 0 else 0.0
         if nome in ('', 'NENHUM'):
             avulsas_info = {
                 'total': total_f, 'pago': pago_f,
-                'pendente': pendente_f, 'percentual': percentual_f,
+                'pendente': pendente_f,
+                'percentual': _percentual_faturamento(total_f),
             }
             continue
-        faturamento_por_fornecedor.append({
-            'nome': nome, 'faturamento': total_f, 'pago': pago_f,
-            'pendente': pendente_f, 'percentual': percentual_f,
+        totais_por_empresa[nome] = {
+            'total': total_f, 'pago': pago_f, 'pendente': pendente_f,
+        }
+
+    faturamentos_dinamicos = []
+    fornecedores_vistos = set()
+    for forn in query_tenant(Fornecedor).order_by(Fornecedor.nome).all():
+        nome = (forn.nome or '').strip().upper()
+        if not nome:
+            continue
+        fornecedores_vistos.add(nome)
+        dados = totais_por_empresa.get(
+            nome, {'total': 0.0, 'pago': 0.0, 'pendente': 0.0},
+        )
+        total_f = dados['total']
+        faturamentos_dinamicos.append({
+            'nome': nome,
+            'faturamento': total_f,
+            'pago': dados['pago'],
+            'pendente': dados['pendente'],
+            'percentual': _percentual_faturamento(total_f),
         })
 
-    faturamento_por_fornecedor.sort(key=lambda x: x['faturamento'], reverse=True)
+    for nome, dados in totais_por_empresa.items():
+        if nome in fornecedores_vistos:
+            continue
+        total_f = dados['total']
+        faturamentos_dinamicos.append({
+            'nome': nome,
+            'faturamento': total_f,
+            'pago': dados['pago'],
+            'pendente': dados['pendente'],
+            'percentual': _percentual_faturamento(total_f),
+        })
+
+    faturamentos_dinamicos.sort(key=lambda x: x['faturamento'], reverse=True)
 
     # KPI 8: Margem (sobre total_vendas/total_lucro já consolidados acima)
     margem_porcentagem = (float(total_lucro) / float(total_vendas) * 100) if total_vendas and float(total_vendas) > 0 else 0
@@ -970,7 +1003,7 @@ def dashboard():
         total_prejuizo=float(total_prejuizo),
         qtd_caixas_prejuizo=int(qtd_caixas_prejuizo),
         detalhes_prejuizo=detalhes_prejuizo,
-        faturamento_por_fornecedor=faturamento_por_fornecedor,
+        faturamentos_dinamicos=faturamentos_dinamicos,
         avulsas_info=avulsas_info,
         margem_porcentagem=float(margem_porcentagem),
         ticket_medio=float(ticket_medio),

@@ -354,10 +354,11 @@
 </div>
 
 <!-- Modal Novo Cliente -->
-<div id="modal-novo-cliente-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
-    <div class="fixed inset-0 bg-black/50" id="modal-novo-cliente-overlay"></div>
-    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-xl shadow-sm dark:shadow-none border border-gray-200 dark:border-gray-700 z-50" onclick="event.stopPropagation()">
-        <div class="sticky top-0 flex justify-between items-center px-8 py-5 bg-emerald-700 text-white rounded-t-xl z-10">
+<div id="modal-novo-cliente-wrap" class="fixed inset-0 z-[100] hidden" aria-hidden="true">
+    <div class="fixed inset-0 bg-black/50 z-[100]" id="modal-novo-cliente-overlay"></div>
+    <div class="fixed inset-0 z-[100] flex items-center justify-center p-4 pointer-events-none">
+    <div class="pointer-events-auto relative w-full max-w-2xl max-h-[min(90vh,calc(100dvh-2rem))] flex flex-col bg-white dark:bg-gray-800 rounded-xl shadow-sm dark:shadow-none border border-gray-200 dark:border-gray-700 overflow-hidden" onclick="event.stopPropagation()">
+        <div class="shrink-0 flex justify-between items-center px-8 py-5 bg-emerald-700 text-white">
             <h3 class="text-xl font-bold flex items-center">
                 <i data-lucide="users" class="w-5 h-5 mr-2"></i>Novo Cliente
             </h3>
@@ -365,7 +366,7 @@
                 <i data-lucide="x" class="w-5 h-5"></i>
             </button>
         </div>
-        <div class="p-8">
+        <div class="overflow-y-auto flex-1 min-h-0 p-8">
             <div id="modal-novo-cliente-erro" class="hidden mb-4 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl text-red-800 dark:text-red-300 text-sm"></div>
             <form id="form-novo-cliente" action="{{ url_for('clientes.novo_cliente') }}" method="POST">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
@@ -470,13 +471,15 @@
             </form>
         </div>
     </div>
+    </div>
 </div>
 
 <!-- Modal Abater Lote (Receber Pagamento em Lote) -->
-<div id="modal-abater-lote-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
-    <div class="fixed inset-0 bg-black/50" id="modal-abater-lote-overlay"></div>
-    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-xl shadow-sm dark:shadow-none border border-gray-200 dark:border-gray-700 z-50" onclick="event.stopPropagation()">
-        <div class="sticky top-0 flex justify-between items-center px-8 py-5 bg-emerald-700 text-white rounded-t-xl z-10">
+<div id="modal-abater-lote-wrap" class="fixed inset-0 z-[100] hidden" aria-hidden="true">
+    <div class="fixed inset-0 bg-black/50 z-[100]" id="modal-abater-lote-overlay"></div>
+    <div class="fixed inset-0 z-[100] flex items-center justify-center p-4 pointer-events-none">
+    <div class="pointer-events-auto relative w-full max-w-md max-h-[min(90vh,calc(100dvh-2rem))] flex flex-col bg-white dark:bg-gray-800 rounded-xl shadow-sm dark:shadow-none border border-gray-200 dark:border-gray-700 overflow-hidden" onclick="event.stopPropagation()">
+        <div class="shrink-0 flex justify-between items-center px-8 py-5 bg-emerald-700 text-white">
             <h3 class="text-xl font-bold flex items-center">
                 <i data-lucide="banknote" class="w-5 h-5 mr-2"></i>Receber Pagamento em Lote
             </h3>
@@ -484,7 +487,7 @@
                 <i data-lucide="x" class="w-5 h-5"></i>
             </button>
         </div>
-        <div class="p-8">
+        <div class="overflow-y-auto flex-1 min-h-0 p-8">
             <form id="form-abater-lote" method="POST" action="" data-action-base="{{ url_for('clientes.receber_lote_cliente', id=0) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <p class="text-sm text-gray-600 dark:text-gray-400 mb-4" id="modal-abater-cliente-nome">O valor informado irá quitar as dívidas mais antigas deste cliente primeiro.</p>
@@ -532,13 +535,15 @@
             </form>
         </div>
     </div>
+    </div>
 </div>
 
 <!-- Modal Editar Cliente -->
-<div id="modal-editar-cliente-wrap" class="fixed inset-0 z-[60] hidden" aria-hidden="true">
-    <div class="fixed inset-0 bg-black/50" id="modal-editar-cliente-overlay"></div>
-    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-xl shadow-sm dark:shadow-none border border-gray-200 dark:border-gray-700 z-[60]" onclick="event.stopPropagation()">
-        <div class="sticky top-0 flex justify-between items-center px-8 py-5 bg-emerald-700 text-white rounded-t-xl z-10">
+<div id="modal-editar-cliente-wrap" class="fixed inset-0 z-[100] hidden" aria-hidden="true">
+    <div class="fixed inset-0 bg-black/50 z-[100]" id="modal-editar-cliente-overlay"></div>
+    <div class="fixed inset-0 z-[100] flex items-center justify-center p-4 pointer-events-none">
+    <div class="pointer-events-auto relative w-full max-w-2xl max-h-[min(90vh,calc(100dvh-2rem))] flex flex-col bg-white dark:bg-gray-800 rounded-xl shadow-sm dark:shadow-none border border-gray-200 dark:border-gray-700 overflow-hidden" onclick="event.stopPropagation()">
+        <div class="shrink-0 flex justify-between items-center px-8 py-5 bg-emerald-700 text-white">
             <h3 class="text-xl font-bold flex items-center">
                 <i data-lucide="pencil" class="w-5 h-5 mr-2"></i>Editar Cliente
             </h3>
@@ -546,7 +551,7 @@
                 <i data-lucide="x" class="w-5 h-5"></i>
             </button>
         </div>
-        <div class="p-8">
+        <div class="overflow-y-auto flex-1 min-h-0 p-8">
             <form id="form-editar-cliente" method="POST" action="" data-action-base="{{ url_for('clientes.editar_cliente', id=0) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="mb-5">
@@ -648,6 +653,7 @@
                 </div>
             </form>
         </div>
+    </div>
     </div>
 </div>
 
@@ -1668,10 +1674,11 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 <!-- Modal Confirmar Exclusão de Cliente (mesmo padrão visual do Dashboard/Vendas) -->
-<div id="modal-confirmacao-exclusao-cliente-wrap" class="fixed inset-0 z-50 hidden" aria-hidden="true">
-    <div class="fixed inset-0 bg-black/50" id="modal-confirmacao-exclusao-cliente-overlay"></div>
-    <div class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-xl shadow-sm dark:shadow-none border border-gray-200 dark:border-gray-700 z-50" onclick="event.stopPropagation()" role="dialog" aria-modal="true" aria-labelledby="modal-confirmacao-exclusao-cliente-titulo">
-        <div class="sticky top-0 flex justify-between items-center px-8 py-5 bg-emerald-700 text-white rounded-t-xl z-10">
+<div id="modal-confirmacao-exclusao-cliente-wrap" class="fixed inset-0 z-[100] hidden" aria-hidden="true">
+    <div class="fixed inset-0 bg-black/50 z-[100]" id="modal-confirmacao-exclusao-cliente-overlay"></div>
+    <div class="fixed inset-0 z-[100] flex items-center justify-center p-4 pointer-events-none">
+    <div class="pointer-events-auto relative w-full max-w-md max-h-[min(90vh,calc(100dvh-2rem))] flex flex-col bg-white dark:bg-gray-800 rounded-xl shadow-sm dark:shadow-none border border-gray-200 dark:border-gray-700 overflow-hidden" onclick="event.stopPropagation()" role="dialog" aria-modal="true" aria-labelledby="modal-confirmacao-exclusao-cliente-titulo">
+        <div class="shrink-0 flex justify-between items-center px-8 py-5 bg-emerald-700 text-white">
             <h3 id="modal-confirmacao-exclusao-cliente-titulo" class="text-xl font-bold flex items-center">
                 <i data-lucide="trash-2" class="w-5 h-5 mr-2"></i>Confirmar Exclusão
             </h3>
@@ -1679,7 +1686,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <i data-lucide="x" class="w-5 h-5"></i>
             </button>
         </div>
-        <div class="p-8">
+        <div class="overflow-y-auto flex-1 min-h-0 p-8">
             <p id="modal-confirmacao-exclusao-cliente-mensagem" class="text-gray-700 dark:text-gray-200 text-base leading-relaxed"></p>
             <div class="flex flex-wrap gap-4 mt-8 justify-end">
                 <button type="button" class="modal-confirmacao-exclusao-cliente-fechar bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-6 py-2.5 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 transition flex items-center font-medium">
@@ -1690,6 +1697,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 </button>
             </div>
         </div>
+    </div>
     </div>
 </div>
 <script>
