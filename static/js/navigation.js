@@ -95,9 +95,81 @@
     navigate(destino);
   }
 
+  /**
+   * Fecha drawer/menu lateral ao deslizar da esquerda para a direita (iOS / Capacitor).
+   * @param {{ panel: Element, backdrop?: Element|null, isOpen: function(): boolean, onClose: function() }} options
+   */
+  function setupDrawerSwipeToClose(options) {
+    if (!options || !options.panel || typeof options.onClose !== 'function') return;
+
+    var panel = options.panel;
+    var backdrop = options.backdrop || null;
+    var isOpen = options.isOpen || function () { return true; };
+    var onClose = options.onClose;
+    var minDeltaX = typeof options.minDeltaX === 'number' ? options.minDeltaX : 50;
+
+    function alvoIgnoraSwipe(target) {
+      if (!target || !target.closest) return false;
+      return !!target.closest(
+        'input, textarea, select, button, [contenteditable="true"], label[for]'
+      );
+    }
+
+    function registrarSwipeFechar(el) {
+      if (!el) return;
+
+      var startX = 0;
+      var startY = 0;
+      var rastreando = false;
+
+      el.addEventListener(
+        'touchstart',
+        function (e) {
+          if (!isOpen()) return;
+          if (alvoIgnoraSwipe(e.target)) return;
+          if (!e.touches || !e.touches.length) return;
+          var touch = e.touches[0];
+          startX = touch.screenX;
+          startY = touch.screenY;
+          rastreando = true;
+        },
+        { passive: true }
+      );
+
+      el.addEventListener(
+        'touchend',
+        function (e) {
+          if (!rastreando) return;
+          rastreando = false;
+          if (!isOpen()) return;
+          if (!e.changedTouches || !e.changedTouches.length) return;
+          var touch = e.changedTouches[0];
+          var diffX = touch.screenX - startX;
+          var diffY = touch.screenY - startY;
+          if (Math.abs(diffX) > Math.abs(diffY) && diffX > minDeltaX) {
+            onClose();
+          }
+        },
+        { passive: true }
+      );
+
+      el.addEventListener(
+        'touchcancel',
+        function () {
+          rastreando = false;
+        },
+        { passive: true }
+      );
+    }
+
+    registrarSwipeFechar(panel);
+    registrarSwipeFechar(backdrop);
+  }
+
   global.MeninoAlhoNavigation = {
     navigate: navigate,
-    FALLBACK_MS: FALLBACK_MS
+    FALLBACK_MS: FALLBACK_MS,
+    setupDrawerSwipeToClose: setupDrawerSwipeToClose
   };
 
   if (!reducedMotion) {

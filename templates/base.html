@@ -219,6 +219,7 @@
                 padding: env(safe-area-inset-top) 0.75rem env(safe-area-inset-bottom);
                 overflow-y: auto;
                 -webkit-overflow-scrolling: touch;
+                touch-action: pan-y;
                 background-color: rgb(4 120 87); /* emerald-700 */
                 box-shadow: 4px 0 24px rgba(0, 0, 0, 0.25);
             }
@@ -1903,14 +1904,18 @@
             }
         });
 
-        // Swipe: borda esquerda → direita abre; com menu aberto, ↔ fecha (padrão iOS)
+        window.fecharSiteNavMobile = fecharNavMobile;
+        window.isSiteNavMobileOpen = function() {
+            return nav.classList.contains('site-nav-mobile-open');
+        };
+
+        // Swipe da borda esquerda → direita abre o menu (padrão iOS)
         var SWIPE_BORDA_MAX_X = 48;
-        var SWIPE_MIN_DELTA_X = 72;
+        var SWIPE_ABRIR_MIN_DELTA_X = 72;
         var SWIPE_MAX_DELTA_Y = 64;
-        var swipeAtivo = false;
-        var swipeModo = null;
-        var swipeStartX = 0;
-        var swipeStartY = 0;
+        var swipeAbrirAtivo = false;
+        var swipeAbrirStartX = 0;
+        var swipeAbrirStartY = 0;
 
         var toqueDentroDeModalNav = function(target) {
             if (!target || !target.closest) return false;
@@ -1918,69 +1923,37 @@
             return !!target.closest('.fixed.z-50, .fixed.z-\\[9998\\], .fixed.z-\\[9999\\], [role="dialog"], .modal-container, .bg-black\\/50, .bg-black\\/60, #gaveta-contagem, #gaveta-orcamento, #gaveta-lancamento, #gaveta-balanco, #modal-nova-entrada-wrap, #modal-nova-entrada-overlay, #modal-editar-produto-wrap, #modal-editar-produto-overlay, #modal-devolver-produto-wrap, #container-nova-venda, #modal-novo-cliente-wrap, #modal-novo-cliente-panel');
         };
 
-        var podeUsarSwipeMenuNav = function() {
-            return window.innerWidth < 768 && !document.body.classList.contains('modal-aberto');
-        };
-
-        var gestoHorizontalValido = function(deltaX, deltaY) {
-            return Math.abs(deltaY) <= SWIPE_MAX_DELTA_Y && Math.abs(deltaX) > Math.abs(deltaY);
+        var podeUsarSwipeAbrirMenu = function() {
+            return window.innerWidth < 768
+                && !document.body.classList.contains('modal-aberto')
+                && !nav.classList.contains('site-nav-mobile-open');
         };
 
         document.addEventListener('touchstart', function(e) {
-            if (!podeUsarSwipeMenuNav()) return;
+            if (!podeUsarSwipeAbrirMenu()) return;
             if (toqueDentroDeModalNav(e.target)) return;
             if (!e.touches || !e.touches.length) return;
             var touch = e.touches[0];
-            var menuAberto = nav.classList.contains('site-nav-mobile-open');
-
-            if (menuAberto) {
-                var alvo = e.target;
-                var noOverlay = links.contains(alvo) || (backdrop && backdrop.contains(alvo));
-                if (!noOverlay) return;
-                swipeModo = 'fechar';
-            } else {
-                if (touch.clientX > SWIPE_BORDA_MAX_X) return;
-                swipeModo = 'abrir';
-            }
-
-            swipeStartX = touch.clientX;
-            swipeStartY = touch.clientY;
-            swipeAtivo = true;
+            if (touch.screenX > SWIPE_BORDA_MAX_X) return;
+            swipeAbrirStartX = touch.screenX;
+            swipeAbrirStartY = touch.screenY;
+            swipeAbrirAtivo = true;
         }, { passive: true });
 
-        var finalizarSwipeMenu = function(e) {
-            if (!swipeAtivo) return;
-            swipeAtivo = false;
-            if (!podeUsarSwipeMenuNav()) {
-                swipeModo = null;
-                return;
-            }
-            if (!e.changedTouches || !e.changedTouches.length) {
-                swipeModo = null;
-                return;
-            }
+        document.addEventListener('touchend', function(e) {
+            if (!swipeAbrirAtivo) return;
+            swipeAbrirAtivo = false;
+            if (!podeUsarSwipeAbrirMenu()) return;
+            if (!e.changedTouches || !e.changedTouches.length) return;
             var touch = e.changedTouches[0];
-            var deltaX = touch.clientX - swipeStartX;
-            var deltaY = touch.clientY - swipeStartY;
-            if (!gestoHorizontalValido(deltaX, deltaY)) {
-                swipeModo = null;
-                return;
-            }
+            var diffX = touch.screenX - swipeAbrirStartX;
+            var diffY = touch.screenY - swipeAbrirStartY;
+            if (Math.abs(diffY) > SWIPE_MAX_DELTA_Y || Math.abs(diffX) <= Math.abs(diffY)) return;
+            if (diffX >= SWIPE_ABRIR_MIN_DELTA_X) abrirNavMobile();
+        }, { passive: true });
 
-            if (swipeModo === 'abrir' && !nav.classList.contains('site-nav-mobile-open')) {
-                if (deltaX >= SWIPE_MIN_DELTA_X) abrirNavMobile();
-            } else if (swipeModo === 'fechar' && nav.classList.contains('site-nav-mobile-open')) {
-                if (deltaX >= SWIPE_MIN_DELTA_X || deltaX <= -SWIPE_MIN_DELTA_X) {
-                    fecharNavMobile();
-                }
-            }
-            swipeModo = null;
-        };
-
-        document.addEventListener('touchend', finalizarSwipeMenu, { passive: true });
         document.addEventListener('touchcancel', function() {
-            swipeAtivo = false;
-            swipeModo = null;
+            swipeAbrirAtivo = false;
         }, { passive: true });
     })();
 
@@ -2091,6 +2064,28 @@
     <script>(function(){ if (typeof lucide !== 'undefined') lucide.createIcons(); })();</script>
     <script src="{{ url_for('static', filename='js/ios-drag-drop.js') }}"></script>
     <script src="{{ url_for('static', filename='js/navigation.js') }}"></script>
+    <script>
+    (function() {
+        var links = document.getElementById('site-nav-links');
+        var backdrop = document.getElementById('site-nav-mobile-backdrop');
+        if (!links || !window.MeninoAlhoNavigation || !window.MeninoAlhoNavigation.setupDrawerSwipeToClose) return;
+        window.MeninoAlhoNavigation.setupDrawerSwipeToClose({
+            panel: links,
+            backdrop: backdrop,
+            isOpen: function() {
+                return window.innerWidth < 768
+                    && typeof window.isSiteNavMobileOpen === 'function'
+                    && window.isSiteNavMobileOpen();
+            },
+            onClose: function() {
+                if (typeof window.fecharSiteNavMobile === 'function') {
+                    window.fecharSiteNavMobile();
+                }
+            },
+            minDeltaX: 50
+        });
+    })();
+    </script>
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
     <script src="{{ url_for('static', filename='js/push-notifications.js') }}"></script>
     <script src="{{ url_for('static', filename='js/auth-session.js') }}"></script>
