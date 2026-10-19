@@ -90,7 +90,11 @@
                 }
                 return;
             }
-            global.location.href = rota;
+            if (global.MeninoAlhoNavigation && typeof global.MeninoAlhoNavigation.navigate === 'function') {
+                global.MeninoAlhoNavigation.navigate(rota);
+            } else {
+                global.location.href = rota;
+            }
         } catch (e) {
             console.error('[DeepLink] Falha ao processar URL:', e);
         }

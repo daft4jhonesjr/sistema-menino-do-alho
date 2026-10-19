@@ -66,6 +66,14 @@
       animation: none !important;
     }
   }
+
+  /* Fallback de saída (navigation.js) quando View Transitions API não está disponível */
+  main.page-nav-exit {
+    @apply pointer-events-none opacity-0;
+    transform: translateX(-20px);
+    transition: opacity 300ms cubic-bezier(0.32, 0.72, 0, 1),
+      transform 300ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
 }
 
 /* Drag & Drop nativo estilo iOS (touch + elevação) */

@@ -2,7 +2,13 @@
 <html lang="pt-BR" class="font-sans antialiased">
 <head>
     <meta charset="UTF-8">
+    <meta name="view-transition" content="same-origin">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <style>
+        /* Evita flash branco entre telas antes do CSS/Tailwind carregar (WKWebView / Safari) */
+        html { background-color: #ecfdf5; }
+        html.dark { background-color: #111827; }
+    </style>
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <script>
         window.getCsrfHeaders = function() {
@@ -349,22 +355,34 @@
             navigation: auto;
         }
 
+        main {
+            view-transition-name: page-main;
+        }
+
+        ::view-transition-old(page-main) {
+            animation: 280ms cubic-bezier(0.32, 0.72, 0, 1) both iosMainFadeOut;
+        }
+
+        ::view-transition-new(page-main) {
+            animation: 280ms cubic-bezier(0.32, 0.72, 0, 1) both iosMainSlideIn;
+        }
+
         ::view-transition-old(root) {
-            animation: 250ms cubic-bezier(0.32, 0.72, 0, 1) both iosFadeOut;
+            animation-duration: 0ms;
         }
 
         ::view-transition-new(root) {
-            animation: 250ms cubic-bezier(0.32, 0.72, 0, 1) both iosSlideIn;
+            animation-duration: 0ms;
         }
 
-        @keyframes iosFadeOut {
-            from { opacity: 1; transform: scale(1); }
-            to { opacity: 0; transform: scale(0.98); }
+        @keyframes iosMainFadeOut {
+            from { opacity: 1; transform: translateX(0); }
+            to { opacity: 0; transform: translateX(-20px); }
         }
 
-        @keyframes iosSlideIn {
-            from { opacity: 0; transform: translateY(6px); }
-            to { opacity: 1; transform: translateY(0); }
+        @keyframes iosMainSlideIn {
+            from { opacity: 0; transform: translateX(16px); }
+            to { opacity: 1; transform: translateX(0); }
         }
 
         /* Nav e footer estáveis — nomes únicos (a API não permite o mesmo name em dois elementos) */
@@ -373,6 +391,28 @@
         }
         body > footer {
             view-transition-name: fixed-footer;
+        }
+
+        ::view-transition-old(fixed-nav),
+        ::view-transition-new(fixed-nav),
+        ::view-transition-old(fixed-footer),
+        ::view-transition-new(fixed-footer) {
+            animation: none;
+        }
+
+        /* Fallback JS (navigation.js) quando startViewTransition não existe */
+        main.page-nav-exit {
+            opacity: 0;
+            transform: translateX(-20px);
+            transition: opacity 300ms cubic-bezier(0.32, 0.72, 0, 1),
+                        transform 300ms cubic-bezier(0.32, 0.72, 0, 1);
+            pointer-events: none;
+        }
+        html.page-nav-exit-root body {
+            opacity: 0;
+            transform: translateX(-20px);
+            transition: opacity 300ms cubic-bezier(0.32, 0.72, 0, 1),
+                        transform 300ms cubic-bezier(0.32, 0.72, 0, 1);
         }
 
         /* Fallback de entrada quando View Transitions não está disponível */
@@ -389,11 +429,19 @@
                 navigation: none;
             }
             ::view-transition-old(root),
-            ::view-transition-new(root) {
+            ::view-transition-new(root),
+            ::view-transition-old(page-main),
+            ::view-transition-new(page-main) {
                 animation: none !important;
             }
             main.animate-in.fade-in {
                 animation: none !important;
+            }
+            main.page-nav-exit,
+            html.page-nav-exit-root body {
+                transition: none !important;
+                opacity: 1 !important;
+                transform: none !important;
             }
         }
     </style>
