@@ -129,3 +129,54 @@ tr.ios-drag-placeholder td {
   background: rgba(16, 185, 129, 0.05) !important;
   border-radius: 0.75rem;
 }
+
+/* Gaveta lateral direita — Logística (iOS / WebKit) */
+#logistica-drawer-overlay {
+  transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+
+#logistica-drawer-overlay:not(.is-visible) {
+  pointer-events: none;
+  opacity: 0;
+}
+
+#logistica-drawer-overlay.is-visible {
+  pointer-events: auto;
+  opacity: 1;
+}
+
+#logistica-drawer-overlay.is-drag-preview {
+  display: block !important;
+  pointer-events: none;
+}
+
+#logistica-drawer-panel {
+  width: min(100%, 22rem);
+  max-width: 100vw;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  transform: translate3d(100%, 0, 0);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
+  -webkit-transform: translate3d(100%, 0, 0);
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
+#logistica-drawer-panel.translate-x-0,
+#logistica-drawer-panel.logistica-drawer-panel--open {
+  transform: translate3d(0, 0, 0);
+  -webkit-transform: translate3d(0, 0, 0);
+}
+
+#logistica-drawer-panel.translate-x-full {
+  transform: translate3d(100%, 0, 0);
+  -webkit-transform: translate3d(100%, 0, 0);
+}
+
+body.logistica-drawer-open,
+body.logistica-drawer-dragging {
+  overflow: hidden;
+}

@@ -112,6 +112,7 @@ _ENDPOINTS_PUBLICOS = frozenset({
 # Endpoints de logística exigem permissão 'logistica'; demais rotas exigem 'vendas'.
 _ENDPOINTS_LOGISTICA = frozenset({
     'vendas.logistica',
+    'vendas.api_logistica_dados',
     'vendas.toggle_entrega',
     'vendas.marcar_entregue_rapido',
     'vendas.logistica_bulk_update',
@@ -2470,6 +2471,58 @@ def _agrupar_pedidos_logistica(vendas, ordem_log=None):
         pedidos_agrupados = sorted(pedidos_agrupados, key=_sort_key)
 
     return pedidos_agrupados
+
+
+def _carregar_resumo_logistica(per_page=20):
+    """Agrega pedidos pendentes/entregues para a gaveta lateral e API JSON."""
+    vendas = query_tenant(Venda).filter(
+        Venda.status_entrega.in_(('PENDENTE', 'ENTREGUE'))
+    ).options(
+        joinedload(Venda.cliente),
+        joinedload(Venda.produto),
+    ).order_by(Venda.data_venda.desc()).all()
+
+    vendas_pendentes = [
+        v for v in vendas if (v.status_entrega or 'PENDENTE') == 'PENDENTE'
+    ]
+    vendas_entregues = [
+        v for v in vendas if (v.status_entrega or '') == 'ENTREGUE'
+    ]
+
+    _ordem_log = session.get('logistica_ordem') or []
+    pedidos_pendentes = _agrupar_pedidos_logistica(vendas_pendentes, _ordem_log)
+    pedidos_entregues = _agrupar_pedidos_logistica(vendas_entregues, _ordem_log)
+
+    total_caixas_pendentes = sum(
+        int(getattr(v, 'quantidade_venda', 0) or 0) for v in vendas_pendentes
+    )
+
+    for lista in (pedidos_pendentes, pedidos_entregues):
+        for pedido in lista:
+            pedido['total'] = float(pedido.get('total') or 0)
+
+    return {
+        'total_caixas_pendentes': total_caixas_pendentes,
+        'total_pedidos_pendentes': len(pedidos_pendentes),
+        'total_pedidos_entregues': len(pedidos_entregues),
+        'entregas_pendentes': pedidos_pendentes[:per_page],
+        'entregas_entregues': pedidos_entregues[:per_page],
+        'has_more_pendentes': len(pedidos_pendentes) > per_page,
+        'has_more_entregues': len(pedidos_entregues) > per_page,
+    }
+
+
+@vendas_bp.route('/api/logistica/dados')
+def api_logistica_dados():
+    """JSON com resumo de entregas para a gaveta lateral (sem redirecionar rota)."""
+    per_page = request.args.get('limit', 20, type=int)
+    per_page = max(1, min(per_page, 50))
+    dados = _carregar_resumo_logistica(per_page=per_page)
+    return jsonify({
+        'success': True,
+        **dados,
+        'pagina_completa_url': url_for('vendas.logistica'),
+    })
 
 
 @vendas_bp.route('/logistica')

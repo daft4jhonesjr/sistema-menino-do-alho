@@ -210,7 +210,9 @@
     var onOpen = options.onOpen;
     var onClose = options.onClose;
     var drawerPosition = options.drawerPosition === 'right' ? 'right' : 'left';
-    if (drawerPosition !== 'left') return;
+    var isRightDrawer = drawerPosition === 'right';
+    var onOpenGestureStart =
+      typeof options.onOpenGestureStart === 'function' ? options.onOpenGestureStart : null;
 
     var edgeWidth = typeof options.edgeWidth === 'number' ? options.edgeWidth : 40;
     var openThreshold = typeof options.openThreshold === 'number' ? options.openThreshold : 0.35;
@@ -229,6 +231,23 @@
 
     /** @type {null | { mode: 'open'|'close', startX: number, startY: number, startTime: number, drawerWidth: number, locked: boolean }} */
     var gesture = null;
+
+    function transformClosed(width) {
+      return isRightDrawer
+        ? 'translate3d(' + width + 'px, 0, 0)'
+        : 'translate3d(' + -width + 'px, 0, 0)';
+    }
+
+    function transformOpen() {
+      return 'translate3d(0, 0, 0)';
+    }
+
+    function openProgressFromTx(width, tx) {
+      if (isRightDrawer) {
+        return Math.min(1, Math.max(0, 1 - tx / width));
+      }
+      return Math.min(1, Math.max(0, (width + tx) / width));
+    }
 
     function alvoIgnoraSwipe(target) {
       if (!target || !target.closest) return false;
@@ -314,16 +333,22 @@
           }
           return;
         }
-        if (gesture.mode === 'open' && deltaX <= 0) {
-          detachDocumentTouch();
-          gesture = null;
-          setDragging(false);
-          clearInlineStyles();
-          setBackdropProgress(0, false);
-          return;
+        if (gesture.mode === 'open') {
+          var openWrongDir = isRightDrawer ? deltaX >= 0 : deltaX <= 0;
+          if (openWrongDir) {
+            detachDocumentTouch();
+            gesture = null;
+            setDragging(false);
+            clearInlineStyles();
+            setBackdropProgress(0, false);
+            return;
+          }
         }
-        if (gesture.mode === 'close' && deltaX >= 0) {
-          return;
+        if (gesture.mode === 'close') {
+          var closeWrongDir = isRightDrawer ? deltaX <= 0 : deltaX >= 0;
+          if (closeWrongDir) {
+            return;
+          }
         }
         gesture.locked = true;
         gesture.drawerWidth = getDrawerWidth();
@@ -333,21 +358,21 @@
       }
 
       if (gesture.mode === 'open') {
-        if (deltaX <= 0) return;
+        if (isRightDrawer ? deltaX >= 0 : deltaX <= 0) return;
         if (e.cancelable) e.preventDefault();
         panel.style.transition = 'none';
-        var txOpen = Math.min(0, -gesture.drawerWidth + deltaX);
-        panel.style.transform = 'translateX(' + txOpen + 'px)';
-        var progressOpen = (gesture.drawerWidth + txOpen) / gesture.drawerWidth;
-        setBackdropProgress(progressOpen, false);
+        var txOpen = isRightDrawer
+          ? Math.max(0, gesture.drawerWidth + deltaX)
+          : Math.min(0, -gesture.drawerWidth + deltaX);
+        panel.style.transform = 'translate3d(' + txOpen + 'px, 0, 0)';
+        setBackdropProgress(openProgressFromTx(gesture.drawerWidth, txOpen), false);
       } else if (gesture.mode === 'close') {
-        if (deltaX >= 0) return;
+        if (isRightDrawer ? deltaX <= 0 : deltaX >= 0) return;
         if (e.cancelable) e.preventDefault();
         panel.style.transition = 'none';
-        var txClose = Math.min(0, deltaX);
-        panel.style.transform = 'translateX(' + txClose + 'px)';
-        var progressClose = (gesture.drawerWidth + txClose) / gesture.drawerWidth;
-        setBackdropProgress(progressClose, false);
+        var txClose = isRightDrawer ? Math.max(0, deltaX) : Math.min(0, deltaX);
+        panel.style.transform = 'translate3d(' + txClose + 'px, 0, 0)';
+        setBackdropProgress(openProgressFromTx(gesture.drawerWidth, txClose), false);
       }
     }
 
@@ -376,15 +401,19 @@
           setBackdropProgress(0, false);
           return;
         }
-        var openedRatio = deltaX / active.drawerWidth;
-        var abrirCompleto = openedRatio >= openThreshold || velocityX > DRAWER_DRAG_VELOCITY;
+        var openedRatio = isRightDrawer
+          ? -deltaX / active.drawerWidth
+          : deltaX / active.drawerWidth;
+        var abrirCompleto = isRightDrawer
+          ? openedRatio >= openThreshold || velocityX < -DRAWER_DRAG_VELOCITY
+          : openedRatio >= openThreshold || velocityX > DRAWER_DRAG_VELOCITY;
         if (abrirCompleto) {
           onOpen();
-          panel.style.transform = 'translateX(0)';
+          panel.style.transform = transformOpen();
           setBackdropProgress(1, true);
           waitTransitionEnd(null);
         } else {
-          panel.style.transform = 'translateX(' + -active.drawerWidth + 'px)';
+          panel.style.transform = transformClosed(active.drawerWidth);
           setBackdropProgress(0, false);
           waitTransitionEnd(null);
         }
@@ -392,20 +421,25 @@
       }
 
       if (active.mode === 'close') {
-        if (!active.locked || deltaX >= 0) {
-          panel.style.transform = 'translateX(0)';
+        var closeCancelDir = isRightDrawer ? deltaX <= 0 : deltaX >= 0;
+        if (!active.locked || closeCancelDir) {
+          panel.style.transform = transformOpen();
           setBackdropProgress(1, true);
           waitTransitionEnd(null);
           return;
         }
-        var closedRatio = Math.abs(deltaX) / active.drawerWidth;
-        var fecharCompleto = closedRatio >= closeThreshold || velocityX < -DRAWER_DRAG_VELOCITY;
+        var closedRatio = isRightDrawer
+          ? deltaX / active.drawerWidth
+          : Math.abs(deltaX) / active.drawerWidth;
+        var fecharCompleto = isRightDrawer
+          ? closedRatio >= closeThreshold || velocityX > DRAWER_DRAG_VELOCITY
+          : closedRatio >= closeThreshold || velocityX < -DRAWER_DRAG_VELOCITY;
         if (fecharCompleto) {
-          panel.style.transform = 'translateX(' + -active.drawerWidth + 'px)';
+          panel.style.transform = transformClosed(active.drawerWidth);
           setBackdropProgress(0, false);
           waitTransitionEnd(onClose);
         } else {
-          panel.style.transform = 'translateX(0)';
+          panel.style.transform = transformOpen();
           setBackdropProgress(1, true);
           waitTransitionEnd(null);
         }
@@ -420,11 +454,11 @@
       panel.style.transition = DRAWER_DRAG_TRANSITION;
 
       if (active.mode === 'open') {
-        panel.style.transform = 'translateX(' + -active.drawerWidth + 'px)';
+        panel.style.transform = transformClosed(active.drawerWidth);
         setBackdropProgress(0, false);
         waitTransitionEnd(null);
       } else {
-        panel.style.transform = 'translateX(0)';
+        panel.style.transform = transformOpen();
         setBackdropProgress(1, true);
         waitTransitionEnd(null);
       }
@@ -437,6 +471,13 @@
     }
 
     function beginOpenGesture(touch) {
+      if (onOpenGestureStart) {
+        try {
+          onOpenGestureStart();
+        } catch (err) {
+          /* ignore */
+        }
+      }
       setDragging(true);
       panel.style.transition = 'none';
       void panel.offsetWidth;
@@ -449,7 +490,8 @@
         drawerWidth: largura,
         locked: false
       };
-      panel.style.transform = 'translateX(' + -largura + 'px)';
+      panel.classList.remove('hidden');
+      panel.style.transform = transformClosed(largura);
       setBackdropProgress(0, false);
       attachDocumentTouch();
     }
@@ -474,7 +516,11 @@
         if (shouldIgnoreTouchTarget(e.target)) return;
         if (!e.touches || !e.touches.length) return;
         var touch = e.touches[0];
-        if (touch.clientX > edgeWidth) return;
+        if (isRightDrawer) {
+          if (touch.clientX < global.innerWidth - edgeWidth) return;
+        } else if (touch.clientX > edgeWidth) {
+          return;
+        }
         beginOpenGesture(touch);
       },
       { passive: true }
