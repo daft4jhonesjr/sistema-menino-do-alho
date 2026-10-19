@@ -40,20 +40,15 @@
   top: 0;
 }
 
-/* Shell flex: cabeçalho/nav fixos no fluxo; scroll independente no main */
+/* Shell flex: logo rola com a página; nav sticky; scroll no documento */
 @layer base {
   body.app-shell {
     display: flex;
     flex-direction: column;
-    height: 100dvh;
-    max-height: 100dvh;
-    overflow: hidden;
+    min-height: 100dvh;
   }
   body.app-shell > main {
     flex: 1 1 auto;
-    min-height: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
   }
 }
 
