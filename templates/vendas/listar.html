@@ -496,7 +496,7 @@
     <!-- Backdrop: click fora fecha o drawer -->
     <div class="fixed inset-0 bg-black/60 z-[9998] transition-opacity" id="nova-venda-backdrop" onclick="fecharModalNovaVenda()"></div>
     <!-- Drawer lateral direito -->
-    <div class="fixed inset-y-0 right-0 w-full max-w-3xl flex flex-col h-full bg-white dark:bg-gray-900 shadow-2xl border-l border-gray-200 dark:border-gray-700 z-[9999] transform transition-transform duration-300">
+    <div id="nova-venda-panel" class="fixed inset-y-0 right-0 w-full max-w-3xl flex flex-col h-full bg-white dark:bg-gray-900 shadow-2xl border-l border-gray-200 dark:border-gray-700 z-[9999] transform transition-transform duration-300">
         <div class="relative z-[9999] flex items-center justify-between px-6 py-4 bg-emerald-700 text-white flex-shrink-0" style="padding-top: max(1rem, env(safe-area-inset-top))">
             <h2 class="text-xl font-bold flex items-center gap-2 pointer-events-none">
                 <i data-lucide="shopping-cart" class="w-5 h-5"></i> Nova Venda
@@ -6097,6 +6097,31 @@ document.addEventListener('DOMContentLoaded', function() {
             fecharModalNovaVenda();
         }
     });
+
+    // Swipe esquerda → direita fecha o drawer (iOS / Capacitor)
+    var novaVendaPanel = document.getElementById('nova-venda-panel');
+    var touchstartX = 0;
+    var touchendX = 0;
+    var SWIPE_FECHAR_NOVA_VENDA_MIN = 70;
+    if (novaVendaPanel) {
+        novaVendaPanel.addEventListener('touchstart', function(event) {
+            if (!event.changedTouches || !event.changedTouches.length) return;
+            touchstartX = event.changedTouches[0].screenX;
+        }, { passive: true });
+        novaVendaPanel.addEventListener('touchend', function(event) {
+            if (!containerVenda || containerVenda.classList.contains('hidden')) return;
+            if (!event.changedTouches || !event.changedTouches.length) return;
+            touchendX = event.changedTouches[0].screenX;
+            if (touchendX - touchstartX > SWIPE_FECHAR_NOVA_VENDA_MIN) {
+                var btnFechar = document.getElementById('btn-fechar-nova-venda');
+                if (btnFechar) {
+                    btnFechar.click();
+                } else {
+                    fecharModalNovaVenda();
+                }
+            }
+        }, { passive: true });
+    }
 
     // 2) Setinha: abrir/fechar dropdown de ações
     if (btnDropdownSeta && menuDropdown) {
