@@ -682,7 +682,7 @@
 
             var toqueDentroDeModal = function(target) {
                 if (!target || !target.closest) return false;
-                return !!target.closest('.fixed.z-50, .fixed.z-\\[9998\\], .fixed.z-\\[9999\\], [role="dialog"], .modal-container, .bg-black\\/50, .bg-black\\/60, #site-nav-mobile-backdrop, #site-nav-links, #gaveta-contagem, #gaveta-orcamento, #gaveta-lancamento, #gaveta-balanco, #modal-nova-entrada-wrap, #modal-nova-entrada-overlay, #modal-editar-produto-wrap, #modal-editar-produto-overlay, #modal-devolver-produto-wrap, #container-nova-venda, #modal-novo-cliente-wrap, #modal-novo-cliente-panel');
+                return !!target.closest('.fixed.z-50, .fixed.z-\\[9998\\], .fixed.z-\\[9999\\], [role="dialog"], .modal-container, .bg-black\\/50, .bg-black\\/60, #site-nav-mobile-backdrop, #site-nav-links, #gaveta-contagem, #gaveta-orcamento, #gaveta-lancamento, #gaveta-balanco, #logistica-drawer-overlay, #logistica-drawer-panel, #modal-nova-entrada-wrap, #modal-nova-entrada-overlay, #modal-editar-produto-wrap, #modal-editar-produto-overlay, #modal-devolver-produto-wrap, #container-nova-venda, #modal-novo-cliente-wrap, #modal-novo-cliente-panel');
             };
 
             // Início do toque
@@ -916,6 +916,38 @@
 
     <!-- Container de Toasts (Notificações Flutuantes) — respeita Dynamic Island / safe area -->
     <div id="toast-container" class="fixed top-[calc(env(safe-area-inset-top,0px)+1.25rem)] right-5 z-[9999] flex flex-col gap-3 max-w-sm w-full"></div>
+
+    {% if current_user.is_authenticated and (current_user.nivel_acesso in ['admin', 'master'] or 'logistica' in current_user.permissoes_lista) %}
+    <!-- Overlay + Gaveta lateral direita: Logística (sem sair da página) -->
+    <div id="logistica-drawer-overlay" class="fixed inset-0 z-[9998] hidden bg-black/45 dark:bg-black/55" aria-hidden="true" role="presentation"></div>
+    <aside id="logistica-drawer-panel" class="fixed inset-y-0 right-0 z-[9999] hidden flex flex-col h-full max-h-[100dvh] bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 translate-x-full transform" role="dialog" aria-modal="true" aria-labelledby="logistica-drawer-titulo" aria-hidden="true">
+        <header class="flex items-center justify-between gap-2 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 shrink-0">
+            <div class="min-w-0">
+                <h2 id="logistica-drawer-titulo" class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                    <i data-lucide="truck" class="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0"></i>
+                    Logística
+                </h2>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">Entregas pendentes e concluídas</p>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+                <button type="button" id="logistica-drawer-refresh" class="p-2 rounded-lg text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 dark:text-slate-400 dark:hover:text-emerald-300 dark:hover:bg-slate-700 transition-colors" aria-label="Atualizar dados">
+                    <i data-lucide="refresh-cw" class="w-5 h-5"></i>
+                </button>
+                <button type="button" id="logistica-drawer-fechar" class="p-2 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-200 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-700 transition-colors" aria-label="Fechar">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+        </header>
+        <div id="drawerContent" class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain"></div>
+    </aside>
+    <script>
+    window.LOGISTICA_DRAWER_CONFIG = {
+        apiUrl: {{ url_for('vendas.api_logistica_dados')|tojson }},
+        paginaUrl: {{ url_for('vendas.logistica')|tojson }},
+        paginaAtual: {{ (request.endpoint == 'vendas.logistica')|tojson }}
+    };
+    </script>
+    {% endif %}
 
     {% if current_user.is_authenticated %}
     <!-- Overlay + Gaveta: Balanço Patrimonial Rápido -->
@@ -2029,6 +2061,9 @@
     <script>(function(){ if (typeof lucide !== 'undefined') lucide.createIcons(); })();</script>
     <script src="{{ url_for('static', filename='js/ios-drag-drop.js') }}"></script>
     <script src="{{ url_for('static', filename='js/navigation.js') }}"></script>
+    {% if current_user.is_authenticated and (current_user.nivel_acesso in ['admin', 'master'] or 'logistica' in current_user.permissoes_lista) %}
+    <script src="{{ url_for('static', filename='js/logistica-drawer.js') }}"></script>
+    {% endif %}
     <script>
     (function() {
         var links = document.getElementById('site-nav-links');
@@ -2066,7 +2101,7 @@
             shouldIgnoreTouchTarget: function(target) {
                 if (!target || !target.closest) return false;
                 if (target.closest('#site-nav-links, #site-nav-mobile-backdrop')) return false;
-                return !!target.closest('.fixed.z-50, .fixed.z-\\[9998\\], .fixed.z-\\[9999\\], [role="dialog"], .modal-container, .bg-black\\/50, .bg-black\\/60, #gaveta-contagem, #gaveta-orcamento, #gaveta-lancamento, #gaveta-balanco, #modal-nova-entrada-wrap, #modal-nova-entrada-overlay, #modal-editar-produto-wrap, #modal-editar-produto-overlay, #modal-devolver-produto-wrap, #container-nova-venda, #modal-novo-cliente-wrap, #modal-novo-cliente-panel');
+                return !!target.closest('.fixed.z-50, .fixed.z-\\[9998\\], .fixed.z-\\[9999\\], [role="dialog"], .modal-container, .bg-black\\/50, .bg-black\\/60, #gaveta-contagem, #gaveta-orcamento, #gaveta-lancamento, #gaveta-balanco, #logistica-drawer-overlay, #logistica-drawer-panel, #modal-nova-entrada-wrap, #modal-nova-entrada-overlay, #modal-editar-produto-wrap, #modal-editar-produto-overlay, #modal-devolver-produto-wrap, #container-nova-venda, #modal-novo-cliente-wrap, #modal-novo-cliente-panel');
             }
         });
     })();
