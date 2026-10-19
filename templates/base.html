@@ -682,7 +682,7 @@
 
             var toqueDentroDeModal = function(target) {
                 if (!target || !target.closest) return false;
-                return !!target.closest('.fixed.z-50, .fixed.z-\\[9998\\], .fixed.z-\\[9999\\], [role="dialog"], .modal-container, .bg-black\\/50, .bg-black\\/60, #site-nav-mobile-backdrop, #site-nav-links, #gaveta-contagem, #gaveta-orcamento, #gaveta-lancamento, #gaveta-balanco, #logistica-drawer-overlay, #logistica-drawer-panel, #modal-nova-entrada-wrap, #modal-nova-entrada-overlay, #modal-editar-produto-wrap, #modal-editar-produto-overlay, #modal-devolver-produto-wrap, #container-nova-venda, #modal-novo-cliente-wrap, #modal-novo-cliente-panel');
+                return !!target.closest('.fixed.z-50, .fixed.z-\\[9998\\], .fixed.z-\\[9999\\], [role="dialog"], .modal-container, .bg-black\\/50, .bg-black\\/60, #site-nav-mobile-backdrop, #site-nav-links, #gaveta-contagem, #gaveta-orcamento, #gaveta-lancamento, #gaveta-balanco, #logistica-drawer-overlay, #logistica-drawer-panel, #modal-nova-entrada-wrap, #modal-nova-entrada-overlay, #modal-editar-produto-wrap, #modal-editar-produto-overlay, #modal-devolver-produto-wrap, #container-nova-venda, #modal-importar-vendas-wrap, #modal-novo-cliente-wrap, #modal-novo-cliente-panel');
             };
 
             // Início do toque
@@ -2101,7 +2101,7 @@
             shouldIgnoreTouchTarget: function(target) {
                 if (!target || !target.closest) return false;
                 if (target.closest('#site-nav-links, #site-nav-mobile-backdrop')) return false;
-                return !!target.closest('.fixed.z-50, .fixed.z-\\[9998\\], .fixed.z-\\[9999\\], [role="dialog"], .modal-container, .bg-black\\/50, .bg-black\\/60, #gaveta-contagem, #gaveta-orcamento, #gaveta-lancamento, #gaveta-balanco, #logistica-drawer-overlay, #logistica-drawer-panel, #modal-nova-entrada-wrap, #modal-nova-entrada-overlay, #modal-editar-produto-wrap, #modal-editar-produto-overlay, #modal-devolver-produto-wrap, #container-nova-venda, #modal-novo-cliente-wrap, #modal-novo-cliente-panel');
+                return !!target.closest('.fixed.z-50, .fixed.z-\\[9998\\], .fixed.z-\\[9999\\], [role="dialog"], .modal-container, .bg-black\\/50, .bg-black\\/60, #gaveta-contagem, #gaveta-orcamento, #gaveta-lancamento, #gaveta-balanco, #logistica-drawer-overlay, #logistica-drawer-panel, #modal-nova-entrada-wrap, #modal-nova-entrada-overlay, #modal-editar-produto-wrap, #modal-editar-produto-overlay, #modal-devolver-produto-wrap, #container-nova-venda, #modal-importar-vendas-wrap, #modal-novo-cliente-wrap, #modal-novo-cliente-panel');
             }
         });
     })();
