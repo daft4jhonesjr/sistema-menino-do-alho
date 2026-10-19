@@ -1239,9 +1239,14 @@ document.addEventListener('keydown', function(e) {
     var params = new URLSearchParams(window.location.search);
     if (params.get('abrir_modal') === 'true') {
         window.history.replaceState({}, document.title, window.location.pathname);
+        if (typeof window.mostrarCarregamentoAcao === 'function') window.mostrarCarregamentoAcao(0);
         setTimeout(function() {
-            if (typeof abrirModalNovo === 'function') {
-                abrirModalNovo();
+            try {
+                if (typeof abrirModalNovo === 'function') {
+                    abrirModalNovo();
+                }
+            } finally {
+                if (typeof window.ocultarCarregamentoAcao === 'function') window.ocultarCarregamentoAcao();
             }
         }, 300);
     }
