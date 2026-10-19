@@ -624,6 +624,15 @@
             <span class="page-loading-texto">Carregando…</span>
         </div>
     </div>
+    <div id="overlay-carregando-global" class="fixed inset-0 z-[9999] hidden flex items-center justify-center bg-black/40 backdrop-blur-[2px] cursor-progress" role="status" aria-live="polite" aria-hidden="true">
+        <div class="flex flex-col items-center justify-center gap-2 bg-emerald-900 border border-emerald-700/60 shadow-2xl rounded-2xl px-6 py-5 text-white min-w-[130px]">
+            <svg class="w-8 h-8 text-emerald-400 animate-spin motion-reduce:[animation-duration:2.5s]" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+                <circle cx="12" cy="12" r="3"/>
+            </svg>
+            <span class="text-xs font-semibold tracking-wide text-emerald-100">Carregando...</span>
+        </div>
+    </div>
     <script>
     var _scrollPosAnteModal = 0;
     function travarFundo() {
@@ -958,19 +967,19 @@
         </div>
         <div class="flex items-center justify-start sm:justify-end gap-3 w-full sm:w-1/3">
             {% if current_user.nivel_acesso in ['admin', 'master'] or 'vendas' in current_user.permissoes_lista %}
-            <a href="{{ url_for('vendas.listar_vendas', acao='nova_venda') }}" class="px-2 py-1.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:hover:bg-emerald-800/50 text-emerald-700 dark:text-emerald-400 rounded transition-colors font-medium flex items-center gap-1 border border-emerald-200 dark:border-emerald-800/50">
+            <a href="{{ url_for('vendas.listar_vendas', acao='nova_venda') }}" data-acao-rapida class="px-2 py-1.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:hover:bg-emerald-800/50 text-emerald-700 dark:text-emerald-400 rounded transition-colors font-medium flex items-center gap-1 border border-emerald-200 dark:border-emerald-800/50">
                 <i data-lucide="shopping-cart" class="w-3.5 h-3.5 shrink-0" aria-hidden="true"></i>
                 Nova Venda
             </a>
             {% endif %}
             {% if current_user.nivel_acesso in ['admin', 'master'] or 'caixa' in current_user.permissoes_lista %}
-            <a href="{{ url_for('caixa.caixa') }}?abrir_modal=true" class="px-2 py-1.5 bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded transition-colors font-medium flex items-center gap-1 border border-gray-200 dark:border-gray-600">
+            <a href="{{ url_for('caixa.caixa') }}?abrir_modal=true" data-acao-rapida class="px-2 py-1.5 bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded transition-colors font-medium flex items-center gap-1 border border-gray-200 dark:border-gray-600">
                 <i data-lucide="wallet" class="w-3.5 h-3.5 shrink-0" aria-hidden="true"></i>
                 Lançar Caixa
             </a>
             {% endif %}
             {% if current_user.nivel_acesso in ['admin', 'master'] or 'produtos' in current_user.permissoes_lista %}
-            <a href="{{ url_for('produtos.listar_produtos', acao='nova_entrada') }}" class="px-2 py-1.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:hover:bg-emerald-800/50 text-emerald-700 dark:text-emerald-400 rounded transition-colors font-medium flex items-center gap-1 border border-emerald-200 dark:border-emerald-800/50">
+            <a href="{{ url_for('produtos.listar_produtos', acao='nova_entrada') }}" data-acao-rapida class="px-2 py-1.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:hover:bg-emerald-800/50 text-emerald-700 dark:text-emerald-400 rounded transition-colors font-medium flex items-center gap-1 border border-emerald-200 dark:border-emerald-800/50">
                 <i data-lucide="package" class="w-3.5 h-3.5 shrink-0" aria-hidden="true"></i>
                 Nova Entrada
             </a>
