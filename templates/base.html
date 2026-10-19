@@ -244,6 +244,9 @@
             .site-nav-mobile-drawer-header {
                 flex-shrink: 0;
             }
+            #site-nav-links a.site-nav-mobile-drawer-header {
+                justify-content: space-between;
+            }
             #user-menu-button span.pointer-events-none {
                 display: none;
             }
@@ -928,18 +931,29 @@
     </nav>
     <div id="site-nav-mobile-backdrop" class="fixed inset-0 z-40 bg-black/50 hidden md:hidden" aria-hidden="true" role="presentation"></div>
     <nav id="site-nav-links" class="z-50 md:hidden" aria-label="Menu principal">
-        <div class="site-nav-mobile-drawer-header flex items-center justify-between gap-2 px-1 py-2 mb-1 border-b border-white/15">
-            <span class="truncate max-w-[180px] sm:max-w-[220px] min-w-0 font-semibold text-emerald-50 text-sm tracking-wide" title="{% if current_user.is_authenticated %}{{ (current_user.nome or current_user.username)|e }}{% else %}Menu{% endif %}">{% if current_user.is_authenticated %}{{ current_user.nome or current_user.username }}{% else %}Menu{% endif %}</span>
-            <button type="button" id="btn-mobile-nav-close-panel" class="inline-flex flex-shrink-0 items-center justify-center p-0.5 rounded-full hover:ring-2 hover:ring-white/40 transition focus:outline-none focus:ring-2 focus:ring-emerald-400" title="Fechar menu" aria-label="Fechar menu">
-                {% if current_user.is_authenticated and current_user.profile_image_url %}
-                    <img class="w-8 h-8 rounded-full border-2 border-emerald-500/50 object-cover pointer-events-none" src="{{ current_user.profile_image_url | cloudinary_thumb(64, 64) }}" alt="Perfil" loading="lazy" decoding="async">
+        {% if current_user.is_authenticated %}
+        <a href="{{ url_for('auth.perfil') }}" id="btn-mobile-nav-perfil" class="site-nav-mobile-drawer-header group flex items-center justify-between gap-2 px-1 py-2 mb-1 border-b border-white/15 rounded-lg cursor-pointer select-none transition hover:bg-white/10 active:bg-white/20 active:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400" title="Gerenciar meu perfil" aria-label="Gerenciar meu perfil ({{ (current_user.nome or current_user.username)|e }})">
+            <span class="truncate max-w-[180px] sm:max-w-[220px] min-w-0 font-semibold text-emerald-50 text-sm tracking-wide pointer-events-none">{{ current_user.nome or current_user.username }}</span>
+            <span class="inline-flex flex-shrink-0 items-center justify-center p-0.5 rounded-full transition group-hover:ring-2 group-hover:ring-white/40 pointer-events-none">
+                {% if current_user.profile_image_url %}
+                    <img class="w-8 h-8 rounded-full border-2 border-emerald-500/50 object-cover pointer-events-none" src="{{ current_user.profile_image_url | cloudinary_thumb(64, 64) }}" alt="" loading="lazy" decoding="async">
                 {% else %}
-                    <div class="w-8 h-8 rounded-full border-2 border-emerald-500/50 flex items-center justify-center bg-emerald-800 pointer-events-none">
+                    <span class="w-8 h-8 rounded-full border-2 border-emerald-500/50 flex items-center justify-center bg-emerald-800 pointer-events-none">
                         <svg class="w-5 h-5 text-emerald-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                    </div>
+                    </span>
                 {% endif %}
+            </span>
+        </a>
+        {% else %}
+        <div class="site-nav-mobile-drawer-header flex items-center justify-between gap-2 px-1 py-2 mb-1 border-b border-white/15">
+            <span class="truncate max-w-[180px] sm:max-w-[220px] min-w-0 font-semibold text-emerald-50 text-sm tracking-wide">Menu</span>
+            <button type="button" id="btn-mobile-nav-close-panel" class="inline-flex flex-shrink-0 items-center justify-center p-0.5 rounded-full hover:ring-2 hover:ring-white/40 transition focus:outline-none focus:ring-2 focus:ring-emerald-400" title="Fechar menu" aria-label="Fechar menu">
+                <div class="w-8 h-8 rounded-full border-2 border-emerald-500/50 flex items-center justify-center bg-emerald-800 pointer-events-none">
+                    <svg class="w-5 h-5 text-emerald-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                </div>
             </button>
         </div>
+        {% endif %}
         {% include '_site_nav_link_items.html' %}
     </nav>
 
