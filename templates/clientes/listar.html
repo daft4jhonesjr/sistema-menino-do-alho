@@ -32,26 +32,15 @@
             </svg>
             Padronizar Maiúsculas
         </button>
-        <div id="dropdown-novo-cliente-wrap" class="flex w-full sm:w-auto sm:inline-flex rounded-md shadow-sm">
-            <button type="button" id="btn-abrir-modal-novo-cliente" class="flex-1 justify-center inline-flex items-center px-6 py-3 rounded-l-md border border-transparent bg-emerald-700 text-lg font-medium text-white hover:bg-emerald-800 transition-colors">
+        <div class="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+            <button type="button" id="btn-abrir-modal-novo-cliente" class="flex-1 sm:flex-none justify-center inline-flex items-center px-6 py-3 rounded-xl border border-transparent bg-emerald-700 text-lg font-medium text-white hover:bg-emerald-800 transition-colors shadow-sm">
                 👤 Novo Cliente
             </button>
-
-            <div class="relative block">
-                <button type="button" id="btn-novo-cliente-seta" onclick="toggleDropdownNovoCliente(event)" class="inline-flex items-center px-4 py-3 rounded-r-md border-l border-emerald-800 bg-emerald-700 text-lg font-medium text-white hover:bg-emerald-800 transition-colors h-full">
-                    <i class="fas fa-chevron-down"></i>
-                </button>
-
-                <div id="dropdown-novo-cliente-menu" class="hidden origin-top-right absolute right-0 mt-2 w-64 sm:w-48 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 z-50">
-                    <div class="py-1">
-                        {% if current_user.is_authenticated and current_user.is_admin() %}
-                        <a href="{{ url_for('clientes.importar_clientes') }}" class="group flex items-center px-4 py-3 sm:py-2 text-base sm:text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
-                            📥&nbsp;Importar Lista
-                        </a>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
+            {% if current_user.is_authenticated and current_user.is_admin() %}
+            <a href="{{ url_for('clientes.importar_clientes') }}" class="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-base sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-300 dark:hover:border-emerald-700 hover:text-emerald-800 dark:hover:text-emerald-300 transition-colors shadow-sm">
+                📥&nbsp;Importar Lista
+            </a>
+            {% endif %}
         </div>
     </div>
 </div>
@@ -658,34 +647,6 @@
 </div>
 
 <script>
-function toggleDropdownNovoCliente(event) {
-    if (event) {
-        event.preventDefault();
-        event.stopPropagation();
-    }
-    var menu = document.getElementById('dropdown-novo-cliente-menu');
-    if (!menu) return;
-    menu.classList.toggle('hidden');
-}
-
-(function() {
-    var wrapDropdown = document.getElementById('dropdown-novo-cliente-wrap');
-    var menu = document.getElementById('dropdown-novo-cliente-menu');
-    if (!wrapDropdown || !menu) return;
-
-    document.addEventListener('click', function(e) {
-        if (!wrapDropdown.contains(e.target)) {
-            menu.classList.add('hidden');
-        }
-    });
-
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') {
-            menu.classList.add('hidden');
-        }
-    });
-})();
-
 (function() {
     var btn = document.getElementById('bulk-delete-btn');
     var selectAll = document.getElementById('bulk-select-all');
@@ -819,8 +780,6 @@ window.padronizarClientesMaiusculo = function() {
     }
 
     function abrir() {
-        var menuNovoCliente = document.getElementById('dropdown-novo-cliente-menu');
-        if (menuNovoCliente) menuNovoCliente.classList.add('hidden');
         if (wrap && panel) {
             if (wrap.parentElement !== document.body) {
                 document.body.appendChild(wrap);
