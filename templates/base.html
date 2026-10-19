@@ -166,7 +166,71 @@
     <style>
         html, body {
             width: 100%;
+            height: 100%;
             min-height: 100%;
+        }
+        /* Shell da app: cabeçalho + nav empurram o conteúdo; scroll só no main */
+        body.app-shell {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            height: 100dvh;
+            max-height: 100dvh;
+            overflow: hidden;
+        }
+        body.app-shell > header,
+        body.app-shell > nav#site-nav {
+            flex-shrink: 0;
+        }
+        body.app-shell > main {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow-y: auto;
+            overflow-x: hidden;
+            -webkit-overflow-scrolling: touch;
+            position: relative;
+            z-index: 0;
+        }
+        /* Menu mobile: links colapsáveis */
+        @media (max-width: 767px) {
+            #site-nav-links {
+                display: none;
+                width: 100%;
+                flex-direction: column;
+                align-items: stretch;
+                gap: 0.25rem;
+                padding-top: 0.25rem;
+                border-top: 1px solid rgba(255, 255, 255, 0.12);
+                margin-top: 0.25rem;
+            }
+            #site-nav.site-nav-mobile-open #site-nav-links {
+                display: flex;
+            }
+            #site-nav-links a {
+                width: 100%;
+                justify-content: flex-start;
+            }
+            #user-menu-button span.pointer-events-none {
+                display: none;
+            }
+            #btn-ano-selector span.ano-label-long {
+                display: none;
+            }
+        }
+        @media (min-width: 768px) {
+            #btn-mobile-nav-toggle {
+                display: none !important;
+            }
+            #site-nav-links {
+                display: flex !important;
+                flex-wrap: wrap;
+                flex-direction: row;
+                justify-content: center;
+                width: auto;
+                border-top: none;
+                margin-top: 0;
+                padding-top: 0;
+            }
         }
         /* --- KIT DE ACABAMENTO APPLE IOS --- */
         /* 1. Fonte nativa e Safe Area Insets (Respeita o Notch e a Home Bar) */
@@ -457,7 +521,7 @@
     </style>
     {% block head_extras %}{% endblock %}
 </head>
-<body class="bg-emerald-50 text-gray-800 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-500 min-h-screen flex flex-col">
+<body class="app-shell bg-emerald-50 text-gray-800 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-500 min-h-dvh flex flex-col overflow-hidden">
     <div id="ptr-indicador" role="status" aria-live="polite" aria-label="Puxe para atualizar">
         <svg id="ptr-engrenagem" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
@@ -659,20 +723,26 @@
         });
     </script>
     <!-- Header -->
-    <header class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 shadow-sm">
-        <div class="w-full px-2 md:px-4 lg:px-6 xl:px-8 py-5">
+    <header class="flex-shrink-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 shadow-sm">
+        <div class="w-full px-2 md:px-4 lg:px-6 xl:px-8 py-3 md:py-5">
             <div class="flex justify-center">
                 <img src="{{ url_for('static', filename='images/logo_menino_do_alho_amarelo1.jpeg') }}"
                      alt="Menino do Alho - Gestão de Vendas"
-                     class="h-48 md:h-64 w-auto object-contain mx-auto mix-blend-multiply">
+                     class="h-28 sm:h-36 md:h-64 w-auto object-contain mx-auto mix-blend-multiply">
             </div>
         </div>
     </header>
 
     <!-- Navigation Bar -->
-    <nav class="bg-emerald-700 shadow-sm relative z-40">
-        <div class="w-full px-2 md:px-4 lg:px-6 xl:px-8">
-            <div class="flex flex-wrap justify-center gap-1 py-2 items-center">
+    <nav id="site-nav" class="bg-emerald-700 shadow-sm relative z-30 flex-shrink-0">
+        <div class="w-full px-2 md:px-4 lg:px-6 xl:px-8 py-2">
+            <div class="flex flex-wrap items-center justify-end md:justify-center gap-1">
+                <button type="button" id="btn-mobile-nav-toggle" class="md:hidden order-1 mr-auto inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-emerald-50 hover:bg-white/10 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400" aria-expanded="false" aria-controls="site-nav-links">
+                    <i data-lucide="menu" class="w-5 h-5" id="icon-mobile-nav-menu"></i>
+                    <i data-lucide="x" class="w-5 h-5 hidden" id="icon-mobile-nav-close"></i>
+                    Menu
+                </button>
+                <div id="site-nav-links" class="order-3 md:order-none gap-1 items-center md:flex md:flex-wrap md:justify-center">
                 {% if current_user.nivel_acesso in ['admin', 'master'] or 'dashboard' in current_user.permissoes_lista %}
                 <a href="{{ url_for('dashboard.dashboard') }}" class="px-4 py-2.5 rounded-lg flex items-center gap-2 transition-colors text-sm {% if request.endpoint == 'dashboard.dashboard' %}bg-white/20 text-white font-medium{% else %}text-emerald-50 hover:bg-white/10 hover:text-white{% endif %}">
                     <i data-lucide="layout-dashboard" class="w-4 h-4"></i>Dashboard
@@ -711,12 +781,15 @@
                     {% endif %}
                 </a>
                 {% endif %}
-                
+                </div>
+
+                <div id="site-nav-utils" class="order-2 md:order-none flex flex-wrap items-center justify-end gap-1 flex-shrink-0">
                 <!-- Seletor de Ano -->
                 <div class="relative" id="ano-selector-wrap">
-                    <button type="button" id="btn-ano-selector" class="px-4 py-2.5 bg-emerald-800 text-white hover:bg-emerald-600 rounded-lg transition flex items-center text-sm font-medium gap-2">
+                    <button type="button" id="btn-ano-selector" class="px-3 md:px-4 py-2.5 bg-emerald-800 text-white hover:bg-emerald-600 rounded-lg transition flex items-center text-sm font-medium gap-2">
                         <i data-lucide="calendar" class="w-4 h-4"></i>
-                        <span>Ano: <strong>{{ ano_ativo }}</strong></span>
+                        <span class="ano-label-long">Ano: <strong>{{ ano_ativo }}</strong></span>
+                        <strong class="md:hidden">{{ ano_ativo }}</strong>
                         <i data-lucide="chevron-down" class="w-3 h-3 transition-transform" id="ano-chevron"></i>
                     </button>
                     <div id="ano-dropdown" class="hidden absolute right-0 mt-1 w-32 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
@@ -781,12 +854,13 @@
                     <i data-lucide="user" class="w-4 h-4 mr-2"></i>Conta
                 </a>
                 {% endif %}
+                </div>
             </div>
         </div>
     </nav>
 
     <!-- Main Content -->
-    <main class="w-full px-2 md:px-4 lg:px-6 xl:px-8 py-6 pb-16 flex-1 overflow-x-hidden animate-in fade-in duration-200">
+    <main class="w-full px-2 md:px-4 lg:px-6 xl:px-8 py-6 pb-16 flex-1 min-h-0 overflow-y-auto overflow-x-hidden animate-in fade-in duration-200">
         {% block content %}{% endblock %}
     </main>
     {% block modals %}{% endblock %}
@@ -1735,6 +1809,58 @@
         }
     }
     
+    // Menu mobile (hambúrguer)
+    (function() {
+        var nav = document.getElementById('site-nav');
+        var toggle = document.getElementById('btn-mobile-nav-toggle');
+        var links = document.getElementById('site-nav-links');
+        var iconMenu = document.getElementById('icon-mobile-nav-menu');
+        var iconClose = document.getElementById('icon-mobile-nav-close');
+        if (!nav || !toggle || !links) return;
+
+        function fecharNavMobile() {
+            nav.classList.remove('site-nav-mobile-open');
+            toggle.setAttribute('aria-expanded', 'false');
+            if (iconMenu) iconMenu.classList.remove('hidden');
+            if (iconClose) iconClose.classList.add('hidden');
+        }
+
+        function abrirNavMobile() {
+            nav.classList.add('site-nav-mobile-open');
+            toggle.setAttribute('aria-expanded', 'true');
+            if (iconMenu) iconMenu.classList.add('hidden');
+            if (iconClose) iconClose.classList.remove('hidden');
+        }
+
+        toggle.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (nav.classList.contains('site-nav-mobile-open')) {
+                fecharNavMobile();
+            } else {
+                abrirNavMobile();
+            }
+        });
+
+        links.querySelectorAll('a[href]').forEach(function(link) {
+            link.addEventListener('click', function() {
+                if (window.innerWidth < 768) fecharNavMobile();
+            });
+        });
+
+        document.addEventListener('click', function(e) {
+            if (window.innerWidth >= 768) return;
+            if (!nav.contains(e.target)) fecharNavMobile();
+        });
+
+        window.addEventListener('resize', function() {
+            if (window.innerWidth >= 768) fecharNavMobile();
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') fecharNavMobile();
+        });
+    })();
+
     // Dropdown Seletor de Ano
     (function() {
         var btn = document.getElementById('btn-ano-selector');
