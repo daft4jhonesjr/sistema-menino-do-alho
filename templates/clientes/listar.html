@@ -37,9 +37,9 @@
                 👤 Novo Cliente
             </button>
             {% if current_user.is_authenticated and current_user.is_admin() %}
-            <a href="{{ url_for('clientes.importar_clientes') }}" class="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-base sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-300 dark:hover:border-emerald-700 hover:text-emerald-800 dark:hover:text-emerald-300 transition-colors shadow-sm">
+            <button type="button" onclick="abrirDrawerImportarClientes()" class="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-base sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-300 dark:hover:border-emerald-700 hover:text-emerald-800 dark:hover:text-emerald-300 transition-colors shadow-sm">
                 📥&nbsp;Importar Lista
-            </a>
+            </button>
             {% endif %}
         </div>
     </div>
@@ -461,6 +461,93 @@
             </div>
         </form>
     </div>
+</div>
+
+<!-- Drawer Importar Clientes -->
+<div id="drawer-importar-clientes-backdrop" class="fixed inset-0 z-40 bg-black/50 hidden transition-opacity" aria-hidden="true" onclick="fecharDrawerImportarClientes()"></div>
+<div id="drawer-importar-clientes-panel" class="fixed inset-y-0 right-0 z-50 w-full max-w-lg bg-white dark:bg-slate-900 shadow-2xl flex flex-col transform translate-x-full transition-transform duration-300 hidden" role="dialog" aria-modal="true" aria-labelledby="drawer-importar-clientes-titulo" onclick="event.stopPropagation()">
+    <div class="shrink-0 flex justify-between items-center px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-slate-700 bg-emerald-700 text-white" style="padding-top: max(1rem, env(safe-area-inset-top));">
+        <h3 id="drawer-importar-clientes-titulo" class="text-lg sm:text-xl font-bold flex items-center gap-2">
+            <i data-lucide="upload" class="w-5 h-5"></i>Importar Clientes
+        </h3>
+        <button type="button" class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-emerald-600 text-white transition flex-shrink-0 min-w-[44px] min-h-[44px] touch-manipulation" id="drawer-importar-clientes-fechar" title="Fechar (Esc)" aria-label="Fechar" onclick="fecharDrawerImportarClientes()">
+            <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+    </div>
+    <form id="form-importar-clientes-drawer" method="POST" enctype="multipart/form-data" action="{{ url_for('clientes.importar_clientes') }}" class="flex flex-col flex-1 min-h-0">
+        <div class="flex-1 overflow-y-auto p-4 sm:p-6">
+            <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">Cole a lista (copiada do Excel, separada por TAB) ou faça upload de um arquivo Excel (.xlsx) ou CSV (.csv)</p>
+
+            {% if erros_detalhados is defined and erros_detalhados %}
+            <div class="mb-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-300 dark:border-red-800 rounded-lg p-4 shadow-sm" id="drawer-importar-clientes-feedback">
+                <div class="flex items-start">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-exclamation-triangle text-red-600 dark:text-red-400 text-xl"></i>
+                    </div>
+                    <div class="ml-3 flex-1">
+                        <h4 class="text-base font-bold text-red-800 dark:text-red-300 mb-2">Ops! Encontramos alguns probleminhas</h4>
+                        {% if sucesso is defined and sucesso > 0 %}
+                        <p class="text-red-700 dark:text-red-400 mb-3 text-sm">Importação parcial: <strong>{{ sucesso }}</strong> registros importados, <strong>{{ erros }}</strong> erro(s). Corrija os itens abaixo e importe novamente.</p>
+                        {% else %}
+                        <p class="text-red-700 dark:text-red-400 mb-3 text-sm"><strong>{{ erros }}</strong> erro(s) encontrado(s). Confira as mensagens abaixo, ajuste sua planilha e tente novamente.</p>
+                        {% endif %}
+                        <ul class="space-y-2 max-h-64 overflow-y-auto pr-2">
+                            {% for msg in erros_detalhados %}
+                            <li class="text-sm text-red-800 dark:text-red-300 flex items-start"><span class="text-red-500 mr-2">•</span> {{ msg }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <div class="mb-4">
+                <label for="drawer-lista_raw" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Cole a lista (uma linha por cliente, campos separados por TAB)
+                </label>
+                <textarea id="drawer-lista_raw" name="lista_raw" rows="8" placeholder="Ex.: DINHO 4	CAPIM FRIOS	17.995.737/0001-94	Juazeiro-BA (copie do Excel; TAB entre colunas)"
+                          class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent font-mono text-sm placeholder-gray-400 dark:placeholder-gray-500"></textarea>
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Ordem: Apelido [TAB] Razão Social [TAB] CNPJ [TAB] Cidade. Razão Social vazia = usa Apelido. CNPJ com aspas/quebras é limpo automaticamente.
+                </p>
+            </div>
+
+            <div class="mb-4 text-center text-gray-500 dark:text-gray-500 font-medium">— ou —</div>
+
+            <div class="mb-4">
+                <label for="drawer-arquivo-importar" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Selecione um arquivo
+                </label>
+                <input type="file" id="drawer-arquivo-importar" name="arquivo"
+                       accept=".xlsx,.xls,.csv"
+                       class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-emerald-50 file:text-emerald-700 dark:file:bg-emerald-900/30 dark:file:text-emerald-400 hover:file:bg-emerald-100 dark:hover:file:bg-emerald-800/40">
+                <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                    Formatos aceitos: .xlsx, .xls, .csv (CSV com TAB é tratado como lista raw)
+                </p>
+            </div>
+
+            <div class="mb-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                <h4 class="font-semibold text-blue-900 dark:text-blue-400 mb-2 text-sm">
+                    <i class="fas fa-info-circle mr-2"></i>Formato esperado (arquivo ou colagem):
+                </h4>
+                <ul class="text-sm text-blue-800 dark:text-blue-300 space-y-1">
+                    <li>• <strong>Apelido / nome_cliente</strong> (obrigatório — chave de busca; se já existir, atualiza os demais campos)</li>
+                    <li>• <strong>Razão Social</strong> (se vazio, usa o Apelido)</li>
+                    <li>• <strong>CNPJ</strong> (opcional, único; aspas e quebras de linha são removidas)</li>
+                    <li>• <strong>Cidade/UF</strong> (opcional)</li>
+                </ul>
+            </div>
+        </div>
+        <div class="shrink-0 flex flex-col-reverse sm:flex-row gap-3 p-4 sm:p-6 border-t border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            <button type="button" id="btn-cancelar-drawer-importar-clientes" onclick="fecharDrawerImportarClientes()" class="w-full sm:w-auto px-4 py-2.5 bg-gray-300 dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-medium rounded-md hover:bg-gray-400 dark:hover:bg-gray-600 transition-colors flex items-center justify-center min-h-[44px] touch-manipulation">
+                <i data-lucide="x" class="w-4 h-4 mr-2"></i>Cancelar
+            </button>
+            <button type="submit" id="btn-submit-drawer-importar-clientes" class="w-full sm:w-auto px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-md transition-colors flex items-center justify-center min-h-[44px] touch-manipulation">
+                <i data-lucide="upload" class="w-4 h-4 mr-2"></i>Importar
+            </button>
+        </div>
+    </form>
 </div>
 
 <!-- Modal Abater Lote (Receber Pagamento em Lote) -->
@@ -1954,6 +2041,57 @@ document.addEventListener('DOMContentLoaded', function() {
         rua: 'edit_rua', numero: 'edit_numero', bairro: 'edit_bairro',
         cidade: 'edit_cidade', estado: 'edit_estado'
     });
+})();
+</script>
+
+<script>
+// Gaveta: Importar Clientes
+function abrirDrawerImportarClientes() {
+    var backdrop = document.getElementById('drawer-importar-clientes-backdrop');
+    var panel = document.getElementById('drawer-importar-clientes-panel');
+    if (!backdrop || !panel) return;
+    backdrop.classList.remove('hidden');
+    backdrop.setAttribute('aria-hidden', 'false');
+    panel.classList.remove('hidden');
+    panel.classList.add('translate-x-full');
+    panel.offsetHeight;
+    panel.classList.remove('translate-x-full');
+    if (typeof travarFundo === 'function') travarFundo();
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function fecharDrawerImportarClientes() {
+    var backdrop = document.getElementById('drawer-importar-clientes-backdrop');
+    var panel = document.getElementById('drawer-importar-clientes-panel');
+    if (panel) {
+        panel.classList.add('translate-x-full');
+    }
+    setTimeout(function() {
+        if (panel && panel.classList.contains('translate-x-full')) {
+            if (backdrop) {
+                backdrop.classList.add('hidden');
+                backdrop.setAttribute('aria-hidden', 'true');
+            }
+            panel.classList.add('hidden');
+            if (typeof liberarFundo === 'function') liberarFundo();
+        }
+    }, 300);
+}
+
+(function() {
+    document.addEventListener('keydown', function(e) {
+        if (e.key !== 'Escape') return;
+        var panel = document.getElementById('drawer-importar-clientes-panel');
+        if (panel && !panel.classList.contains('hidden') && !panel.classList.contains('translate-x-full')) {
+            fecharDrawerImportarClientes();
+        }
+    });
+
+    {% if abrir_drawer_importar is defined and abrir_drawer_importar %}
+    abrirDrawerImportarClientes();
+    {% elif request.args.get('importar') == '1' %}
+    abrirDrawerImportarClientes();
+    {% endif %}
 })();
 </script>
 {% endblock %}

@@ -364,24 +364,8 @@ def _processar_linhas_clientes_upsert(linhas, erros_detalhados, sucesso_ref, err
 # Rotas
 # ============================================================
 
-@clientes_bp.route('/clientes')
-def listar_clientes():
-    """Listagem de clientes com paginação SQL + busca server-side opcional.
-
-    Mudanças de performance:
-    * Paginação backend via ``?page=`` e ``?per_page=`` (default 200,
-      máx 500). Antes carregava 500 clientes a cada visita,
-      independentemente do que o usuário ia ver.
-    * Busca server-side via ``?q=`` (ilike) — usa o índice em
-      ``Cliente.nome_cliente`` e em ``Cliente.razao_social``. Antes a
-      única busca era client-side em JS, que dependia de ter os 500
-      clientes carregados no HTML.
-
-    O template antigo continua funcional: se o caller não passar
-    ``?q=`` nem ``?page=``, recebe a primeira página (200 clientes)
-    com a mesma ordenação default, e a busca client-side já existente
-    funciona dentro desses 200.
-    """
+def _kwargs_listar_clientes():
+    """Contexto compartilhado da listagem (drawer de importação reutiliza)."""
     ordem_param = (request.args.get('ordem') or '').strip().lower()
     q = (request.args.get('q') or '').strip()
     try:
@@ -410,15 +394,11 @@ def listar_clientes():
         ordem = 'id_crescente'
         base = base.order_by(Cliente.id.asc())
     else:
-        # Padrão: alfabética por nome (agrupa filiais com mesmo prefixo, ex. COMAL_*)
         ordem = 'nome_asc'
         base = base.order_by(Cliente.nome_cliente.asc())
 
     clientes = base.limit(per_page).offset((page - 1) * per_page).all()
 
-    # Top 10 clientes por lucro total (histórico do tenant).
-    # Mesma fórmula do dashboard: (preço venda − custo) × quantidade.
-    # Sem coluna persistida — só ranking dinâmico para a estrela VIP.
     top_10_ids = []
     try:
         lucro_expr = (Venda.preco_venda - Produto.preco_custo) * Venda.quantidade_venda
@@ -443,8 +423,7 @@ def listar_clientes():
         current_app.logger.warning(f'[clientes] Falha ao calcular top 10 lucro: {e_top}')
         top_10_ids = []
 
-    return render_template(
-        'clientes/listar.html',
+    return dict(
         clientes=clientes,
         ordem=ordem,
         q=q,
@@ -453,6 +432,36 @@ def listar_clientes():
         has_next=len(clientes) >= per_page,
         top_10_ids=top_10_ids,
     )
+
+
+def _render_listar_clientes_com_drawer_importar(**extra):
+    return render_template(
+        'clientes/listar.html',
+        **_kwargs_listar_clientes(),
+        abrir_drawer_importar=True,
+        **extra,
+    )
+
+
+@clientes_bp.route('/clientes')
+def listar_clientes():
+    """Listagem de clientes com paginação SQL + busca server-side opcional.
+
+    Mudanças de performance:
+    * Paginação backend via ``?page=`` e ``?per_page=`` (default 200,
+      máx 500). Antes carregava 500 clientes a cada visita,
+      independentemente do que o usuário ia ver.
+    * Busca server-side via ``?q=`` (ilike) — usa o índice em
+      ``Cliente.nome_cliente`` e em ``Cliente.razao_social``. Antes a
+      única busca era client-side em JS, que dependia de ter os 500
+      clientes carregados no HTML.
+
+    O template antigo continua funcional: se o caller não passar
+    ``?q=`` nem ``?page=``, recebe a primeira página (200 clientes)
+    com a mesma ordenação default, e a busca client-side já existente
+    funciona dentro desses 200.
+    """
+    return render_template('clientes/listar.html', **_kwargs_listar_clientes())
 
 
 def _prazo_efetivo_venda(venda):
@@ -1030,7 +1039,11 @@ def importar_clientes():
             lista_raw = (request.form.get('lista_raw') or '').strip()
             tem_arquivo = 'arquivo' in request.files and request.files['arquivo'] and request.files['arquivo'].filename
             if not lista_raw and not tem_arquivo:
-                return render_template('clientes/importar.html', erros_detalhados=['Cole a lista (TAB) no campo de texto ou selecione um arquivo.'], sucesso=0, erros=1)
+                return _render_listar_clientes_com_drawer_importar(
+                    erros_detalhados=['Cole a lista (TAB) no campo de texto ou selecione um arquivo.'],
+                    sucesso=0,
+                    erros=1,
+                )
             filepath = None
             try:
                 sucesso = 0
@@ -1042,7 +1055,11 @@ def importar_clientes():
                 if lista_raw:
                     linhas = _parse_clientes_raw_tsv(lista_raw)
                     if not linhas:
-                        return render_template('clientes/importar.html', erros_detalhados=['Nenhuma linha válida encontrada. Use uma linha por cliente, campos separados por TAB: Apelido, Razão Social, CNPJ, Cidade.'], sucesso=0, erros=1)
+                        return _render_listar_clientes_com_drawer_importar(
+                            erros_detalhados=['Nenhuma linha válida encontrada. Use uma linha por cliente, campos separados por TAB: Apelido, Razão Social, CNPJ, Cidade.'],
+                            sucesso=0,
+                            erros=1,
+                        )
                     _processar_linhas_clientes_upsert(linhas, erros_detalhados, sucesso_ref, erros_ref, linha_offset=0)
                     sucesso, erros = sucesso_ref[0], erros_ref[0]
                 else:
@@ -1121,7 +1138,11 @@ def importar_clientes():
                 if filepath and os.path.exists(filepath):
                     os.remove(filepath)
                 if erros > 0:
-                    return render_template('clientes/importar.html', erros_detalhados=erros_detalhados, sucesso=sucesso, erros=erros)
+                    return _render_listar_clientes_com_drawer_importar(
+                        erros_detalhados=erros_detalhados,
+                        sucesso=sucesso,
+                        erros=erros,
+                    )
                 flash(f'Importação concluída com sucesso! {sucesso} cliente(s) importado(s).', 'success')
                 return redirect(url_for('clientes.listar_clientes'))
             except Exception as e:
@@ -1131,8 +1152,12 @@ def importar_clientes():
                         os.remove(filepath)
                     except Exception:
                         pass
-                return render_template('clientes/importar.html', erros_detalhados=[f'Erro ao processar: {str(e)}'], sucesso=0, erros=1)
-        return render_template('clientes/importar.html')
+                return _render_listar_clientes_com_drawer_importar(
+                    erros_detalhados=[f'Erro ao processar: {str(e)}'],
+                    sucesso=0,
+                    erros=1,
+                )
+        return redirect(url_for('clientes.listar_clientes', importar='1'))
 
     return _importar()
 
