@@ -872,6 +872,24 @@ def dashboard():
 
     faturamentos_dinamicos.sort(key=lambda x: x['faturamento'], reverse=True)
 
+    # Separa emissores oficiais (DESTAK/PATY) dos demais; oculta fornecedores
+    # de compra sem faturamento de venda (total == 0).
+    _EMPRESAS_FATURADORAS = ('DESTAK', 'PATY')
+    _ordem_faturadora = {'DESTAK': 0, 'PATY': 1}
+    faturadoras = []
+    faturamentos_restantes = []
+    for item in faturamentos_dinamicos:
+        nome = item['nome']
+        total_item = float(item.get('faturamento') or 0)
+        if nome in _EMPRESAS_FATURADORAS:
+            if total_item > 0:
+                faturadoras.append(item)
+            continue
+        if total_item > 0:
+            faturamentos_restantes.append(item)
+    faturadoras.sort(key=lambda x: _ordem_faturadora.get(x['nome'], 99))
+    faturamentos_dinamicos = faturamentos_restantes
+
     # KPI 8: Margem (sobre total_vendas/total_lucro já consolidados acima)
     margem_porcentagem = (float(total_lucro) / float(total_vendas) * 100) if total_vendas and float(total_vendas) > 0 else 0
 
@@ -1004,6 +1022,7 @@ def dashboard():
         qtd_caixas_prejuizo=int(qtd_caixas_prejuizo),
         detalhes_prejuizo=detalhes_prejuizo,
         faturamentos_dinamicos=faturamentos_dinamicos,
+        faturadoras=faturadoras,
         avulsas_info=avulsas_info,
         margem_porcentagem=float(margem_porcentagem),
         ticket_medio=float(ticket_medio),
