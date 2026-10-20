@@ -156,10 +156,11 @@
       dados.entregas_pendentes,
       'Nenhuma entrega pendente.'
     );
+    var diasRecentes = Number(dados.entregues_recentes_dias) || 7;
     var entregues = renderLista(
       'Entregas concluídas (recentes)',
       dados.entregas_entregues,
-      'Nenhuma entrega concluída recente.'
+      'Nenhuma entrega concluída nos últimos ' + diasRecentes + ' dias.'
     );
 
     var linkCompleto = config.paginaUrl
