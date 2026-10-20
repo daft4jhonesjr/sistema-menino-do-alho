@@ -325,6 +325,19 @@
     });
   }
 
+  if (global.MeninoAlhoSwipeDismiss && typeof global.MeninoAlhoSwipeDismiss.attach === 'function') {
+    if (panel.__swipeDismiss && typeof panel.__swipeDismiss.destroy === 'function') {
+      panel.__swipeDismiss.destroy();
+    }
+    global.MeninoAlhoSwipeDismiss.attach(panel, {
+      backdrop: overlay,
+      onClose: fecharDrawer,
+      isOpen: isOpen,
+      edgeWidth: 48,
+      minClosePx: 60
+    });
+  }
+
   if (global.MeninoAlhoNavigation && global.MeninoAlhoNavigation.setupDrawerInteractiveDrag) {
     global.MeninoAlhoNavigation.setupDrawerInteractiveDrag({
       panel: panel,
