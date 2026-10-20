@@ -184,6 +184,16 @@
         body.app-shell > main {
             flex: 1 1 auto;
             position: relative;
+            /* Espaço para o footer fixo (status + ações no mobile) + home indicator iOS */
+            padding-bottom: calc(10rem + env(safe-area-inset-bottom, 0px));
+        }
+        @media (min-width: 640px) {
+            body.app-shell > main {
+                padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+            }
+        }
+        body.app-shell.site-footer-height-synced > main {
+            padding-bottom: calc(var(--site-fixed-footer-height, 10rem) + 0.5rem);
         }
         /* Menu mobile: overlay (não empurra o conteúdo) */
         @media (max-width: 767px) {
@@ -958,13 +968,13 @@
     </nav>
 
     <!-- Main Content -->
-    <main class="w-full px-2 md:px-4 lg:px-6 xl:px-8 py-6 pb-16 flex-1 animate-in fade-in duration-200">
+    <main class="w-full px-2 md:px-4 lg:px-6 xl:px-8 py-6 flex-1 animate-in fade-in duration-200">
         {% block content %}{% endblock %}
     </main>
     {% block modals %}{% endblock %}
 
     <!-- Footer -->
-    <footer class="fixed bottom-0 left-0 w-full bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-50 text-xs px-4 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] flex flex-col sm:flex-row justify-between items-center gap-2">
+    <footer id="site-fixed-footer" class="fixed bottom-0 left-0 w-full bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-50 text-xs px-4 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex flex-col sm:flex-row justify-between items-center gap-2">
         <div class="flex items-center gap-2 w-full sm:w-1/3">
             <span class="relative flex h-3 w-3">
                 <span id="status-ping" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -2720,5 +2730,25 @@
     });
     </script>
     {% endif %}
+    <script>
+    (function syncSiteFixedFooterReserve() {
+        var footer = document.getElementById('site-fixed-footer');
+        if (!footer) return;
+
+        function applyFooterReserve() {
+            var height = footer.getBoundingClientRect().height;
+            if (!height) return;
+            document.documentElement.style.setProperty('--site-fixed-footer-height', height + 'px');
+            document.body.classList.add('site-footer-height-synced');
+        }
+
+        applyFooterReserve();
+        window.addEventListener('resize', applyFooterReserve, { passive: true });
+        if (typeof ResizeObserver !== 'undefined') {
+            new ResizeObserver(applyFooterReserve).observe(footer);
+        }
+        document.fonts && document.fonts.ready && document.fonts.ready.then(applyFooterReserve);
+    })();
+    </script>
 </body>
 </html>
