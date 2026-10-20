@@ -165,6 +165,11 @@ tr.ios-drag-placeholder td {
   -webkit-overflow-scrolling: touch;
 }
 
+#logistica-drawer-panel #drawerContent {
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
 #logistica-drawer-panel.translate-x-0,
 #logistica-drawer-panel.logistica-drawer-panel--open {
   transform: translate3d(0, 0, 0);
@@ -183,7 +188,9 @@ body.logistica-drawer-dragging {
 
 /* Swipe-to-dismiss dos painéis laterais direitos (static/js/swipe-dismiss.js) */
 .swipe-dismiss-panel [data-swipe-handle] {
-  touch-action: pan-y;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 body.swipe-dismiss-dragging {

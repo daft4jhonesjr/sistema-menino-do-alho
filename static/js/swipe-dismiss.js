@@ -29,6 +29,12 @@
   var CLOSE_RATIO = 0.35;
   var FLICK_VELOCITY = 0.5;
   var AXIS_LOCK_PX = 8;
+  /** Folga para preferir fechamento horizontal sobre scroll vertical (iOS WebView). */
+  var HORIZONTAL_AXIS_BIAS = 10;
+  var HANDLE_AXIS_BIAS = 4;
+  var MIN_CLOSE_OFFSET_PX = 60;
+  /** Gesto nativo “voltar” do Safari perto da borda esquerda da tela. */
+  var VIEWPORT_LEFT_EDGE_PX = 20;
   var VELOCITY_WINDOW_MS = 100;
   var CLEANUP_TIMEOUT_MS = 1200;
   var CLICK_SUPPRESS_MS = 350;
@@ -89,8 +95,10 @@
    *   handle?: string,
    *   edgeWidth?: number,
    *   closeRatio?: number,
+   *   minClosePx?: number,
    *   flickVelocity?: number,
-   *   duration?: number
+   *   duration?: number,
+   *   allowBodySwipe?: boolean
    * }} options
    */
   function attach(panel, options) {
@@ -110,13 +118,16 @@
     var handleSelector = options.handle || HANDLE_SELECTOR;
     var edgeWidth = typeof options.edgeWidth === 'number' ? options.edgeWidth : DEFAULT_EDGE_WIDTH;
     var closeRatio = typeof options.closeRatio === 'number' ? options.closeRatio : CLOSE_RATIO;
+    var minClosePx =
+      typeof options.minClosePx === 'number' ? options.minClosePx : MIN_CLOSE_OFFSET_PX;
     var flickVelocity =
       typeof options.flickVelocity === 'number' ? options.flickVelocity : FLICK_VELOCITY;
     var duration = typeof options.duration === 'number' ? options.duration : DURATION_MS;
+    var allowBodySwipe = options.allowBodySwipe !== false;
 
     /** 'idle' | 'pending' | 'dragging' | 'returning' | 'closing' */
     var state = 'idle';
-    /** @type {null | { id: number, startX: number, startY: number, base: number, offset: number, width: number, samples: Array<{x: number, t: number}> }} */
+    /** @type {null | { id: number, startX: number, startY: number, base: number, offset: number, width: number, fromHandle: boolean, scrollRoot: Element|null, samples: Array<{x: number, t: number}> }} */
     var gesture = null;
     var settleToken = 0;
     var cleanupRaf = 0;
@@ -142,7 +153,12 @@
       }
     }
 
-    function beginDrag() {
+    function unlockScrollRoot(g) {
+      if (!g || !g.scrollRoot) return;
+      g.scrollRoot.style.overflow = '';
+    }
+
+    function beginDrag(g) {
       cancelPendingCleanup();
       settleToken++;
       panel.style.transition = 'none';
@@ -151,6 +167,9 @@
       if (backdrop) {
         backdrop.style.transition = 'none';
         backdrop.style.willChange = 'opacity';
+      }
+      if (g && g.scrollRoot) {
+        g.scrollRoot.style.overflow = 'hidden';
       }
       document.body.classList.add(DRAGGING_BODY_CLASS);
     }
@@ -299,6 +318,7 @@
 
     function abortPending() {
       var base = gesture ? gesture.base : 0;
+      if (gesture) unlockScrollRoot(gesture);
       gesture = null;
       state = 'idle';
       if (base > 0) settleOpen();
@@ -326,12 +346,19 @@
       if (target.closest('[data-swipe-ignore], input[type="range"]')) return;
 
       var rect = panel.getBoundingClientRect();
-      var fromEdge = touch.clientX - rect.left <= edgeWidth;
+      var fromPanelEdge = touch.clientX - rect.left <= edgeWidth;
+      var fromViewportEdge = touch.clientX <= VIEWPORT_LEFT_EDGE_PX;
+      var fromEdge = fromPanelEdge || fromViewportEdge;
       var handle = target.closest(handleSelector);
       var onHandle = !!handle && panel.contains(handle);
-      if (!fromEdge && !onHandle) return;
-      if (!fromEdge && target.closest(TEXT_INPUT_SELECTOR)) return;
+      if (!fromEdge && !onHandle && !allowBodySwipe) return;
+      if (!fromEdge && !onHandle && target.closest(TEXT_INPUT_SELECTOR)) return;
       if (insideScrolledHorizontalScroller(target, panel)) return;
+
+      var scrollRoot = target.closest(
+        '[data-swipe-scroll], .overflow-y-auto, .overflow-y-scroll, .overscroll-contain'
+      );
+      if (scrollRoot && !panel.contains(scrollRoot)) scrollRoot = null;
 
       var base = 0;
       if (state === 'returning') {
@@ -349,9 +376,23 @@
         base: base,
         offset: base,
         width: rect.width || global.innerWidth,
+        fromHandle: onHandle,
+        scrollRoot: scrollRoot,
         samples: [{ x: touch.clientX, t: now() }]
       };
       state = 'pending';
+    }
+
+    function axisBias(g) {
+      return g && g.fromHandle ? HANDLE_AXIS_BIAS : HORIZONTAL_AXIS_BIAS;
+    }
+
+    function isClearlyHorizontal(dx, dy, g) {
+      return Math.abs(dx) > Math.abs(dy) + axisBias(g);
+    }
+
+    function isClearlyVertical(dx, dy, g) {
+      return Math.abs(dy) > Math.abs(dx) + axisBias(g);
     }
 
     function onTouchMove(e) {
@@ -363,18 +404,18 @@
 
       if (state === 'pending') {
         if (Math.abs(dx) < AXIS_LOCK_PX && Math.abs(dy) < AXIS_LOCK_PX) return;
-        var vertical = Math.abs(dy) >= Math.abs(dx);
         var leftward = dx < 0 && gesture.base === 0;
-        if (vertical || leftward) {
+        if (leftward || isClearlyVertical(dx, dy, gesture)) {
           abortPending();
           return;
         }
+        if (!isClearlyHorizontal(dx, dy, gesture)) return;
         state = 'dragging';
         // Rebase para o painel não "pular" a folga do travamento de eixo.
         gesture.startX = touch.clientX;
         gesture.startY = touch.clientY;
         dx = 0;
-        beginDrag();
+        beginDrag(gesture);
       }
 
       if (state !== 'dragging') return;
@@ -399,13 +440,16 @@
 
       var active = gesture;
       var v = velocity(touch.clientX);
+      unlockScrollRoot(gesture);
       gesture = null;
       suppressClickUntil = now() + CLICK_SUPPRESS_MS;
 
       var threshold = Math.min(active.width, global.innerWidth) * closeRatio;
       var flickRight = v > flickVelocity;
       var flickLeft = v < -flickVelocity;
-      if (active.offset > 0 && (flickRight || (active.offset > threshold && !flickLeft))) {
+      var passedDistance =
+        active.offset >= minClosePx || active.offset > threshold;
+      if (active.offset > 0 && (flickRight || (passedDistance && !flickLeft))) {
         settleClosed();
       } else {
         settleOpen();
@@ -416,6 +460,7 @@
       if (!gesture) return;
       if (!findTouch(e.changedTouches, gesture.id)) return;
       if (state === 'dragging') {
+        unlockScrollRoot(gesture);
         gesture = null;
         settleOpen();
       } else {
@@ -431,7 +476,7 @@
     }
 
     panel.addEventListener('touchstart', onTouchStart, { passive: true });
-    panel.addEventListener('touchmove', onTouchMove, { passive: false });
+    panel.addEventListener('touchmove', onTouchMove, { passive: false, capture: true });
     panel.addEventListener('touchend', onTouchEnd, { passive: true });
     panel.addEventListener('touchcancel', onTouchCancel, { passive: true });
     panel.addEventListener('click', onClickCapture, true);
@@ -442,7 +487,7 @@
       dismiss: function () {
         if (state === 'closing' || !isOpen()) return;
         gesture = null;
-        beginDrag();
+        beginDrag(null);
         settleClosed();
       },
       isDragging: function () {
