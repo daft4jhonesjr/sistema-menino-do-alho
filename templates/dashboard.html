@@ -1257,23 +1257,31 @@
             
             <!-- Seção 1: Top Clientes do Mês -->
             <div class="mb-6">
-                <h4 class="text-lg font-bold text-gray-800 dark:text-gray-100 mb-3 flex items-center">
-                    <i data-lucide="users" class="w-5 h-5 mr-2 text-emerald-600"></i>Top Clientes do Mês
-                </h4>
-                <div id="modal-mes-top-clientes" class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-hidden">
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                            <thead class="bg-gray-50 dark:bg-gray-700">
-                                <tr>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Cliente</th>
-                                    <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Qtd Compras</th>
-                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Total Gasto</th>
-                                </tr>
-                            </thead>
-                            <tbody id="modal-mes-top-clientes-tbody" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                            </tbody>
-                        </table>
+                <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+                    <h4 class="text-lg font-bold text-gray-800 dark:text-gray-100 flex items-center min-w-0">
+                        <i data-lucide="users" class="w-5 h-5 mr-2 text-emerald-600 shrink-0"></i>Top Clientes do Mês
+                    </h4>
+                    {{ dashboard_layout_toggle() }}
+                </div>
+                <div class="view-lista block">
+                    <div id="modal-mes-top-clientes" class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                <thead class="bg-gray-50 dark:bg-gray-700">
+                                    <tr>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Cliente</th>
+                                        <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Qtd Compras</th>
+                                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Total Gasto</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="modal-mes-top-clientes-tbody" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
+                </div>
+                <div class="view-grade hidden">
+                    <div id="modal-mes-top-clientes-grade" class="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4"></div>
                 </div>
             </div>
             
@@ -1681,6 +1689,8 @@ window.abrirDetalhesMes = function(ano, mes) {
         conteudo.classList.add('hidden');
 
         document.getElementById('modal-mes-top-clientes-tbody').innerHTML = '';
+        var gradeClientesEl = document.getElementById('modal-mes-top-clientes-grade');
+        if (gradeClientesEl) gradeClientesEl.innerHTML = '';
         document.getElementById('modal-mes-vendas-tbody').innerHTML = '';
 
         fetch('/api/dashboard/detalhes_mes/' + ano + '/' + mes)
@@ -1698,6 +1708,11 @@ window.abrirDetalhesMes = function(ano, mes) {
                         document.getElementById('modal-mes-total-lucro').textContent = formatoMoeda(data.totais.total_lucro || 0);
                         document.getElementById('modal-mes-total-vendido').textContent = formatoMoeda(data.totais.total_vendido || 0);
                     }
+                    if (typeof window.aplicarLayoutDashboard === 'function') {
+                        var savedLayoutErr = 'lista';
+                        try { savedLayoutErr = localStorage.getItem('dashboardLayoutPreference') || 'lista'; } catch (e) {}
+                        window.aplicarLayoutDashboard(savedLayoutErr);
+                    }
                     if (typeof lucide !== 'undefined') lucide.createIcons();
                     return;
                 }
@@ -1707,6 +1722,7 @@ window.abrirDetalhesMes = function(ano, mes) {
                 document.getElementById('modal-mes-total-vendido').textContent = formatoMoeda((data.totais && data.totais.total_vendido) || 0);
 
                 var tbodyClientes = document.getElementById('modal-mes-top-clientes-tbody');
+                var gradeClientes = document.getElementById('modal-mes-top-clientes-grade');
                 if (data.top_clientes && data.top_clientes.length > 0) {
                     data.top_clientes.forEach(function(cliente, index) {
                         var tr = document.createElement('tr');
@@ -1716,9 +1732,29 @@ window.abrirDetalhesMes = function(ano, mes) {
                             '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100 text-center">' + cliente.qtd_compras + '</td>' +
                             '<td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 dark:text-gray-100 text-right valor-financeiro">' + formatoMoeda(cliente.total_gasto) + '</td>';
                         tbodyClientes.appendChild(tr);
+                        if (gradeClientes) {
+                            var card = document.createElement('div');
+                            card.className = 'bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-3 sm:p-4 border-l-4 border-l-emerald-500 min-w-0';
+                            card.innerHTML =
+                                '<h5 class="text-sm font-bold text-gray-900 dark:text-gray-100 mb-2 sm:mb-3 truncate" title="' + String(cliente.nome).replace(/"/g, '&quot;') + '">' + cliente.nome + '</h5>' +
+                                '<dl class="space-y-1.5 sm:space-y-2 text-xs sm:text-sm">' +
+                                '<div class="flex justify-between gap-2">' +
+                                '<dt class="text-gray-500 dark:text-gray-400 shrink-0">Qtd compras</dt>' +
+                                '<dd class="font-medium text-gray-900 dark:text-gray-100">' + cliente.qtd_compras + '</dd>' +
+                                '</div>' +
+                                '<div class="flex justify-between gap-2">' +
+                                '<dt class="text-gray-500 dark:text-gray-400 shrink-0">Total gasto</dt>' +
+                                '<dd class="font-bold text-emerald-600 dark:text-emerald-400 valor-financeiro text-right">' + formatoMoeda(cliente.total_gasto) + '</dd>' +
+                                '</div>' +
+                                '</dl>';
+                            gradeClientes.appendChild(card);
+                        }
                     });
                 } else {
                     tbodyClientes.innerHTML = '<tr><td colspan="3" class="px-6 py-4 text-center text-gray-500 dark:text-gray-400">Nenhum cliente encontrado</td></tr>';
+                    if (gradeClientes) {
+                        gradeClientes.innerHTML = '<p class="col-span-2 lg:col-span-3 text-gray-500 dark:text-gray-400 text-center py-6">Nenhum cliente encontrado</p>';
+                    }
                 }
 
                 var tbodyVendas = document.getElementById('modal-mes-vendas-tbody');
@@ -1750,6 +1786,11 @@ window.abrirDetalhesMes = function(ano, mes) {
                     vazioVendas.classList.remove('hidden');
                 }
 
+                if (typeof window.aplicarLayoutDashboard === 'function') {
+                    var savedLayout = 'lista';
+                    try { savedLayout = localStorage.getItem('dashboardLayoutPreference') || 'lista'; } catch (e) {}
+                    window.aplicarLayoutDashboard(savedLayout);
+                }
                 if (typeof lucide !== 'undefined') lucide.createIcons();
             })
             .catch(function(error) {
