@@ -351,11 +351,11 @@
     </div>
 </div>
 
-<!-- Terceira linha: Faturamento por fornecedor (dinâmico), Margem e Ticket Médio -->
+<!-- Terceira linha: Empresas faturadoras, compras por fornecedor, avulsas -->
 {#
-  Cards de faturamento por fornecedor agora são gerados dinamicamente a partir
-  de `faturadoras` (DESTAK/PATY), `faturamentos_dinamicos` (demais com total > 0)
-  e `avulsas_info` (dict) enviados pelo backend. Paleta rotacionada nos cards.
+  Backend envia `faturadoras` (DESTAK/PATY), `faturamentos_dinamicos` (demais
+  faturamentos com total > 0), `compras_por_empresa` (entradas de produto) e
+  `avulsas_info`. Paleta de cores rotacionada (classes literais para Tailwind).
 #}
 {#
   Paleta rotacionada. Usa classes completas (strings literais) para que o
@@ -406,7 +406,7 @@
 {% if faturadoras|default([])|length > 0 %}
 <section class="mb-6">
     <h3 class="text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-3">Empresas Faturadoras</h3>
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 sortable-grid">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sortable-grid">
         {% for faturamento in faturadoras %}
             {% set _paleta = _cores_fornecedor[loop.index0 % _cores_fornecedor|length] %}
             {{ card_faturamento_empresa(
@@ -421,6 +421,43 @@
     </div>
 </section>
 {% endif %}
+
+<!-- BLOCO: COMPRAS POR EMPRESAS -->
+<section class="mb-6">
+    <h3 class="text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-3">
+        Compras por Empresas
+    </h3>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {% for item in compras_por_empresa|default([]) %}
+        <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700/60 p-5 shadow-sm flex flex-col justify-between">
+            <div class="flex items-start justify-between">
+                <div>
+                    <span class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                        Compras {{ item.nome_empresa }}
+                    </span>
+                    <div class="text-2xl font-bold text-gray-900 dark:text-white mt-1 valor-financeiro">
+                        {{ item.total_compras|formato_moeda }}
+                    </div>
+                    {% if item.qtd_itens %}
+                    <span class="text-xs text-gray-400 dark:text-gray-500">
+                        {{ item.qtd_itens }} itens/caixas adquiridas
+                    </span>
+                    {% endif %}
+                </div>
+                <div class="p-2.5 rounded-xl bg-purple-50 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/>
+                    </svg>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="col-span-full py-4 text-center text-sm text-gray-400 dark:text-gray-500 bg-white dark:bg-gray-800 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700">
+            Nenhuma compra registrada para as empresas cadastradas neste período.
+        </div>
+        {% endfor %}
+    </div>
+</section>
 
 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6 sortable-grid">
     {% for faturamento in faturamentos_dinamicos %}
