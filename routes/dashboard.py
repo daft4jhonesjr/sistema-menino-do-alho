@@ -872,6 +872,69 @@ def dashboard():
 
     faturamentos_dinamicos.sort(key=lambda x: x['faturamento'], reverse=True)
 
+    # KPI 7: Compras por fornecedor (entradas de produto no ano ativo).
+    # Valor = preço de custo × quantidade_entrada; filtra por data_chegada.
+    filtro_tenant_produto = Produto.empresa_id == empresa_id_atual()
+    filtro_ano_produto = filtro_ano_data_venda(ano_ativo, Produto.data_chegada)
+    fornecedor_norm = func.upper(func.trim(func.coalesce(Produto.fornecedor, '')))
+    valor_compra_expr = (
+        func.coalesce(Produto.preco_custo, 0) * func.coalesce(Produto.quantidade_entrada, 0)
+    )
+    rows_compras_fornecedor = db.session.query(
+        fornecedor_norm.label('fornecedor'),
+        func.coalesce(func.sum(valor_compra_expr), 0).label('total_compras'),
+        func.coalesce(func.sum(Produto.quantidade_entrada), 0).label('qtd_itens'),
+    ).filter(
+        filtro_tenant_produto,
+        *filtro_ano_produto,
+        fornecedor_norm != '',
+    ).group_by(fornecedor_norm).order_by(desc('total_compras')).all()
+
+    totais_compras_por_nome = {}
+    for row in rows_compras_fornecedor:
+        nome_key = (row.fornecedor or '').strip().upper()
+        if not nome_key:
+            continue
+        totais_compras_por_nome[nome_key] = {
+            'total_compras': float(row.total_compras or 0),
+            'qtd_itens': int(row.qtd_itens or 0),
+        }
+
+    rotulos_fornecedor = {}
+    for forn in query_tenant(Fornecedor).order_by(Fornecedor.nome).all():
+        nome_key = (forn.nome or '').strip().upper()
+        if nome_key:
+            rotulos_fornecedor[nome_key] = (forn.nome or nome_key).strip()
+
+    compras_por_empresa = []
+    fornecedores_compras_vistos = set()
+    for forn in query_tenant(Fornecedor).order_by(Fornecedor.nome).all():
+        nome_key = (forn.nome or '').strip().upper()
+        if not nome_key:
+            continue
+        dados = totais_compras_por_nome.get(nome_key)
+        if not dados or dados['total_compras'] <= 0:
+            continue
+        fornecedores_compras_vistos.add(nome_key)
+        compras_por_empresa.append({
+            'nome_empresa': rotulos_fornecedor.get(nome_key, nome_key),
+            'total_compras': dados['total_compras'],
+            'qtd_itens': dados['qtd_itens'],
+        })
+
+    for nome_key, dados in totais_compras_por_nome.items():
+        if nome_key in fornecedores_compras_vistos:
+            continue
+        if dados['total_compras'] <= 0:
+            continue
+        compras_por_empresa.append({
+            'nome_empresa': rotulos_fornecedor.get(nome_key, nome_key.title()),
+            'total_compras': dados['total_compras'],
+            'qtd_itens': dados['qtd_itens'],
+        })
+
+    compras_por_empresa.sort(key=lambda x: x['total_compras'], reverse=True)
+
     # KPI 8: Margem (sobre total_vendas/total_lucro já consolidados acima)
     margem_porcentagem = (float(total_lucro) / float(total_vendas) * 100) if total_vendas and float(total_vendas) > 0 else 0
 
@@ -1004,6 +1067,7 @@ def dashboard():
         qtd_caixas_prejuizo=int(qtd_caixas_prejuizo),
         detalhes_prejuizo=detalhes_prejuizo,
         faturamentos_dinamicos=faturamentos_dinamicos,
+        compras_por_empresa=compras_por_empresa,
         avulsas_info=avulsas_info,
         margem_porcentagem=float(margem_porcentagem),
         ticket_medio=float(ticket_medio),
