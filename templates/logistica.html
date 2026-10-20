@@ -1698,6 +1698,96 @@ function _produtosSelecionadosRomaneio(cb) {
     return doDom;
 }
 
+/* ── Feedback visual: remanejo já gerado nesta sessão ───────────────── */
+var _CLS_FUNDO_REMANEJO_REMOVER = [
+    'bg-white',
+    'dark:bg-slate-800',
+    'dark:bg-gray-800',
+    'hover:bg-emerald-50',
+    'dark:hover:bg-emerald-900/20'
+];
+var _CLS_BORDA_REMANEJO_REMOVER = [
+    'border-gray-200',
+    'dark:border-slate-700',
+    'dark:border-gray-700'
+];
+var _CLS_DESTAQUE_REMANEJO = [
+    'bg-blue-50',
+    'dark:bg-blue-900/20',
+    'border-blue-300',
+    'dark:border-blue-700'
+];
+var _HTML_BADGE_REMANEJO = '<span class="badge-remanejo ml-2 px-2 py-0.5 text-[10px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-800 dark:text-blue-200 rounded shrink-0 whitespace-nowrap">REMANEJO GERADO</span>';
+
+function _containerEntregaDoCheckbox(cb) {
+    if (!cb || !cb.closest) return null;
+    var alvo = cb.closest('.card-entrega, tr.ios-draggable-item, div.ios-draggable-item, .bg-white');
+    if (!alvo) return cb.closest('tr');
+    if (alvo.classList.contains('container-lista-logistica') || (alvo.querySelector && alvo.querySelector('tbody'))) {
+        return cb.closest('tr');
+    }
+    return alvo;
+}
+
+function _alvosEntregaDoCheckbox(cb) {
+    var alvos = [];
+    var direto = _containerEntregaDoCheckbox(cb);
+    if (direto) alvos.push(direto);
+    var ids = (cb.getAttribute('data-ids') || cb.value || '').trim();
+    if (!ids) return alvos;
+    document.querySelectorAll('tr.ios-draggable-item[data-id], div.ios-draggable-item[data-id], .card-entrega[data-id]').forEach(function(el) {
+        if ((el.getAttribute('data-id') || '') !== ids) return;
+        if (alvos.indexOf(el) === -1) alvos.push(el);
+    });
+    return alvos;
+}
+
+function _injetarBadgeRemanejo(alvo) {
+    if (!alvo || alvo.querySelector('.badge-remanejo')) return;
+    var nome = alvo.querySelector('.nome-cliente-entrega');
+    if (nome) {
+        var titulo = nome.closest('h3');
+        if (titulo) {
+            titulo.classList.remove('truncate');
+            nome.classList.add('min-w-0');
+        }
+        nome.insertAdjacentHTML('afterend', _HTML_BADGE_REMANEJO);
+        return;
+    }
+    var dataEl = alvo.querySelector('td:nth-child(2)');
+    if (dataEl) {
+        dataEl.insertAdjacentHTML('beforeend', _HTML_BADGE_REMANEJO);
+        return;
+    }
+    alvo.insertAdjacentHTML('beforeend', _HTML_BADGE_REMANEJO);
+}
+
+function _destacarCardRemanejo(alvo) {
+    if (!alvo || alvo.dataset.remanejoGerado === '1') return;
+    alvo.dataset.remanejoGerado = '1';
+    _CLS_FUNDO_REMANEJO_REMOVER.forEach(function(cls) { alvo.classList.remove(cls); });
+    _CLS_BORDA_REMANEJO_REMOVER.forEach(function(cls) { alvo.classList.remove(cls); });
+    _CLS_DESTAQUE_REMANEJO.forEach(function(cls) { alvo.classList.add(cls); });
+
+    if (alvo.tagName === 'TR') {
+        var td = alvo.querySelector('td');
+        if (td) {
+            td.classList.add('border-l-4', 'border-blue-300', 'dark:border-blue-700');
+        }
+    }
+
+    _injetarBadgeRemanejo(alvo);
+}
+
+function marcarCardsComoProcessados() {
+    var selecionados = document.querySelectorAll(
+        '.checkbox-entrega:checked, input[type="checkbox"].item-entrega:checked, .check-entrega:checked'
+    );
+    selecionados.forEach(function(cb) {
+        _alvosEntregaDoCheckbox(cb).forEach(_destacarCardRemanejo);
+    });
+}
+
 function copiarRomaneioWhatsApp() {
     const selecionados = _checksEntregaSelecionadosUnicos();
 
@@ -1734,6 +1824,7 @@ function copiarRomaneioWhatsApp() {
         + blocos.join('\n\n');
 
     _copiarTextoRomaneio(textoFinal);
+    marcarCardsComoProcessados();
 }
 
 function _copiarTextoRomaneio(texto) {
@@ -1801,6 +1892,7 @@ function gerarDocumentoRemanejo() {
     }
 
     window.open('/logistica/remanejo?ids=' + ids.join(','), '_blank');
+    marcarCardsComoProcessados();
 }
 
 /* ── Atualizar em massa ───────────────────────────────────────────────── */
