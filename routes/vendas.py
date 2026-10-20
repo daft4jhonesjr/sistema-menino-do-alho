@@ -2473,7 +2473,30 @@ def _agrupar_pedidos_logistica(vendas, ordem_log=None):
     return pedidos_agrupados
 
 
-def _carregar_resumo_logistica(per_page=20):
+def _data_venda_logistica(venda):
+    """Normaliza ``Venda.data_venda`` para ``date`` (coluna Date ou datetime legado)."""
+    dv = getattr(venda, 'data_venda', None)
+    if dv is None:
+        return None
+    if isinstance(dv, datetime):
+        return dv.date()
+    if isinstance(dv, date):
+        return dv
+    return None
+
+
+def _venda_entregue_nos_ultimos_dias(venda, hoje, dias=7):
+    """Entregas concluídas nos últimos ``dias`` corridos até ``hoje`` (inclusivo), fuso Brasil."""
+    if dias < 1:
+        return False
+    data_pedido = _data_venda_logistica(venda)
+    if data_pedido is None:
+        return False
+    inicio = hoje - timedelta(days=dias - 1)
+    return inicio <= data_pedido <= hoje
+
+
+def _carregar_resumo_logistica(per_page=20, dias_entregues_recentes=7):
     """Agrega pedidos pendentes/entregues para a gaveta lateral e API JSON."""
     vendas = query_tenant(Venda).filter(
         Venda.status_entrega.in_(('PENDENTE', 'ENTREGUE'))
@@ -2489,26 +2512,36 @@ def _carregar_resumo_logistica(per_page=20):
         v for v in vendas if (v.status_entrega or '') == 'ENTREGUE'
     ]
 
+    hoje = get_hoje_brasil()
+    vendas_entregues_recentes = [
+        v for v in vendas_entregues
+        if _venda_entregue_nos_ultimos_dias(v, hoje, dias=dias_entregues_recentes)
+    ]
+
     _ordem_log = session.get('logistica_ordem') or []
     pedidos_pendentes = _agrupar_pedidos_logistica(vendas_pendentes, _ordem_log)
-    pedidos_entregues = _agrupar_pedidos_logistica(vendas_entregues, _ordem_log)
+    pedidos_entregues_todos = _agrupar_pedidos_logistica(vendas_entregues, _ordem_log)
+    pedidos_entregues_recentes = _agrupar_pedidos_logistica(
+        vendas_entregues_recentes, _ordem_log
+    )
 
     total_caixas_pendentes = sum(
         int(getattr(v, 'quantidade_venda', 0) or 0) for v in vendas_pendentes
     )
 
-    for lista in (pedidos_pendentes, pedidos_entregues):
+    for lista in (pedidos_pendentes, pedidos_entregues_recentes):
         for pedido in lista:
             pedido['total'] = float(pedido.get('total') or 0)
 
     return {
         'total_caixas_pendentes': total_caixas_pendentes,
         'total_pedidos_pendentes': len(pedidos_pendentes),
-        'total_pedidos_entregues': len(pedidos_entregues),
+        'total_pedidos_entregues': len(pedidos_entregues_todos),
         'entregas_pendentes': pedidos_pendentes[:per_page],
-        'entregas_entregues': pedidos_entregues[:per_page],
+        'entregas_entregues': pedidos_entregues_recentes[:per_page],
         'has_more_pendentes': len(pedidos_pendentes) > per_page,
-        'has_more_entregues': len(pedidos_entregues) > per_page,
+        'has_more_entregues': len(pedidos_entregues_recentes) > per_page,
+        'entregues_recentes_dias': dias_entregues_recentes,
     }
 
 

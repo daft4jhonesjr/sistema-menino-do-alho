@@ -872,6 +872,24 @@ def dashboard():
 
     faturamentos_dinamicos.sort(key=lambda x: x['faturamento'], reverse=True)
 
+    # Separa emissores oficiais (DESTAK/PATY) dos demais; oculta fornecedores
+    # de compra sem faturamento de venda (total == 0).
+    _EMPRESAS_FATURADORAS = ('DESTAK', 'PATY')
+    _ordem_faturadora = {'DESTAK': 0, 'PATY': 1}
+    faturadoras = []
+    faturamentos_restantes = []
+    for item in faturamentos_dinamicos:
+        nome = item['nome']
+        total_item = float(item.get('faturamento') or 0)
+        if nome in _EMPRESAS_FATURADORAS:
+            if total_item > 0:
+                faturadoras.append(item)
+            continue
+        if total_item > 0:
+            faturamentos_restantes.append(item)
+    faturadoras.sort(key=lambda x: _ordem_faturadora.get(x['nome'], 99))
+    faturamentos_dinamicos = faturamentos_restantes
+
     # KPI 7: Compras por fornecedor (entradas de produto no ano ativo).
     # Valor = preço de custo × quantidade_entrada; filtra por data_chegada.
     filtro_tenant_produto = Produto.empresa_id == empresa_id_atual()
@@ -1067,6 +1085,7 @@ def dashboard():
         qtd_caixas_prejuizo=int(qtd_caixas_prejuizo),
         detalhes_prejuizo=detalhes_prejuizo,
         faturamentos_dinamicos=faturamentos_dinamicos,
+        faturadoras=faturadoras,
         compras_por_empresa=compras_por_empresa,
         avulsas_info=avulsas_info,
         margem_porcentagem=float(margem_porcentagem),
