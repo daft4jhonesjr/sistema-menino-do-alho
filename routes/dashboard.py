@@ -2,7 +2,7 @@
 
 Rotas extraídas do legado ``app.py``:
 
-* ``GET  /``                                         — redirect para /dashboard
+* ``GET  /``                                         — login ou Vendas (entrada padrão)
 * ``GET  /dashboard``                                — KPIs, gráficos e radar
 * ``GET  /api/vendas_por_filtro``                    — drill-down (modal de vendas)
 * ``GET  /api/dashboard/detalhes/<filtro>``          — vendas pendentes/pagas/avulsa/fornecedor
@@ -26,8 +26,8 @@ Helpers exclusivos:
 
 Multi-tenant:
     O ``before_request`` aplica ``login_required`` + ``tenant_required`` em
-    TODAS as rotas deste blueprint, exceto a raiz ``/`` (que apenas redireciona
-    para ``/dashboard``; a checagem real ocorre lá).
+    TODAS as rotas deste blueprint, exceto a raiz ``/`` (que redireciona
+    anônimos para o login e autenticados para a entrada padrão em Vendas).
 
 Cache:
     ``/dashboard`` mantém ``@cache.cached`` com chave dinâmica por tenant +
@@ -55,7 +55,7 @@ from extensions import cache
 from models import db, Cliente, Produto, Venda, Documento, LancamentoCaixa, VotoFrase, Fornecedor
 from services.auth_utils import (
     tenant_required, _e_admin_tenant, _usuario_pode_gerenciar_venda,
-    _checar_permissao_ou_redirecionar,
+    _checar_permissao_ou_redirecionar, _pos_login_landing,
 )
 from services.db_utils import (
     query_tenant, empresa_id_atual,
@@ -109,8 +109,8 @@ _ENDPOINTS_PUBLICOS = {'dashboard.index'}
 def _exigir_tenant_em_todas_rotas():
     """Aplica ``login_required`` + ``tenant_required`` automaticamente.
 
-    A raiz ``/`` é exempt porque ela apenas faz ``redirect`` para
-    ``/dashboard`` e a proteção real é aplicada no destino.
+    A raiz ``/`` é exempt porque ela apenas escolhe o destino (login ou
+    a página inicial do perfil) e a proteção real é aplicada lá.
     """
     if request.endpoint in _ENDPOINTS_PUBLICOS:
         return None
@@ -626,13 +626,18 @@ def dividir_radar_recompra(alertas):
 
 @dashboard_bp.route('/')
 def index():
-    """Raiz do site → redireciona para o dashboard.
+    """Raiz do site: Vendas para quem já entrou, login para anônimos.
 
     Esta rota é EXEMPT do ``before_request`` deste blueprint (ver
-    ``_ENDPOINTS_PUBLICOS``); o ``login_required`` + ``tenant_required`` real
-    é aplicado pelo ``/dashboard`` para o qual estamos redirecionando.
+    ``_ENDPOINTS_PUBLICOS``). O destino autenticado vem de
+    ``_pos_login_landing`` (DONO e quem tem acesso a vendas cai em
+    ``/vendas``; MASTER continua no painel master; funcionário sem o
+    módulo de vendas cai no primeiro módulo permitido).
     """
-    return redirect(url_for('dashboard.dashboard'))
+    if not current_user.is_authenticated:
+        return redirect(url_for('auth.login'))
+    destino = _pos_login_landing(current_user)
+    return redirect(destino or url_for('auth.login'))
 
 
 @dashboard_bp.route('/dashboard')

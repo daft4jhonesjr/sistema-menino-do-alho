@@ -49,7 +49,7 @@
     }
 
     function normalizarUrlRedirect(url) {
-        var destino = (url || '/dashboard').trim();
+        var destino = (url || '/vendas').trim();
         if (/^https?:\/\//i.test(destino)) {
             return destino;
         }

@@ -367,8 +367,8 @@
             window.MeninoAlhoAuth.persistirSessao(data);
         }
         var destino = (window.MeninoAlhoAuth && window.MeninoAlhoAuth.normalizarUrlRedirect)
-            ? window.MeninoAlhoAuth.normalizarUrlRedirect(data.redirect_url || '/dashboard')
-            : (data.redirect_url || '/dashboard');
+            ? window.MeninoAlhoAuth.normalizarUrlRedirect(data.redirect_url || '/vendas')
+            : (data.redirect_url || '/vendas');
         if (window.MeninoAlhoNavigation && typeof window.MeninoAlhoNavigation.navigate === 'function') {
             window.MeninoAlhoNavigation.navigate(destino);
         } else {

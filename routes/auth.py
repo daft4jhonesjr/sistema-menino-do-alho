@@ -826,7 +826,8 @@ def cadastro():
     códigos de cadastro válidos por força bruta.
     """
     if current_user.is_authenticated:
-        return redirect(url_for('dashboard.dashboard'))
+        destino = _pos_login_landing(current_user)
+        return redirect(destino or url_for('auth.login'))
     erro = None
     if request.method == 'POST':
         username = (request.form.get('username') or '').strip()

@@ -4769,19 +4769,20 @@ def _pos_login_landing(user):
     """Define a pagina inicial apos autenticacao segundo o perfil.
 
     * MASTER         -> /master-admin (nao opera rotas comuns).
-    * DONO/FUNCIONARIO (com empresa_id) -> primeiro módulo permitido.
-    * Qualquer outro (sem empresa_id) -> login com flash; eh um estado
-      invalido para rotas operacionais.
+    * DONO (acesso total) -> /vendas.
+    * FUNCIONARIO (com empresa_id) -> Vendas, se permitido; senao o
+      primeiro módulo da lista.
+    * Qualquer outro (sem empresa_id) -> None (o caller manda para o login).
     """
     if getattr(user, 'is_master', lambda: False)():
         return url_for('master.master_admin')
     if not getattr(user, 'empresa_id', None):
         return None
     if usuario_tem_acesso_total(user):
-        return url_for('dashboard.dashboard')
+        return url_for('vendas.listar_vendas')
     rotas_por_modulo = (
-        ('dashboard', 'dashboard.dashboard'),
         ('vendas', 'vendas.listar_vendas'),
+        ('dashboard', 'dashboard.dashboard'),
         ('logistica', 'vendas.logistica'),
         ('produtos', 'produtos.listar_produtos'),
         ('caixa', 'caixa.caixa'),
@@ -5918,7 +5919,7 @@ def backup_excel():
 # Todos os blueprints de domínio (``produtos_bp``, ``clientes_bp``,
 # ``vendas_bp``, ``documentos_bp``, ``dashboard_bp``, ``caixa_bp``) aplicam
 # ``tenant_required`` automaticamente via ``before_request``. ``dashboard_bp``
-# exempta apenas ``/`` (que só redireciona). ``documentos_bp`` mantém uma
+# exempta apenas ``/`` (login ou entrada padrão em Vendas). ``documentos_bp`` mantém uma
 # allowlist de endpoints públicos para o bot externo (token-based).
 from routes.caixa import _limpar_valor_moeda  # re-export para vendas/produtos
 from routes import (
