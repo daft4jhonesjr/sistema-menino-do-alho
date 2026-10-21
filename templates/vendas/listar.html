@@ -91,6 +91,27 @@
         background-color: #374151;
         color: #f3f4f6;
     }
+    .custom-scrollbar {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(4, 120, 87, 0.45) transparent;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+        background-color: rgba(4, 120, 87, 0.45);
+        border-radius: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    .dark .custom-scrollbar {
+        scrollbar-color: rgba(52, 211, 153, 0.4) transparent;
+    }
+    .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+        background-color: rgba(52, 211, 153, 0.4);
+    }
     .vendas-cliente-dropdown { border-radius: 0.375rem !important; border: 1px solid #e5e7eb !important; box-shadow: 0 20px 40px rgb(0 0 0 / 0.35) !important; max-height: 220px !important; z-index: 999999 !important; overflow-y: auto !important; background-color: #ffffff !important; opacity: 1 !important; }
     .vendas-cliente-dropdown .option { padding: 0.75rem 0.875rem; min-height: 44px; display: flex; align-items: center; font-size: 0.875rem; cursor: pointer; background-color: transparent; }
     .vendas-cliente-dropdown .option.active { background-color: #ecfdf5; color: #047857; }
@@ -666,19 +687,19 @@
         <i data-lucide="shopping-bag" class="w-5 h-5 mr-2"></i>🛒 Carrinho Atual
     </h3>
     <div id="carrinho-vazio" class="py-6 text-center text-gray-500 dark:text-emerald-400 text-sm">Carrinho vazio. Adicione itens acima.</div>
-    <div id="carrinho-tabela-wrap" class="hidden overflow-x-auto rounded-lg border border-dashed border-emerald-200 dark:border-emerald-800">
+    <div id="carrinho-tabela-wrap" class="hidden w-full overflow-x-auto overflow-y-auto max-h-[40vh] custom-scrollbar rounded-lg border border-dashed border-emerald-200 dark:border-emerald-800">
         <table class="min-w-full divide-y divide-emerald-200 dark:divide-emerald-800">
             <thead class="bg-emerald-100/60 dark:bg-emerald-900/40">
                 <tr>
                     <th class="px-4 py-2 text-left text-xs font-medium text-emerald-800 dark:text-emerald-300 uppercase">Cliente</th>
-                    <th class="px-4 py-2 text-left text-xs font-medium text-emerald-800 dark:text-emerald-300 uppercase">Produto</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-emerald-800 dark:text-emerald-300 uppercase min-w-[280px] whitespace-normal break-words">Produto</th>
                     <th class="px-4 py-2 text-left text-xs font-medium text-emerald-800 dark:text-emerald-300 uppercase">NF</th>
-                    <th class="px-4 py-2 text-right text-xs font-medium text-emerald-800 dark:text-emerald-300 uppercase">Qtd</th>
-                    <th class="px-4 py-2 text-right text-xs font-medium text-emerald-800 dark:text-emerald-300 uppercase">Preço</th>
-                    <th class="px-4 py-2 text-right text-xs font-medium text-emerald-800 dark:text-emerald-300 uppercase">Lucro</th>
-                    <th class="px-4 py-2 text-right text-xs font-medium text-emerald-800 dark:text-emerald-300 uppercase">Total</th>
+                    <th class="px-4 py-2 text-right text-xs font-medium text-emerald-800 dark:text-emerald-300 uppercase whitespace-nowrap">Qtd</th>
+                    <th class="px-4 py-2 text-right text-xs font-medium text-emerald-800 dark:text-emerald-300 uppercase whitespace-nowrap">Preço</th>
+                    <th class="px-4 py-2 text-right text-xs font-medium text-emerald-800 dark:text-emerald-300 uppercase whitespace-nowrap">Lucro</th>
+                    <th class="px-4 py-2 text-right text-xs font-medium text-emerald-800 dark:text-emerald-300 uppercase whitespace-nowrap">Total</th>
                     <th class="px-4 py-2 text-left text-xs font-medium text-emerald-800 dark:text-emerald-300 uppercase">Forma Pagto</th>
-                    <th class="px-4 py-2 w-12"></th>
+                    <th class="px-4 py-2 w-12 whitespace-nowrap"></th>
                 </tr>
             </thead>
             <tbody id="carrinho-tbody" class="bg-white dark:bg-gray-800 divide-y divide-emerald-200 dark:divide-emerald-800"></tbody>
@@ -3262,14 +3283,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 : '<button type="button" class="carrinho-editar text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 inline-flex p-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/30" data-index="' + i + '" title="Editar item"><i data-lucide="pencil" class="w-4 h-4"></i></button>';
             tr.innerHTML =
                 '<td class="px-4 py-2 text-sm font-medium text-gray-900 dark:text-gray-100">' + (it.cliente_nome || '-') + '</td>' +
-                '<td class="px-4 py-2 text-sm text-gray-900 dark:text-gray-100">' + (it.produto_nome || '-') + '</td>' +
+                '<td class="px-4 py-2 text-sm text-gray-900 dark:text-gray-100 min-w-[280px] whitespace-normal break-words">' + (it.produto_nome || '-') + '</td>' +
                 '<td class="px-4 py-2 text-sm text-gray-900 dark:text-gray-100">' + nfCell + '</td>' +
-                '<td class="px-4 py-2 text-sm text-gray-900 dark:text-gray-100 text-right">' + qtdCell + '</td>' +
-                '<td class="px-4 py-2 text-sm text-gray-900 dark:text-gray-100 text-right">' + precoCell + '</td>' +
-                '<td class="px-4 py-2 text-sm text-right ' + lucroClass + '">' + lucroCell + '</td>' +
-                '<td class="px-4 py-2 text-sm font-bold text-gray-900 dark:text-gray-100 text-right">' + totalStr + '</td>' +
+                '<td class="px-4 py-2 text-sm text-gray-900 dark:text-gray-100 text-right whitespace-nowrap">' + qtdCell + '</td>' +
+                '<td class="px-4 py-2 text-sm text-gray-900 dark:text-gray-100 text-right whitespace-nowrap">' + precoCell + '</td>' +
+                '<td class="px-4 py-2 text-sm text-right whitespace-nowrap ' + lucroClass + '">' + lucroCell + '</td>' +
+                '<td class="px-4 py-2 text-sm font-bold text-gray-900 dark:text-gray-100 text-right whitespace-nowrap">' + totalStr + '</td>' +
                 '<td class="px-4 py-2 text-sm text-gray-900 dark:text-gray-100"><span class="px-2 py-0.5 text-xs rounded ' + (formaPagStr !== '-' ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300' : 'text-gray-400 dark:text-gray-500') + '">' + formaPagStr + '</span></td>' +
-                '<td class="px-4 py-2 text-right"><div class="inline-flex items-center gap-1">' + editarOuSalvarBtn + '<button type="button" class="carrinho-remover text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 inline-flex p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/30" data-index="' + i + '" title="Remover do carrinho"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div></td>';
+                '<td class="px-4 py-2 text-right whitespace-nowrap"><div class="inline-flex items-center gap-1">' + editarOuSalvarBtn + '<button type="button" class="carrinho-remover text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 inline-flex p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/30" data-index="' + i + '" title="Remover do carrinho"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div></td>';
             carrinhoTbody.appendChild(tr);
         }
         var brutoEl = document.getElementById('carrinho-total-bruto');
