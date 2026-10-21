@@ -72,15 +72,14 @@
                             {% endif %}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
-                            {% if doc.url_arquivo %}
-                            <a href="{{ doc.url_arquivo }}" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition" title="Abrir PDF em nova aba">
+                            {% set _url_pdf = url_for('documentos.visualizar_documento', id=doc.id) %}
+                            {% set _tipo_pdf = 'Boleto' if (doc.tipo or '')|upper == 'BOLETO' else 'Nota Fiscal' %}
+                            {% set _nf_pdf = doc.numero_nf or (doc.venda.nf if doc.venda and doc.venda.nf else '') %}
+                            {% set _cliente_pdf = doc.venda.cliente.nome_cliente if doc.venda and doc.venda.cliente else '' %}
+                            {% set _titulo_pdf = ('Boleto - ' ~ (_cliente_pdf or 'Cliente') ~ ' (NF ' ~ (_nf_pdf or 'S/N') ~ ')') if _tipo_pdf == 'Boleto' else ('Nota Fiscal - NF ' ~ (_nf_pdf or 'S/N')) %}
+                            <a href="{{ _url_pdf }}" onclick="if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return true; event.preventDefault(); abrirViewerPDF({{ _url_pdf|tojson|forceescape }}, {{ _titulo_pdf|tojson|forceescape }});" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition" title="Visualizar PDF">
                                 <i data-lucide="eye" class="w-4 h-4"></i>Visualizar
                             </a>
-                            {% else %}
-                            <a href="{{ url_for('documentos.visualizar_documento', id=doc.id) }}" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition" title="Abrir PDF em nova aba">
-                                <i data-lucide="eye" class="w-4 h-4"></i>Visualizar
-                            </a>
-                            {% endif %}
                         </td>
                     </tr>
                     {% else %}
