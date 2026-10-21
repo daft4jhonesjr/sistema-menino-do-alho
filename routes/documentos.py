@@ -53,7 +53,7 @@ import uuid
 
 from flask import (
     Blueprint, render_template, request, redirect, url_for,
-    flash, jsonify, send_file, current_app,
+    flash, jsonify, send_file, current_app, Response,
 )
 from flask_login import current_user
 from flask_wtf.csrf import generate_csrf
@@ -76,6 +76,14 @@ from services.db_utils import query_tenant, query_documentos_tenant
 from services.cache_utils import limpar_cache_dashboard
 from services.error_utils import erro_json, erro_flash
 from services.config_helpers import _EXTERNAL_TIMEOUT
+from services.pdf_embed import (
+    PdfEmbedError,
+    baixar_pdf_remoto,
+    html_embed_erro,
+    nome_pdf_de_url,
+    nome_pdf_seguro,
+    quer_visualizacao_embutida,
+)
 from services.files_utils import _deletar_cloudinary_seguro
 from services.vendas_services import _vendas_do_pedido
 from services.documentos_services import (
@@ -234,6 +242,42 @@ def _nome_arquivo_disponivel(pasta, subpasta, nome_arquivo):
         nome = f'{base}_bot{uuid.uuid4().hex[:8]}{ext}'
 
 
+def _quer_visualizacao_embutida():
+    """Iframe do modal (``?embed=1`` ou ``Sec-Fetch-Dest: iframe``)."""
+    return quer_visualizacao_embutida(
+        request.args.get('embed'),
+        request.headers.get('Sec-Fetch-Dest'),
+    )
+
+
+def _resposta_pdf_bytes(dados, nome):
+    resp = Response(dados, mimetype='application/pdf')
+    nome_seguro = nome_pdf_seguro(nome)
+    resp.headers['Content-Disposition'] = f'inline; filename="{nome_seguro}"'
+    resp.headers['X-Content-Type-Options'] = 'nosniff'
+    resp.headers['Cache-Control'] = 'private, max-age=120'
+    return resp
+
+
+def _responder_ausencia_pdf(mensagem, destino=None, status=404):
+    """Erro legível dentro do iframe; flash + redirect na navegação normal."""
+    if _quer_visualizacao_embutida():
+        return html_embed_erro(mensagem, status)
+    flash(mensagem, 'error')
+    return redirect(destino or request.referrer or url_for('vendas.listar_vendas'))
+
+
+def _entregar_pdf_nuvem_ou_redirect(url, nome):
+    """Nova aba segue o redirect; o modal recebe o PDF inline, same-origin."""
+    if not _quer_visualizacao_embutida():
+        return redirect(url)
+    try:
+        dados = baixar_pdf_remoto(url, timeout=_EXTERNAL_TIMEOUT)
+    except PdfEmbedError as exc:
+        return html_embed_erro(exc.mensagem, exc.status)
+    return _resposta_pdf_bytes(dados, nome)
+
+
 def _token_upload_required(f):
     """Permite autenticação via token no header Authorization (para robô)."""
     from functools import wraps
@@ -256,14 +300,19 @@ def _token_upload_required(f):
 
 @documentos_bp.route('/documento/visualizar/<int:id>')
 def visualizar_documento(id):
-    """Redireciona para o PDF na nuvem (Cloudinary)."""
+    """Abre o PDF na nuvem. Com ``embed=1``, entrega o arquivo inline para o modal."""
     documento = query_documentos_tenant().filter_by(id=id).first_or_404()
     if not _usuario_pode_gerenciar_documento(documento):
         return _resposta_sem_permissao()
     if documento.url_arquivo:
-        return redirect(documento.url_arquivo)
-    flash('Link do arquivo não encontrado na nuvem. Faça o upload novamente.', 'error')
-    return redirect(request.referrer or url_for('dashboard.dashboard'))
+        return _entregar_pdf_nuvem_ou_redirect(
+            documento.url_arquivo,
+            nome_pdf_de_url(documento.url_arquivo, f'documento-{documento.id}.pdf'),
+        )
+    return _responder_ausencia_pdf(
+        'Link do arquivo não encontrado na nuvem. Faça o upload novamente.',
+        destino=request.referrer or url_for('dashboard.dashboard'),
+    )
 
 
 @documentos_bp.route('/arquivos/<int:id>/debug_texto', methods=['GET'])
@@ -406,32 +455,41 @@ def deletar_arquivos_massa():
 
 @documentos_bp.route('/venda/<int:id>/ver_boleto')
 def ver_boleto_venda(id):
-    """Abre o PDF do boleto vinculado ao pedido em nova aba.
-    Prioriza URL Cloudinary; fallback para arquivo local com guarda contra path traversal."""
+    """Entrega o PDF do boleto. No modal (``embed=1``) serve inline; senão redireciona à nuvem.
+
+    Prioriza URL Cloudinary; fallback para arquivo local com guarda contra path traversal.
+    """
     venda = query_tenant(Venda).filter_by(id=id).first_or_404()
     path = (venda.caminho_boleto or '').strip()
     if not path:
-        flash('Boleto não vinculado a este pedido.', 'error')
-        return redirect(url_for('vendas.listar_vendas'))
+        return _responder_ausencia_pdf(
+            'Boleto não vinculado a este pedido.',
+            destino=url_for('vendas.listar_vendas'),
+        )
     doc = query_documentos_tenant().filter(
         or_(Documento.caminho_arquivo == path, Documento.url_arquivo == path)
     ).first()
     if doc and doc.url_arquivo:
-        return redirect(doc.url_arquivo)
+        return _entregar_pdf_nuvem_ou_redirect(
+            doc.url_arquivo,
+            nome_pdf_de_url(doc.url_arquivo, f'boleto-{venda.id}.pdf'),
+        )
     nome_seguro = os.path.basename(path)
     full = _resolver_caminho_documento_seguro('boletos', nome_seguro)
     if not full:
+        if _quer_visualizacao_embutida():
+            return html_embed_erro('Acesso ao arquivo do boleto foi negado.', 403)
         return "Forbidden", 403
     if not os.path.isfile(full):
-        flash('Arquivo do boleto não encontrado no servidor.', 'error')
-        return redirect(request.referrer or url_for('vendas.listar_vendas'))
+        return _responder_ausencia_pdf('Arquivo do boleto não encontrado no servidor.')
     try:
-        return send_file(full, mimetype='application/pdf')
+        return send_file(full, mimetype='application/pdf', as_attachment=False)
     except FileNotFoundError:
-        flash('Arquivo do boleto não encontrado no disco do servidor.', 'error')
-        return redirect(request.referrer or url_for('vendas.listar_vendas'))
+        return _responder_ausencia_pdf('Arquivo do boleto não encontrado no disco do servidor.')
     except Exception as e:
         current_app.logger.error(f"Erro ao servir boleto (venda {id}): {e}")
+        if _quer_visualizacao_embutida():
+            return html_embed_erro('Erro ao acessar o arquivo do boleto.', 500)
         flash(f'Erro ao acessar o arquivo: {e}', 'error')
         return redirect(request.referrer or url_for('vendas.listar_vendas'))
 
@@ -475,12 +533,14 @@ def enviar_whatsapp_boleto(id):
 
 @documentos_bp.route('/venda/<int:id>/ver_nf')
 def ver_nf_venda(id):
-    """Abre o PDF da nota fiscal vinculada ao pedido em nova aba."""
+    """Entrega o PDF da nota fiscal. No modal (``embed=1``) serve inline; senão redireciona à nuvem."""
     venda = query_tenant(Venda).filter_by(id=id).first_or_404()
     path = (venda.caminho_nf or '').strip()
     if not path:
-        flash('Nota fiscal não vinculada a este pedido.', 'error')
-        return redirect(url_for('vendas.listar_vendas'))
+        return _responder_ausencia_pdf(
+            'Nota fiscal não vinculada a este pedido.',
+            destino=url_for('vendas.listar_vendas'),
+        )
 
     doc = query_documentos_tenant().filter(
         or_(Documento.caminho_arquivo == path, Documento.url_arquivo == path)
@@ -488,20 +548,31 @@ def ver_nf_venda(id):
     if not doc:
         venda.caminho_nf = None
         db.session.commit()
-        flash('Nota fiscal não encontrada no banco de dados. Vínculo removido.', 'error')
-        return redirect(url_for('vendas.listar_vendas'))
+        return _responder_ausencia_pdf(
+            'Nota fiscal não encontrada no banco de dados. Vínculo removido.',
+            destino=url_for('vendas.listar_vendas'),
+        )
     if doc.url_arquivo:
-        return redirect(doc.url_arquivo)
+        return _entregar_pdf_nuvem_ou_redirect(
+            doc.url_arquivo,
+            nome_pdf_de_url(doc.url_arquivo, f'nf-{venda.id}.pdf'),
+        )
     nome_seguro = os.path.basename(path)
     full = _resolver_caminho_documento_seguro('notas_fiscais', nome_seguro)
     if not full:
+        if _quer_visualizacao_embutida():
+            return html_embed_erro('Acesso ao arquivo da nota fiscal foi negado.', 403)
         return "Forbidden", 403
     if not os.path.isfile(full):
-        flash('Arquivo da nota fiscal não encontrado no servidor.', 'error')
-        return redirect(request.referrer or url_for('vendas.listar_vendas'))
+        return _responder_ausencia_pdf('Arquivo da nota fiscal não encontrado no servidor.')
     try:
-        return send_file(full, mimetype='application/pdf')
+        return send_file(full, mimetype='application/pdf', as_attachment=False)
     except FileNotFoundError:
+        if _quer_visualizacao_embutida():
+            return html_embed_erro(
+                'Arquivo da Nota Fiscal não encontrado no servidor. Pode ter sido removido.',
+                404,
+            )
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.is_json:
             return jsonify({
                 'error': 'Arquivo da Nota Fiscal não encontrado no servidor. Pode ter sido removido.'
@@ -510,6 +581,8 @@ def ver_nf_venda(id):
         return redirect(request.referrer or url_for('vendas.listar_vendas'))
     except Exception as e:
         current_app.logger.error(f"Erro ao servir NF (venda {id}): {e}")
+        if _quer_visualizacao_embutida():
+            return html_embed_erro('Erro ao acessar o arquivo da nota fiscal.', 500)
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.is_json:
             return jsonify({'error': f'Erro ao acessar o arquivo: {e}'}), 500
         flash(f'Erro ao acessar o arquivo: {e}', 'error')

@@ -2750,5 +2750,178 @@
         document.fonts && document.fonts.ready && document.fonts.ready.then(applyFooterReserve);
     })();
     </script>
+
+    <!-- Visualizador global de PDF (NF, boleto e demais documentos) -->
+    <div id="modal-viewer-pdf"
+         class="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-2 sm:p-4"
+         role="dialog"
+         aria-modal="true"
+         aria-hidden="true"
+         aria-labelledby="viewer-pdf-titulo"
+         onclick="if (event.target === this) fecharViewerPDF()">
+        <div id="viewer-pdf-painel" class="bg-gray-900 border border-gray-700 w-full max-w-5xl h-[92vh] rounded-xl flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div class="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-700 shrink-0">
+                <span class="min-w-0 flex-1 flex items-center gap-2">
+                    <svg id="viewer-pdf-icone" class="w-4 h-4 flex-shrink-0 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                    </svg>
+                    <span id="viewer-pdf-titulo" class="text-sm font-semibold text-gray-200 flex items-center gap-2 min-w-0 truncate">Visualização de Documento</span>
+                </span>
+                <div class="flex items-center gap-1 flex-shrink-0">
+                    <a id="viewer-pdf-nova-aba" href="#" target="_blank" rel="noopener noreferrer"
+                       class="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-gray-800 transition-colors"
+                       title="Abrir em nova aba" aria-label="Abrir em nova aba">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                        </svg>
+                    </a>
+                    <button type="button" onclick="fecharViewerPDF()" class="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-gray-800 transition-colors" aria-label="Fechar">✕</button>
+                </div>
+            </div>
+            <div class="flex-1 w-full bg-gray-950 relative min-h-0">
+                <div id="viewer-pdf-loader" class="absolute inset-0 z-10 hidden flex items-center justify-center bg-gray-950" aria-hidden="true">
+                    <div class="h-8 w-8 rounded-full border-2 border-gray-700 border-t-emerald-400 animate-spin"></div>
+                </div>
+                <iframe id="viewer-pdf-frame" src="about:blank" class="w-full h-full border-none" title="Visualizador de PDF"></iframe>
+            </div>
+        </div>
+    </div>
+    <script id="script-viewer-pdf">
+    (function() {
+        var viewerReq = 0;
+        var viewerTravaScroll = false;
+        var viewerLoaderTimer = null;
+
+        function urlParaEmbed(url) {
+            try {
+                var abs = new URL(url, window.location.href);
+                if (abs.origin !== window.location.origin) return url;
+                abs.searchParams.set('embed', '1');
+                return abs.pathname + abs.search + abs.hash;
+            } catch (err) {
+                return url;
+            }
+        }
+
+        function mostrarLoader(loader) {
+            if (!loader) return;
+            loader.classList.remove('hidden');
+            loader.setAttribute('aria-hidden', 'false');
+        }
+
+        function ocultarLoader(loader) {
+            if (!loader) return;
+            loader.classList.add('hidden');
+            loader.setAttribute('aria-hidden', 'true');
+        }
+
+        window.abrirViewerPDF = function(url, titulo) {
+            url = String(url == null ? '' : url).trim();
+            if (!url || url === '#' || url === 'None' || /^\s*(javascript|data):/i.test(url)) {
+                if (window.Swal) {
+                    Swal.fire({
+                        icon: 'info',
+                        title: 'Arquivo indisponível',
+                        text: 'Nenhum documento anexado para este registro.',
+                        background: '#1e293b',
+                        color: '#f8fafc'
+                    });
+                } else {
+                    alert('Arquivo indisponível para este registro.');
+                }
+                return;
+            }
+
+            var modal = document.getElementById('modal-viewer-pdf');
+            var frame = document.getElementById('viewer-pdf-frame');
+            var tituloEl = document.getElementById('viewer-pdf-titulo');
+            var novaAba = document.getElementById('viewer-pdf-nova-aba');
+            var loader = document.getElementById('viewer-pdf-loader');
+            var icone = document.getElementById('viewer-pdf-icone');
+            if (!modal || !frame || !tituloEl) return;
+
+            var texto = titulo || 'Visualização de Documento';
+            tituloEl.innerText = texto;
+            if (icone) {
+                var ehBoleto = /boleto/i.test(texto);
+                icone.classList.toggle('text-amber-400', ehBoleto);
+                icone.classList.toggle('text-blue-400', !ehBoleto);
+            }
+            if (novaAba) novaAba.href = url;
+
+            var req = ++viewerReq;
+            if (viewerLoaderTimer) {
+                clearTimeout(viewerLoaderTimer);
+                viewerLoaderTimer = null;
+            }
+            mostrarLoader(loader);
+            var embedUrl = urlParaEmbed(url);
+            frame.onload = null;
+            frame.src = 'about:blank';
+            window.setTimeout(function() {
+                if (req !== viewerReq) return;
+                frame.onload = function() {
+                    if (req !== viewerReq) return;
+                    var src = frame.getAttribute('src') || '';
+                    if (!src || src === 'about:blank') return;
+                    ocultarLoader(loader);
+                    if (viewerLoaderTimer) {
+                        clearTimeout(viewerLoaderTimer);
+                        viewerLoaderTimer = null;
+                    }
+                };
+                frame.src = embedUrl;
+            }, 0);
+            viewerLoaderTimer = setTimeout(function() {
+                if (req !== viewerReq) return;
+                ocultarLoader(loader);
+            }, 12000);
+            var painel = document.getElementById('viewer-pdf-painel');
+            if (painel) {
+                painel.classList.remove('animate-in');
+                void painel.offsetWidth;
+                painel.classList.add('animate-in');
+            }
+
+            modal.classList.remove('hidden');
+            modal.setAttribute('aria-hidden', 'false');
+            document.body.classList.add('overflow-hidden');
+            if (!document.body.classList.contains('modal-aberto') && typeof travarFundo === 'function') {
+                travarFundo();
+                viewerTravaScroll = true;
+            }
+            var fecharBtn = modal.querySelector('button[aria-label="Fechar"]');
+            if (fecharBtn) fecharBtn.focus();
+        };
+
+        window.fecharViewerPDF = function() {
+            var modal = document.getElementById('modal-viewer-pdf');
+            if (!modal || modal.classList.contains('hidden')) return;
+            viewerReq += 1;
+            if (viewerLoaderTimer) {
+                clearTimeout(viewerLoaderTimer);
+                viewerLoaderTimer = null;
+            }
+            modal.classList.add('hidden');
+            modal.setAttribute('aria-hidden', 'true');
+            var frame = document.getElementById('viewer-pdf-frame');
+            if (frame) {
+                frame.onload = null;
+                frame.src = 'about:blank';
+            }
+            var loader = document.getElementById('viewer-pdf-loader');
+            ocultarLoader(loader);
+            document.body.classList.remove('overflow-hidden');
+            if (viewerTravaScroll && typeof liberarFundo === 'function') {
+                liberarFundo();
+                viewerTravaScroll = false;
+            }
+        };
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') fecharViewerPDF();
+        });
+    })();
+    </script>
 </body>
 </html>

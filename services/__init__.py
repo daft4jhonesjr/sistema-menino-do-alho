@@ -64,5 +64,7 @@ Mapa rápido:
     * ``services.config_helpers``  → get_config, get_hoje_brasil,
                                       _logs_file, _EXTERNAL_TIMEOUT,
                                       registrar_log
+    * ``services.pdf_embed``       → PDF inline do modal (allowlist
+                                      Cloudinary, nome seguro, download)
     * ``services.clima``           → obter_clima_atual (Open-Meteo + cache)
 """
