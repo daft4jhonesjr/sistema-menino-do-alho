@@ -844,9 +844,11 @@
     <header class="flex-shrink-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 shadow-sm">
         <div class="w-full px-2 md:px-4 lg:px-6 xl:px-8 py-3 md:py-5">
             <div class="flex justify-center">
-                <img src="{{ url_for('static', filename='images/logo_menino_do_alho_amarelo1.jpeg') }}"
-                     alt="Menino do Alho - Gestão de Vendas"
-                     class="h-28 sm:h-36 md:h-64 w-auto object-contain mx-auto mix-blend-multiply">
+                <a href="{{ url_for('vendas.listar_vendas') }}" class="inline-block" title="Ir para Vendas" aria-label="Ir para Vendas">
+                    <img src="{{ url_for('static', filename='images/logo_menino_do_alho_amarelo1.jpeg') }}"
+                         alt="Menino do Alho - Gestão de Vendas"
+                         class="h-28 sm:h-36 md:h-64 w-auto object-contain mx-auto mix-blend-multiply">
+                </a>
             </div>
         </div>
     </header>

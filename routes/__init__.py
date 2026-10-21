@@ -90,7 +90,8 @@ Proteção de tenant:
     ``documentos_bp``, ``caixa_bp``) aplicam ``@tenant_required`` automaticamente
     via ``before_request``, eliminando o risco de esquecer o decorator em rotas
     novas. ``dashboard_bp`` aplica também, mas exempta apenas a raiz ``/``
-    (que apenas redireciona). ``documentos_bp`` mantém endpoints públicos
+    (anônimos vão ao login; autenticados, à entrada padrão em Vendas).
+    ``documentos_bp`` mantém endpoints públicos
     token-based em uma allowlist explícita (bot externo). ``vendas_bp``
     exempta ``/api/calendario/feed.ics`` (token HMAC por tenant para Webcal).
 """

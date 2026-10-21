@@ -25,7 +25,7 @@ Helpers de request:
     * ``_is_safe_next_url(url)`` — valida ``next=`` para evitar open
       redirect.
     * ``_pos_login_landing(user)`` — retorna a rota destino apropriada
-      para o perfil do usuário (DONO → /dashboard, MASTER → /master-admin,
+      para o perfil do usuário (DONO → /vendas, MASTER → /master-admin,
       etc.).
 """
 
