@@ -5052,6 +5052,21 @@ function ordenarVendasTabela(colIndex, tipo) {
         if (btn && btn.getAttribute) btn.setAttribute('aria-expanded', minimizado ? 'false' : 'true');
     };
 
+    window.toggleSubLembretes = function(mestreId) {
+        var filhosDiv = document.getElementById('sub-lembretes-' + mestreId);
+        var icone = document.getElementById('icone-toggle-' + mestreId);
+        if (!filhosDiv) return;
+        var oculto = filhosDiv.classList.toggle('hidden');
+        if (icone) {
+            if (oculto) icone.classList.add('-rotate-90');
+            else icone.classList.remove('-rotate-90');
+        }
+        var gatilho = icone && icone.parentElement;
+        if (gatilho && gatilho.getAttribute) {
+            gatilho.setAttribute('aria-expanded', oculto ? 'false' : 'true');
+        }
+    };
+
     function _atualizarBarraEntrega(iso) {
         var temPendente = false;
         var lista = detalhesPendentes[iso] || [];
@@ -5176,8 +5191,13 @@ function ordenarVendasTabela(colIndex, tipo) {
         return (depth || 0) > 0 || !!(lem && lem.parent_id);
     }
 
-    function _htmlLembrete(iso, lem, depth) {
+    function _temFilhosLembrete(lem) {
+        return !!(lem && lem.filhos && lem.filhos.length);
+    }
+
+    function _htmlLembrete(iso, lem, depth, temFilhos) {
         depth = depth || 0;
+        if (temFilhos === undefined) temFilhos = !lem.parent_id && _temFilhosLembrete(lem);
         // Evento dinâmico do Radar de Recompra (não persistido)
         if (lem && lem.tipo === 'recompra') {
             var statusRadar = lem.status || '';
@@ -5255,9 +5275,26 @@ function ordenarVendasTabela(colIndex, tipo) {
                 '</button>';
         }
 
+        var tituloHtml;
+        if (temFilhos && !lem.parent_id) {
+            tituloHtml =
+                '<div class="inline-flex items-start gap-1 min-w-0 max-w-full cursor-pointer no-drag" ' +
+                    'role="button" tabindex="0" ' +
+                    'onclick="toggleSubLembretes(' + lem.id + ')" ' +
+                    'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();toggleSubLembretes(' + lem.id + ');}" ' +
+                    'title="Recolher ou expandir sub-lembretes" aria-expanded="true">' +
+                    '<svg id="icone-toggle-' + lem.id + '" class="w-4 h-4 flex-shrink-0 mt-0.5 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">' +
+                        '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"/>' +
+                    '</svg>' +
+                    '<span class="' + textoCls + '">' + esc(lem.descricao) + '</span>' +
+                '</div>';
+        } else {
+            tituloHtml = '<p class="' + textoCls + '">' + esc(lem.descricao) + '</p>';
+        }
+
         return '<div class="' + cardCls + '" id="lem-' + lem.id + '" data-concluido="' + (concluido ? '1' : '0') + '">' +
             '<div class="min-w-0 flex-1 pr-1">' +
-                '<p class="' + textoCls + '">' + esc(lem.descricao) + '</p>' +
+                tituloHtml +
                 (meta ? '<p class="mt-1 flex items-center gap-2 flex-wrap">' + meta + '</p>' : '') +
             '</div>' +
             '<div class="flex items-center justify-end gap-1 flex-wrap mt-0.5 no-drag" style="max-width:13.5rem">' +
@@ -5312,10 +5349,13 @@ function ordenarVendasTabela(colIndex, tipo) {
             miolo += _htmlNodoLembrete(iso, filhos[i], depth + 1);
         }
         var arrastavel = depth === 0 ? ' ios-draggable-item' : '';
-        var guia = filhos.length ? 'lembrete-filhos no-drag' : 'no-drag hidden';
+        var mestreComFilhos = !lem.parent_id && filhos.length > 0;
+        var guia = filhos.length
+            ? 'lembrete-filhos no-drag transition-all duration-300'
+            : 'no-drag hidden transition-all duration-300';
         return '<div class="lembrete-nodo' + arrastavel + '" id="nodo-lem-' + lem.id + '" data-id="' + lem.id + '">' +
-            _htmlLembrete(iso, lem, depth) +
-            '<div id="filhos-lem-' + lem.id + '" class="' + guia + '">' + miolo + '</div>' +
+            _htmlLembrete(iso, lem, depth, mestreComFilhos) +
+            '<div id="sub-lembretes-' + lem.id + '" class="' + guia + '">' + miolo + '</div>' +
         '</div>';
     }
 
@@ -5485,10 +5525,28 @@ function ordenarVendasTabela(colIndex, tipo) {
     }
 
     function _mostrarGuiaFilhos(parentId) {
-        var cont = document.getElementById('filhos-lem-' + parentId);
+        var cont = document.getElementById('sub-lembretes-' + parentId);
         if (!cont) return null;
-        cont.className = 'lembrete-filhos no-drag';
+        cont.className = 'lembrete-filhos no-drag transition-all duration-300';
         return cont;
+    }
+
+    function _refreshCardLembrete(iso, id) {
+        var lem = _encontrarLembrete(iso, id);
+        var card = document.getElementById('lem-' + id);
+        if (!card || !lem) return;
+        var filhosDiv = document.getElementById('sub-lembretes-' + id);
+        var estavaOculto = !!(filhosDiv && filhosDiv.classList.contains('hidden'));
+        var tmp = document.createElement('div');
+        tmp.innerHTML = _htmlLembrete(iso, lem, lem.parent_id ? 1 : 0, _temFilhosLembrete(lem));
+        if (!tmp.firstElementChild) return;
+        card.replaceWith(tmp.firstElementChild);
+        if (estavaOculto) {
+            var filhosAtual = document.getElementById('sub-lembretes-' + id);
+            var icone = document.getElementById('icone-toggle-' + id);
+            if (filhosAtual) filhosAtual.classList.add('hidden');
+            if (icone) icone.classList.add('-rotate-90');
+        }
     }
 
     function _removerLembreteDoPainel(id, iso) {
@@ -5498,8 +5556,11 @@ function ordenarVendasTabela(colIndex, tipo) {
             var card = document.getElementById('nodo-lem-' + id) || document.getElementById('lem-' + id);
             var guia = card && card.parentElement;
             if (card) card.remove();
-            if (guia && guia.id && guia.id.indexOf('filhos-lem-') === 0 && !guia.querySelector('.lembrete-nodo')) {
-                guia.className = 'no-drag hidden';
+            if (guia && guia.id && guia.id.indexOf('sub-lembretes-') === 0 && !guia.querySelector('.lembrete-nodo')) {
+                guia.className = 'no-drag hidden transition-all duration-300';
+                var parentNodo = guia.closest('.lembrete-nodo');
+                var mestreId = parentNodo && parentNodo.getAttribute('data-id');
+                if (mestreId && iso) _refreshCardLembrete(iso, mestreId);
             }
             var lista = document.getElementById('lista-lembretes-' + iso);
             if (lista && !lista.querySelector(':scope > .lembrete-nodo') && !lista.querySelector(':scope > [id^="lem-"]')) {
@@ -5526,12 +5587,8 @@ function ordenarVendasTabela(colIndex, tipo) {
     function _atualizarCardLembrete(id, iso, concluido) {
         var lem = _encontrarLembrete(iso, id);
         if (lem) lem.concluido = !!concluido;
-        var card = document.getElementById('lem-' + id);
-        if (!card) return;
-        if (!lem) lem = { id: id, descricao: '', concluido: !!concluido, filhos: [] };
-        var tmp = document.createElement('div');
-        tmp.innerHTML = _htmlLembrete(iso, lem, lem.parent_id ? 1 : 0);
-        if (tmp.firstElementChild) card.replaceWith(tmp.firstElementChild);
+        if (!document.getElementById('lem-' + id)) return;
+        _refreshCardLembrete(iso, id);
     }
 
     window.concluirLembrete = function(id, iso, btn) {
@@ -5651,6 +5708,7 @@ function ordenarVendasTabela(colIndex, tipo) {
             var cont = _mostrarGuiaFilhos(nodo.parent_id);
             if (cont) {
                 cont.appendChild(tmp.firstElementChild);
+                _refreshCardLembrete(iso, nodo.parent_id);
                 return;
             }
         }
@@ -5727,11 +5785,7 @@ function ordenarVendasTabela(colIndex, tipo) {
                     }
                     var alvo = _encontrarLembrete(iso, editId) || salvo;
                     var card = document.getElementById('lem-' + editId);
-                    if (card) {
-                        var tmpEdit = document.createElement('div');
-                        tmpEdit.innerHTML = _htmlLembrete(iso, alvo, alvo.parent_id ? 1 : 0);
-                        if (tmpEdit.firstElementChild) card.replaceWith(tmpEdit.firstElementChild);
-                    }
+                    if (card) _refreshCardLembrete(iso, editId);
                     if (!alvo.parent_id) {
                         _reordenarNodosLembretes(iso);
                         _iniciarDnDLembretes(iso);
@@ -5809,8 +5863,11 @@ function ordenarVendasTabela(colIndex, tipo) {
                 function finalizarMovimento() {
                     var guia = card && card.parentElement;
                     if (card && card.parentNode) card.remove();
-                    if (guia && guia.id && guia.id.indexOf('filhos-lem-') === 0 && !guia.querySelector('.lembrete-nodo')) {
-                        guia.className = 'no-drag hidden';
+                    if (guia && guia.id && guia.id.indexOf('sub-lembretes-') === 0 && !guia.querySelector('.lembrete-nodo')) {
+                        guia.className = 'no-drag hidden transition-all duration-300';
+                        var parentNodoMv = guia.closest('.lembrete-nodo');
+                        var mestreIdMv = parentNodoMv && parentNodoMv.getAttribute('data-id');
+                        if (mestreIdMv) _refreshCardLembrete(iso, mestreIdMv);
                     }
                     var lista = document.getElementById('lista-lembretes-' + iso);
                     if (lista && !lista.querySelector(':scope > .lembrete-nodo') && !lista.querySelector(':scope > [id^="lem-"]')) {
