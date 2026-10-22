@@ -540,9 +540,11 @@
     </div>
 </div>
 
-<!-- Overlay + Gaveta de Ações (Nova Entrada e demais) -->
-<div id="modal-nova-entrada-overlay" class="fixed inset-0 z-[9998] hidden bg-black/50 transition-opacity" aria-hidden="true"></div>
-<div id="modal-nova-entrada-wrap" class="fixed inset-y-0 right-0 z-[9999] hidden w-full max-w-md h-full translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col transform" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="gaveta-nova-entrada-titulo" data-acao="" data-swipe-dismiss data-swipe-backdrop="#modal-nova-entrada-overlay" data-swipe-close-click="#modal-nova-entrada-fechar">
+<!-- Overlay + Gaveta de Ações (Nova Entrada, Relatório, Importar, Tipos, Fornecedores)
+     Mobile: abre da direita→esquerda (translate-x-full → translate-x-0);
+     fecha da esquerda→direita (translate-x-0 → translate-x-full). -->
+<div id="modal-nova-entrada-overlay" class="fixed inset-0 z-[9998] hidden bg-black/50 opacity-0 transition-opacity duration-300 ease-in-out" aria-hidden="true"></div>
+<div id="modal-nova-entrada-wrap" class="fixed inset-y-0 right-0 z-[9999] hidden w-full max-w-md h-full bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col transform translate-x-full transition-transform duration-300 ease-in-out" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="gaveta-nova-entrada-titulo" data-acao="" data-swipe-dismiss data-swipe-backdrop="#modal-nova-entrada-overlay" data-swipe-close-click="#modal-nova-entrada-fechar">
     <div data-swipe-handle class="flex items-center justify-between px-5 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))] border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 shrink-0">
         <div>
             <h3 id="gaveta-nova-entrada-titulo" class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
@@ -1902,11 +1904,18 @@ window.getTipoConfigPorSelect = function(selectEl) {
     if (overlay && overlay.parentElement !== document.body) {
         document.body.appendChild(overlay);
     }
+    var DRAWER_ANIM_MS = 300;
+    var _gavetaFechando = false;
+    var _gavetaCloseTimer = null;
+
     if (wrap) {
         wrap.classList.remove('translate-x-0');
         wrap.classList.add('translate-x-full', 'hidden');
     }
-    if (overlay) overlay.classList.add('hidden');
+    if (overlay) {
+        overlay.classList.add('hidden', 'opacity-0');
+        overlay.classList.remove('opacity-100');
+    }
     var dataChegada = document.getElementById('data_chegada');
     var tipoSelect = document.getElementById('tipo');
     var containerNac = document.getElementById('container_nacionalidade');
@@ -1995,19 +2004,39 @@ window.getTipoConfigPorSelect = function(selectEl) {
             document.body.appendChild(overlay);
         }
         acao = acao || 'entrada';
-        var jaAberta = !wrap.classList.contains('hidden') && !wrap.classList.contains('translate-x-full');
+        var jaAberta = !wrap.classList.contains('hidden') && !wrap.classList.contains('translate-x-full') && !_gavetaFechando;
         aplicarPainel(acao);
 
+        if (_gavetaCloseTimer) {
+            clearTimeout(_gavetaCloseTimer);
+            _gavetaCloseTimer = null;
+        }
+        _gavetaFechando = false;
+
         if (!jaAberta) {
-            if (overlay) overlay.classList.remove('hidden');
+            // Backdrop: fade-in; painel: slide da direita → esquerda
+            if (overlay) {
+                overlay.classList.remove('hidden');
+                overlay.classList.add('opacity-0');
+                overlay.classList.remove('opacity-100');
+                overlay.setAttribute('aria-hidden', 'false');
+            }
             wrap.classList.remove('hidden');
             wrap.classList.add('translate-x-full');
             wrap.classList.remove('translate-x-0');
-            wrap.offsetHeight;
-            wrap.classList.remove('translate-x-full');
-            wrap.classList.add('translate-x-0');
             wrap.setAttribute('aria-hidden', 'false');
-            if (overlay) overlay.setAttribute('aria-hidden', 'false');
+            // Força reflow e anima no próximo frame (evita pular a transição)
+            void wrap.offsetHeight;
+            requestAnimationFrame(function() {
+                requestAnimationFrame(function() {
+                    if (overlay) {
+                        overlay.classList.remove('opacity-0');
+                        overlay.classList.add('opacity-100');
+                    }
+                    wrap.classList.remove('translate-x-full');
+                    wrap.classList.add('translate-x-0');
+                });
+            });
             if (typeof travarFundo === 'function') travarFundo();
         }
 
@@ -2025,19 +2054,37 @@ window.getTipoConfigPorSelect = function(selectEl) {
     }
     function fechar() {
         if (!wrap) return;
+        if (wrap.classList.contains('hidden') && (!_gavetaFechando)) return;
+        if (_gavetaFechando) return;
+        _gavetaFechando = true;
+
+        // Painel: slide da esquerda → direita (sai pela borda direita)
         wrap.classList.remove('translate-x-0');
         wrap.classList.add('translate-x-full');
         wrap.setAttribute('aria-hidden', 'true');
+
+        // Backdrop: fade-out suave (hidden só após a transição)
         if (overlay) {
-            overlay.classList.add('hidden');
+            overlay.classList.remove('opacity-100');
+            overlay.classList.add('opacity-0');
             overlay.setAttribute('aria-hidden', 'true');
         }
-        setTimeout(function() {
+
+        if (_gavetaCloseTimer) clearTimeout(_gavetaCloseTimer);
+        _gavetaCloseTimer = setTimeout(function() {
+            _gavetaCloseTimer = null;
             if (wrap.classList.contains('translate-x-full')) {
                 wrap.classList.add('hidden');
             }
-        }, 300);
-        if (typeof liberarFundo === 'function') liberarFundo();
+            if (overlay) {
+                overlay.classList.add('hidden');
+                overlay.classList.remove('opacity-100');
+                overlay.classList.add('opacity-0');
+            }
+            _gavetaFechando = false;
+            if (typeof liberarFundo === 'function') liberarFundo();
+        }, DRAWER_ANIM_MS);
+
         if (erroDiv) {
             erroDiv.classList.add('hidden');
             erroDiv.textContent = '';
