@@ -986,6 +986,12 @@ function abrirGavetaLancamento() {
     var overlay = document.getElementById('gaveta-lancamento-overlay');
     var gaveta = document.getElementById('gaveta-lancamento');
     if (!gaveta) return;
+    if (document.body.dataset.iosBloqueioClique === 'true') return;
+    var swipeApi = window.MeninoAlhoSwipeDismiss;
+    if (swipeApi && typeof swipeApi.isAberturaBloqueada === 'function' && swipeApi.isAberturaBloqueada(gaveta)) {
+        return;
+    }
+    if (gaveta.dataset && gaveta.dataset.bloquearAbertura === 'true') return;
     if (gaveta.dataset) delete gaveta.dataset.closing;
     if (overlay) {
         overlay.classList.remove('hidden');
@@ -2370,6 +2376,12 @@ document.addEventListener('keydown', function(e) {
         var overlay = document.getElementById('gaveta-contagem-overlay');
         var gaveta = document.getElementById('gaveta-contagem');
         if (!gaveta) return;
+        if (document.body.dataset.iosBloqueioClique === 'true') return;
+        var swipeApi = window.MeninoAlhoSwipeDismiss;
+        if (swipeApi && typeof swipeApi.isAberturaBloqueada === 'function' && swipeApi.isAberturaBloqueada(gaveta)) {
+            return;
+        }
+        if (gaveta.dataset && gaveta.dataset.bloquearAbertura === 'true') return;
         if (gaveta.dataset) delete gaveta.dataset.closing;
         if (overlay) {
             overlay.classList.remove('hidden');
@@ -2845,6 +2857,12 @@ document.addEventListener('keydown', function(e) {
     }
 
     window.abrirGavetaOrcamento = function() {
+        if (document.body.dataset.iosBloqueioClique === 'true') return;
+        var swipeApi = window.MeninoAlhoSwipeDismiss;
+        if (swipeApi && typeof swipeApi.isAberturaBloqueada === 'function' && swipeApi.isAberturaBloqueada(gaveta)) {
+            return;
+        }
+        if (gaveta.dataset && gaveta.dataset.bloquearAbertura === 'true') return;
         if (gaveta.dataset) delete gaveta.dataset.closing;
         if (overlay) {
             overlay.classList.remove('hidden');

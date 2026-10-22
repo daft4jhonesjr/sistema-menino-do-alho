@@ -37,12 +37,12 @@
   var VIEWPORT_LEFT_EDGE_PX = 20;
   var VELOCITY_WINDOW_MS = 100;
   var CLEANUP_TIMEOUT_MS = 1200;
-  /** Janela anti ghost click (touchend → click sintético ~300ms no mobile). */
-  var CLICK_SUPPRESS_MS = 400;
-  /** Cooldown que impede reabrir a gaveta logo após fechar por swipe. */
-  var OPEN_BLOCK_MS = 400;
+  /** Janela anti ghost click (touchend → click sintético ~350ms no WebKit/iOS). */
+  var CLICK_SUPPRESS_MS = 450;
+  /** Cooldown global/painel que impede reabrir logo após fechar por swipe (cobre os ~350ms do iOS). */
+  var OPEN_BLOCK_MS = 450;
   /** Deslocamento mínimo (px) para tratar o gesto como swipe e cancelar o click fantasma. */
-  var GHOST_CLICK_DELTA_PX = 40;
+  var GHOST_CLICK_DELTA_PX = 50;
   var SETTLE_CLOSE_MS = 250;
   var SETTLE_OPEN_MS = 200;
   var DRAGGING_BODY_CLASS = 'swipe-dismiss-dragging';
@@ -220,10 +220,19 @@
 
     /**
      * Trava temporária contra reabertura (ghost click no botão de abrir / toggle).
-     * Funções como abrirModalNovaVenda() devem consultar dataset.bloquearAbertura.
+     * Funções de abertura devem consultar isAberturaBloqueada() / dataset.iosBloqueioClique
+     * e dataset.bloquearAbertura (painel).
      */
+    function clearBodyIosClickLockIfIdle() {
+      if (!document.querySelector('[data-bloquear-abertura="true"]')) {
+        delete document.body.dataset.iosBloqueioClique;
+      }
+    }
+
     function blockReopenTemporarily() {
       panel.dataset.bloquearAbertura = 'true';
+      // Trava global: neutraliza clique fantasma do iOS em qualquer botão de ação sob o dedo
+      document.body.dataset.iosBloqueioClique = 'true';
       if (openBlockTimer) {
         global.clearTimeout(openBlockTimer);
         openBlockTimer = 0;
@@ -231,6 +240,7 @@
       openBlockTimer = global.setTimeout(function () {
         openBlockTimer = 0;
         delete panel.dataset.bloquearAbertura;
+        clearBodyIosClickLockIfIdle();
       }, OPEN_BLOCK_MS);
     }
 
@@ -402,6 +412,7 @@
               global.clearTimeout(openBlockTimer);
               openBlockTimer = 0;
             }
+            clearBodyIosClickLockIfIdle();
             setSwiping(false);
             setExiting(false);
             void panel.offsetWidth;
@@ -607,12 +618,12 @@
       var passedDistance =
         active.offset >= minClosePx || active.offset > threshold;
       if (active.offset > 0 && (flickRight || (passedDistance && !flickLeft))) {
-        // Cancela o click sintético (ghost click) que o iOS dispararia após o touchend
-        if (deltaX > GHOST_CLICK_DELTA_PX && e.cancelable) {
-          e.preventDefault();
+        // Cancela o click sintético residual do WebKit (~350ms após touchend)
+        if (e.cancelable) e.preventDefault();
+        if (deltaX > GHOST_CLICK_DELTA_PX) {
+          e.stopPropagation();
+          if (e.stopImmediatePropagation) e.stopImmediatePropagation();
         }
-        e.stopPropagation();
-        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
         blockReopenTemporarily();
         settleClosed();
       } else {
@@ -634,6 +645,7 @@
 
     function shouldSuppressResidualClick() {
       return (
+        document.body.dataset.iosBloqueioClique === 'true' ||
         panel.dataset.isSwiping === 'true' ||
         panel.dataset.bloquearAbertura === 'true' ||
         now() < suppressClickUntil
@@ -701,11 +713,30 @@
         setExiting(false);
         delete panel.dataset.swipeClosed;
         delete panel.dataset.bloquearAbertura;
+        clearBodyIosClickLockIfIdle();
         delete panel.__swipeDismiss;
       }
     };
     panel.__swipeDismiss = controller;
     return controller;
+  }
+
+  /**
+   * True enquanto o iOS ainda pode emitir o click sintético pós-swipe.
+   * Use no início de toda função que abre gaveta (Nova Venda, Relatório, Entrada…).
+   * @param {Element|null} [panel]
+   */
+  function isAberturaBloqueada(panel) {
+    if (document.body && document.body.dataset.iosBloqueioClique === 'true') {
+      return true;
+    }
+    if (panel && panel.dataset && panel.dataset.bloquearAbertura === 'true') {
+      return true;
+    }
+    if (document.querySelector('[data-swipe-dismiss][data-bloquear-abertura="true"]')) {
+      return true;
+    }
+    return false;
   }
 
   function closeHandlerFromDataset(panel) {
@@ -740,6 +771,8 @@
   global.MeninoAlhoSwipeDismiss = {
     attach: attach,
     init: init,
+    isAberturaBloqueada: isAberturaBloqueada,
+    OPEN_BLOCK_MS: OPEN_BLOCK_MS,
     EASING: EASING,
     DURATION_MS: DURATION_MS
   };

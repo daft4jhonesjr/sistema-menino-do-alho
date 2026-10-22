@@ -6232,6 +6232,14 @@ window.abrirModalNovaVenda = function() {
     var panel = document.getElementById('nova-venda-panel');
     var backdrop = document.getElementById('nova-venda-backdrop');
     if (!modal) return;
+    // Ignora clique fantasma do Safari/WebKit logo após swipe de fechar
+    var swipeApi = window.MeninoAlhoSwipeDismiss;
+    if (swipeApi && typeof swipeApi.isAberturaBloqueada === 'function' && swipeApi.isAberturaBloqueada(panel)) {
+        return;
+    }
+    if (document.body.dataset.iosBloqueioClique === 'true') {
+        return;
+    }
     // Impede reabertura imediata logo após fechamento por swipe (ghost click)
     if (panel && panel.dataset.bloquearAbertura === 'true') {
         return;
@@ -6293,6 +6301,13 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!containerVenda) return;
             var panelToggle = document.getElementById('nova-venda-panel');
             // Ghost click após swipe-to-close: não reabre / não alterna
+            if (document.body.dataset.iosBloqueioClique === 'true') {
+                return;
+            }
+            var swipeApi = window.MeninoAlhoSwipeDismiss;
+            if (swipeApi && typeof swipeApi.isAberturaBloqueada === 'function' && swipeApi.isAberturaBloqueada(panelToggle)) {
+                return;
+            }
             if (panelToggle && panelToggle.dataset.bloquearAbertura === 'true') {
                 return;
             }
@@ -6331,6 +6346,11 @@ document.addEventListener('DOMContentLoaded', function() {
     if (btnMenuRelatorio) {
         btnMenuRelatorio.addEventListener('click', function(e) {
             e.preventDefault();
+            if (document.body.dataset.iosBloqueioClique === 'true') return;
+            var swipeApi = window.MeninoAlhoSwipeDismiss;
+            if (swipeApi && typeof swipeApi.isAberturaBloqueada === 'function' && swipeApi.isAberturaBloqueada()) {
+                return;
+            }
             if (typeof abrirModalRelatorioVendas === 'function') {
                 abrirModalRelatorioVendas();
             }
@@ -6341,6 +6361,11 @@ document.addEventListener('DOMContentLoaded', function() {
     if (btnMenuImportar) {
         btnMenuImportar.addEventListener('click', function(e) {
             e.preventDefault();
+            if (document.body.dataset.iosBloqueioClique === 'true') return;
+            var swipeApi = window.MeninoAlhoSwipeDismiss;
+            if (swipeApi && typeof swipeApi.isAberturaBloqueada === 'function' && swipeApi.isAberturaBloqueada()) {
+                return;
+            }
             if (typeof abrirModalImportarVendas === 'function') {
                 abrirModalImportarVendas();
             }
@@ -6478,6 +6503,14 @@ function toggleAnaliseVendas(event) {
 
     function abrir() {
         if (!wrap) return;
+        // Ignora clique fantasma do Safari/WebKit logo após swipe de fechar
+        if (document.body.dataset.iosBloqueioClique === 'true') return;
+        var swipeApi = window.MeninoAlhoSwipeDismiss;
+        if (swipeApi && typeof swipeApi.isAberturaBloqueada === 'function' && swipeApi.isAberturaBloqueada(panel)) {
+            return;
+        }
+        if (panel && panel.dataset && panel.dataset.bloquearAbertura === 'true') return;
+        if (panel && panel.dataset && panel.dataset.isSwiping === 'true') return;
         if (panel && panel.dataset) delete panel.dataset.closing;
         wrap.classList.remove('hidden');
         wrap.setAttribute('aria-hidden', 'false');
@@ -6589,6 +6622,14 @@ function toggleAnaliseVendas(event) {
     }
 
     function abrir() {
+        // Ignora clique fantasma do Safari/WebKit logo após swipe de fechar
+        if (document.body.dataset.iosBloqueioClique === 'true') return;
+        var swipeApi = window.MeninoAlhoSwipeDismiss;
+        if (swipeApi && typeof swipeApi.isAberturaBloqueada === 'function' && swipeApi.isAberturaBloqueada(panel)) {
+            return;
+        }
+        if (panel && panel.dataset && panel.dataset.bloquearAbertura === 'true') return;
+        if (panel && panel.dataset && panel.dataset.isSwiping === 'true') return;
         if (panel && panel.dataset) delete panel.dataset.closing;
         wrap.classList.remove('hidden');
         wrap.setAttribute('aria-hidden', 'false');

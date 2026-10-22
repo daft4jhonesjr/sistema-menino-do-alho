@@ -867,6 +867,13 @@ window.padronizarClientesMaiusculo = function() {
     }
 
     function abrir() {
+        // Ignora clique fantasma do Safari/WebKit logo após swipe de fechar
+        if (document.body.dataset.iosBloqueioClique === 'true') return;
+        var swipeApi = window.MeninoAlhoSwipeDismiss;
+        if (swipeApi && typeof swipeApi.isAberturaBloqueada === 'function' && swipeApi.isAberturaBloqueada(panel)) {
+            return;
+        }
+        if (panel && panel.dataset && panel.dataset.bloquearAbertura === 'true') return;
         if (wrap && panel) {
             if (wrap.parentElement !== document.body) {
                 document.body.appendChild(wrap);

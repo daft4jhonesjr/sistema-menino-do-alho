@@ -439,6 +439,15 @@
         if (gesture) return;
         // Não processa abertura se a gaveta deste drawer já está aberta
         if (isOpen()) return;
+        // Trava global anti ghost click do iOS (pós-swipe)
+        if (document.body.dataset.iosBloqueioClique === 'true') return;
+        if (
+          global.MeninoAlhoSwipeDismiss &&
+          typeof global.MeninoAlhoSwipeDismiss.isAberturaBloqueada === 'function' &&
+          global.MeninoAlhoSwipeDismiss.isAberturaBloqueada(panel)
+        ) {
+          return;
+        }
         if (panel.dataset.bloquearAbertura === 'true') return;
         // Outra gaveta swipe-dismiss em cooldown de reabertura (anti ghost click)
         if (document.querySelector('[data-swipe-dismiss][data-bloquear-abertura="true"]')) {
