@@ -5410,13 +5410,6 @@ def robots_txt():
     return "User-agent: *\nDisallow: /", 200, {'Content-Type': 'text/plain'}
 
 
-@app.route('/teste-sentry')
-def trigger_sentry_test():
-    """Rota temporária para teste de monitoramento do Sentry."""
-    divisao_zero = 1 / 0
-    return "ok"
-
-
 @app.route('/.well-known/apple-app-site-association')
 def apple_app_site_association():
     """Associa o domínio web ao app iOS para iCloud Keychain / AutoFill.
