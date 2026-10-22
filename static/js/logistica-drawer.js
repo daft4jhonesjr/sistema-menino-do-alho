@@ -259,6 +259,9 @@
 
   function fecharDrawer() {
     if (!aberta || fechando) return;
+    var fromSwipe = panel.dataset && panel.dataset.swipeClosed === 'true';
+    // Durante o arrasto/animação de swipe, ignora fechamentos concorrentes
+    if (!fromSwipe && panel.dataset && panel.dataset.isSwiping === 'true') return;
     if (panel.dataset && panel.dataset.closing === 'true') return;
     fechando = true;
     if (panel.dataset) panel.dataset.closing = 'true';
@@ -274,7 +277,8 @@
     // Mantém o overlay interceptando o ghost click até o fim da animação
     overlay.style.pointerEvents = 'auto';
 
-    global.setTimeout(function () {
+    var hideDelay = fromSwipe ? 0 : ANIM_MS;
+    function finalizeHide() {
       fechando = false;
       if (panel.dataset) delete panel.dataset.closing;
       if (!aberta) {
@@ -284,7 +288,12 @@
         overlay.style.pointerEvents = '';
         if (typeof liberarFundo === 'function') liberarFundo();
       }
-    }, ANIM_MS);
+    }
+    if (hideDelay <= 0) {
+      global.requestAnimationFrame(finalizeHide);
+    } else {
+      global.setTimeout(finalizeHide, hideDelay);
+    }
   }
 
   global.abrirGavetaLogistica = abrirDrawer;

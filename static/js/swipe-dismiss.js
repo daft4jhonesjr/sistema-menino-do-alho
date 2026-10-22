@@ -38,10 +38,14 @@
   var VELOCITY_WINDOW_MS = 100;
   var CLEANUP_TIMEOUT_MS = 1200;
   var CLICK_SUPPRESS_MS = 350;
+  var SETTLE_CLOSE_MS = 250;
+  var SETTLE_OPEN_MS = 200;
   var DRAGGING_BODY_CLASS = 'swipe-dismiss-dragging';
   var HANDLE_SELECTOR = '[data-swipe-handle]';
   var TEXT_INPUT_SELECTOR =
     'input, textarea, select, [contenteditable=""], [contenteditable="true"]';
+  /** Curva de saída alinhada ao fechamento por swipe (evita conflito com transition Tailwind). */
+  var SETTLE_CLOSE_EASING = 'cubic-bezier(0.16, 1, 0.3, 1)';
 
   function now() {
     return global.performance && performance.now ? performance.now() : Date.now();
@@ -192,6 +196,42 @@
       backdrop.style.transition = '';
     }
 
+    function setSwiping(active) {
+      panel.dataset.isSwiping = active ? 'true' : 'false';
+    }
+
+    /**
+     * Sincroniza classes Tailwind com o transform inline ANTES de limpar o style.
+     * Sem isso, o WebKit pode renderizar 1 frame em translateX(0) (painel “pisca”).
+     */
+    function syncClosedClassesBeforeClearingInline() {
+      panel.style.transition = 'none';
+      panel.style.transform = 'translate3d(100%, 0, 0)';
+      panel.classList.add('translate-x-full');
+      panel.classList.remove('translate-x-0');
+      panel.setAttribute('aria-hidden', 'true');
+
+      var backdrop = getBackdrop();
+      if (backdrop) {
+        backdrop.style.transition = 'none';
+        backdrop.style.opacity = '0';
+        backdrop.classList.add('opacity-0');
+        backdrop.classList.remove('opacity-100', 'is-visible');
+        backdrop.setAttribute('aria-hidden', 'true');
+      }
+
+      // Garante que as classes já controlam o layout antes de soltar o inline
+      void panel.offsetWidth;
+      panel.style.transform = '';
+      panel.style.transition = '';
+      panel.style.willChange = '';
+      if (backdrop) {
+        backdrop.style.opacity = '';
+        backdrop.style.transition = '';
+        backdrop.style.willChange = '';
+      }
+    }
+
     function cancelPendingCleanup() {
       if (cleanupRaf) {
         global.cancelAnimationFrame(cleanupRaf);
@@ -214,11 +254,11 @@
         cleanupRaf = 0;
         var expired = now() >= deadline;
         var reopened = isOpen();
-        if (!panelDone && (expired || reopened || !isRendered(panel) || panel.classList.contains('translate-x-full'))) {
+        if (!panelDone && (expired || reopened || !isRendered(panel) || panel.classList.contains('translate-x-full') || panel.classList.contains('hidden'))) {
           clearPanelStyles();
           panelDone = true;
         }
-        if (!backdropDone && (expired || reopened || !isRendered(getBackdrop()))) {
+        if (!backdropDone && (expired || reopened || !isRendered(getBackdrop()) || (getBackdrop() && getBackdrop().classList.contains('hidden')))) {
           clearBackdropStyles();
           backdropDone = true;
         }
@@ -230,9 +270,11 @@
       tick();
     }
 
-    function animate(toClosed, done) {
+    function animate(toClosed, done, settleMs, settleEasing) {
       var token = ++settleToken;
-      var transition = duration + 'ms ' + EASING;
+      var ms = typeof settleMs === 'number' ? settleMs : duration;
+      var ease = settleEasing || EASING;
+      var transition = ms + 'ms ' + ease;
       panel.style.transition = 'transform ' + transition;
       panel.style.transform = toClosed ? 'translate3d(100%, 0, 0)' : translate(0);
       var backdrop = getBackdrop();
@@ -254,40 +296,84 @@
         if (e.target === panel && e.propertyName === 'transform') finish();
       }
       panel.addEventListener('transitionend', onEnd);
-      var fallback = global.setTimeout(finish, duration + 80);
+      var fallback = global.setTimeout(finish, ms + 80);
     }
 
     function settleOpen() {
       state = 'returning';
+      setSwiping(false);
       document.body.classList.remove(DRAGGING_BODY_CLASS);
-      animate(false, function () {
-        state = 'idle';
-        clearPanelStyles();
-        clearBackdropStyles();
-      });
+      animate(
+        false,
+        function () {
+          state = 'idle';
+          // Devolve à posição aberta e só então limpa o inline (sem piscar)
+          panel.style.transition = 'none';
+          panel.style.transform = translate(0);
+          void panel.offsetWidth;
+          clearPanelStyles();
+          clearBackdropStyles();
+        },
+        SETTLE_OPEN_MS,
+        'ease-out'
+      );
     }
 
+    /**
+     * Conclusão do swipe: anima com style.transform, chama onClose (com flag para
+     * pular 2ª animação) mantendo o inline em 100%, e só então sincroniza classes
+     * Tailwind e limpa o style — evita o frame em translateX(0) no WebKit.
+     */
     function settleClosed() {
       state = 'closing';
+      setSwiping(true);
+      suppressClickUntil = now() + CLICK_SUPPRESS_MS + SETTLE_CLOSE_MS;
       document.body.classList.remove(DRAGGING_BODY_CLASS);
-      animate(true, function () {
-        state = 'idle';
-        panel.style.transition = 'none';
-        var backdrop = getBackdrop();
-        if (backdrop) backdrop.style.transition = 'none';
-        try {
-          onClose();
-        } catch (err) {
-          if (global.console) console.error('[swipe-dismiss] onClose falhou', err);
-        }
-        if (isOpen()) {
-          // Fechamento recusado (ex.: confirmação de descarte): volta ao lugar.
-          void panel.offsetWidth;
-          settleOpen();
-        } else {
-          deferCleanupAfterClose();
-        }
-      });
+      animate(
+        true,
+        function () {
+          var token = settleToken;
+          // Congela fora da tela com inline até o onClose aplicar as classes
+          panel.style.transition = 'none';
+          panel.style.transform = 'translate3d(100%, 0, 0)';
+          var backdrop = getBackdrop();
+          if (backdrop) {
+            backdrop.style.transition = 'none';
+            backdrop.style.opacity = '0';
+          }
+
+          panel.dataset.swipeClosed = 'true';
+          state = 'idle';
+          try {
+            onClose();
+          } catch (err) {
+            if (global.console) console.error('[swipe-dismiss] onClose falhou', err);
+          }
+          delete panel.dataset.swipeClosed;
+
+          if (token !== settleToken) {
+            setSwiping(false);
+            return;
+          }
+
+          if (isOpen()) {
+            // Fechamento recusado (ex.: confirmação de descarte): volta ao lugar.
+            setSwiping(false);
+            void panel.offsetWidth;
+            settleOpen();
+          } else {
+            // onClose já fechou (classes/hidden). Sincroniza e limpa o inline com segurança.
+            syncClosedClassesBeforeClearingInline();
+            deferCleanupAfterClose();
+            // Mantém a trava até a janela de click sintético do mobile acabar
+            global.setTimeout(function () {
+              setSwiping(false);
+            }, CLICK_SUPPRESS_MS);
+          }
+        },
+        SETTLE_CLOSE_MS,
+        SETTLE_CLOSE_EASING
+      );
     }
 
     function velocity(endX) {
@@ -337,6 +423,7 @@
         return;
       }
       if (state === 'closing') return;
+      if (panel.dataset.isSwiping === 'true') return;
       if (!e.touches || e.touches.length !== 1) return;
       if (!isOpen()) return;
 
@@ -442,7 +529,9 @@
       var v = velocity(touch.clientX);
       unlockScrollRoot(gesture);
       gesture = null;
+      // Trava anti click sintético (touchend → click) em cima da animação de fechamento
       suppressClickUntil = now() + CLICK_SUPPRESS_MS;
+      setSwiping(true);
 
       var threshold = Math.min(active.width, global.innerWidth) * closeRatio;
       var flickRight = v > flickVelocity;
@@ -469,9 +558,13 @@
     }
 
     function onClickCapture(e) {
-      if (e.isTrusted && now() < suppressClickUntil) {
+      if (
+        panel.dataset.isSwiping === 'true' ||
+        (e.isTrusted && now() < suppressClickUntil)
+      ) {
         e.preventDefault();
         e.stopPropagation();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
       }
     }
 
@@ -481,17 +574,18 @@
     panel.addEventListener('touchcancel', onTouchCancel, { passive: true });
     panel.addEventListener('click', onClickCapture, true);
     panel.classList.add('swipe-dismiss-panel');
+    setSwiping(false);
 
     var controller = {
       /** Fecha com a mesma animação do gesto (útil para botões "voltar"). */
       dismiss: function () {
-        if (state === 'closing' || !isOpen()) return;
+        if (state === 'closing' || panel.dataset.isSwiping === 'true' || !isOpen()) return;
         gesture = null;
         beginDrag(null);
         settleClosed();
       },
       isDragging: function () {
-        return state === 'dragging';
+        return state === 'dragging' || panel.dataset.isSwiping === 'true';
       },
       destroy: function () {
         cancelPendingCleanup();
@@ -505,6 +599,8 @@
         clearPanelStyles();
         clearBackdropStyles();
         document.body.classList.remove(DRAGGING_BODY_CLASS);
+        setSwiping(false);
+        delete panel.dataset.swipeClosed;
         delete panel.__swipeDismiss;
       }
     };
