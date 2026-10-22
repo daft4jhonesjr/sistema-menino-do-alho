@@ -37,7 +37,12 @@
   var VIEWPORT_LEFT_EDGE_PX = 20;
   var VELOCITY_WINDOW_MS = 100;
   var CLEANUP_TIMEOUT_MS = 1200;
-  var CLICK_SUPPRESS_MS = 350;
+  /** Janela anti ghost click (touchend → click sintético ~300ms no mobile). */
+  var CLICK_SUPPRESS_MS = 400;
+  /** Cooldown que impede reabrir a gaveta logo após fechar por swipe. */
+  var OPEN_BLOCK_MS = 400;
+  /** Deslocamento mínimo (px) para tratar o gesto como swipe e cancelar o click fantasma. */
+  var GHOST_CLICK_DELTA_PX = 40;
   var SETTLE_CLOSE_MS = 250;
   var SETTLE_OPEN_MS = 200;
   var DRAGGING_BODY_CLASS = 'swipe-dismiss-dragging';
@@ -138,6 +143,7 @@
     var settleToken = 0;
     var cleanupRaf = 0;
     var suppressClickUntil = 0;
+    var openBlockTimer = 0;
 
     function getBackdrop() {
       return resolveElement(backdropRef);
@@ -213,6 +219,22 @@
     }
 
     /**
+     * Trava temporária contra reabertura (ghost click no botão de abrir / toggle).
+     * Funções como abrirModalNovaVenda() devem consultar dataset.bloquearAbertura.
+     */
+    function blockReopenTemporarily() {
+      panel.dataset.bloquearAbertura = 'true';
+      if (openBlockTimer) {
+        global.clearTimeout(openBlockTimer);
+        openBlockTimer = 0;
+      }
+      openBlockTimer = global.setTimeout(function () {
+        openBlockTimer = 0;
+        delete panel.dataset.bloquearAbertura;
+      }, OPEN_BLOCK_MS);
+    }
+
+    /**
      * Sincroniza classes Tailwind com o transform inline ANTES de limpar o style.
      * Sem isso, o WebKit pode renderizar 1 frame em translateX(0) (painel “pisca”).
      */
@@ -221,6 +243,8 @@
       panel.style.transform = 'translate3d(100%, 0, 0)';
       panel.classList.add('translate-x-full');
       panel.classList.remove('translate-x-0');
+      // Evita estado ambíguo no DOM após o swipe (onClose também pode aplicar hidden)
+      panel.classList.add('hidden');
       panel.setAttribute('aria-hidden', 'true');
 
       var backdrop = getBackdrop();
@@ -232,7 +256,7 @@
         backdrop.setAttribute('aria-hidden', 'true');
       }
 
-      // Garante que as classes já controlam o layout antes de soltar o inline
+      // Limpa totalmente os estilos inline para não deixar o elemento ambíguo
       void panel.offsetWidth;
       panel.style.transform = '';
       panel.style.transition = '';
@@ -340,6 +364,7 @@
       state = 'closing';
       setSwiping(true);
       setExiting(true);
+      blockReopenTemporarily();
       suppressClickUntil = now() + CLICK_SUPPRESS_MS + SETTLE_CLOSE_MS;
       document.body.classList.remove(DRAGGING_BODY_CLASS);
       animate(
@@ -372,6 +397,11 @@
 
           if (isOpen()) {
             // Fechamento recusado (ex.: confirmação de descarte): volta ao lugar.
+            delete panel.dataset.bloquearAbertura;
+            if (openBlockTimer) {
+              global.clearTimeout(openBlockTimer);
+              openBlockTimer = 0;
+            }
             setSwiping(false);
             setExiting(false);
             void panel.offsetWidth;
@@ -380,6 +410,8 @@
             // onClose já fechou (classes/hidden). Sincroniza e limpa o inline com segurança.
             syncClosedClassesBeforeClearingInline();
             deferCleanupAfterClose();
+            // Renova a trava após a animação (cobre o delay do click fantasma)
+            blockReopenTemporarily();
             // Mantém a trava até a janela de click sintético do mobile acabar
             global.setTimeout(function () {
               setSwiping(false);
@@ -543,6 +575,7 @@
 
       var active = gesture;
       var v = velocity(touch.clientX);
+      var deltaX = active.offset;
       unlockScrollRoot(gesture);
       gesture = null;
       // Trava anti click sintético (touchend → click) em cima da animação de fechamento
@@ -556,8 +589,12 @@
         active.offset >= minClosePx || active.offset > threshold;
       if (active.offset > 0 && (flickRight || (passedDistance && !flickLeft))) {
         // Cancela o click sintético (ghost click) que o iOS dispararia após o touchend
-        if (e.cancelable) e.preventDefault();
+        if (deltaX > GHOST_CLICK_DELTA_PX && e.cancelable) {
+          e.preventDefault();
+        }
         e.stopPropagation();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        blockReopenTemporarily();
         settleClosed();
       } else {
         settleOpen();
@@ -576,23 +613,30 @@
       }
     }
 
-    function onClickCapture(e) {
-      if (
+    function shouldSuppressResidualClick() {
+      return (
         panel.dataset.isSwiping === 'true' ||
-        (e.isTrusted && now() < suppressClickUntil)
-      ) {
-        e.preventDefault();
-        e.stopPropagation();
-        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        panel.dataset.bloquearAbertura === 'true' ||
+        now() < suppressClickUntil
+      );
+    }
+
+    function suppressResidualEvent(e) {
+      if (e.cancelable) e.preventDefault();
+      e.stopPropagation();
+      if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+    }
+
+    function onClickCapture(e) {
+      if (shouldSuppressResidualClick()) {
+        suppressResidualEvent(e);
       }
     }
 
     function onDocumentClickCapture(e) {
-      if (!e.isTrusted || now() >= suppressClickUntil) return;
+      if (!e.isTrusted || !shouldSuppressResidualClick()) return;
       // Clique residual do gesto: não pode alcançar o botão disparador atrás do painel
-      e.preventDefault();
-      e.stopPropagation();
-      if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+      suppressResidualEvent(e);
     }
 
     panel.addEventListener('touchstart', onTouchStart, { passive: true });
@@ -620,6 +664,10 @@
       destroy: function () {
         cancelPendingCleanup();
         settleToken++;
+        if (openBlockTimer) {
+          global.clearTimeout(openBlockTimer);
+          openBlockTimer = 0;
+        }
         panel.removeEventListener('touchstart', onTouchStart);
         panel.removeEventListener('touchmove', onTouchMove);
         panel.removeEventListener('touchend', onTouchEnd);
@@ -633,6 +681,7 @@
         setSwiping(false);
         setExiting(false);
         delete panel.dataset.swipeClosed;
+        delete panel.dataset.bloquearAbertura;
         delete panel.__swipeDismiss;
       }
     };
