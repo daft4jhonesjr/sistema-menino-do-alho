@@ -781,12 +781,43 @@
         </div>
     </div>
 
-    <div id="modal-lista-fornecedores" data-gaveta-painel="fornecedores" class="hidden flex-col flex-1 min-h-0">
+    <div id="modal-lista-fornecedores" data-gaveta-painel="fornecedores" class="hidden flex-col flex-1 min-h-0" data-view-mode="list">
         <div class="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4 min-w-0 bg-white dark:bg-slate-900">
             <button type="button" onclick="abrirModalNovoFornecedor()" class="w-full inline-flex justify-center items-center px-4 py-2.5 border border-transparent text-sm font-medium rounded-xl shadow-sm text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none">
                 <i data-lucide="plus" class="w-4 h-4 mr-2"></i> Novo Fornecedor
             </button>
-            <div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+
+            <div class="flex items-center justify-between gap-3">
+                <p class="text-xs font-medium text-slate-500 dark:text-slate-400">
+                    {{ fornecedores|length }} fornecedor{% if fornecedores|length != 1 %}es{% endif %}
+                </p>
+                <div class="flex items-stretch gap-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-1" role="group" aria-label="Alternar visualização">
+                    <button
+                        type="button"
+                        id="btn-fornecedores-view-list"
+                        class="inline-flex items-center justify-center gap-1.5 min-w-[2.75rem] px-3 py-2 rounded-lg text-sm font-semibold transition-colors bg-white dark:bg-slate-700 text-emerald-700 dark:text-emerald-400 shadow-sm"
+                        aria-pressed="true"
+                        title="Lista"
+                        onclick="setFornecedoresViewMode('list')"
+                    >
+                        <i data-lucide="list" class="w-4 h-4"></i>
+                        <span class="hidden sm:inline">Lista</span>
+                    </button>
+                    <button
+                        type="button"
+                        id="btn-fornecedores-view-cards"
+                        class="inline-flex items-center justify-center gap-1.5 min-w-[2.75rem] px-3 py-2 rounded-lg text-sm font-semibold transition-colors text-slate-600 dark:text-slate-300"
+                        aria-pressed="false"
+                        title="Cards"
+                        onclick="setFornecedoresViewMode('cards')"
+                    >
+                        <i data-lucide="layout-grid" class="w-4 h-4"></i>
+                        <span class="hidden sm:inline">Cards</span>
+                    </button>
+                </div>
+            </div>
+
+            <div id="fornecedores-view-list" class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700 transition-opacity duration-200">
                 <table class="w-full text-sm text-left min-w-[36rem]">
                     <thead class="text-xs text-slate-500 uppercase bg-slate-100 dark:bg-slate-900 dark:text-slate-400">
                         <tr>
@@ -799,7 +830,7 @@
                     </thead>
                     <tbody>
                         {% for fornecedor in fornecedores %}
-                        <tr class="border-b dark:border-slate-700 group transition-colors hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                        <tr class="border-b dark:border-slate-700 group transition-colors hover:bg-slate-50 dark:hover:bg-slate-700/50" data-fornecedor-id="{{ fornecedor.id }}">
                             <td class="px-4 py-3">
                                 <span class="display-mode font-bold text-slate-800 dark:text-slate-200">{{ fornecedor.nome }}</span>
                                 <input
@@ -893,6 +924,55 @@
                         {% endfor %}
                     </tbody>
                 </table>
+            </div>
+
+            <div id="fornecedores-view-cards" class="hidden space-y-3 transition-opacity duration-200" aria-hidden="true">
+                {% for fornecedor in fornecedores %}
+                <article class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm p-4 flex flex-col gap-3 min-w-0">
+                    <div class="min-w-0">
+                        <p class="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500 font-semibold mb-0.5">Nome Fantasia</p>
+                        <h4 class="font-bold text-base text-slate-800 dark:text-slate-100 break-words">{{ fornecedor.nome }}</h4>
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500 font-semibold mb-0.5">Razão Social</p>
+                        <p class="text-sm text-slate-600 dark:text-slate-300 break-words whitespace-normal">{{ fornecedor.razao_social or '--' }}</p>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 min-w-0">
+                        <div class="min-w-0">
+                            <p class="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500 font-semibold mb-0.5">CNPJ</p>
+                            <p class="text-sm text-slate-600 dark:text-slate-300 break-words">{{ fornecedor.cnpj or '--' }}</p>
+                        </div>
+                        <div class="min-w-0">
+                            <p class="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500 font-semibold mb-0.5">Tipos</p>
+                            <p class="text-sm text-slate-600 dark:text-slate-300 break-words">
+                                {% if fornecedor.tipos_produtos %}
+                                    {% for t in fornecedor.tipos_produtos %}{{ t.nome }}{% if not loop.last %}, {% endif %}{% endfor %}
+                                {% else %}
+                                    --
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+                    <div class="pt-3 mt-1 border-t border-slate-100 dark:border-slate-700 flex items-center justify-end gap-2 min-h-[2.75rem]">
+                        <button
+                            type="button"
+                            class="p-2 rounded-lg text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
+                            title="Editar"
+                            onclick="editarFornecedorNoCard({{ fornecedor.id }})"
+                        >✏️</button>
+                        <button
+                            type="button"
+                            class="p-2 rounded-lg text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
+                            title="Excluir"
+                            onclick='excluirFornecedor({{ fornecedor.id }}, {{ fornecedor.nome|tojson }})'
+                        >🗑️</button>
+                    </div>
+                </article>
+                {% else %}
+                <div class="rounded-xl border border-dashed border-slate-200 dark:border-slate-700 px-4 py-8 text-center text-slate-500">
+                    Nenhum fornecedor cadastrado no sistema.
+                </div>
+                {% endfor %}
             </div>
         </div>
         <div class="px-4 pt-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] border-t border-slate-200 dark:border-slate-700/50 bg-slate-50 dark:bg-slate-800/80 w-full shrink-0">
@@ -2814,6 +2894,70 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 <script>
+(function() {
+    var viewMode = 'list';
+    var painel = document.getElementById('modal-lista-fornecedores');
+    var viewList = document.getElementById('fornecedores-view-list');
+    var viewCards = document.getElementById('fornecedores-view-cards');
+    var btnList = document.getElementById('btn-fornecedores-view-list');
+    var btnCards = document.getElementById('btn-fornecedores-view-cards');
+
+    function aplicarEstiloBotao(btn, ativo) {
+        if (!btn) return;
+        btn.setAttribute('aria-pressed', ativo ? 'true' : 'false');
+        if (ativo) {
+            btn.classList.add('bg-white', 'dark:bg-slate-700', 'text-emerald-700', 'dark:text-emerald-400', 'shadow-sm');
+            btn.classList.remove('text-slate-600', 'dark:text-slate-300');
+        } else {
+            btn.classList.remove('bg-white', 'dark:bg-slate-700', 'text-emerald-700', 'dark:text-emerald-400', 'shadow-sm');
+            btn.classList.add('text-slate-600', 'dark:text-slate-300');
+        }
+    }
+
+    function setFornecedoresViewMode(mode) {
+        viewMode = (mode === 'cards') ? 'cards' : 'list';
+        if (painel) painel.setAttribute('data-view-mode', viewMode);
+
+        if (viewList && viewCards) {
+            if (viewMode === 'cards') {
+                viewList.classList.add('hidden');
+                viewCards.classList.remove('hidden');
+                viewCards.setAttribute('aria-hidden', 'false');
+                viewList.setAttribute('aria-hidden', 'true');
+            } else {
+                viewCards.classList.add('hidden');
+                viewList.classList.remove('hidden');
+                viewList.setAttribute('aria-hidden', 'false');
+                viewCards.setAttribute('aria-hidden', 'true');
+            }
+        }
+
+        aplicarEstiloBotao(btnList, viewMode === 'list');
+        aplicarEstiloBotao(btnCards, viewMode === 'cards');
+
+        if (window.lucide && typeof window.lucide.createIcons === 'function') {
+            window.lucide.createIcons();
+        }
+    }
+
+    function editarFornecedorNoCard(id) {
+        setFornecedoresViewMode('list');
+        var tr = document.querySelector('#fornecedores-view-list tr[data-fornecedor-id="' + id + '"]');
+        if (!tr) return;
+        var editBtn = tr.querySelector('.display-mode button[title="Editar"]');
+        if (editBtn && typeof ativarEdicaoLinha === 'function') {
+            ativarEdicaoLinha(editBtn);
+            tr.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
+
+    window.setFornecedoresViewMode = setFornecedoresViewMode;
+    window.editarFornecedorNoCard = editarFornecedorNoCard;
+    window.getFornecedoresViewMode = function() { return viewMode; };
+
+    setFornecedoresViewMode('list');
+})();
+
 function toggleLinhaEdicao(btnElement, editando) {
     var tr = btnElement.closest('tr');
     if (!tr) return;
