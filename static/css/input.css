@@ -207,6 +207,16 @@ body.logistica-drawer-dragging {
 /* Swipe-to-dismiss dos painéis laterais direitos (static/js/swipe-dismiss.js) */
 .swipe-dismiss-panel {
   touch-action: pan-y;
+  overscroll-behavior-x: contain;
+}
+
+.swipe-dismiss-backdrop {
+  overscroll-behavior-x: contain;
+}
+
+/* Saída do painel: não recebe toques/cliques residuais (ghost click) até concluir */
+.swipe-dismiss-panel.swipe-dismiss-exiting {
+  pointer-events: none;
 }
 
 .swipe-dismiss-panel [data-swipe-handle] {
