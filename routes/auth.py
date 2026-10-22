@@ -1073,10 +1073,12 @@ def trocar_minha_senha():
 @auth_bp.route('/api/minha-empresa/atualizar', methods=['POST'])
 @login_required
 def api_atualizar_minha_empresa():
-    """Atualiza os dados da Empresa (tenant) vinculada ao usuário logado.
+    """Atualiza estritamente ``nome_fantasia`` da Empresa do usuário logado.
 
     Isolamento multi-tenant: só altera ``Empresa`` cujo ``id`` é
-    ``current_user.empresa_id``. Nunca aceita ``empresa_id`` do cliente.
+    ``current_user.empresa_id``. O ``id`` da empresa NUNCA é alterado
+    (preserva FKs em vendas, clientes, produtos, etc.). Qualquer
+    ``empresa_id``/``id`` enviado pelo cliente é ignorado.
     Restrito a DONO / admin (role legado) do próprio tenant.
     """
     @tenant_required
@@ -1108,6 +1110,9 @@ def api_atualizar_minha_empresa():
                 error='Empresa vinculada ao seu login não foi encontrada.',
             ), 404
 
+        # Snapshot defensivo: o id nunca deve mudar neste endpoint.
+        empresa_id_protegido = empresa.id
+
         payload = request.get_json(silent=True) or {}
         nome_fantasia = (
             payload.get('nome_fantasia')
@@ -1126,14 +1131,6 @@ def api_atualizar_minha_empresa():
                 error='O Nome Fantasia deve ter no máximo 150 caracteres.',
             ), 400
 
-        # CNPJ opcional: só atualiza se o cliente enviou o campo preenchido.
-        cnpj_raw = (
-            payload.get('cnpj')
-            if 'cnpj' in payload
-            else request.form.get('cnpj')
-        )
-        cnpj = (cnpj_raw or '').strip() if cnpj_raw is not None else None
-
         conflito = (
             Empresa.query
             .filter(
@@ -1148,34 +1145,33 @@ def api_atualizar_minha_empresa():
                 error=f'Já existe outra empresa com o nome "{nome_fantasia}".',
             ), 400
 
-        if cnpj:
-            conflito_cnpj = (
-                Empresa.query
-                .filter(Empresa.cnpj == cnpj, Empresa.id != empresa.id)
-                .first()
-            )
-            if conflito_cnpj:
+        try:
+            # Atualiza APENAS nome_fantasia — nunca id, cnpj ou outros campos.
+            empresa.nome_fantasia = nome_fantasia
+            if empresa.id != empresa_id_protegido:
+                db.session.rollback()
                 return jsonify(
                     success=False,
-                    error=f'Já existe outra empresa com o CNPJ "{cnpj}".',
-                ), 400
-
-        empresa.nome_fantasia = nome_fantasia
-        if cnpj:
-            empresa.cnpj = cnpj
-
-        ok, err = _safe_db_commit()
-        if not ok:
+                    error='Erro ao atualizar nome da empresa.',
+                ), 500
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(
+                'Erro ao atualizar nome_fantasia da empresa id=%s: %s',
+                empresa_id_protegido,
+                e,
+                exc_info=True,
+            )
             return jsonify(
                 success=False,
-                error=err or 'Erro ao salvar os dados da empresa.',
+                error='Erro ao atualizar nome da empresa.',
             ), 500
 
         return jsonify(
             success=True,
-            message='Dados da empresa atualizados com sucesso!',
+            message='Nome da empresa atualizado com sucesso!',
             novo_nome=empresa.nome_fantasia,
-            empresa_id=empresa.id,
         )
 
     return _atualizar()
