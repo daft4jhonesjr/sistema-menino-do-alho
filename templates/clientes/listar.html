@@ -37,7 +37,7 @@
                 👤 Novo Cliente
             </button>
             {% if current_user.is_authenticated and current_user.is_admin() %}
-            <button type="button" onclick="abrirDrawerImportarClientes()" class="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-base sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-300 dark:hover:border-emerald-700 hover:text-emerald-800 dark:hover:text-emerald-300 transition-colors shadow-sm">
+            <button type="button" id="btn-abrir-drawer-importar-clientes" onclick="abrirDrawerImportarClientes()" class="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-base sm:text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-300 dark:hover:border-emerald-700 hover:text-emerald-800 dark:hover:text-emerald-300 transition-colors shadow-sm touch-manipulation">
                 📥&nbsp;Importar Lista
             </button>
             {% endif %}
@@ -347,7 +347,7 @@
     <div class="fixed inset-0 z-[9998] bg-black/50 opacity-0 transition-opacity duration-300 ease-out" id="modal-novo-cliente-overlay"></div>
     <div id="modal-novo-cliente-panel"
          class="hidden fixed inset-y-0 right-0 w-full max-w-md bg-white dark:bg-gray-800 shadow-2xl flex flex-col h-full z-[9999] transform transition-transform duration-300 ease-out translate-x-full border-l border-gray-200 dark:border-gray-700"
-         role="dialog" aria-modal="true" aria-labelledby="modal-novo-cliente-titulo" onclick="event.stopPropagation()" data-swipe-dismiss data-swipe-backdrop="#modal-novo-cliente-overlay" data-swipe-close-click="#modal-novo-cliente-fechar">
+         role="dialog" aria-modal="true" aria-labelledby="modal-novo-cliente-titulo" onclick="event.stopPropagation()" data-swipe-dismiss data-swipe-backdrop="#modal-novo-cliente-overlay" data-swipe-close="fecharDrawerNovoCliente">
         <div data-swipe-handle class="shrink-0 flex justify-between items-center px-6 py-4 bg-emerald-700 text-white" style="padding-top: max(1rem, env(safe-area-inset-top));">
             <h3 id="modal-novo-cliente-titulo" class="text-xl font-bold flex items-center">
                 <i data-lucide="users" class="w-5 h-5 mr-2"></i>Novo Cliente
@@ -465,8 +465,8 @@
 
 <!-- Drawer Importar Clientes -->
 <div id="drawer-importar-clientes-backdrop" class="fixed inset-0 z-40 bg-black/50 hidden opacity-0 transition-opacity duration-300 ease-out" aria-hidden="true" data-drawer-backdrop-close="fecharDrawerImportarClientes"></div>
-<div id="drawer-importar-clientes-panel" class="fixed inset-y-0 right-0 z-50 w-full max-w-lg bg-white dark:bg-slate-900 shadow-2xl flex flex-col transform translate-x-full transition-transform duration-300 ease-out hidden" role="dialog" aria-modal="true" aria-labelledby="drawer-importar-clientes-titulo" onclick="event.stopPropagation()">
-    <div class="shrink-0 flex justify-between items-center px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-slate-700 bg-emerald-700 text-white" style="padding-top: max(1rem, env(safe-area-inset-top));">
+<div id="drawer-importar-clientes-panel" class="fixed inset-y-0 right-0 z-50 w-full max-w-lg bg-white dark:bg-slate-900 shadow-2xl flex flex-col transform translate-x-full transition-transform duration-300 ease-out hidden" role="dialog" aria-modal="true" aria-labelledby="drawer-importar-clientes-titulo" onclick="event.stopPropagation()" data-swipe-dismiss data-swipe-backdrop="#drawer-importar-clientes-backdrop" data-swipe-close="fecharDrawerImportarClientes" style="touch-action: pan-y; -webkit-touch-callout: none;">
+    <div data-swipe-handle class="shrink-0 flex justify-between items-center px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-slate-700 bg-emerald-700 text-white" style="padding-top: max(1rem, env(safe-area-inset-top));">
         <h3 id="drawer-importar-clientes-titulo" class="text-lg sm:text-xl font-bold flex items-center gap-2">
             <i data-lucide="upload" class="w-5 h-5"></i>Importar Clientes
         </h3>
@@ -866,6 +866,19 @@ window.padronizarClientesMaiusculo = function() {
         if (typeof lucide !== 'undefined') lucide.createIcons();
     }
 
+    function ativarTravaAntiGhostClick() {
+        if (!panel) return;
+        panel.dataset.bloquearAbertura = 'true';
+        document.body.dataset.iosBloqueioClique = 'true';
+        var unlockMs = (window.MeninoAlhoSwipeDismiss && window.MeninoAlhoSwipeDismiss.OPEN_BLOCK_MS) || 450;
+        setTimeout(function() {
+            if (panel && panel.dataset) delete panel.dataset.bloquearAbertura;
+            if (!document.querySelector('[data-bloquear-abertura="true"]')) {
+                delete document.body.dataset.iosBloqueioClique;
+            }
+        }, unlockMs);
+    }
+
     function abrir() {
         // Ignora clique fantasma do Safari/WebKit logo após swipe de fechar
         if (document.body.dataset.iosBloqueioClique === 'true') return;
@@ -874,6 +887,7 @@ window.padronizarClientesMaiusculo = function() {
             return;
         }
         if (panel && panel.dataset && panel.dataset.bloquearAbertura === 'true') return;
+        if (panel && panel.dataset && panel.dataset.isSwiping === 'true') return;
         if (wrap && panel) {
             if (wrap.parentElement !== document.body) {
                 document.body.appendChild(wrap);
@@ -905,6 +919,8 @@ window.padronizarClientesMaiusculo = function() {
         if (typeof lucide !== 'undefined') lucide.createIcons();
     }
     function fechar() {
+        var fromSwipe = panel && panel.dataset && panel.dataset.swipeClosed === 'true';
+        if (fromSwipe) ativarTravaAntiGhostClick();
         var safe = window.MeninoAlhoDrawerSafe;
         if (panel && safe && safe.fecharGavetaComSeguranca) {
             safe.fecharGavetaComSeguranca(panel, overlay, {
@@ -914,7 +930,11 @@ window.padronizarClientesMaiusculo = function() {
                         wrap.classList.add('hidden');
                         wrap.setAttribute('aria-hidden', 'true');
                     }
-                    if (panel) panel.classList.add('hidden');
+                    if (panel) {
+                        panel.classList.add('hidden');
+                        panel.style.transform = '';
+                        panel.style.transition = '';
+                    }
                     if (typeof liberarFundo === 'function') liberarFundo();
                 }
             });
@@ -941,11 +961,13 @@ window.padronizarClientesMaiusculo = function() {
                     wrap.setAttribute('aria-hidden', 'true');
                     if (panel) {
                         panel.classList.add('hidden');
+                        panel.style.transform = '';
+                        panel.style.transition = '';
                         delete panel.dataset.closing;
                     }
                     if (typeof liberarFundo === 'function') liberarFundo();
                 }
-            }, 300);
+            }, 250);
         } else if (typeof liberarFundo === 'function') {
             liberarFundo();
         }
@@ -953,6 +975,9 @@ window.padronizarClientesMaiusculo = function() {
         erroDiv.textContent = '';
         resetBtnSalvar();
     }
+
+    window.abrirDrawerNovoCliente = abrir;
+    window.fecharDrawerNovoCliente = fechar;
 
     if (btnAbrir) btnAbrir.addEventListener('click', abrir);
     // Backdrop: MeninoAlhoDrawerSafe (pointerdown) via data-swipe-backdrop
@@ -2093,9 +2118,17 @@ document.addEventListener('DOMContentLoaded', function() {
 <script>
 // Gaveta: Importar Clientes
 function abrirDrawerImportarClientes() {
+    // Isola o botão "Importar Lista" do clique fantasma residual do iOS/WebKit
+    if (document.body.dataset.iosBloqueioClique === 'true') return;
     var backdrop = document.getElementById('drawer-importar-clientes-backdrop');
     var panel = document.getElementById('drawer-importar-clientes-panel');
     if (!backdrop || !panel) return;
+    var swipeApi = window.MeninoAlhoSwipeDismiss;
+    if (swipeApi && typeof swipeApi.isAberturaBloqueada === 'function' && swipeApi.isAberturaBloqueada(panel)) {
+        return;
+    }
+    if (panel.dataset && panel.dataset.bloquearAbertura === 'true') return;
+    if (panel.dataset && panel.dataset.isSwiping === 'true') return;
     if (panel.dataset) delete panel.dataset.closing;
     backdrop.classList.remove('hidden');
     backdrop.classList.add('opacity-0');
@@ -2113,13 +2146,30 @@ function abrirDrawerImportarClientes() {
     if (typeof lucide !== 'undefined') lucide.createIcons();
 }
 
-function fecharDrawerImportarClientes() {
+function fecharDrawerImportarClientes(fromSwipeGesture) {
     var backdrop = document.getElementById('drawer-importar-clientes-backdrop');
     var panel = document.getElementById('drawer-importar-clientes-panel');
+    var fromSwipe = fromSwipeGesture === true || (panel && panel.dataset && panel.dataset.swipeClosed === 'true');
+    if (fromSwipe && panel) {
+        // Trava anti-reabertura (ghost click iOS) — compartilhada com Novo Cliente
+        panel.dataset.bloquearAbertura = 'true';
+        document.body.dataset.iosBloqueioClique = 'true';
+        var unlockMs = (window.MeninoAlhoSwipeDismiss && window.MeninoAlhoSwipeDismiss.OPEN_BLOCK_MS) || 450;
+        setTimeout(function() {
+            if (panel && panel.dataset) delete panel.dataset.bloquearAbertura;
+            if (!document.querySelector('[data-bloquear-abertura="true"]')) {
+                delete document.body.dataset.iosBloqueioClique;
+            }
+        }, unlockMs);
+    }
     var safe = window.MeninoAlhoDrawerSafe;
     if (panel && safe && safe.fecharGavetaComSeguranca) {
         safe.fecharGavetaComSeguranca(panel, backdrop, {
             onDone: function() {
+                if (panel) {
+                    panel.style.transform = '';
+                    panel.style.transition = '';
+                }
                 if (typeof liberarFundo === 'function') liberarFundo();
             }
         });
@@ -2139,10 +2189,12 @@ function fecharDrawerImportarClientes() {
         if (panel && panel.classList.contains('translate-x-full')) {
             if (backdrop) backdrop.classList.add('hidden');
             panel.classList.add('hidden');
+            panel.style.transform = '';
+            panel.style.transition = '';
             delete panel.dataset.closing;
             if (typeof liberarFundo === 'function') liberarFundo();
         }
-    }, 300);
+    }, 250);
 }
 
 (function() {
