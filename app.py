@@ -2956,8 +2956,9 @@ def add_cache_control_static(response):
 
     Estratégia:
 
-    * ``/static/*`` — cache longo (1 ano) com ETag, pois o nome do arquivo
-      é versionado pelo bundler/git e o navegador pode reusar livremente.
+    * ``/static/*`` — cache de 24 h com ETag. As URLs de ``url_for('static')``
+      não são versionadas, então um ``max-age`` maior deixaria JS/CSS
+      desatualizados no navegador por muito tempo após um deploy.
     * Páginas autenticadas (``current_user.is_authenticated``) — bloqueamos
       explicitamente o ``bfcache`` (back-forward cache) do Safari e demais
       caches de navegador com ``Cache-Control: no-store``. Isto é
@@ -2978,8 +2979,7 @@ def add_cache_control_static(response):
       mantemos o default do Flask, sem cache explícito.
     """
     if request.path.startswith('/static/'):
-        # Cache de 1 ano para arquivos estáticos (CSS, JS, imagens, fontes)
-        response.headers['Cache-Control'] = 'public, max-age=31536000'
+        response.headers['Cache-Control'] = 'public, max-age=86400'
         # Adicionar ETag para validação de cache
         if not response.headers.get('ETag'):
             etag = hashlib.md5(response.get_data()).hexdigest()
