@@ -2286,6 +2286,16 @@ def _auto_vincular_documentos_pendentes_por_nf(user_id=None):
 
 app = Flask(__name__)
 app.config.from_object(Config)
+
+# Inicialização do Sentry para monitoramento de erros e performance
+import sentry_sdk
+sentry_dsn = os.getenv("SENTRY_DSN")
+if sentry_dsn:
+    sentry_sdk.init(
+        dsn=sentry_dsn,
+        traces_sample_rate=0.5,
+        send_default_pii=False,
+    )
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
@@ -5023,6 +5033,13 @@ def handle_exception(e):
     # Garante que a sessão do banco não fique suja (transação pendente/quebrada)
     try:
         db.session.rollback()
+    except Exception:
+        pass
+
+    # Captura exceção no Sentry se estiver configurado
+    try:
+        import sentry_sdk
+        sentry_sdk.capture_exception(e)
     except Exception:
         pass
 
