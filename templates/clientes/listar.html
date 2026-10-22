@@ -344,9 +344,9 @@
 
 <!-- Drawer Novo Cliente (padrão Nova Venda) -->
 <div id="modal-novo-cliente-wrap" class="fixed inset-0 z-[9999] hidden" aria-hidden="true">
-    <div class="fixed inset-0 z-[9998] bg-black/50 transition-opacity" id="modal-novo-cliente-overlay"></div>
+    <div class="fixed inset-0 z-[9998] bg-black/50 opacity-0 transition-opacity duration-300 ease-out" id="modal-novo-cliente-overlay"></div>
     <div id="modal-novo-cliente-panel"
-         class="hidden fixed inset-y-0 right-0 w-full max-w-md bg-white dark:bg-gray-800 shadow-2xl flex flex-col h-full z-[9999] transform transition-transform duration-300 translate-x-full border-l border-gray-200 dark:border-gray-700"
+         class="hidden fixed inset-y-0 right-0 w-full max-w-md bg-white dark:bg-gray-800 shadow-2xl flex flex-col h-full z-[9999] transform transition-transform duration-300 ease-out translate-x-full border-l border-gray-200 dark:border-gray-700"
          role="dialog" aria-modal="true" aria-labelledby="modal-novo-cliente-titulo" onclick="event.stopPropagation()" data-swipe-dismiss data-swipe-backdrop="#modal-novo-cliente-overlay" data-swipe-close-click="#modal-novo-cliente-fechar">
         <div data-swipe-handle class="shrink-0 flex justify-between items-center px-6 py-4 bg-emerald-700 text-white" style="padding-top: max(1rem, env(safe-area-inset-top));">
             <h3 id="modal-novo-cliente-titulo" class="text-xl font-bold flex items-center">
@@ -464,8 +464,8 @@
 </div>
 
 <!-- Drawer Importar Clientes -->
-<div id="drawer-importar-clientes-backdrop" class="fixed inset-0 z-40 bg-black/50 hidden transition-opacity" aria-hidden="true" onclick="fecharDrawerImportarClientes()"></div>
-<div id="drawer-importar-clientes-panel" class="fixed inset-y-0 right-0 z-50 w-full max-w-lg bg-white dark:bg-slate-900 shadow-2xl flex flex-col transform translate-x-full transition-transform duration-300 hidden" role="dialog" aria-modal="true" aria-labelledby="drawer-importar-clientes-titulo" onclick="event.stopPropagation()">
+<div id="drawer-importar-clientes-backdrop" class="fixed inset-0 z-40 bg-black/50 hidden opacity-0 transition-opacity duration-300 ease-out" aria-hidden="true" data-drawer-backdrop-close="fecharDrawerImportarClientes"></div>
+<div id="drawer-importar-clientes-panel" class="fixed inset-y-0 right-0 z-50 w-full max-w-lg bg-white dark:bg-slate-900 shadow-2xl flex flex-col transform translate-x-full transition-transform duration-300 ease-out hidden" role="dialog" aria-modal="true" aria-labelledby="drawer-importar-clientes-titulo" onclick="event.stopPropagation()">
     <div class="shrink-0 flex justify-between items-center px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-slate-700 bg-emerald-700 text-white" style="padding-top: max(1rem, env(safe-area-inset-top));">
         <h3 id="drawer-importar-clientes-titulo" class="text-lg sm:text-xl font-bold flex items-center gap-2">
             <i data-lucide="upload" class="w-5 h-5"></i>Importar Clientes
@@ -871,14 +871,26 @@ window.padronizarClientesMaiusculo = function() {
             if (wrap.parentElement !== document.body) {
                 document.body.appendChild(wrap);
             }
+            if (panel.dataset) delete panel.dataset.closing;
             wrap.classList.remove('hidden');
             wrap.setAttribute('aria-hidden', 'false');
+            if (overlay) {
+                overlay.classList.remove('hidden');
+                overlay.classList.add('opacity-0');
+                overlay.classList.remove('opacity-100');
+            }
             panel.classList.remove('hidden');
             panel.classList.add('translate-x-full');
             panel.classList.remove('translate-x-0');
             panel.offsetHeight;
-            panel.classList.remove('translate-x-full');
-            panel.classList.add('translate-x-0');
+            requestAnimationFrame(function() {
+                if (overlay) {
+                    overlay.classList.remove('opacity-0');
+                    overlay.classList.add('opacity-100');
+                }
+                panel.classList.remove('translate-x-full');
+                panel.classList.add('translate-x-0');
+            });
             panel.setAttribute('aria-hidden', 'false');
             travarFundo();
         }
@@ -886,17 +898,44 @@ window.padronizarClientesMaiusculo = function() {
         if (typeof lucide !== 'undefined') lucide.createIcons();
     }
     function fechar() {
+        var safe = window.MeninoAlhoDrawerSafe;
+        if (panel && safe && safe.fecharGavetaComSeguranca) {
+            safe.fecharGavetaComSeguranca(panel, overlay, {
+                hideDrawer: false,
+                onDone: function() {
+                    if (wrap) {
+                        wrap.classList.add('hidden');
+                        wrap.setAttribute('aria-hidden', 'true');
+                    }
+                    if (panel) panel.classList.add('hidden');
+                    if (typeof liberarFundo === 'function') liberarFundo();
+                }
+            });
+            erroDiv.classList.add('hidden');
+            erroDiv.textContent = '';
+            resetBtnSalvar();
+            return;
+        }
+        if (panel && panel.dataset && panel.dataset.closing === 'true') return;
+        if (panel && panel.dataset) panel.dataset.closing = 'true';
         if (panel) {
             panel.classList.remove('translate-x-0');
             panel.classList.add('translate-x-full');
             panel.setAttribute('aria-hidden', 'true');
+        }
+        if (overlay) {
+            overlay.classList.add('opacity-0');
+            overlay.classList.remove('opacity-100');
         }
         if (wrap) {
             setTimeout(function() {
                 if (!panel || panel.classList.contains('translate-x-full')) {
                     wrap.classList.add('hidden');
                     wrap.setAttribute('aria-hidden', 'true');
-                    if (panel) panel.classList.add('hidden');
+                    if (panel) {
+                        panel.classList.add('hidden');
+                        delete panel.dataset.closing;
+                    }
                     if (typeof liberarFundo === 'function') liberarFundo();
                 }
             }, 300);
@@ -909,7 +948,7 @@ window.padronizarClientesMaiusculo = function() {
     }
 
     if (btnAbrir) btnAbrir.addEventListener('click', abrir);
-    if (overlay) overlay.addEventListener('click', fechar);
+    // Backdrop: MeninoAlhoDrawerSafe (pointerdown) via data-swipe-backdrop
     if (btnFechar) btnFechar.addEventListener('click', fechar);
     if (btnCancelar) btnCancelar.addEventListener('click', fechar);
     document.addEventListener('keydown', function(e) {
@@ -2050,12 +2089,19 @@ function abrirDrawerImportarClientes() {
     var backdrop = document.getElementById('drawer-importar-clientes-backdrop');
     var panel = document.getElementById('drawer-importar-clientes-panel');
     if (!backdrop || !panel) return;
+    if (panel.dataset) delete panel.dataset.closing;
     backdrop.classList.remove('hidden');
+    backdrop.classList.add('opacity-0');
+    backdrop.classList.remove('opacity-100');
     backdrop.setAttribute('aria-hidden', 'false');
     panel.classList.remove('hidden');
     panel.classList.add('translate-x-full');
     panel.offsetHeight;
-    panel.classList.remove('translate-x-full');
+    requestAnimationFrame(function() {
+        backdrop.classList.remove('opacity-0');
+        backdrop.classList.add('opacity-100');
+        panel.classList.remove('translate-x-full');
+    });
     if (typeof travarFundo === 'function') travarFundo();
     if (typeof lucide !== 'undefined') lucide.createIcons();
 }
@@ -2063,16 +2109,30 @@ function abrirDrawerImportarClientes() {
 function fecharDrawerImportarClientes() {
     var backdrop = document.getElementById('drawer-importar-clientes-backdrop');
     var panel = document.getElementById('drawer-importar-clientes-panel');
+    var safe = window.MeninoAlhoDrawerSafe;
+    if (panel && safe && safe.fecharGavetaComSeguranca) {
+        safe.fecharGavetaComSeguranca(panel, backdrop, {
+            onDone: function() {
+                if (typeof liberarFundo === 'function') liberarFundo();
+            }
+        });
+        return;
+    }
+    if (panel && panel.dataset && panel.dataset.closing === 'true') return;
+    if (panel && panel.dataset) panel.dataset.closing = 'true';
     if (panel) {
         panel.classList.add('translate-x-full');
     }
+    if (backdrop) {
+        backdrop.classList.add('opacity-0');
+        backdrop.classList.remove('opacity-100');
+        backdrop.setAttribute('aria-hidden', 'true');
+    }
     setTimeout(function() {
         if (panel && panel.classList.contains('translate-x-full')) {
-            if (backdrop) {
-                backdrop.classList.add('hidden');
-                backdrop.setAttribute('aria-hidden', 'true');
-            }
+            if (backdrop) backdrop.classList.add('hidden');
             panel.classList.add('hidden');
+            delete panel.dataset.closing;
             if (typeof liberarFundo === 'function') liberarFundo();
         }
     }, 300);

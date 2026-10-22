@@ -543,8 +543,8 @@
 <!-- Overlay + Gaveta de Ações (Nova Entrada, Relatório, Importar, Tipos, Fornecedores)
      Mobile: abre da direita→esquerda (translate-x-full → translate-x-0);
      fecha da esquerda→direita (translate-x-0 → translate-x-full). -->
-<div id="modal-nova-entrada-overlay" class="fixed inset-0 z-[9998] hidden bg-black/50 opacity-0 transition-opacity duration-300 ease-in-out" aria-hidden="true"></div>
-<div id="modal-nova-entrada-wrap" class="fixed inset-y-0 right-0 z-[9999] hidden w-full max-w-md h-full bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col transform translate-x-full transition-transform duration-300 ease-in-out" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="gaveta-nova-entrada-titulo" data-acao="" data-swipe-dismiss data-swipe-backdrop="#modal-nova-entrada-overlay" data-swipe-close-click="#modal-nova-entrada-fechar">
+<div id="modal-nova-entrada-overlay" class="fixed inset-0 z-[9998] hidden bg-black/50 opacity-0 transition-opacity duration-300 ease-out" aria-hidden="true"></div>
+<div id="modal-nova-entrada-wrap" class="fixed inset-y-0 right-0 z-[9999] hidden w-full max-w-md h-full bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col transform translate-x-full transition-transform duration-300 ease-out" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="gaveta-nova-entrada-titulo" data-acao="" data-swipe-dismiss data-swipe-backdrop="#modal-nova-entrada-overlay" data-swipe-close-click="#modal-nova-entrada-fechar" onclick="event.stopPropagation()">
     <div data-swipe-handle class="flex items-center justify-between px-5 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))] border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 shrink-0">
         <div>
             <h3 id="gaveta-nova-entrada-titulo" class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
@@ -1270,8 +1270,8 @@ function fecharModalNovoFornecedor() {
 
 <!-- Modal Editar Produto -->
 <!-- Overlay + Gaveta Editar Produto -->
-<div id="modal-editar-produto-overlay" class="fixed inset-0 z-[9998] hidden bg-black/50 transition-opacity" aria-hidden="true"></div>
-<div id="modal-editar-produto-wrap" class="fixed inset-y-0 right-0 z-[9999] hidden w-full max-w-md h-full translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col pointer-events-auto transform" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="gaveta-editar-produto-titulo" data-swipe-dismiss data-swipe-backdrop="#modal-editar-produto-overlay" data-swipe-close="fecharGavetaEditarProduto">
+<div id="modal-editar-produto-overlay" class="fixed inset-0 z-[9998] hidden bg-black/50 opacity-0 transition-opacity duration-300 ease-out" aria-hidden="true"></div>
+<div id="modal-editar-produto-wrap" class="fixed inset-y-0 right-0 z-[9999] hidden w-full max-w-md h-full translate-x-full transition-transform duration-300 ease-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col pointer-events-auto transform" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="gaveta-editar-produto-titulo" data-swipe-dismiss data-swipe-backdrop="#modal-editar-produto-overlay" data-swipe-close="fecharGavetaEditarProduto" onclick="event.stopPropagation()">
     <div data-swipe-handle class="flex items-center justify-between px-5 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))] border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 shrink-0">
         <div>
             <h3 id="gaveta-editar-produto-titulo" class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
@@ -1724,17 +1724,26 @@ function fecharModalNovoFornecedor() {
             editNacionalidade.value = nacionalidade;
         }
 
+        if (wrap.dataset) delete wrap.dataset.closing;
         wrap.classList.remove('hidden');
         wrap.classList.add('translate-x-full');
         wrap.classList.remove('translate-x-0');
-        wrap.offsetHeight;
-        wrap.classList.remove('translate-x-full');
-        wrap.classList.add('translate-x-0');
-        wrap.setAttribute('aria-hidden', 'false');
         if (overlay) {
             overlay.classList.remove('hidden');
+            overlay.classList.add('opacity-0');
+            overlay.classList.remove('opacity-100');
             overlay.setAttribute('aria-hidden', 'false');
         }
+        wrap.offsetHeight;
+        requestAnimationFrame(function() {
+            if (overlay) {
+                overlay.classList.remove('opacity-0');
+                overlay.classList.add('opacity-100');
+            }
+            wrap.classList.remove('translate-x-full');
+            wrap.classList.add('translate-x-0');
+        });
+        wrap.setAttribute('aria-hidden', 'false');
         if (typeof travarFundo === 'function') travarFundo();
         if (typeof lucide !== 'undefined' && lucide.createIcons) {
             try { lucide.createIcons(); } catch (_) {}
@@ -1894,15 +1903,35 @@ function fecharModalNovoFornecedor() {
     function fecharModalEditarProduto() {
         wrap = elWrap();
         overlay = document.getElementById('modal-editar-produto-overlay');
+        var safe = window.MeninoAlhoDrawerSafe;
+        if (wrap && safe && safe.fecharGavetaComSeguranca) {
+            safe.fecharGavetaComSeguranca(wrap, overlay, {
+                onDone: function() {
+                    if (typeof liberarFundo === 'function') liberarFundo();
+                }
+            });
+            return;
+        }
+        if (wrap && wrap.dataset && wrap.dataset.closing === 'true') return;
+        if (wrap && wrap.dataset) wrap.dataset.closing = 'true';
         if (wrap) {
             wrap.classList.remove('translate-x-0');
             wrap.classList.add('translate-x-full');
             wrap.setAttribute('aria-hidden', 'true');
+            if (overlay) {
+                overlay.classList.add('opacity-0');
+                overlay.classList.remove('opacity-100');
+                overlay.setAttribute('aria-hidden', 'true');
+            }
             setTimeout(function() {
                 if (wrap.classList.contains('translate-x-full')) {
                     wrap.classList.add('hidden');
                 }
+                if (overlay) overlay.classList.add('hidden');
+                if (wrap.dataset) delete wrap.dataset.closing;
+                if (typeof liberarFundo === 'function') liberarFundo();
             }, 300);
+            return;
         }
         if (overlay) {
             overlay.classList.add('hidden');
@@ -1913,7 +1942,7 @@ function fecharModalNovoFornecedor() {
     window.fecharModalEditarProduto = fecharModalEditarProduto;
     window.fecharGavetaEditarProduto = fecharModalEditarProduto;
 
-    if (overlay) overlay.addEventListener('click', fecharModalEditarProduto);
+    // Backdrop: MeninoAlhoDrawerSafe (pointerdown) via data-swipe-backdrop
     btnsFechar.forEach(function(b) { b.addEventListener('click', fecharModalEditarProduto); });
     document.addEventListener('keydown', function(e) {
         if (e.key !== 'Escape') return;
@@ -2135,19 +2164,21 @@ window.getTipoConfigPorSelect = function(selectEl) {
     function fechar() {
         if (!wrap) return;
         if (wrap.classList.contains('hidden') && (!_gavetaFechando)) return;
-        if (_gavetaFechando) return;
+        if (_gavetaFechando || (wrap.dataset && wrap.dataset.closing === 'true')) return;
         _gavetaFechando = true;
+        if (wrap.dataset) wrap.dataset.closing = 'true';
 
         // Painel: slide da esquerda → direita (sai pela borda direita)
         wrap.classList.remove('translate-x-0');
         wrap.classList.add('translate-x-full');
         wrap.setAttribute('aria-hidden', 'true');
 
-        // Backdrop: fade-out suave (hidden só após a transição)
+        // Backdrop: fade-out suave (hidden só após a transição — bloqueia ghost click)
         if (overlay) {
             overlay.classList.remove('opacity-100');
             overlay.classList.add('opacity-0');
             overlay.setAttribute('aria-hidden', 'true');
+            overlay.style.pointerEvents = 'auto';
         }
 
         if (_gavetaCloseTimer) clearTimeout(_gavetaCloseTimer);
@@ -2160,8 +2191,10 @@ window.getTipoConfigPorSelect = function(selectEl) {
                 overlay.classList.add('hidden');
                 overlay.classList.remove('opacity-100');
                 overlay.classList.add('opacity-0');
+                overlay.style.pointerEvents = '';
             }
             _gavetaFechando = false;
+            if (wrap.dataset) delete wrap.dataset.closing;
             if (typeof liberarFundo === 'function') liberarFundo();
         }, DRAWER_ANIM_MS);
 
@@ -2362,7 +2395,7 @@ window.getTipoConfigPorSelect = function(selectEl) {
             }
         });
     }
-    if (overlay) overlay.addEventListener('click', fechar);
+    // Backdrop: MeninoAlhoDrawerSafe (pointerdown) via data-swipe-backdrop
     if (btnFechar) btnFechar.addEventListener('click', fechar);
     if (btnCancelar) btnCancelar.addEventListener('click', fechar);
 

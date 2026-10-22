@@ -231,9 +231,12 @@
     carregarDados(false).catch(function () {});
   }
 
+  var fechando = false;
+
   function abrirDrawer() {
-    if (aberta) return;
+    if (aberta || fechando) return;
     aberta = true;
+    if (panel.dataset) delete panel.dataset.closing;
     document.body.classList.add('logistica-drawer-open');
     if (typeof travarFundo === 'function') travarFundo();
 
@@ -255,7 +258,10 @@
   }
 
   function fecharDrawer() {
-    if (!aberta) return;
+    if (!aberta || fechando) return;
+    if (panel.dataset && panel.dataset.closing === 'true') return;
+    fechando = true;
+    if (panel.dataset) panel.dataset.closing = 'true';
     aberta = false;
     document.body.classList.remove('logistica-drawer-open');
 
@@ -265,12 +271,17 @@
 
     overlay.classList.remove('is-visible');
     overlay.setAttribute('aria-hidden', 'true');
+    // Mantém o overlay interceptando o ghost click até o fim da animação
+    overlay.style.pointerEvents = 'auto';
 
     global.setTimeout(function () {
+      fechando = false;
+      if (panel.dataset) delete panel.dataset.closing;
       if (!aberta) {
         panel.classList.add('hidden');
         panel.classList.remove('logistica-drawer-panel--open');
         overlay.classList.add('hidden');
+        overlay.style.pointerEvents = '';
         if (typeof liberarFundo === 'function') liberarFundo();
       }
     }, ANIM_MS);
@@ -292,7 +303,12 @@
     });
   }
 
-  overlay.addEventListener('click', fecharDrawer);
+  if (global.MeninoAlhoDrawerSafe && global.MeninoAlhoDrawerSafe.bindBackdropClose) {
+    global.MeninoAlhoDrawerSafe.bindBackdropClose(overlay, fecharDrawer);
+    global.MeninoAlhoDrawerSafe.bindPanelStopPropagation(panel);
+  } else {
+    overlay.addEventListener('click', fecharDrawer);
+  }
 
   panel.addEventListener('transitionend', function (e) {
     if (e.propertyName !== 'transform') return;
