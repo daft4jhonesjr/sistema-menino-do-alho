@@ -11,6 +11,7 @@ from typing import Any
 
 from flask import url_for
 from sqlalchemy import or_
+from sqlalchemy.orm import contains_eager
 
 # IDs fixos no Capacitor LocalNotifications (cancel/reschedule).
 ID_LOCAL_BOLETOS = 9101
@@ -143,6 +144,10 @@ def _contar_radar_por_empresa(empresa_id: int) -> int:
         Venda.query
         .join(Produto, Venda.produto_id == Produto.id)
         .join(Cliente, Venda.cliente_id == Cliente.id)
+        .options(
+            contains_eager(Venda.produto),
+            contains_eager(Venda.cliente),
+        )
         .filter(
             Venda.empresa_id == empresa_id,
             ~Produto.tipo.ilike('%BACALHAU%'),

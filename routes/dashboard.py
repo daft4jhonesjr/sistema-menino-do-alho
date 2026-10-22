@@ -49,7 +49,7 @@ from flask import (
 )
 from flask_login import current_user
 from sqlalchemy import and_, case, desc, func, or_
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, contains_eager
 
 from extensions import cache
 from models import db, Cliente, Produto, Venda, Documento, LancamentoCaixa, VotoFrase, Fornecedor
@@ -421,9 +421,12 @@ def get_radar_recompra():
 
     vendas_all = (
         query_tenant(Venda)
-        .options(joinedload(Venda.cliente), joinedload(Venda.produto))
         .join(Produto, Venda.produto_id == Produto.id)
         .join(Cliente, Venda.cliente_id == Cliente.id)
+        .options(
+            contains_eager(Venda.produto),
+            contains_eager(Venda.cliente),
+        )
         .filter(
             ~Produto.tipo.ilike('%BACALHAU%'),
             ~Produto.nome_produto.ilike('%BACALHAU%'),
@@ -769,11 +772,14 @@ def dashboard():
 
     vendas_com_prejuizo = []
     try:
-        vendas_com_prejuizo = query_tenant(Venda).options(
-            joinedload(Venda.cliente), joinedload(Venda.produto)
-        ).join(Produto, Venda.produto_id == Produto.id) \
-         .filter(prejuizo_expr < 0, *filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome) \
-         .order_by(Venda.data_venda.desc()).all()
+        vendas_com_prejuizo = query_tenant(Venda) \
+            .join(Produto, Venda.produto_id == Produto.id) \
+            .options(
+                contains_eager(Venda.produto),
+                joinedload(Venda.cliente),
+            ) \
+            .filter(prejuizo_expr < 0, *filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome) \
+            .order_by(Venda.data_venda.desc()).all()
     except Exception as _e_prej:
         db.session.rollback()
         current_app.logger.warning(f'dashboard: falha ao carregar vendas_com_prejuizo: {_e_prej}')
