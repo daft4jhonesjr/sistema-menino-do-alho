@@ -55,7 +55,7 @@ from flask import (
 )
 from sqlalchemy import asc, case, desc, extract, func
 from sqlalchemy.orm import selectinload
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, DataError, DatabaseError
 import pandas as pd
 from werkzeug.utils import secure_filename
 import cloudinary.uploader
@@ -88,6 +88,13 @@ from routes.caixa import _limpar_valor_moeda
 
 
 produtos_bp = Blueprint('produtos', __name__)
+
+# Limites defensivos para campos numéricos do produto.
+# Numeric(10, 2) suporta no máximo 8 dígitos inteiros (10 - 2 = 8), ou seja:
+# valor máximo = 99.999.999,99. Qualquer valor acima causa DataError no PostgreSQL.
+LIMITE_VALOR_MAX = Decimal('99999999.99')
+# Máximo de um INTEGER de 32 bits (tipo da coluna quantidade_entrada/estoque_atual).
+LIMITE_QTD_MAX = 2_147_483_647
 
 
 # ============================================================
@@ -1140,6 +1147,23 @@ def novo_produto():
             nome_produto = _montar_nome_produto(tipo_upper, (marca or 'NORGY').strip().upper(), tamanho)
         else:
             nome_produto = gerar_nome_produto(tipo_upper, nacionalidade, marca, data_chegada, tamanho)
+
+        # --- Validação defensiva de overflow numérico ---
+        preco_custo_decimal = Decimal(str(_limpar_valor_moeda(preco_custo)))
+        if preco_custo_decimal > LIMITE_VALOR_MAX:
+            msg = 'O preço informado excede o limite máximo permitido (R$ 99.999.999,99).'
+            if _is_ajax():
+                return jsonify(success=False, ok=False, error=msg), 400
+            flash(msg, 'warning')
+            return render_template('produtos/formulario.html', produto=None)
+        if quantidade_entrada > LIMITE_QTD_MAX:
+            msg = 'A quantidade informada excede o limite máximo permitido pelo sistema.'
+            if _is_ajax():
+                return jsonify(success=False, ok=False, error=msg), 400
+            flash(msg, 'warning')
+            return render_template('produtos/formulario.html', produto=None)
+        # ------------------------------------------------
+
         produto = Produto(
             tipo=tipo_upper,
             nacionalidade=nacionalidade,
@@ -1147,7 +1171,7 @@ def novo_produto():
             tamanho=tamanho,
             fornecedor=fornecedor,
             caminhoneiro=caminhoneiro,
-            preco_custo=Decimal(str(_limpar_valor_moeda(preco_custo))),
+            preco_custo=preco_custo_decimal,
             preco_venda_alvo=None,
             quantidade_entrada=quantidade_entrada,  # Quantidade original que entrou
             estoque_atual=quantidade_entrada,
@@ -1275,6 +1299,18 @@ def editar_produto(id):
             else:
                 nome_produto = gerar_nome_produto(tipo_upper, nacionalidade, marca, data_chegada, tamanho)
 
+            # --- Validação defensiva de overflow numérico ---
+            preco_custo_decimal = Decimal(str(_limpar_valor_moeda(preco_custo)))
+            if preco_custo_decimal > LIMITE_VALOR_MAX:
+                return _erro_validacao(
+                    'O preço informado excede o limite máximo permitido (R$ 99.999.999,99).'
+                )
+            if quantidade_entrada > LIMITE_QTD_MAX:
+                return _erro_validacao(
+                    'A quantidade informada excede o limite máximo permitido pelo sistema.'
+                )
+            # ------------------------------------------------
+
             # "quantidade_entrada" no formulário de edição = quantidade ADICIONAL
             # (não o total histórico). Precisa somar em estoque_atual E no
             # acumulado quantidade_entrada para manter a identidade:
@@ -1293,7 +1329,7 @@ def editar_produto(id):
             produto.tamanho = tamanho
             produto.fornecedor = fornecedor
             produto.caminhoneiro = caminhoneiro
-            produto.preco_custo = Decimal(str(_limpar_valor_moeda(preco_custo)))
+            produto.preco_custo = preco_custo_decimal
             produto.data_chegada = data_chegada
             produto.nome_produto = nome_produto
 
