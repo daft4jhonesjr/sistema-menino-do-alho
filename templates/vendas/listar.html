@@ -572,11 +572,11 @@
                 <i data-lucide="x" class="w-5 h-5 pointer-events-none"></i>
             </button>
         </div>
-        <div class="flex-1 overflow-y-auto p-5 space-y-4 relative z-0">
+        <div data-swipe-scroll class="flex-1 overflow-y-auto p-5 space-y-4 relative z-0 overscroll-contain" style="touch-action: pan-y; -webkit-overflow-scrolling: touch;">
 
 <!-- Linha de inserção: campos alinhados com a tabela -->
 <div id="container-formulario-venda" class="mb-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none overflow-visible">
-        <form id="form-nova-venda-inline" action="{{ url_for('vendas.add_venda') }}" method="POST" class="p-4" novalidate>
+        <form id="form-nova-venda-inline" action="{{ url_for('vendas.add_venda') }}" method="POST" class="p-4" novalidate style="touch-action: pan-y;">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         <div class="venda-input-group flex flex-col gap-5 w-full">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-5 items-start">
@@ -6183,6 +6183,8 @@ window.fecharModalNovaVenda = function(event) {
     var panel = document.getElementById('nova-venda-panel');
     var backdrop = document.getElementById('nova-venda-backdrop');
     if (!modal || !panel) return;
+    // Durante o swipe, só aceita o onClose do próprio gesto (swipeClosed)
+    if (panel.dataset.isSwiping === 'true' && panel.dataset.swipeClosed !== 'true') return;
     if (panel.dataset.isClosing === 'true' || panel.dataset.closing === 'true') return;
 
     var safe = window.MeninoAlhoDrawerSafe;

@@ -27,6 +27,8 @@
 
   /**
    * Anima a saída da gaveta e do backdrop com trava anti-reentrada.
+   * Quando o fechamento veio do swipe (`dataset.swipeClosed`), pula a 2ª animação
+   * (o painel já está em translateX(100%)) para evitar delay + “piscar” no WebKit.
    * @returns {boolean} true se o fechamento foi iniciado
    */
   function fecharGavetaComSeguranca(drawerEl, backdropEl, options) {
@@ -34,6 +36,17 @@
     drawerEl = resolveEl(drawerEl);
     backdropEl = resolveEl(backdropEl);
     if (!drawerEl) return false;
+
+    var fromSwipe = drawerEl.dataset.swipeClosed === 'true' || options.skipAnimation === true;
+
+    // Durante o arrasto/animação de swipe, ignora fechamentos concorrentes (ghost click)
+    if (
+      !fromSwipe &&
+      drawerEl.dataset.isSwiping === 'true'
+    ) {
+      return false;
+    }
+
     if (drawerEl.dataset.closing === 'true' || drawerEl.dataset.isClosing === 'true') {
       return false;
     }
@@ -42,6 +55,7 @@
     drawerEl.dataset.isClosing = 'true';
 
     // Anima saída primeiro — NÃO aplicar `hidden` no mesmo frame
+    // (no swipe as classes já foram sincronizadas; reaplicar é idempotente)
     drawerEl.classList.remove('translate-x-0');
     drawerEl.classList.add('translate-x-full');
     drawerEl.setAttribute('aria-hidden', 'true');
@@ -54,13 +68,16 @@
       backdropEl.style.pointerEvents = 'auto';
     }
 
-    var duration =
-      typeof options.duration === 'number' ? options.duration : DURATION_MS;
+    var duration = fromSwipe
+      ? 0
+      : typeof options.duration === 'number'
+        ? options.duration
+        : DURATION_MS;
     var onDone = typeof options.onDone === 'function' ? options.onDone : null;
     var hideDrawer = options.hideDrawer !== false;
     var hideBackdrop = options.hideBackdrop !== false;
 
-    global.setTimeout(function () {
+    function finalize() {
       if (hideDrawer) drawerEl.classList.add('hidden');
       if (backdropEl) {
         if (hideBackdrop) backdropEl.classList.add('hidden');
@@ -80,7 +97,14 @@
         delete drawerEl.dataset.closing;
         delete drawerEl.dataset.isClosing;
       }, unlockDelay);
-    }, duration);
+    }
+
+    if (duration <= 0) {
+      // Já animado pelo swipe: esconde no próximo frame (sem 2ª transição)
+      global.requestAnimationFrame(finalize);
+    } else {
+      global.setTimeout(finalize, duration);
+    }
 
     return true;
   }
@@ -155,7 +179,28 @@
       return true;
     }
 
+    function findSwipePanel() {
+      var panels = document.querySelectorAll('[data-swipe-dismiss]');
+      for (var i = 0; i < panels.length; i++) {
+        var sel = panels[i].getAttribute('data-swipe-backdrop');
+        if (!sel) continue;
+        var matched = document.querySelector(sel);
+        if (matched === backdropEl) return panels[i];
+      }
+      return null;
+    }
+
     function trigger(e) {
+      var panel = findSwipePanel();
+      // Ignora ghost click / pointer durante swipe em andamento
+      if (panel && panel.dataset.isSwiping === 'true' && panel.dataset.swipeClosed !== 'true') {
+        if (e) {
+          if (e.cancelable) e.preventDefault();
+          e.stopPropagation();
+          if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        }
+        return;
+      }
       var t = now();
       if (t - lastTriggerAt < DEBOUNCE_MS) {
         if (e) {
@@ -251,7 +296,21 @@
     var suppressClickUntil = 0;
     var usedPointer = false;
 
+    function findSwipePanelFromControl() {
+      return controlEl.closest ? controlEl.closest('[data-swipe-dismiss]') : null;
+    }
+
     function trigger(e) {
+      var panel = findSwipePanelFromControl();
+      // Ignora ghost click no X/Cancelar enquanto o swipe anima o fechamento
+      if (panel && panel.dataset.isSwiping === 'true' && panel.dataset.swipeClosed !== 'true') {
+        if (e) {
+          if (e.cancelable) e.preventDefault();
+          e.stopPropagation();
+          if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        }
+        return;
+      }
       var t = now();
       if (t - lastTriggerAt < DEBOUNCE_MS) {
         if (e) {
