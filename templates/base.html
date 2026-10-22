@@ -1019,7 +1019,7 @@
     {% if current_user.is_authenticated and (current_user.nivel_acesso in ['admin', 'master'] or 'logistica' in current_user.permissoes_lista) %}
     <!-- Overlay + Gaveta lateral direita: Logística (sem sair da página) -->
     <div id="logistica-drawer-overlay" class="fixed inset-0 z-[9998] hidden bg-black/45 dark:bg-black/55" aria-hidden="true" role="presentation"></div>
-    <aside id="logistica-drawer-panel" class="fixed inset-y-0 right-0 z-[9999] hidden flex flex-col h-full max-h-[100dvh] bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 translate-x-full transform" role="dialog" aria-modal="true" aria-labelledby="logistica-drawer-titulo" aria-hidden="true" data-swipe-dismiss data-swipe-backdrop="#logistica-drawer-overlay" data-swipe-close="fecharGavetaLogistica">
+    <aside id="logistica-drawer-panel" class="fixed inset-y-0 right-0 z-[9999] hidden flex flex-col h-full max-h-[100dvh] bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 translate-x-full transform transition-transform duration-300 ease-out" role="dialog" aria-modal="true" aria-labelledby="logistica-drawer-titulo" aria-hidden="true" data-swipe-dismiss data-swipe-backdrop="#logistica-drawer-overlay" data-swipe-close="fecharGavetaLogistica" onclick="event.stopPropagation()">
         <header data-swipe-handle class="flex items-center justify-between gap-2 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 shrink-0">
             <div class="min-w-0">
                 <h2 id="logistica-drawer-titulo" class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
@@ -1050,8 +1050,8 @@
 
     {% if current_user.is_authenticated %}
     <!-- Overlay + Gaveta: Balanço Patrimonial Rápido -->
-    <div id="gaveta-balanco-overlay" class="fixed inset-0 z-50 hidden bg-black/50" onclick="fecharGavetaBalanco()" aria-hidden="true"></div>
-    <div id="gaveta-balanco" class="fixed inset-y-0 right-0 z-50 hidden w-full max-w-md translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col h-full" role="dialog" aria-modal="true" aria-labelledby="modal-balanco-titulo" aria-hidden="true" data-swipe-dismiss data-swipe-backdrop="#gaveta-balanco-overlay" data-swipe-close="fecharGavetaBalanco">
+    <div id="gaveta-balanco-overlay" class="fixed inset-0 z-50 hidden bg-black/50 opacity-0 transition-opacity duration-300 ease-out" data-drawer-backdrop-close="fecharGavetaBalanco" aria-hidden="true"></div>
+    <div id="gaveta-balanco" class="fixed inset-y-0 right-0 z-50 hidden w-full max-w-md translate-x-full transition-transform duration-300 ease-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col h-full" role="dialog" aria-modal="true" aria-labelledby="modal-balanco-titulo" aria-hidden="true" data-swipe-dismiss data-swipe-backdrop="#gaveta-balanco-overlay" data-swipe-close="fecharGavetaBalanco" onclick="event.stopPropagation()">
         <div data-swipe-handle class="flex items-center justify-between px-5 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))] border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 shrink-0">
             <div>
                 <h3 id="modal-balanco-titulo" class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
@@ -1306,16 +1306,27 @@
             var overlay = document.getElementById('gaveta-balanco-overlay');
             var gaveta = document.getElementById('gaveta-balanco');
             if (!gaveta) return;
+            if (gaveta.dataset) delete gaveta.dataset.closing;
             document.getElementById('balanco-loading').classList.remove('hidden');
             document.getElementById('balanco-loading').textContent = 'Carregando saldos…';
             document.getElementById('balanco-saldos').classList.add('hidden');
-            if (overlay) overlay.classList.remove('hidden');
+            if (overlay) {
+                overlay.classList.remove('hidden');
+                overlay.classList.add('opacity-0');
+                overlay.classList.remove('opacity-100');
+            }
             gaveta.classList.remove('hidden');
             gaveta.classList.add('translate-x-full');
             gaveta.classList.remove('translate-x-0');
             gaveta.offsetHeight;
-            gaveta.classList.remove('translate-x-full');
-            gaveta.classList.add('translate-x-0');
+            requestAnimationFrame(function() {
+                if (overlay) {
+                    overlay.classList.remove('opacity-0');
+                    overlay.classList.add('opacity-100');
+                }
+                gaveta.classList.remove('translate-x-full');
+                gaveta.classList.add('translate-x-0');
+            });
             gaveta.setAttribute('aria-hidden', 'false');
             if (overlay) overlay.setAttribute('aria-hidden', 'false');
             if (typeof travarFundo === 'function') travarFundo();
@@ -1344,20 +1355,35 @@
             var overlay = document.getElementById('gaveta-balanco-overlay');
             var gaveta = document.getElementById('gaveta-balanco');
             if (!gaveta) return;
+            var safe = window.MeninoAlhoDrawerSafe;
+            if (safe && safe.fecharGavetaComSeguranca) {
+                safe.fecharGavetaComSeguranca(gaveta, overlay, {
+                    onDone: function() {
+                        if (typeof liberarFundo === 'function') liberarFundo();
+                        else document.body.style.overflow = '';
+                    }
+                });
+                return;
+            }
+            if (gaveta.dataset && gaveta.dataset.closing === 'true') return;
+            if (gaveta.dataset) gaveta.dataset.closing = 'true';
             gaveta.classList.remove('translate-x-0');
             gaveta.classList.add('translate-x-full');
             gaveta.setAttribute('aria-hidden', 'true');
             if (overlay) {
-                overlay.classList.add('hidden');
+                overlay.classList.add('opacity-0');
+                overlay.classList.remove('opacity-100');
                 overlay.setAttribute('aria-hidden', 'true');
             }
             setTimeout(function() {
                 if (gaveta.classList.contains('translate-x-full')) {
                     gaveta.classList.add('hidden');
                 }
+                if (overlay) overlay.classList.add('hidden');
+                if (gaveta.dataset) delete gaveta.dataset.closing;
+                if (typeof liberarFundo === 'function') liberarFundo();
+                else document.body.style.overflow = '';
             }, 300);
-            if (typeof liberarFundo === 'function') liberarFundo();
-            else document.body.style.overflow = '';
         };
         window.abrirModalBalanco = window.abrirGavetaBalanco;
         window.fecharModalBalanco = window.fecharGavetaBalanco;
@@ -2160,6 +2186,7 @@
     <script>(function(){ if (typeof lucide !== 'undefined') lucide.createIcons(); })();</script>
     <script src="{{ url_for('static', filename='js/ios-drag-drop.js') }}"></script>
     <script src="{{ url_for('static', filename='js/navigation.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/drawer-safe-close.js') }}"></script>
     <script src="{{ url_for('static', filename='js/swipe-dismiss.js') }}"></script>
     {% if current_user.is_authenticated and (current_user.nivel_acesso in ['admin', 'master'] or 'logistica' in current_user.permissoes_lista) %}
     <script src="{{ url_for('static', filename='js/logistica-drawer.js') }}"></script>

@@ -362,8 +362,8 @@
 </form>
 
 <!-- Overlay + Gaveta de Orçamento Pessoal -->
-<div id="gaveta-orcamento-overlay" class="fixed inset-0 z-[60] hidden bg-black/50 transition-opacity" onclick="fecharGavetaOrcamento()" aria-hidden="true"></div>
-<div id="gaveta-orcamento" class="fixed inset-y-0 right-0 z-[60] hidden w-full max-w-md h-full translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col transform" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="gaveta-orcamento-titulo" data-swipe-dismiss data-swipe-backdrop="#gaveta-orcamento-overlay" data-swipe-close="fecharGavetaOrcamento">
+<div id="gaveta-orcamento-overlay" class="fixed inset-0 z-[60] hidden bg-black/50 opacity-0 transition-opacity duration-300 ease-out" aria-hidden="true"></div>
+<div id="gaveta-orcamento" class="fixed inset-y-0 right-0 z-[60] hidden w-full max-w-md h-full translate-x-full transition-transform duration-300 ease-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col transform" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="gaveta-orcamento-titulo" data-swipe-dismiss data-swipe-backdrop="#gaveta-orcamento-overlay" data-swipe-close="fecharGavetaOrcamento" onclick="event.stopPropagation()">
     <div data-swipe-handle class="flex items-center justify-between px-5 pb-4 pt-[calc(env(safe-area-inset-top,0px)+1rem)] border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80">
         <div>
             <h3 id="gaveta-orcamento-titulo" class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
@@ -432,8 +432,8 @@
 </div>
 
 <!-- Overlay + Gaveta Novo/Editar Lançamento -->
-<div id="gaveta-lancamento-overlay" class="fixed inset-0 z-[60] hidden bg-black/50 transition-opacity" onclick="fecharGavetaLancamento()" aria-hidden="true"></div>
-<div id="gaveta-lancamento" class="fixed inset-y-0 right-0 z-[60] hidden w-full max-w-md h-full translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col transform" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="modalLancamentoTitulo" data-swipe-dismiss data-swipe-backdrop="#gaveta-lancamento-overlay" data-swipe-close="fecharGavetaLancamento">
+<div id="gaveta-lancamento-overlay" class="fixed inset-0 z-[60] hidden bg-black/50 opacity-0 transition-opacity duration-300 ease-out" aria-hidden="true"></div>
+<div id="gaveta-lancamento" class="fixed inset-y-0 right-0 z-[60] hidden w-full max-w-md h-full translate-x-full transition-transform duration-300 ease-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col transform" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="modalLancamentoTitulo" data-swipe-dismiss data-swipe-backdrop="#gaveta-lancamento-overlay" data-swipe-close="fecharGavetaLancamento" onclick="event.stopPropagation()">
     <div data-swipe-handle class="flex items-center justify-between px-5 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))] border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 shrink-0">
         <div>
             <h3 id="modalLancamentoTitulo" class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
@@ -986,13 +986,24 @@ function abrirGavetaLancamento() {
     var overlay = document.getElementById('gaveta-lancamento-overlay');
     var gaveta = document.getElementById('gaveta-lancamento');
     if (!gaveta) return;
-    if (overlay) overlay.classList.remove('hidden');
+    if (gaveta.dataset) delete gaveta.dataset.closing;
+    if (overlay) {
+        overlay.classList.remove('hidden');
+        overlay.classList.add('opacity-0');
+        overlay.classList.remove('opacity-100');
+    }
     gaveta.classList.remove('hidden');
     gaveta.classList.add('translate-x-full');
     gaveta.classList.remove('translate-x-0');
     gaveta.offsetHeight;
-    gaveta.classList.remove('translate-x-full');
-    gaveta.classList.add('translate-x-0');
+    requestAnimationFrame(function() {
+        if (overlay) {
+            overlay.classList.remove('opacity-0');
+            overlay.classList.add('opacity-100');
+        }
+        gaveta.classList.remove('translate-x-full');
+        gaveta.classList.add('translate-x-0');
+    });
     gaveta.setAttribute('aria-hidden', 'false');
     if (overlay) overlay.setAttribute('aria-hidden', 'false');
     if (typeof travarFundo === 'function') travarFundo();
@@ -1005,19 +1016,33 @@ function fecharGavetaLancamento() {
     var overlay = document.getElementById('gaveta-lancamento-overlay');
     var gaveta = document.getElementById('gaveta-lancamento');
     if (!gaveta) return;
+    var safe = window.MeninoAlhoDrawerSafe;
+    if (safe && safe.fecharGavetaComSeguranca) {
+        safe.fecharGavetaComSeguranca(gaveta, overlay, {
+            onDone: function() {
+                if (typeof liberarFundo === 'function') liberarFundo();
+            }
+        });
+        return;
+    }
+    if (gaveta.dataset && gaveta.dataset.closing === 'true') return;
+    if (gaveta.dataset) gaveta.dataset.closing = 'true';
     gaveta.classList.remove('translate-x-0');
     gaveta.classList.add('translate-x-full');
     gaveta.setAttribute('aria-hidden', 'true');
     if (overlay) {
-        overlay.classList.add('hidden');
+        overlay.classList.add('opacity-0');
+        overlay.classList.remove('opacity-100');
         overlay.setAttribute('aria-hidden', 'true');
     }
     setTimeout(function() {
         if (gaveta.classList.contains('translate-x-full')) {
             gaveta.classList.add('hidden');
         }
+        if (overlay) overlay.classList.add('hidden');
+        if (gaveta.dataset) delete gaveta.dataset.closing;
+        if (typeof liberarFundo === 'function') liberarFundo();
     }, 300);
-    if (typeof liberarFundo === 'function') liberarFundo();
 }
 
 function abrirModalNovo() {
@@ -1463,8 +1488,8 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <!-- Overlay + Gaveta Contagem de Gaveta (Dinheiro + Cheques) -->
-<div id="gaveta-contagem-overlay" class="fixed inset-0 z-[60] hidden bg-black/50 transition-opacity" onclick="fecharGavetaContagem()" aria-hidden="true"></div>
-<div id="gaveta-contagem" class="fixed inset-y-0 right-0 z-[60] hidden w-full max-w-md h-full translate-x-full transition-transform duration-300 ease-in-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col transform" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="gaveta-contagem-titulo" data-swipe-dismiss data-swipe-backdrop="#gaveta-contagem-overlay" data-swipe-close="fecharGavetaContagem">
+<div id="gaveta-contagem-overlay" class="fixed inset-0 z-[60] hidden bg-black/50 opacity-0 transition-opacity duration-300 ease-out" aria-hidden="true"></div>
+<div id="gaveta-contagem" class="fixed inset-y-0 right-0 z-[60] hidden w-full max-w-md h-full translate-x-full transition-transform duration-300 ease-out bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col transform" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="gaveta-contagem-titulo" data-swipe-dismiss data-swipe-backdrop="#gaveta-contagem-overlay" data-swipe-close="fecharGavetaContagem" onclick="event.stopPropagation()">
     <div data-swipe-handle class="flex items-center justify-between px-5 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))] border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 shrink-0">
         <div>
             <h3 id="gaveta-contagem-titulo" class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
@@ -2345,13 +2370,24 @@ document.addEventListener('keydown', function(e) {
         var overlay = document.getElementById('gaveta-contagem-overlay');
         var gaveta = document.getElementById('gaveta-contagem');
         if (!gaveta) return;
-        if (overlay) overlay.classList.remove('hidden');
+        if (gaveta.dataset) delete gaveta.dataset.closing;
+        if (overlay) {
+            overlay.classList.remove('hidden');
+            overlay.classList.add('opacity-0');
+            overlay.classList.remove('opacity-100');
+        }
         gaveta.classList.remove('hidden');
         gaveta.classList.add('translate-x-full');
         gaveta.classList.remove('translate-x-0');
         gaveta.offsetHeight;
-        gaveta.classList.remove('translate-x-full');
-        gaveta.classList.add('translate-x-0');
+        requestAnimationFrame(function() {
+            if (overlay) {
+                overlay.classList.remove('opacity-0');
+                overlay.classList.add('opacity-100');
+            }
+            gaveta.classList.remove('translate-x-full');
+            gaveta.classList.add('translate-x-0');
+        });
         gaveta.setAttribute('aria-hidden', 'false');
         if (overlay) overlay.setAttribute('aria-hidden', 'false');
         if (typeof travarFundo === 'function') travarFundo();
@@ -2367,19 +2403,33 @@ document.addEventListener('keydown', function(e) {
         var overlay = document.getElementById('gaveta-contagem-overlay');
         var gaveta = document.getElementById('gaveta-contagem');
         if (!gaveta) return;
+        var safe = window.MeninoAlhoDrawerSafe;
+        if (safe && safe.fecharGavetaComSeguranca) {
+            safe.fecharGavetaComSeguranca(gaveta, overlay, {
+                onDone: function() {
+                    if (typeof liberarFundo === 'function') liberarFundo();
+                }
+            });
+            return;
+        }
+        if (gaveta.dataset && gaveta.dataset.closing === 'true') return;
+        if (gaveta.dataset) gaveta.dataset.closing = 'true';
         gaveta.classList.remove('translate-x-0');
         gaveta.classList.add('translate-x-full');
         gaveta.setAttribute('aria-hidden', 'true');
         if (overlay) {
-            overlay.classList.add('hidden');
+            overlay.classList.add('opacity-0');
+            overlay.classList.remove('opacity-100');
             overlay.setAttribute('aria-hidden', 'true');
         }
         setTimeout(function() {
             if (gaveta.classList.contains('translate-x-full')) {
                 gaveta.classList.add('hidden');
             }
+            if (overlay) overlay.classList.add('hidden');
+            if (gaveta.dataset) delete gaveta.dataset.closing;
+            if (typeof liberarFundo === 'function') liberarFundo();
         }, 300);
-        if (typeof liberarFundo === 'function') liberarFundo();
     }
 
     document.getElementById('btn-add-cheque').addEventListener('click', function() { addLinha('cheque'); });
@@ -2795,13 +2845,24 @@ document.addEventListener('keydown', function(e) {
     }
 
     window.abrirGavetaOrcamento = function() {
-        overlay && overlay.classList.remove('hidden');
+        if (gaveta.dataset) delete gaveta.dataset.closing;
+        if (overlay) {
+            overlay.classList.remove('hidden');
+            overlay.classList.add('opacity-0');
+            overlay.classList.remove('opacity-100');
+        }
         gaveta.classList.remove('hidden');
         gaveta.classList.add('translate-x-full');
         gaveta.classList.remove('translate-x-0');
         gaveta.offsetHeight;
-        gaveta.classList.remove('translate-x-full');
-        gaveta.classList.add('translate-x-0');
+        requestAnimationFrame(function() {
+            if (overlay) {
+                overlay.classList.remove('opacity-0');
+                overlay.classList.add('opacity-100');
+            }
+            gaveta.classList.remove('translate-x-full');
+            gaveta.classList.add('translate-x-0');
+        });
         gaveta.setAttribute('aria-hidden', 'false');
         if (typeof travarFundo === 'function') travarFundo();
         refreshIcons();
@@ -2811,17 +2872,33 @@ document.addEventListener('keydown', function(e) {
     };
 
     window.fecharGavetaOrcamento = function() {
+        var safe = window.MeninoAlhoDrawerSafe;
+        setErro('');
+        if (safe && safe.fecharGavetaComSeguranca) {
+            safe.fecharGavetaComSeguranca(gaveta, overlay, {
+                onDone: function() {
+                    if (typeof liberarFundo === 'function') liberarFundo();
+                }
+            });
+            return;
+        }
+        if (gaveta.dataset && gaveta.dataset.closing === 'true') return;
+        if (gaveta.dataset) gaveta.dataset.closing = 'true';
         gaveta.classList.remove('translate-x-0');
         gaveta.classList.add('translate-x-full');
         gaveta.setAttribute('aria-hidden', 'true');
-        overlay && overlay.classList.add('hidden');
+        if (overlay) {
+            overlay.classList.add('opacity-0');
+            overlay.classList.remove('opacity-100');
+        }
         setTimeout(function() {
             if (gaveta.classList.contains('translate-x-full')) {
                 gaveta.classList.add('hidden');
             }
+            if (overlay) overlay.classList.add('hidden');
+            if (gaveta.dataset) delete gaveta.dataset.closing;
+            if (typeof liberarFundo === 'function') liberarFundo();
         }, 300);
-        if (typeof liberarFundo === 'function') liberarFundo();
-        setErro('');
     };
 
     gaveta.classList.remove('translate-x-0');
