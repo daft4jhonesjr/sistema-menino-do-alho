@@ -472,15 +472,34 @@
       }
       if (state === 'closing') return;
       if (panel.dataset.isSwiping === 'true') return;
+      // Swipe só após liberar a trava de abertura (evita fechar no mesmo gesto que abriu)
+      if (
+        panel.dataset.isOpening === 'true' ||
+        panel.dataset.isClosing === 'true' ||
+        panel.dataset.closing === 'true'
+      ) {
+        return;
+      }
       if (!e.touches || e.touches.length !== 1) return;
       if (!isOpen()) return;
 
       var touch = e.touches[0];
       var target = e.target;
       if (!target || !target.closest) return;
+      // Toque inicial precisa estar estritamente dentro do drawer aberto
+      if (!panel.contains(target)) return;
       if (target.closest('[data-swipe-ignore], input[type="range"]')) return;
 
       var rect = panel.getBoundingClientRect();
+      // Confirma coordenadas do toque dentro da área do painel
+      if (
+        touch.clientX < rect.left ||
+        touch.clientX > rect.right ||
+        touch.clientY < rect.top ||
+        touch.clientY > rect.bottom
+      ) {
+        return;
+      }
       var fromPanelEdge = touch.clientX - rect.left <= edgeWidth;
       var fromViewportEdge = touch.clientX <= VIEWPORT_LEFT_EDGE_PX;
       var fromEdge = fromPanelEdge || fromViewportEdge;
