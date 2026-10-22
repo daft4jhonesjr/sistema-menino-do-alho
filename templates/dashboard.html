@@ -351,11 +351,12 @@
     </div>
 </div>
 
-<!-- Terceira linha: Empresas faturadoras, compras por fornecedor, avulsas -->
+<!-- Terceira linha: Empresas faturadoras (DESTAK/PATY + Vendas Avulsas em grid 3), compras, faturamentos dinâmicos -->
 {#
   Backend envia `faturadoras` (DESTAK/PATY), `faturamentos_dinamicos` (demais
   faturamentos com total > 0), `compras_por_empresa` (entradas de produto) e
-  `avulsas_info`. Paleta de cores rotacionada (classes literais para Tailwind).
+  `avulsas_info` (3º card no grid de Empresas Faturadoras).
+  Paleta de cores rotacionada (classes literais para Tailwind).
 #}
 {#
   Paleta rotacionada. Usa classes completas (strings literais) para que o
@@ -403,10 +404,10 @@
     </div>
 {% endmacro %}
 
-{% if faturadoras|default([])|length > 0 %}
+{% if faturadoras|default([])|length > 0 or (avulsas_info.total and avulsas_info.total > 0) %}
 <section class="mb-6">
     <h3 class="text-xs font-semibold text-gray-400 dark:text-gray-400 uppercase tracking-wider mb-3">Empresas Faturadoras</h3>
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sortable-grid">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 sortable-grid">
         {% for faturamento in faturadoras %}
             {% set _paleta = _cores_fornecedor[loop.index0 % _cores_fornecedor|length] %}
             {{ card_faturamento_empresa(
@@ -418,6 +419,31 @@
                 'Detalhamento: ' ~ faturamento.nome
             ) }}
         {% endfor %}
+
+        {% if avulsas_info.total and avulsas_info.total > 0 %}
+        <div data-id="card-avulsas" class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-5 border-l-4 border-blue-500 cursor-pointer hover:bg-emerald-50 dark:hover:bg-gray-700 transition-all" onclick="abrirModalDashboard('avulsa', 'Detalhamento: Vendas Avulsas')">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-600 dark:text-gray-400 text-sm font-medium">Faturamento Vendas Avulsas</p>
+                    <p class="text-2xl font-bold text-blue-600 mt-1 valor-financeiro">{{ avulsas_info.total|formato_moeda }}</p>
+                    {% if faturamento_total and faturamento_total > 0 %}
+                    <small class="text-gray-500 dark:text-gray-400 font-medium" style="font-size: 0.8rem;">({{ "%.1f"|format(avulsas_info.percentual) }}%)</small>
+                    {% endif %}
+                    <div class="mt-3 grid grid-cols-2 gap-2 border-t border-gray-100 dark:border-gray-700 pt-3">
+                        <div>
+                            <p class="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-wider mb-0.5">Pago</p>
+                            <p class="text-xs font-bold text-emerald-600 dark:text-emerald-400 valor-financeiro">{{ (avulsas_info.pago or 0)|formato_moeda }}</p>
+                        </div>
+                        <div class="text-right border-l border-gray-100 dark:border-gray-700">
+                            <p class="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-wider mb-0.5">Pendente</p>
+                            <p class="text-xs font-bold text-amber-500 dark:text-amber-400 valor-financeiro">{{ (avulsas_info.pendente or 0)|formato_moeda }}</p>
+                        </div>
+                    </div>
+                </div>
+                <i data-lucide="user" class="w-8 h-8 text-blue-600"></i>
+            </div>
+        </div>
+        {% endif %}
     </div>
 </section>
 {% endif %}
@@ -459,6 +485,7 @@
     </div>
 </section>
 
+{% if faturamentos_dinamicos|default([])|length > 0 %}
 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6 sortable-grid">
     {% for faturamento in faturamentos_dinamicos %}
         {% set _paleta = _cores_fornecedor[loop.index0 % _cores_fornecedor|length] %}
@@ -471,32 +498,8 @@
             'Detalhamento: ' ~ faturamento.nome
         ) }}
     {% endfor %}
-
-    {% if avulsas_info.total and avulsas_info.total > 0 %}
-    <div data-id="card-avulsas" class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-5 border-l-4 border-gray-400 cursor-pointer hover:bg-emerald-50 dark:hover:bg-gray-700 transition-all" onclick="abrirModalDashboard('avulsa', 'Detalhamento: Vendas Avulsas')">
-        <div class="flex items-center justify-between">
-            <div>
-                <p class="text-gray-600 dark:text-gray-400 text-sm font-medium">Vendas Avulsas</p>
-                <p class="text-2xl font-bold text-gray-600 dark:text-gray-100 mt-1 valor-financeiro">{{ avulsas_info.total|formato_moeda }}</p>
-                {% if faturamento_total and faturamento_total > 0 %}
-                <small class="text-gray-500 dark:text-gray-400 font-medium" style="font-size: 0.8rem;">({{ "%.1f"|format(avulsas_info.percentual) }}%)</small>
-                {% endif %}
-                <div class="mt-3 grid grid-cols-2 gap-2 border-t border-gray-100 dark:border-gray-700 pt-3">
-                    <div>
-                        <p class="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-wider mb-0.5">Pago</p>
-                        <p class="text-xs font-bold text-emerald-600 dark:text-emerald-400 valor-financeiro">{{ (avulsas_info.pago or 0)|formato_moeda }}</p>
-                    </div>
-                    <div class="text-right border-l border-gray-100 dark:border-gray-700">
-                        <p class="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-wider mb-0.5">Pendente</p>
-                        <p class="text-xs font-bold text-amber-500 dark:text-amber-400 valor-financeiro">{{ (avulsas_info.pendente or 0)|formato_moeda }}</p>
-                    </div>
-                </div>
-            </div>
-            <i data-lucide="user" class="w-8 h-8 text-gray-500 dark:text-gray-400"></i>
-        </div>
-    </div>
-    {% endif %}
 </div>
+{% endif %}
 
 <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 sortable-grid">
     <div data-id="card-margem" class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm dark:shadow-none p-5 border-l-4 border-indigo-500">
