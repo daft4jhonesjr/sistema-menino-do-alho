@@ -437,8 +437,24 @@
       'touchstart',
       function (e) {
         if (gesture) return;
+        // Não processa abertura se a gaveta deste drawer já está aberta
+        if (isOpen()) return;
+        if (panel.dataset.bloquearAbertura === 'true') return;
+        // Outra gaveta swipe-dismiss em cooldown de reabertura (anti ghost click)
+        if (document.querySelector('[data-swipe-dismiss][data-bloquear-abertura="true"]')) {
+          return;
+        }
+        if (document.body.classList.contains('swipe-dismiss-dragging')) return;
         if (!canStartOpenGesture()) return;
         if (shouldIgnoreTouchTarget(e.target)) return;
+        // Toque iniciado dentro de uma gaveta aberta: nunca abre por gesto de borda
+        if (
+          e.target &&
+          e.target.closest &&
+          e.target.closest('[data-swipe-dismiss]:not(.hidden):not(.translate-x-full)')
+        ) {
+          return;
+        }
         if (!e.touches || !e.touches.length) return;
         var touch = e.touches[0];
         if (isRightDrawer) {

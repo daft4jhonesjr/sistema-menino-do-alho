@@ -6232,7 +6232,12 @@ window.abrirModalNovaVenda = function() {
     var panel = document.getElementById('nova-venda-panel');
     var backdrop = document.getElementById('nova-venda-backdrop');
     if (!modal) return;
+    // Impede reabertura imediata logo após fechamento por swipe (ghost click)
+    if (panel && panel.dataset.bloquearAbertura === 'true') {
+        return;
+    }
     if (panel && (panel.dataset.isClosing === 'true' || panel.dataset.closing === 'true')) return;
+    if (panel && panel.dataset.isSwiping === 'true') return;
     if (modal.parentElement !== document.body) {
         document.body.appendChild(modal);
     }
@@ -6243,6 +6248,8 @@ window.abrirModalNovaVenda = function() {
     modal.classList.remove('hidden');
     if (panel) {
         panel.classList.remove('hidden');
+        panel.style.transform = '';
+        panel.style.transition = '';
         panel.classList.add('translate-x-full');
         panel.classList.remove('translate-x-0');
     }
@@ -6284,6 +6291,14 @@ document.addEventListener('DOMContentLoaded', function() {
             e.preventDefault();
             e.stopPropagation();
             if (!containerVenda) return;
+            var panelToggle = document.getElementById('nova-venda-panel');
+            // Ghost click após swipe-to-close: não reabre / não alterna
+            if (panelToggle && panelToggle.dataset.bloquearAbertura === 'true') {
+                return;
+            }
+            if (panelToggle && panelToggle.dataset.isSwiping === 'true') {
+                return;
+            }
             if (containerVenda.classList.contains('hidden')) {
                 abrirModalNovaVenda();
             } else {
