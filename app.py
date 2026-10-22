@@ -2373,6 +2373,45 @@ app.config['COMPRESS_MIN_SIZE'] = 500  # bytes (não vale comprimir respostas pe
 app.config['COMPRESS_ALGORITHM'] = ['br', 'gzip']  # brotli para clientes modernos, gzip como fallback
 Compress(app)
 
+
+# Cache busting: todo url_for('static', ...) e url_for('service_worker') ganha
+# ``?v=<mtime do arquivo>``. Após um deploy a URL muda e o Safari/WebKit não
+# fica preso ao JS/CSS antigo (que ele mantém agressivamente via max-age).
+# O mtime é o mesmo em todos os workers do Gunicorn (sem --preload), ao
+# contrário de um timestamp de inicialização do processo.
+_ASSET_VERSION_FALLBACK = (
+    os.environ.get('ASSET_VERSION')
+    or os.environ.get('HEROKU_SLUG_COMMIT')
+    or os.environ.get('SOURCE_VERSION')
+    or '1'
+)[:12]
+_static_versions = {}
+
+
+def _versao_arquivo_estatico(filename):
+    if not app.debug and filename in _static_versions:
+        return _static_versions[filename]
+    versao = _ASSET_VERSION_FALLBACK
+    try:
+        static_root = os.path.realpath(app.static_folder)
+        caminho = os.path.realpath(os.path.join(static_root, filename))
+        if caminho.startswith(static_root + os.sep) and os.path.isfile(caminho):
+            versao = str(int(os.path.getmtime(caminho)))
+    except (OSError, TypeError, ValueError):
+        pass
+    _static_versions[filename] = versao
+    return versao
+
+
+@app.url_defaults
+def _versionar_arquivos_estaticos(endpoint, values):
+    if 'v' in values:
+        return
+    if endpoint == 'static' and values.get('filename'):
+        values['v'] = _versao_arquivo_estatico(values['filename'])
+    elif endpoint == 'service_worker':
+        values['v'] = _versao_arquivo_estatico('sw.js')
+
 # ─────────────────────────────────────────────────────────────────────────────
 # REGISTRO DE TODAS AS EXTENSÕES (db, login_manager, csrf, cache, limiter)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2956,9 +2995,13 @@ def add_cache_control_static(response):
 
     Estratégia:
 
-    * ``/static/*`` — cache de 24 h com ETag. As URLs de ``url_for('static')``
-      não são versionadas, então um ``max-age`` maior deixaria JS/CSS
-      desatualizados no navegador por muito tempo após um deploy.
+    * Todas as respostas — ``Vary: Accept-Encoding, User-Agent`` para que
+      proxies e o cache do Safari não entreguem um corpo br/gzip a um
+      cliente que não o pediu.
+    * ``/static/*?v=...`` — URLs versionadas por ``_versionar_arquivos_estaticos``
+      mudam a cada deploy, então podem ser ``immutable`` por 1 ano.
+    * ``/static/*`` sem versão — cache de 24 h com ETag (um ``max-age``
+      maior deixaria o arquivo desatualizado por muito tempo após um deploy).
     * Páginas autenticadas (``current_user.is_authenticated``) — bloqueamos
       explicitamente o ``bfcache`` (back-forward cache) do Safari e demais
       caches de navegador com ``Cache-Control: no-store``. Isto é
@@ -2978,8 +3021,13 @@ def add_cache_control_static(response):
     * Demais respostas (públicas anônimas, redirects de autenticação) —
       mantemos o default do Flask, sem cache explícito.
     """
+    response.vary.update(('Accept-Encoding', 'User-Agent'))
+
     if request.path.startswith('/static/'):
-        response.headers['Cache-Control'] = 'public, max-age=86400'
+        if request.args.get('v') and response.status_code == 200:
+            response.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+        else:
+            response.headers['Cache-Control'] = 'public, max-age=86400'
         # Adicionar ETag para validação de cache
         if not response.headers.get('ETag'):
             etag = hashlib.md5(response.get_data()).hexdigest()
