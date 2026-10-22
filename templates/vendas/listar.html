@@ -8165,6 +8165,9 @@ async function executarExclusaoDocumentosMassa(ids) {
     }
 
     async function checarFilaSilencioso() {
+        if (document.hidden) {
+            return;
+        }
         try {
             var resp = await fetch('/api/dashboard/documentos_pendentes/resumo?t=' + Date.now(), {
                 headers: { 'Accept': 'application/json', 'Cache-Control': 'no-cache' }
@@ -8192,7 +8195,10 @@ async function executarExclusaoDocumentosMassa(ids) {
         });
     }
 
-    setInterval(checarFilaSilencioso, 30000);
+    setInterval(checarFilaSilencioso, 60000);
+    document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) checarFilaSilencioso();
+    });
     checarFilaSilencioso();
 })();
 </script>
