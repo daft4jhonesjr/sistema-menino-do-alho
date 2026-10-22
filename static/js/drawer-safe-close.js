@@ -34,10 +34,14 @@
     drawerEl = resolveEl(drawerEl);
     backdropEl = resolveEl(backdropEl);
     if (!drawerEl) return false;
-    if (drawerEl.dataset.closing === 'true') return false;
+    if (drawerEl.dataset.closing === 'true' || drawerEl.dataset.isClosing === 'true') {
+      return false;
+    }
 
     drawerEl.dataset.closing = 'true';
+    drawerEl.dataset.isClosing = 'true';
 
+    // Anima saída primeiro — NÃO aplicar `hidden` no mesmo frame
     drawerEl.classList.remove('translate-x-0');
     drawerEl.classList.add('translate-x-full');
     drawerEl.setAttribute('aria-hidden', 'true');
@@ -60,9 +64,8 @@
       if (hideDrawer) drawerEl.classList.add('hidden');
       if (backdropEl) {
         if (hideBackdrop) backdropEl.classList.add('hidden');
-        backdropEl.style.pointerEvents = '';
+        // Mantém pointer-events até liberar a trava (anti ghost click)
       }
-      delete drawerEl.dataset.closing;
       if (onDone) {
         try {
           onDone();
@@ -70,6 +73,13 @@
           if (global.console) console.error('[drawer-safe-close] onDone', err);
         }
       }
+      // Libera a trava só após a janela de click sintético do mobile
+      var unlockDelay = Math.max(0, CLICK_SUPPRESS_MS - duration);
+      global.setTimeout(function () {
+        if (backdropEl) backdropEl.style.pointerEvents = '';
+        delete drawerEl.dataset.closing;
+        delete drawerEl.dataset.isClosing;
+      }, unlockDelay);
     }, duration);
 
     return true;
@@ -84,7 +94,12 @@
       var drawerEl = resolveEl(
         typeof drawerRef === 'function' ? drawerRef() : drawerRef
       );
-      if (drawerEl && drawerEl.dataset.closing === 'true') return;
+      if (
+        drawerEl &&
+        (drawerEl.dataset.closing === 'true' || drawerEl.dataset.isClosing === 'true')
+      ) {
+        return;
+      }
       return closeFn.apply(this, arguments);
     };
   }
@@ -95,19 +110,28 @@
   function beginClosing(drawerEl) {
     drawerEl = resolveEl(drawerEl);
     if (!drawerEl) return false;
-    if (drawerEl.dataset.closing === 'true') return false;
+    if (drawerEl.dataset.closing === 'true' || drawerEl.dataset.isClosing === 'true') {
+      return false;
+    }
     drawerEl.dataset.closing = 'true';
+    drawerEl.dataset.isClosing = 'true';
     return true;
   }
 
   function endClosing(drawerEl) {
     drawerEl = resolveEl(drawerEl);
-    if (drawerEl) delete drawerEl.dataset.closing;
+    if (drawerEl) {
+      delete drawerEl.dataset.closing;
+      delete drawerEl.dataset.isClosing;
+    }
   }
 
   function isClosing(drawerEl) {
     drawerEl = resolveEl(drawerEl);
-    return !!(drawerEl && drawerEl.dataset.closing === 'true');
+    return !!(
+      drawerEl &&
+      (drawerEl.dataset.closing === 'true' || drawerEl.dataset.isClosing === 'true')
+    );
   }
 
   /**
@@ -214,6 +238,90 @@
   }
 
   /**
+   * Liga botões de fechar (X / Cancelar) com pointerdown imediato e
+   * supressão do click fantasma (touchend → click) no mobile.
+   */
+  function bindCloseControl(controlEl, closeFn, options) {
+    controlEl = resolveEl(controlEl);
+    if (!controlEl || typeof closeFn !== 'function') return null;
+    if (controlEl.__drawerSafeCloseBound) return controlEl.__drawerSafeCloseBound;
+
+    options = options || {};
+    var lastTriggerAt = 0;
+    var suppressClickUntil = 0;
+    var usedPointer = false;
+
+    function trigger(e) {
+      var t = now();
+      if (t - lastTriggerAt < DEBOUNCE_MS) {
+        if (e) {
+          if (e.cancelable) e.preventDefault();
+          e.stopPropagation();
+          if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        }
+        return;
+      }
+      lastTriggerAt = t;
+      suppressClickUntil = t + CLICK_SUPPRESS_MS;
+      if (e) {
+        if (e.cancelable) e.preventDefault();
+        e.stopPropagation();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+      }
+      try {
+        closeFn(e);
+      } catch (err) {
+        if (global.console) console.error('[drawer-safe-close] closeControl', err);
+      }
+    }
+
+    function onPointerDown(e) {
+      usedPointer = true;
+      if (typeof e.button === 'number' && e.button !== 0) return;
+      trigger(e);
+    }
+
+    function onTouchStart(e) {
+      if (usedPointer) return;
+      trigger(e);
+    }
+
+    function onClick(e) {
+      var t = now();
+      if (t < suppressClickUntil) {
+        if (e.cancelable) e.preventDefault();
+        e.stopPropagation();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        return;
+      }
+      trigger(e);
+    }
+
+    controlEl.addEventListener('pointerdown', onPointerDown, { passive: false, capture: true });
+    controlEl.addEventListener('touchstart', onTouchStart, { passive: false, capture: true });
+    controlEl.addEventListener('click', onClick, true);
+
+    // Evita disputa com swipe-to-dismiss no cabeçalho
+    if (!controlEl.hasAttribute('data-swipe-ignore')) {
+      controlEl.setAttribute('data-swipe-ignore', '');
+    }
+
+    var controller = {
+      trigger: function () {
+        trigger(null);
+      },
+      destroy: function () {
+        controlEl.removeEventListener('pointerdown', onPointerDown, true);
+        controlEl.removeEventListener('touchstart', onTouchStart, true);
+        controlEl.removeEventListener('click', onClick, true);
+        delete controlEl.__drawerSafeCloseBound;
+      }
+    };
+    controlEl.__drawerSafeCloseBound = controller;
+    return controller;
+  }
+
+  /**
    * Impede que toques/cliques dentro do painel subam até o backdrop.
    */
   function bindPanelStopPropagation(panelEl) {
@@ -302,6 +410,7 @@
     endClosing: endClosing,
     isClosing: isClosing,
     bindBackdropClose: bindBackdropClose,
+    bindCloseControl: bindCloseControl,
     bindPanelStopPropagation: bindPanelStopPropagation,
     init: init
   };
