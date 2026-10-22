@@ -2214,20 +2214,30 @@
     <!-- Service Worker Registration + App Badging API -->
     <script>
     (function() {
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', function() {
-                navigator.serviceWorker.register('{{ url_for("service_worker") }}', { updateViaCache: 'none' })
-                    .then(function(registration) {
-                        console.log('[SW] Service Worker registrado com sucesso:', registration.scope);
-                        registration.update().catch(function() {});
-                        setInterval(function() {
-                            registration.update().catch(function() {});
-                        }, 300000);
-                    })
-                    .catch(function(error) {
-                        console.log('[SW] Erro ao registrar Service Worker:', error);
-                    });
-            });
+        // O Safari pode lançar exceção síncrona (ex.: SecurityError) ao acessar
+        // navigator.serviceWorker; o PWA é opcional e não pode travar a interface.
+        try {
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                    try {
+                        navigator.serviceWorker.register('{{ url_for("service_worker") }}', { updateViaCache: 'none' })
+                            .then(function(registration) {
+                                console.log('[SW] Service Worker registrado com sucesso:', registration.scope);
+                                registration.update().catch(function() {});
+                                setInterval(function() {
+                                    registration.update().catch(function() {});
+                                }, 300000);
+                            })
+                            .catch(function(err) {
+                                console.warn('[PWA] Falha ao registrar Service Worker no Safari:', err);
+                            });
+                    } catch (err) {
+                        console.warn('[PWA] Falha ao registrar Service Worker no Safari:', err);
+                    }
+                });
+            }
+        } catch (err) {
+            console.warn('[PWA] Service Worker indisponível neste navegador:', err);
         }
 
         // Throttle: intervalo mínimo entre chamadas ao backend (ms)
