@@ -49,7 +49,7 @@ from functools import wraps
 import hmac
 from sqlalchemy import func, desc, asc, text, or_, and_, extract, case, cast, inspect
 from sqlalchemy.orm import joinedload, contains_eager, selectinload
-from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
+from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError, DataError, DatabaseError
 import pandas as pd
 import os
 import re
@@ -186,6 +186,10 @@ def _safe_db_commit() -> tuple[bool, str | None]:
     try:
         db.session.commit()
         return True, None
+    except (DataError, DatabaseError) as e:
+        db.session.rollback()
+        logging.error("Erro de dados ao commitar (possível overflow): %s", str(e), exc_info=True)
+        return False, str(e)
     except (IntegrityError, OperationalError) as e:
         db.session.rollback()
         logging.error("Erro de banco ao commitar: %s", str(e), exc_info=True)
