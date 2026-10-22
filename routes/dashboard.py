@@ -772,11 +772,14 @@ def dashboard():
 
     vendas_com_prejuizo = []
     try:
+        # contains_eager exige JOIN explícito no mesmo relacionamento;
+        # joinedload paralelo em Cliente reintroduzia N+1 (PR #112).
         vendas_com_prejuizo = query_tenant(Venda) \
             .join(Produto, Venda.produto_id == Produto.id) \
+            .join(Cliente, Venda.cliente_id == Cliente.id) \
             .options(
                 contains_eager(Venda.produto),
-                joinedload(Venda.cliente),
+                contains_eager(Venda.cliente),
             ) \
             .filter(prejuizo_expr < 0, *filtro_ano_venda, filtro_sem_bacalhau_tipo, filtro_sem_bacalhau_nome) \
             .order_by(Venda.data_venda.desc()).all()
