@@ -391,12 +391,15 @@
           }
 
           panel.dataset.swipeClosed = 'true';
+          // Permite btn.click() de data-swipe-close-click atravessar a trava anti-ghost
+          panel.dataset.swipeInvokingClose = 'true';
           state = 'idle';
           try {
             onClose();
           } catch (err) {
             if (global.console) console.error('[swipe-dismiss] onClose falhou', err);
           }
+          delete panel.dataset.swipeInvokingClose;
           delete panel.dataset.swipeClosed;
 
           if (token !== settleToken) {
@@ -644,6 +647,9 @@
     }
 
     function shouldSuppressResidualClick() {
+      // Libera o click sintético de onClose (data-swipe-close-click → btn.click()).
+      // Sem isso, a trava anti-ghost engole o fechamento e settleOpen() reabre o painel.
+      if (panel.dataset.swipeInvokingClose === 'true') return false;
       return (
         document.body.dataset.iosBloqueioClique === 'true' ||
         panel.dataset.isSwiping === 'true' ||
@@ -712,6 +718,7 @@
         setSwiping(false);
         setExiting(false);
         delete panel.dataset.swipeClosed;
+        delete panel.dataset.swipeInvokingClose;
         delete panel.dataset.bloquearAbertura;
         clearBodyIosClickLockIfIdle();
         delete panel.__swipeDismiss;
