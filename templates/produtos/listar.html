@@ -544,7 +544,7 @@
      Mobile: abre da direita→esquerda (translate-x-full → translate-x-0);
      fecha da esquerda→direita (translate-x-0 → translate-x-full). -->
 <div id="modal-nova-entrada-overlay" class="fixed inset-0 z-[9998] hidden bg-black/50 opacity-0 transition-opacity duration-300 ease-out" aria-hidden="true"></div>
-<div id="modal-nova-entrada-wrap" class="fixed inset-y-0 right-0 z-[9999] hidden w-full max-w-md h-full bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col transform translate-x-full transition-transform duration-300 ease-out" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="gaveta-nova-entrada-titulo" data-acao="" data-swipe-dismiss data-swipe-backdrop="#modal-nova-entrada-overlay" data-swipe-close-click="#modal-nova-entrada-fechar" onclick="event.stopPropagation()">
+<div id="modal-nova-entrada-wrap" class="fixed inset-y-0 right-0 z-[9999] hidden w-full max-w-md h-full bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col transform translate-x-full transition-transform duration-300 ease-out" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="gaveta-nova-entrada-titulo" data-acao="" data-swipe-dismiss data-swipe-backdrop="#modal-nova-entrada-overlay" data-swipe-close="fecharGavetaNovaEntrada" onclick="event.stopPropagation()">
     <div data-swipe-handle class="flex items-center justify-between px-5 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))] border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 shrink-0">
         <div>
             <h3 id="gaveta-nova-entrada-titulo" class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
@@ -1724,7 +1724,17 @@ function fecharModalNovoFornecedor() {
             editNacionalidade.value = nacionalidade;
         }
 
-        if (wrap.dataset) delete wrap.dataset.closing;
+        if (wrap.dataset) {
+            delete wrap.dataset.closing;
+            delete wrap.dataset.isClosing;
+        }
+        // Trava temporária: evita que backdrop/X/swipe fechem no mesmo toque que abriu
+        if (window.MeninoAlhoDrawerSafe && window.MeninoAlhoDrawerSafe.markOpening) {
+            window.MeninoAlhoDrawerSafe.markOpening(wrap, 350);
+        } else if (wrap.dataset) {
+            wrap.dataset.isOpening = 'true';
+            setTimeout(function() { delete wrap.dataset.isOpening; }, 350);
+        }
         wrap.classList.remove('hidden');
         wrap.classList.add('translate-x-full');
         wrap.classList.remove('translate-x-0');
@@ -1900,9 +1910,16 @@ function fecharModalNovoFornecedor() {
         window.abrirModalEdicaoProduto(btn.getAttribute('data-id'), btn);
     });
 
-    function fecharModalEditarProduto() {
+    function fecharModalEditarProduto(event) {
+        if (event) {
+            event.stopPropagation();
+            if (event.cancelable) event.preventDefault();
+            if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+        }
         wrap = elWrap();
         overlay = document.getElementById('modal-editar-produto-overlay');
+        if (wrap && wrap.dataset && wrap.dataset.isOpening === 'true') return;
+        if (wrap && wrap.dataset && wrap.dataset.isSwiping === 'true' && wrap.dataset.swipeClosed !== 'true') return;
         var safe = window.MeninoAlhoDrawerSafe;
         if (wrap && safe && safe.fecharGavetaComSeguranca) {
             safe.fecharGavetaComSeguranca(wrap, overlay, {
@@ -1943,7 +1960,15 @@ function fecharModalNovoFornecedor() {
     window.fecharGavetaEditarProduto = fecharModalEditarProduto;
 
     // Backdrop: MeninoAlhoDrawerSafe (pointerdown) via data-swipe-backdrop
-    btnsFechar.forEach(function(b) { b.addEventListener('click', fecharModalEditarProduto); });
+    // X / Cancelar: pointerdown imediato + trava anti ghost click
+    var safeEdit = window.MeninoAlhoDrawerSafe;
+    btnsFechar.forEach(function(b) {
+        if (safeEdit && safeEdit.bindCloseControl) {
+            safeEdit.bindCloseControl(b, fecharModalEditarProduto);
+        } else {
+            b.addEventListener('click', fecharModalEditarProduto);
+        }
+    });
     document.addEventListener('keydown', function(e) {
         if (e.key !== 'Escape') return;
         wrap = elWrap();
@@ -2104,8 +2129,17 @@ window.getTipoConfigPorSelect = function(selectEl) {
         });
     }
 
-    function abrir(acao) {
+    function abrir(acao, event) {
+        if (event) {
+            event.stopPropagation();
+            if (event.cancelable) event.preventDefault();
+        }
         if (!wrap) return;
+        // Ghost click após swipe-to-close: não reabre
+        if (wrap.dataset && wrap.dataset.bloquearAbertura === 'true') return;
+        if (wrap.dataset && wrap.dataset.isSwiping === 'true') return;
+        if (wrap.dataset && (wrap.dataset.isClosing === 'true' || wrap.dataset.closing === 'true')) return;
+
         if (wrap.parentElement !== document.body) {
             document.body.appendChild(wrap);
         }
@@ -2121,8 +2155,20 @@ window.getTipoConfigPorSelect = function(selectEl) {
             _gavetaCloseTimer = null;
         }
         _gavetaFechando = false;
+        if (wrap.dataset) {
+            delete wrap.dataset.closing;
+            delete wrap.dataset.isClosing;
+        }
 
         if (!jaAberta) {
+            // Trava temporária para evitar que listeners de fechamento/clique externo fechem imediatamente
+            if (window.MeninoAlhoDrawerSafe && window.MeninoAlhoDrawerSafe.markOpening) {
+                window.MeninoAlhoDrawerSafe.markOpening(wrap, 350);
+            } else if (wrap.dataset) {
+                wrap.dataset.isOpening = 'true';
+                setTimeout(function() { delete wrap.dataset.isOpening; }, 350);
+            }
+
             // Backdrop: fade-in; painel: slide da direita → esquerda
             if (overlay) {
                 overlay.classList.remove('hidden');
@@ -2161,12 +2207,47 @@ window.getTipoConfigPorSelect = function(selectEl) {
             try { lucide.createIcons(); } catch (_) {}
         }
     }
-    function fechar() {
+    function fechar(event) {
+        if (event) {
+            event.stopPropagation();
+            if (event.cancelable) event.preventDefault();
+            if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+        }
         if (!wrap) return;
+        if (wrap.dataset && wrap.dataset.isOpening === 'true') return;
+        if (wrap.dataset && wrap.dataset.isSwiping === 'true' && wrap.dataset.swipeClosed !== 'true') return;
         if (wrap.classList.contains('hidden') && (!_gavetaFechando)) return;
-        if (_gavetaFechando || (wrap.dataset && wrap.dataset.closing === 'true')) return;
+        if (_gavetaFechando || (wrap.dataset && (wrap.dataset.closing === 'true' || wrap.dataset.isClosing === 'true'))) return;
+
+        var safe = window.MeninoAlhoDrawerSafe;
+        if (safe && safe.fecharGavetaComSeguranca) {
+            _gavetaFechando = true;
+            var started = safe.fecharGavetaComSeguranca(wrap, overlay, {
+                onDone: function() {
+                    _gavetaFechando = false;
+                    if (typeof liberarFundo === 'function') liberarFundo();
+                }
+            });
+            if (!started) {
+                _gavetaFechando = false;
+                return;
+            }
+            if (erroDiv) {
+                erroDiv.classList.add('hidden');
+                erroDiv.textContent = '';
+            }
+            resetBtnSalvar();
+            acaoAtual = null;
+            window.gavetaAcaoAtual = null;
+            if (wrap) wrap.setAttribute('data-acao', '');
+            return;
+        }
+
         _gavetaFechando = true;
-        if (wrap.dataset) wrap.dataset.closing = 'true';
+        if (wrap.dataset) {
+            wrap.dataset.closing = 'true';
+            wrap.dataset.isClosing = 'true';
+        }
 
         // Painel: slide da esquerda → direita (sai pela borda direita)
         wrap.classList.remove('translate-x-0');
@@ -2194,7 +2275,10 @@ window.getTipoConfigPorSelect = function(selectEl) {
                 overlay.style.pointerEvents = '';
             }
             _gavetaFechando = false;
-            if (wrap.dataset) delete wrap.dataset.closing;
+            if (wrap.dataset) {
+                delete wrap.dataset.closing;
+                delete wrap.dataset.isClosing;
+            }
             if (typeof liberarFundo === 'function') liberarFundo();
         }, DRAWER_ANIM_MS);
 
@@ -2210,7 +2294,7 @@ window.getTipoConfigPorSelect = function(selectEl) {
 
     window.abrirGavetaAcoes = abrir;
     window.fecharGavetaAcoes = fechar;
-    window.abrirGavetaNovaEntrada = function() { abrir('entrada'); };
+    window.abrirGavetaNovaEntrada = function(event) { abrir('entrada', event); };
     window.fecharGavetaNovaEntrada = fechar;
 
     /**
@@ -2374,17 +2458,36 @@ window.getTipoConfigPorSelect = function(selectEl) {
         }
     }
 
-    if (btnAbrir) btnAbrir.addEventListener('click', function() { abrir('entrada'); });
+    if (btnAbrir) {
+        btnAbrir.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            abrir('entrada', e);
+        });
+    }
     document.querySelectorAll('[data-gaveta-acao]').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-            abrir(btn.getAttribute('data-gaveta-acao'));
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            abrir(btn.getAttribute('data-gaveta-acao'), e);
         });
     });
+    var safeGaveta = window.MeninoAlhoDrawerSafe;
     document.querySelectorAll('[data-gaveta-fechar]').forEach(function(btn) {
-        btn.addEventListener('click', fechar);
+        if (safeGaveta && safeGaveta.bindCloseControl) {
+            safeGaveta.bindCloseControl(btn, fechar);
+        } else {
+            btn.addEventListener('click', fechar);
+        }
     });
     var btnCancelarRel = document.getElementById('modal-relatorio-produtos-cancelar');
-    if (btnCancelarRel) btnCancelarRel.addEventListener('click', fechar);
+    if (btnCancelarRel) {
+        if (safeGaveta && safeGaveta.bindCloseControl) {
+            safeGaveta.bindCloseControl(btnCancelarRel, fechar);
+        } else {
+            btnCancelarRel.addEventListener('click', fechar);
+        }
+    }
     var formRel = document.getElementById('form-relatorio-produtos');
     if (formRel) {
         formRel.addEventListener('submit', function(e) {
@@ -2396,8 +2499,21 @@ window.getTipoConfigPorSelect = function(selectEl) {
         });
     }
     // Backdrop: MeninoAlhoDrawerSafe (pointerdown) via data-swipe-backdrop
-    if (btnFechar) btnFechar.addEventListener('click', fechar);
-    if (btnCancelar) btnCancelar.addEventListener('click', fechar);
+    // X / Cancelar: pointerdown imediato + trava anti ghost click (mesma fn do backdrop)
+    if (btnFechar) {
+        if (safeGaveta && safeGaveta.bindCloseControl) {
+            safeGaveta.bindCloseControl(btnFechar, fechar);
+        } else {
+            btnFechar.addEventListener('click', fechar);
+        }
+    }
+    if (btnCancelar) {
+        if (safeGaveta && safeGaveta.bindCloseControl) {
+            safeGaveta.bindCloseControl(btnCancelar, fechar);
+        } else {
+            btnCancelar.addEventListener('click', fechar);
+        }
+    }
 
     document.addEventListener('keydown', function(e) {
         if (e.key !== 'Escape') return;

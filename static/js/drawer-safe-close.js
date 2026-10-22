@@ -39,6 +39,11 @@
 
     var fromSwipe = drawerEl.dataset.swipeClosed === 'true' || options.skipAnimation === true;
 
+    // Durante abertura, não fecha (mesmo toque/ghost click que abriu a gaveta)
+    if (drawerEl.dataset.isOpening === 'true') {
+      return false;
+    }
+
     // Durante o arrasto/animação de swipe, ignora fechamentos concorrentes (ghost click)
     if (
       !fromSwipe &&
@@ -159,6 +164,37 @@
   }
 
   /**
+   * Trava temporária contra fechamento imediato após abrir (mesmo toque / ghost click).
+   */
+  var OPENING_LOCK_MS = 350;
+  var openingTimers = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
+
+  function markOpening(drawerEl, ms) {
+    drawerEl = resolveEl(drawerEl);
+    if (!drawerEl || !drawerEl.dataset) return;
+    drawerEl.dataset.isOpening = 'true';
+    var delay = typeof ms === 'number' ? ms : OPENING_LOCK_MS;
+    if (openingTimers) {
+      var prev = openingTimers.get(drawerEl);
+      if (prev) global.clearTimeout(prev);
+      var timer = global.setTimeout(function () {
+        openingTimers.delete(drawerEl);
+        delete drawerEl.dataset.isOpening;
+      }, delay);
+      openingTimers.set(drawerEl, timer);
+      return;
+    }
+    global.setTimeout(function () {
+      delete drawerEl.dataset.isOpening;
+    }, delay);
+  }
+
+  function isOpening(drawerEl) {
+    drawerEl = resolveEl(drawerEl);
+    return !!(drawerEl && drawerEl.dataset && drawerEl.dataset.isOpening === 'true');
+  }
+
+  /**
    * Liga o backdrop ao fechamento imediato (pointerdown) e suprime o click fantasma.
    */
   function bindBackdropClose(backdropEl, closeFn, options) {
@@ -192,6 +228,20 @@
 
     function trigger(e) {
       var panel = findSwipePanel();
+      // Ignora fechamento durante a trava de abertura (mesmo toque que abriu)
+      if (
+        panel &&
+        (panel.dataset.isOpening === 'true' ||
+          panel.dataset.isClosing === 'true' ||
+          panel.dataset.closing === 'true')
+      ) {
+        if (e) {
+          if (e.cancelable) e.preventDefault();
+          e.stopPropagation();
+          if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        }
+        return;
+      }
       // Ignora ghost click / pointer durante swipe em andamento
       if (panel && panel.dataset.isSwiping === 'true' && panel.dataset.swipeClosed !== 'true') {
         if (e) {
@@ -199,6 +249,10 @@
           e.stopPropagation();
           if (e.stopImmediatePropagation) e.stopImmediatePropagation();
         }
+        return;
+      }
+      // Só fecha se o alvo for explicitamente o backdrop (nunca filhos do formulário)
+      if (onlyDirectTarget && e && e.target !== backdropEl) {
         return;
       }
       var t = now();
@@ -302,6 +356,20 @@
 
     function trigger(e) {
       var panel = findSwipePanelFromControl();
+      // Ignora X/Cancelar durante a trava de abertura (ghost click no mesmo ponto do botão abrir)
+      if (
+        panel &&
+        (panel.dataset.isOpening === 'true' ||
+          panel.dataset.isClosing === 'true' ||
+          panel.dataset.closing === 'true')
+      ) {
+        if (e) {
+          if (e.cancelable) e.preventDefault();
+          e.stopPropagation();
+          if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        }
+        return;
+      }
       // Ignora ghost click no X/Cancelar enquanto o swipe anima o fechamento
       if (panel && panel.dataset.isSwiping === 'true' && panel.dataset.swipeClosed !== 'true') {
         if (e) {
@@ -463,11 +531,14 @@
 
   global.MeninoAlhoDrawerSafe = {
     DURATION_MS: DURATION_MS,
+    OPENING_LOCK_MS: OPENING_LOCK_MS,
     fecharGavetaComSeguranca: fecharGavetaComSeguranca,
     withClosingGuard: withClosingGuard,
     beginClosing: beginClosing,
     endClosing: endClosing,
     isClosing: isClosing,
+    markOpening: markOpening,
+    isOpening: isOpening,
     bindBackdropClose: bindBackdropClose,
     bindCloseControl: bindCloseControl,
     bindPanelStopPropagation: bindPanelStopPropagation,
