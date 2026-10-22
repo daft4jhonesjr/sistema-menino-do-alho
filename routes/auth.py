@@ -9,6 +9,7 @@ Rotas extraídas do legado ``app.py``:
     * /api/usuarios/<id>/forcar_logout  (invalida sessões em todos os dispositivos)
     * /api/usuarios/<id>/historico_login  (últimos acessos do usuário)
     * /api/usuarios/<id>/permissoes  (configura módulos permitidos por usuário)
+    * /api/minha-empresa/atualizar  (DONO/admin atualiza nome_fantasia do próprio tenant)
 
 Endpoints novos seguem o padrão ``auth.<nome>``. Os redirects internos
 e templates já foram atualizados para o novo formato.
@@ -1067,6 +1068,117 @@ def trocar_minha_senha():
 
     flash('Senha atualizada com sucesso.', 'success')
     return redirect(url_for('auth.gerenciar_usuarios'))
+
+
+@auth_bp.route('/api/minha-empresa/atualizar', methods=['POST'])
+@login_required
+def api_atualizar_minha_empresa():
+    """Atualiza os dados da Empresa (tenant) vinculada ao usuário logado.
+
+    Isolamento multi-tenant: só altera ``Empresa`` cujo ``id`` é
+    ``current_user.empresa_id``. Nunca aceita ``empresa_id`` do cliente.
+    Restrito a DONO / admin (role legado) do próprio tenant.
+    """
+    @tenant_required
+    def _atualizar():
+        eh_gestor = (
+            getattr(current_user, 'is_dono', lambda: False)()
+            or getattr(current_user, 'is_admin', lambda: False)()
+            or (getattr(current_user, 'perfil', None) or '').upper() == PERFIL_DONO
+            or getattr(current_user, 'role', None) == 'admin'
+        )
+        if not eh_gestor:
+            return jsonify(
+                success=False,
+                error='Acesso negado: apenas o Dono/Administrador pode alterar os dados da empresa.',
+            ), 403
+
+        empresa_id = getattr(current_user, 'empresa_id', None)
+        if not empresa_id:
+            return jsonify(
+                success=False,
+                error='Seu usuário não está vinculado a nenhuma empresa.',
+            ), 400
+
+        # Fail-closed: carrega exclusivamente pelo FK do login — sem ID externo.
+        empresa = Empresa.query.get(empresa_id)
+        if empresa is None:
+            return jsonify(
+                success=False,
+                error='Empresa vinculada ao seu login não foi encontrada.',
+            ), 404
+
+        payload = request.get_json(silent=True) or {}
+        nome_fantasia = (
+            payload.get('nome_fantasia')
+            if 'nome_fantasia' in payload
+            else request.form.get('nome_fantasia')
+        )
+        nome_fantasia = (nome_fantasia or '').strip()
+        if not nome_fantasia:
+            return jsonify(
+                success=False,
+                error='Informe o Nome Fantasia da empresa.',
+            ), 400
+        if len(nome_fantasia) > 150:
+            return jsonify(
+                success=False,
+                error='O Nome Fantasia deve ter no máximo 150 caracteres.',
+            ), 400
+
+        # CNPJ opcional: só atualiza se o cliente enviou o campo preenchido.
+        cnpj_raw = (
+            payload.get('cnpj')
+            if 'cnpj' in payload
+            else request.form.get('cnpj')
+        )
+        cnpj = (cnpj_raw or '').strip() if cnpj_raw is not None else None
+
+        conflito = (
+            Empresa.query
+            .filter(
+                func.lower(Empresa.nome_fantasia) == nome_fantasia.lower(),
+                Empresa.id != empresa.id,
+            )
+            .first()
+        )
+        if conflito:
+            return jsonify(
+                success=False,
+                error=f'Já existe outra empresa com o nome "{nome_fantasia}".',
+            ), 400
+
+        if cnpj:
+            conflito_cnpj = (
+                Empresa.query
+                .filter(Empresa.cnpj == cnpj, Empresa.id != empresa.id)
+                .first()
+            )
+            if conflito_cnpj:
+                return jsonify(
+                    success=False,
+                    error=f'Já existe outra empresa com o CNPJ "{cnpj}".',
+                ), 400
+
+        empresa.nome_fantasia = nome_fantasia
+        if cnpj:
+            empresa.cnpj = cnpj
+
+        ok, err = _safe_db_commit()
+        if not ok:
+            return jsonify(
+                success=False,
+                error=err or 'Erro ao salvar os dados da empresa.',
+            ), 500
+
+        return jsonify(
+            success=True,
+            message='Dados da empresa atualizados com sucesso!',
+            novo_nome=empresa.nome_fantasia,
+            empresa_id=empresa.id,
+        )
+
+    return _atualizar()
 
 
 @auth_bp.route('/gerenciar_usuarios/editar_completo/<int:id>', methods=['POST'])
