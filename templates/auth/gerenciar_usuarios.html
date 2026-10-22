@@ -657,19 +657,22 @@
                 await Swal.fire(Object.assign(_swalEmpresaTheme(), {
                     icon: 'success',
                     title: 'Empresa atualizada!',
-                    text: data.message || 'Dados da empresa atualizados com sucesso!',
+                    text: data.message || 'Nome da empresa atualizado com sucesso!',
                     confirmButtonColor: '#10b981',
                     confirmButtonText: 'Ótimo!'
                 }));
-            } else {
-                await Swal.fire(Object.assign(_swalEmpresaTheme(), {
-                    icon: 'error',
-                    title: 'Erro ao atualizar',
-                    text: (data && data.error) ? data.error : 'Não foi possível atualizar os dados da empresa.',
-                    confirmButtonColor: '#ef4444',
-                    confirmButtonText: 'Tentar Novamente'
-                }));
+                // Recarrega suavemente para refletir o novo nome em todo o HTML.
+                window.location.reload();
+                return;
             }
+
+            await Swal.fire(Object.assign(_swalEmpresaTheme(), {
+                icon: 'error',
+                title: 'Erro ao atualizar',
+                text: (data && data.error) ? data.error : 'Não foi possível atualizar o nome da empresa.',
+                confirmButtonColor: '#ef4444',
+                confirmButtonText: 'Tentar Novamente'
+            }));
         } catch (err) {
             console.error('Erro de rede ao atualizar empresa:', err);
             await Swal.fire(Object.assign(_swalEmpresaTheme(), {
