@@ -41,6 +41,8 @@
   var SETTLE_CLOSE_MS = 250;
   var SETTLE_OPEN_MS = 200;
   var DRAGGING_BODY_CLASS = 'swipe-dismiss-dragging';
+  var EXITING_CLASS = 'swipe-dismiss-exiting';
+  var BACKDROP_CLASS = 'swipe-dismiss-backdrop';
   var HANDLE_SELECTOR = '[data-swipe-handle]';
   var TEXT_INPUT_SELECTOR =
     'input, textarea, select, [contenteditable=""], [contenteditable="true"]';
@@ -200,6 +202,16 @@
       panel.dataset.isSwiping = active ? 'true' : 'false';
     }
 
+    /** Durante a saída o painel não recebe toques (pointer-events: none via CSS). */
+    function setExiting(active) {
+      panel.classList.toggle(EXITING_CLASS, !!active);
+    }
+
+    function markBackdrop() {
+      var backdrop = getBackdrop();
+      if (backdrop) backdrop.classList.add(BACKDROP_CLASS);
+    }
+
     /**
      * Sincroniza classes Tailwind com o transform inline ANTES de limpar o style.
      * Sem isso, o WebKit pode renderizar 1 frame em translateX(0) (painel “pisca”).
@@ -327,6 +339,7 @@
     function settleClosed() {
       state = 'closing';
       setSwiping(true);
+      setExiting(true);
       suppressClickUntil = now() + CLICK_SUPPRESS_MS + SETTLE_CLOSE_MS;
       document.body.classList.remove(DRAGGING_BODY_CLASS);
       animate(
@@ -353,12 +366,14 @@
 
           if (token !== settleToken) {
             setSwiping(false);
+            setExiting(false);
             return;
           }
 
           if (isOpen()) {
             // Fechamento recusado (ex.: confirmação de descarte): volta ao lugar.
             setSwiping(false);
+            setExiting(false);
             void panel.offsetWidth;
             settleOpen();
           } else {
@@ -368,6 +383,7 @@
             // Mantém a trava até a janela de click sintético do mobile acabar
             global.setTimeout(function () {
               setSwiping(false);
+              setExiting(false);
             }, CLICK_SUPPRESS_MS);
           }
         },
@@ -539,6 +555,9 @@
       var passedDistance =
         active.offset >= minClosePx || active.offset > threshold;
       if (active.offset > 0 && (flickRight || (passedDistance && !flickLeft))) {
+        // Cancela o click sintético (ghost click) que o iOS dispararia após o touchend
+        if (e.cancelable) e.preventDefault();
+        e.stopPropagation();
         settleClosed();
       } else {
         settleOpen();
@@ -568,13 +587,24 @@
       }
     }
 
+    function onDocumentClickCapture(e) {
+      if (!e.isTrusted || now() >= suppressClickUntil) return;
+      // Clique residual do gesto: não pode alcançar o botão disparador atrás do painel
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+    }
+
     panel.addEventListener('touchstart', onTouchStart, { passive: true });
     panel.addEventListener('touchmove', onTouchMove, { passive: false, capture: true });
-    panel.addEventListener('touchend', onTouchEnd, { passive: true });
+    panel.addEventListener('touchend', onTouchEnd, { passive: false });
     panel.addEventListener('touchcancel', onTouchCancel, { passive: true });
     panel.addEventListener('click', onClickCapture, true);
+    document.addEventListener('click', onDocumentClickCapture, true);
     panel.classList.add('swipe-dismiss-panel');
+    markBackdrop();
     setSwiping(false);
+    setExiting(false);
 
     var controller = {
       /** Fecha com a mesma animação do gesto (útil para botões "voltar"). */
@@ -595,11 +625,13 @@
         panel.removeEventListener('touchend', onTouchEnd);
         panel.removeEventListener('touchcancel', onTouchCancel);
         panel.removeEventListener('click', onClickCapture, true);
+        document.removeEventListener('click', onDocumentClickCapture, true);
         panel.classList.remove('swipe-dismiss-panel');
         clearPanelStyles();
         clearBackdropStyles();
         document.body.classList.remove(DRAGGING_BODY_CLASS);
         setSwiping(false);
+        setExiting(false);
         delete panel.dataset.swipeClosed;
         delete panel.__swipeDismiss;
       }
