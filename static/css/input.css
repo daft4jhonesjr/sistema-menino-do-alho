@@ -204,9 +204,12 @@ body.logistica-drawer-dragging {
   overflow: hidden;
 }
 
-/* Swipe-to-dismiss dos painéis laterais direitos (static/js/swipe-dismiss.js) */
+/* Swipe-to-dismiss dos painéis laterais direitos (static/js/swipe-dismiss.js)
+   Isolamento WebKit/iOS: pan-y evita confusão com gesto nativo horizontal;
+   -webkit-touch-callout evita callout/seleção sob o dedo no touchend. */
 .swipe-dismiss-panel {
   touch-action: pan-y;
+  -webkit-touch-callout: none;
   overscroll-behavior-x: contain;
 }
 

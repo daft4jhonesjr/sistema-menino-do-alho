@@ -1682,6 +1682,13 @@ function fecharModalNovoFornecedor() {
         wrap = elWrap();
         form = elForm();
         if (!wrap || !form || !p) return false;
+        // Ignora clique fantasma do Safari/WebKit logo após swipe de fechar
+        if (document.body.dataset.iosBloqueioClique === 'true') return false;
+        var swipeApi = window.MeninoAlhoSwipeDismiss;
+        if (swipeApi && typeof swipeApi.isAberturaBloqueada === 'function' && swipeApi.isAberturaBloqueada(wrap)) {
+            return false;
+        }
+        if (wrap.dataset && wrap.dataset.bloquearAbertura === 'true') return false;
         if (wrap.parentElement !== document.body) {
             document.body.appendChild(wrap);
         }
@@ -2135,6 +2142,12 @@ window.getTipoConfigPorSelect = function(selectEl) {
             if (event.cancelable) event.preventDefault();
         }
         if (!wrap) return;
+        // Ignora clique fantasma do Safari/WebKit logo após swipe de fechar
+        if (document.body.dataset.iosBloqueioClique === 'true') return;
+        var swipeApi = window.MeninoAlhoSwipeDismiss;
+        if (swipeApi && typeof swipeApi.isAberturaBloqueada === 'function' && swipeApi.isAberturaBloqueada(wrap)) {
+            return;
+        }
         // Ghost click após swipe-to-close: não reabre
         if (wrap.dataset && wrap.dataset.bloquearAbertura === 'true') return;
         if (wrap.dataset && wrap.dataset.isSwiping === 'true') return;

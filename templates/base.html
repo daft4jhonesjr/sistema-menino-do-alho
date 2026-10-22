@@ -1306,6 +1306,12 @@
             var overlay = document.getElementById('gaveta-balanco-overlay');
             var gaveta = document.getElementById('gaveta-balanco');
             if (!gaveta) return;
+            if (document.body.dataset.iosBloqueioClique === 'true') return;
+            var swipeApi = window.MeninoAlhoSwipeDismiss;
+            if (swipeApi && typeof swipeApi.isAberturaBloqueada === 'function' && swipeApi.isAberturaBloqueada(gaveta)) {
+                return;
+            }
+            if (gaveta.dataset && gaveta.dataset.bloquearAbertura === 'true') return;
             if (gaveta.dataset) delete gaveta.dataset.closing;
             document.getElementById('balanco-loading').classList.remove('hidden');
             document.getElementById('balanco-loading').textContent = 'Carregando saldos…';

@@ -235,6 +235,16 @@
 
   function abrirDrawer() {
     if (aberta || fechando) return;
+    // Ignora clique fantasma do Safari/WebKit logo após swipe de fechar
+    if (document.body.dataset.iosBloqueioClique === 'true') return;
+    if (
+      global.MeninoAlhoSwipeDismiss &&
+      typeof global.MeninoAlhoSwipeDismiss.isAberturaBloqueada === 'function' &&
+      global.MeninoAlhoSwipeDismiss.isAberturaBloqueada(panel)
+    ) {
+      return;
+    }
+    if (panel.dataset && panel.dataset.bloquearAbertura === 'true') return;
     aberta = true;
     if (panel.dataset) delete panel.dataset.closing;
     document.body.classList.add('logistica-drawer-open');
