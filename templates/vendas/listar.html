@@ -174,8 +174,9 @@
     /* Feedback visual: campo obrigatório em falta */
     .campo-erro { border-color: #ef4444 !important; box-shadow: 0 0 0 1px #ef4444 !important; }
     #cliente-select-wrap .ts-wrapper.campo-erro .ts-control { border-color: #ef4444 !important; box-shadow: 0 0 0 1px #ef4444 !important; }
-    /* Sub-lembretes: indentação + linha guia, fundo mais suave que o master */
-    .lembrete-filhos {
+    /* Sub-lembretes: indentação + linha guia, fundo mais suave que o master.
+       display:flex só vale expandido — senão anula o .hidden do acordeão. */
+    .lembrete-filhos:not(.hidden) {
         margin-top: 0.25rem;
         margin-left: 1rem;
         padding-left: 0.75rem;
@@ -183,6 +184,13 @@
         display: flex;
         flex-direction: column;
         gap: 0.25rem;
+    }
+    .lembrete-filhos.hidden,
+    .sub-lembretes-container.hidden {
+        display: none !important;
+    }
+    .btn-toggle-sub-lembretes:hover {
+        opacity: 0.8;
     }
     .dark .lembrete-filhos {
         border-left-color: rgba(167, 139, 250, 0.5);
@@ -5062,17 +5070,24 @@ function ordenarVendasTabela(colIndex, tipo) {
     };
 
     window.toggleSubLembretes = function(mestreId) {
-        var filhosDiv = document.getElementById('sub-lembretes-' + mestreId);
-        var icone = document.getElementById('icone-toggle-' + mestreId);
-        if (!filhosDiv) return;
-        var oculto = filhosDiv.classList.toggle('hidden');
-        if (icone) {
-            if (oculto) icone.classList.add('-rotate-90');
-            else icone.classList.remove('-rotate-90');
+        const containerFilhos = document.getElementById(`sub-lembretes-${mestreId}`);
+        const icone = document.getElementById(`icone-toggle-${mestreId}`);
+
+        if (!containerFilhos) {
+            console.warn(`Contêiner de sub-lembretes não encontrado para o ID: ${mestreId}`);
+            return;
         }
-        var gatilho = icone && icone.parentElement;
-        if (gatilho && gatilho.getAttribute) {
-            gatilho.setAttribute('aria-expanded', oculto ? 'false' : 'true');
+
+        // Alterna a exibição dos sub-lembretes
+        containerFilhos.classList.toggle('hidden');
+
+        // Alterna a rotação da seta para feedback visual
+        if (icone) {
+            icone.classList.toggle('-rotate-90');
+            var gatilho = icone.closest ? icone.closest('button') : icone.parentElement;
+            if (gatilho && gatilho.setAttribute) {
+                gatilho.setAttribute('aria-expanded', containerFilhos.classList.contains('hidden') ? 'false' : 'true');
+            }
         }
     };
 
@@ -5275,7 +5290,7 @@ function ordenarVendasTabela(colIndex, tipo) {
         var btnSub = '';
         if (!lem.parent_id) {
             btnSub =
-                '<button type="button" onclick="abrirFormSubLembrete(' + lem.id + ',\'' + esc(iso) + '\')" ' +
+                '<button type="button" onclick="event.stopPropagation(); abrirFormSubLembrete(' + lem.id + ',\'' + esc(iso) + '\')" ' +
                     'title="Adicionar sub-lembrete" aria-label="Adicionar sub-lembrete" ' +
                     'class="inline-flex items-center text-[11px] font-medium text-purple-600 hover:text-purple-800 dark:text-purple-300 dark:hover:text-purple-200 hover:bg-purple-500/10 rounded-md px-1.5 py-0.5 transition-colors">' +
                     '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">' +
@@ -5287,15 +5302,19 @@ function ordenarVendasTabela(colIndex, tipo) {
         var tituloHtml;
         if (temFilhos && !lem.parent_id) {
             tituloHtml =
-                '<div class="inline-flex items-start gap-1 min-w-0 max-w-full cursor-pointer no-drag" ' +
-                    'role="button" tabindex="0" ' +
-                    'onclick="toggleSubLembretes(' + lem.id + ')" ' +
-                    'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();toggleSubLembretes(' + lem.id + ');}" ' +
-                    'title="Recolher ou expandir sub-lembretes" aria-expanded="true">' +
-                    '<svg id="icone-toggle-' + lem.id + '" class="w-4 h-4 flex-shrink-0 mt-0.5 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">' +
-                        '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"/>' +
-                    '</svg>' +
-                    '<span class="' + textoCls + '">' + esc(lem.descricao) + '</span>' +
+                '<div class="inline-flex items-start gap-1 min-w-0 max-w-full">' +
+                    '<button type="button" ' +
+                        'class="btn-toggle-sub-lembretes cursor-pointer hover:opacity-80 transition-transform duration-200 inline-flex items-center justify-center flex-shrink-0 mt-0.5 p-0.5 text-purple-700 dark:text-purple-300 bg-transparent border-0 no-drag" ' +
+                        'onclick="event.stopPropagation(); toggleSubLembretes(' + lem.id + ')" ' +
+                        'title="Recolher ou expandir sub-lembretes" aria-expanded="true" aria-controls="sub-lembretes-' + lem.id + '" aria-label="Recolher ou expandir sub-lembretes">' +
+                        '<svg id="icone-toggle-' + lem.id + '" class="w-4 h-4 pointer-events-none transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">' +
+                            '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"/>' +
+                        '</svg>' +
+                    '</button>' +
+                    '<span class="' + textoCls + ' cursor-pointer" ' +
+                        'onclick="toggleSubLembretes(' + lem.id + ')" ' +
+                        'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();toggleSubLembretes(' + lem.id + ');}" ' +
+                        'role="button" tabindex="0">' + esc(lem.descricao) + '</span>' +
                 '</div>';
         } else {
             tituloHtml = '<p class="' + textoCls + '">' + esc(lem.descricao) + '</p>';
@@ -5307,7 +5326,7 @@ function ordenarVendasTabela(colIndex, tipo) {
                 (meta ? '<p class="mt-1 flex items-center gap-2 flex-wrap">' + meta + '</p>' : '') +
             '</div>' +
             '<div class="flex items-center justify-end gap-1 flex-wrap mt-0.5 no-drag" style="max-width:13.5rem">' +
-                '<button type="button" onclick="concluirLembrete(' + lem.id + ',\'' + esc(iso) + '\', this)" ' +
+                '<button type="button" onclick="event.stopPropagation(); concluirLembrete(' + lem.id + ',\'' + esc(iso) + '\', this)" ' +
                     'title="' + btnTitulo + '" ' +
                     'class="' + btnCls + '">' +
                     '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">' +
@@ -5315,7 +5334,7 @@ function ordenarVendasTabela(colIndex, tipo) {
                     '</svg>' +
                     '<span class="hidden sm:inline">' + btnLabel + '</span>' +
                 '</button>' +
-                '<button type="button" onclick="voltarLembrete(' + lem.id + ',\'' + esc(iso) + '\', this)" ' +
+                '<button type="button" onclick="event.stopPropagation(); voltarLembrete(' + lem.id + ',\'' + esc(iso) + '\', this)" ' +
                     'title="Voltar para o dia anterior" ' +
                     'class="inline-flex items-center gap-1 text-[11px] font-medium text-orange-400 hover:text-orange-600 dark:text-orange-400 dark:hover:text-orange-300 hover:bg-orange-500/10 rounded-md px-1.5 py-0.5 transition-colors">' +
                     '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">' +
@@ -5323,7 +5342,7 @@ function ordenarVendasTabela(colIndex, tipo) {
                     '</svg>' +
                     '<span class="hidden sm:inline">Voltar</span>' +
                 '</button>' +
-                '<button type="button" onclick="adiarLembrete(' + lem.id + ',\'' + esc(iso) + '\', this)" ' +
+                '<button type="button" onclick="event.stopPropagation(); adiarLembrete(' + lem.id + ',\'' + esc(iso) + '\', this)" ' +
                     'title="Adiar para amanhã" ' +
                     'class="inline-flex items-center gap-1 text-[11px] font-medium text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-500/10 rounded-md px-1.5 py-0.5 transition-colors">' +
                     '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">' +
@@ -5332,7 +5351,7 @@ function ordenarVendasTabela(colIndex, tipo) {
                     '<span class="hidden sm:inline">Adiar</span>' +
                 '</button>' +
                 btnSub +
-                '<button type="button" onclick="editarLembrete(' + lem.id + ',\'' + esc(iso) + '\')" ' +
+                '<button type="button" onclick="event.stopPropagation(); editarLembrete(' + lem.id + ',\'' + esc(iso) + '\')" ' +
                     'title="Editar lembrete" ' +
                     'class="inline-flex items-center gap-1 text-[11px] font-medium text-purple-500 hover:text-purple-700 dark:text-purple-300 dark:hover:text-purple-200 hover:bg-purple-500/10 rounded-md px-1.5 py-0.5 transition-colors">' +
                     '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">' +
@@ -5340,7 +5359,7 @@ function ordenarVendasTabela(colIndex, tipo) {
                     '</svg>' +
                     '<span class="hidden sm:inline">Editar</span>' +
                 '</button>' +
-                '<button type="button" onclick="excluirLembrete(' + lem.id + ',\'' + esc(iso) + '\', this)" ' +
+                '<button type="button" onclick="event.stopPropagation(); excluirLembrete(' + lem.id + ',\'' + esc(iso) + '\', this)" ' +
                     'title="Excluir lembrete" ' +
                     'class="text-gray-500 hover:text-red-400 transition-colors px-1 leading-none text-sm">' +
                     '✕' +
@@ -5359,9 +5378,8 @@ function ordenarVendasTabela(colIndex, tipo) {
         }
         var arrastavel = depth === 0 ? ' ios-draggable-item' : '';
         var mestreComFilhos = !lem.parent_id && filhos.length > 0;
-        var guia = filhos.length
-            ? 'lembrete-filhos no-drag transition-all duration-300'
-            : 'no-drag hidden transition-all duration-300';
+        var guia = 'sub-lembretes-container no-drag transition-all duration-300' +
+            (filhos.length ? ' lembrete-filhos' : ' hidden');
         return '<div class="lembrete-nodo' + arrastavel + '" id="nodo-lem-' + lem.id + '" data-id="' + lem.id + '">' +
             _htmlLembrete(iso, lem, depth, mestreComFilhos) +
             '<div id="sub-lembretes-' + lem.id + '" class="' + guia + '">' + miolo + '</div>' +
@@ -5536,7 +5554,7 @@ function ordenarVendasTabela(colIndex, tipo) {
     function _mostrarGuiaFilhos(parentId) {
         var cont = document.getElementById('sub-lembretes-' + parentId);
         if (!cont) return null;
-        cont.className = 'lembrete-filhos no-drag transition-all duration-300';
+        cont.className = 'sub-lembretes-container lembrete-filhos no-drag transition-all duration-300';
         return cont;
     }
 
@@ -5554,7 +5572,11 @@ function ordenarVendasTabela(colIndex, tipo) {
             var filhosAtual = document.getElementById('sub-lembretes-' + id);
             var icone = document.getElementById('icone-toggle-' + id);
             if (filhosAtual) filhosAtual.classList.add('hidden');
-            if (icone) icone.classList.add('-rotate-90');
+            if (icone) {
+                icone.classList.add('-rotate-90');
+                var gatilho = icone.closest ? icone.closest('button') : icone.parentElement;
+                if (gatilho) gatilho.setAttribute('aria-expanded', 'false');
+            }
         }
     }
 
@@ -5566,7 +5588,7 @@ function ordenarVendasTabela(colIndex, tipo) {
             var guia = card && card.parentElement;
             if (card) card.remove();
             if (guia && guia.id && guia.id.indexOf('sub-lembretes-') === 0 && !guia.querySelector('.lembrete-nodo')) {
-                guia.className = 'no-drag hidden transition-all duration-300';
+                guia.className = 'sub-lembretes-container no-drag hidden transition-all duration-300';
                 var parentNodo = guia.closest('.lembrete-nodo');
                 var mestreId = parentNodo && parentNodo.getAttribute('data-id');
                 if (mestreId && iso) _refreshCardLembrete(iso, mestreId);
@@ -5873,7 +5895,7 @@ function ordenarVendasTabela(colIndex, tipo) {
                     var guia = card && card.parentElement;
                     if (card && card.parentNode) card.remove();
                     if (guia && guia.id && guia.id.indexOf('sub-lembretes-') === 0 && !guia.querySelector('.lembrete-nodo')) {
-                        guia.className = 'no-drag hidden transition-all duration-300';
+                        guia.className = 'sub-lembretes-container no-drag hidden transition-all duration-300';
                         var parentNodoMv = guia.closest('.lembrete-nodo');
                         var mestreIdMv = parentNodoMv && parentNodoMv.getAttribute('data-id');
                         if (mestreIdMv) _refreshCardLembrete(iso, mestreIdMv);
