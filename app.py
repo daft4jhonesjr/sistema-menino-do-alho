@@ -543,51 +543,117 @@ def _parse_clientes_raw_tsv(text):
     return out
 
 
-def _extrair_numero_nf(texto):
-    """Extrai número da NF apenas se colado a 'Núm. do documento', 'NF' ou 'Numero Documento'.
-    Ignora últimos 25%% da página (feito em _processar_pdf). 4–6 dígitos; blacklist de telefones."""
-    # DANFE: priorizar blocos explícitos de NF-e (aceita zeros à esquerda e número mais longo)
-    padroes_danfe = [
-        r'NFe?\s*N[º°]\s*(\d{3,12})',
-        r'N[º°]\s*0*(\d{3,12})',
-        r'NFe?\s*N[º°]\s*S[ée]rie[\s\S]{0,40}?(\d{3,12})',
-        r'N[ºo]\s*([\d\.]+)',
-    ]
-    for p in padroes_danfe:
-        m = re.search(p, texto, re.IGNORECASE)
-        if not m:
-            continue
-        n = (m.group(1) or '').strip().replace('.', '')
-        if not n:
-            continue
-        if n in BLACKLIST_NF:
-            continue
-        return n
+def _limpar_digitos_nf(raw):
+    """Remove não-dígitos e zeros à esquerda. '000.000.244' → '244'; '000' → None."""
+    if raw is None:
+        return None
+    apenas_digitos = re.sub(r'\D', '', str(raw))
+    if not apenas_digitos:
+        return None
+    num_limpo = apenas_digitos.lstrip('0')
+    if not num_limpo:
+        return None
+    if num_limpo in BLACKLIST_NF:
+        return None
+    return num_limpo
 
-    padroes = [
-        (r'N[úu]m\.?\s*do\s*documento\s*[:\s]*(?:NF[-]?)?\s*(\d+)', False),
-        (r'N[úu]mero\s*do\s*documento\s*[:\s]*(?:NF[-]?)?\s*(\d+)', False),
-        (r'N[úu]mero\s+Documento\s*[:\s]*(?:NF[-]?)?\s*(\d+)', False),
-        (r'(?:Numero Documento|N[úu]mero do Documento)\s*(?:.*?\s+)?(\d+)(?:/\d+)?', False),
-        (r'NF-(\d+)', True),
-        (r'NF\s+(\d+)', True),
-        (r'NF:\s*(\d+)', True),
-        (r'NF(\d+)', True),
-        (r'(\d+)/\d+\s+DM', False),
-    ]
-    for p, exige_nf in padroes:
-        m = re.search(p, texto, re.IGNORECASE)
-        if not m:
-            continue
-        n = m.group(1)
-        if n in BLACKLIST_NF:
-            continue
-        if len(n) == 8 and not exige_nf:
-            continue
-        if len(n) < 3 or len(n) > 12:
-            continue
-        return n
+
+def _extrair_nf_da_chave_acesso(chave_acesso):
+    """Extrai o nNF da chave de acesso (44 dígitos): posições 26–34 (índice 25:34)."""
+    if not chave_acesso:
+        return None
+    chave_limpa = re.sub(r'\D', '', str(chave_acesso))
+    if len(chave_limpa) != 44:
+        return None
+    return _limpar_digitos_nf(chave_limpa[25:34])
+
+
+def _normalizar_numero_nf(texto_bruto, chave_acesso=None):
+    """Normaliza número da NF a partir do texto OCR/PDF (e opcionalmente da chave).
+
+    Trata formatos pontuados com zeros à esquerda, ex.:
+      'N° 000.000.244' / 'Nº 000.000.244' → '244'
+    Nunca retorna '000' nem '0'. Fallback: chave de acesso (44 dígitos).
+    """
+    if texto_bruto:
+        # 1) Captura explícita N° / Nº / Número com pontos ou espaços
+        match_nf = re.search(
+            r'(?:N[º°\.]*|N[uú]mero)\s*([0-9\.\s]{3,15})',
+            texto_bruto,
+            re.IGNORECASE,
+        )
+        if match_nf:
+            num_limpo = _limpar_digitos_nf(match_nf.group(1))
+            if num_limpo:
+                return num_limpo
+
+        # 2) DANFE: blocos explícitos (prioriza captura com pontos)
+        padroes_danfe = [
+            r'NF-?e?\s*N[º°\.]*\s*([0-9\.\s]{3,15})',
+            r'N[º°o]\s*([0-9\.\s]{3,15})',
+            r'NFe?\s*N[º°]\s*S[ée]rie[\s\S]{0,40}?([0-9\.\s]{3,15})',
+        ]
+        for p in padroes_danfe:
+            m = re.search(p, texto_bruto, re.IGNORECASE)
+            if not m:
+                continue
+            num_limpo = _limpar_digitos_nf(m.group(1))
+            if num_limpo:
+                return num_limpo
+
+        # 3) Chave de acesso embutida no texto do DANFE
+        m_chave = re.search(
+            r'(?:chave\s*de\s*acesso|acesso)[^\d]{0,40}((?:\d[\s\.]*){44})',
+            texto_bruto,
+            re.IGNORECASE,
+        )
+        if m_chave:
+            num_chave = _extrair_nf_da_chave_acesso(m_chave.group(1))
+            if num_chave:
+                return num_chave
+
+        # 4) Padrões de boleto / "Núm. do documento"
+        padroes = [
+            (r'N[úu]m\.?\s*do\s*documento\s*[:\s]*(?:NF[-]?)?\s*(\d+)', False),
+            (r'N[úu]mero\s*do\s*documento\s*[:\s]*(?:NF[-]?)?\s*(\d+)', False),
+            (r'N[úu]mero\s+Documento\s*[:\s]*(?:NF[-]?)?\s*(\d+)', False),
+            (r'(?:Numero Documento|N[úu]mero do Documento)\s*(?:.*?\s+)?(\d+)(?:/\d+)?', False),
+            (r'NF-(\d+)', True),
+            (r'NF\s+(\d+)', True),
+            (r'NF:\s*(\d+)', True),
+            (r'NF(\d+)', True),
+            (r'(\d+)/\d+\s+DM', False),
+        ]
+        for p, exige_nf in padroes:
+            m = re.search(p, texto_bruto, re.IGNORECASE)
+            if not m:
+                continue
+            n_raw = m.group(1)
+            n = _limpar_digitos_nf(n_raw)
+            if not n:
+                continue
+            # Rejeita telefones de 8 dígitos quando o padrão não exige prefixo NF
+            if len(re.sub(r'\D', '', n_raw)) == 8 and not exige_nf:
+                continue
+            if len(n) < 1 or len(n) > 12:
+                continue
+            return n
+
+    # 5) Fallback explícito via chave de acesso passada pelo caller
+    num_chave = _extrair_nf_da_chave_acesso(chave_acesso)
+    if num_chave:
+        return num_chave
     return None
+
+
+def _extrair_numero_nf(texto, chave_acesso=None):
+    """Extrai número da NF do texto OCR/PDF (DANFE, boleto ou chave de acesso).
+
+    Ignora últimos 25%% da página (feito em _processar_pdf).
+    Formatos pontuados com zeros à esquerda viram o número significativo
+    (ex.: 'N° 000.000.244' → '244').
+    """
+    return _normalizar_numero_nf(texto, chave_acesso=chave_acesso)
 
 
 def _extrair_nf_do_nome_arquivo(nome_arquivo):
