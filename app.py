@@ -345,28 +345,38 @@ def _parse_data_flex(s):
 CNPJ_PATY = '03.553.665/0002-00'
 CNPJ_DESTAK = '30.820.528/0001-78'
 CNPJ_EMISSOR_SERVICO = '14.187.040/0001-07'  # CNPJ de serviço/emissor comum
+CNPJ_COMERCIAL_MF = '26.132.106/0001-32'
+RAZAO_COMERCIAL_MF = 'COMERCIAL MF CONDIMENTOS E EMBALAGENS LTDA'
 CNPJS_EMISSORES = frozenset({
     CNPJ_PATY,
     CNPJ_DESTAK,
     CNPJ_EMISSOR_SERVICO,
     '14.187.040/0001-07',  # Formato alternativo
+    CNPJ_COMERCIAL_MF,
 })
 
 
 def _extrair_linha_danfe_nome_cnpj_data(texto):
-    """DANFE: tenta capturar linha com 'NOME/RAZÃO SOCIAL + CNPJ + DATA DA EMISSÃO'."""
+    """DANFE: linha 'NOME/RAZÃO SOCIAL + CNPJ + DATA DA EMISSÃO' do destinatário.
+
+    Ignora o emitente (Comercial MF e demais CNPJs de emissor) quando a mesma
+    máscara aparece no cabeçalho.
+    """
     if not texto:
         return None, None
-    m = re.search(
+    for m in re.finditer(
         r'^([A-Z0-9\s\&\.\-\*]+?)\s+(\d{2}\.\d{3}\.\d{3}/\d{4}\-\d{2})\s+\d{2}/\d{2}/\d{4}',
         texto,
-        re.MULTILINE
-    )
-    if not m:
-        return None, None
-    nome = (m.group(1) or '').strip()
-    cnpj = (m.group(2) or '').strip()
-    return nome or None, cnpj or None
+        re.MULTILINE,
+    ):
+        nome = (m.group(1) or '').strip()
+        cnpj = (m.group(2) or '').strip()
+        if not nome or not cnpj or cnpj in CNPJS_EMISSORES:
+            continue
+        if 'COMERCIAL MF' in nome.upper():
+            continue
+        return nome, cnpj
+    return None, None
 
 
 def _extrair_cnpj(texto, nome_arquivo=None):
@@ -396,6 +406,11 @@ def _extrair_cnpj(texto, nome_arquivo=None):
     _, cnpj_danfe = _extrair_linha_danfe_nome_cnpj_data(texto)
     if cnpj_danfe and cnpj_danfe not in CNPJS_EMISSORES:
         return cnpj_danfe
+
+    # Prioridade 0.1: bloco Destinatário/Remetente (layout Comercial MF e similares)
+    _, cnpj_dest = _extrair_destinatario_danfe(texto)
+    if cnpj_dest and cnpj_dest not in CNPJS_EMISSORES:
+        return cnpj_dest
     
     # Prioridade 1: CNPJ após "CNPJ/CPF:" próximo ao Pagador (Itaú/DESTAK)
     m = re.search(r'Pagador[:\s]*[\s\S]{0,200}?CNPJ\s*/\s*CPF\s*[:\s]*(\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2})', texto, re.IGNORECASE | re.DOTALL)
@@ -556,6 +571,80 @@ def _limpar_digitos_nf(raw):
     if num_limpo in BLACKLIST_NF:
         return None
     return num_limpo
+
+
+def _normalizar_numero_nf_capturado(raw):
+    """Compat DANFE/Comercial MF: mesma limpeza de `_limpar_digitos_nf`."""
+    return _limpar_digitos_nf(raw)
+
+
+def _extrair_chave_nfe(texto):
+    """Chave de acesso da NF-e (44 dígitos, modelo 55).
+
+    Aceita o miolo espaçado da DANFE (11 grupos de 4) e, se houver o rótulo
+    'CHAVE DE ACESSO', também a sequência colada. Não trata código de barras
+    de boleto (44 dígitos sem esse rótulo) como chave.
+    """
+    if not texto:
+        return None
+    # Exige separador entre os grupos. 44 dígitos colados são código de barras de boleto.
+    for m in re.finditer(r'(?:\d{4}[\s.\u00a0]+){10}\d{4}', texto):
+        digs = re.sub(r'\D', '', m.group(0))
+        if len(digs) == 44 and digs[20:22] == '55':
+            return digs
+    if re.search(r'CHAVE\s+DE\s+ACESSO', texto, re.IGNORECASE):
+        compact = re.sub(r'\s+', '', texto)
+        for m in re.finditer(r'\d{44}', compact):
+            digs = m.group(0)
+            if digs[20:22] == '55':
+                return digs
+    return None
+
+
+def _nf_da_chave_nfe(texto):
+    """nNF (9 posições) dentro da chave de acesso, sem zeros à esquerda."""
+    chave = _extrair_chave_nfe(texto)
+    if not chave:
+        return None
+    return _normalizar_numero_nf_capturado(chave[25:34])
+
+
+def _texto_parece_danfe(texto):
+    u = (texto or '').upper()
+    if not u:
+        return False
+    if (
+        'DANFE' in u
+        or 'NOTA FISCAL' in u
+        or 'COMERCIAL MF' in u
+        or 'DOCUMENTO AUXILIAR' in u
+        or 'CHAVE DE ACESSO' in u
+    ):
+        return True
+    return _extrair_chave_nfe(texto) is not None
+
+
+def _extrair_numero_nf_rotulo_danfe(texto):
+    """Nº 000.000.244, N° 000244 ou o número na linha seguinte ao rótulo."""
+    if not texto:
+        return None
+    candidatos = []
+    padrao = re.compile(
+        r'N[º°o]\.?[\s:.\-]{0,25}(\d{1,3}(?:\.\d{3})+|\d{3,12})',
+        re.IGNORECASE,
+    )
+    for m in padrao.finditer(texto):
+        raw = m.group(1) or ''
+        norm = _normalizar_numero_nf_capturado(raw)
+        if not norm:
+            continue
+        candidatos.append((m.start(), norm, '.' in raw))
+    if not candidatos:
+        return None
+    pontuados = [c for c in candidatos if c[2]]
+    if pontuados:
+        return pontuados[0][1]
+    return candidatos[0][1]
 
 
 def _extrair_nf_da_chave_acesso(chave_acesso):
@@ -783,11 +872,115 @@ def _limpar_razao_ate_cnpj_ou_data(linha):
     return linha.strip()
 
 
+def _nome_fornecedor_comercial_mf():
+    """Nome fantasia cadastrado para o CNPJ da Comercial MF, ou a razão social oficial."""
+    try:
+        alvo = _normalizar_cnpj(CNPJ_COMERCIAL_MF)
+        for fornecedor in Fornecedor.query.filter(Fornecedor.cnpj.isnot(None)).all():
+            if _normalizar_cnpj(fornecedor.cnpj) == alvo:
+                fantasia = (fornecedor.nome or '').strip() or (fornecedor.razao_social or '').strip()
+                if fantasia:
+                    return fantasia[:200]
+    except Exception:
+        pass
+    return RAZAO_COMERCIAL_MF
+
+
+def _eh_nome_emitente_comercial_mf(nome):
+    if not nome:
+        return False
+    u = str(nome).upper()
+    if 'COMERCIAL MF' in u:
+        return True
+    return _normalizar_cnpj(CNPJ_COMERCIAL_MF) in _normalizar_cnpj(nome)
+
+
+def _extrair_destinatario_danfe(texto):
+    """Nome e CNPJ do destinatário da DANFE, sem o emitente.
+
+    No layout da Comercial MF o cabeçalho 'NOME / RAZÃO SOCIAL CNPJ / CPF'
+    vem na mesma faixa e o nome real está na linha seguinte, colado ao CNPJ
+    31.022.721/0001-26. O recorte antigo parava nesse rótulo e perdia o nome.
+    """
+    if not texto:
+        return None, None
+    bloco = re.search(
+        r'Destinat[áa]rio\s*/\s*Remetente([\s\S]{0,1800}?)(?:C[aá]lculo\s+do\s+Imposto|Fatura\s*/\s*Duplicata|Transportador\s*/\s*Volumes)',
+        texto,
+        re.IGNORECASE,
+    )
+    if not bloco:
+        bloco = re.search(
+            r'Destinat[áa]rio\s*/\s*Remetente([\s\S]{0,1200}?)(?:Endere[cç]o|CNPJ\s*/\s*CPF)',
+            texto,
+            re.IGNORECASE,
+        )
+    trecho = bloco.group(1) if bloco else ''
+    if not trecho:
+        return None, None
+
+    cnpj = None
+    for encontrado in re.findall(r'\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}', trecho):
+        if encontrado not in CNPJS_EMISSORES:
+            cnpj = encontrado
+            break
+
+    nome = None
+    linhas = [re.sub(r'\s+', ' ', linha).strip() for linha in re.split(r'[\r\n]+', trecho) if linha and linha.strip()]
+    for i, linha in enumerate(linhas):
+        if re.search(r'Nome\s*/\s*Raz[ãa]o\s+Social', linha, re.IGNORECASE) and i + 1 < len(linhas):
+            cand = _limpar_razao_ate_cnpj_ou_data(linhas[i + 1])
+            cand = re.sub(r'^(?:NOME\s*/\s*RAZ[AÃ]O\s+SOCIAL\s*)', '', cand or '', flags=re.IGNORECASE).strip()
+            if cand and len(cand) > 3 and not _eh_linha_cabecalho_pagador(cand) and not _eh_nome_emitente_comercial_mf(cand):
+                nome = cand
+                break
+    if not nome:
+        mnome = re.search(
+            r'([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ0-9\s&\.\-]{4,}?)\s+(\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2})',
+            trecho,
+            re.IGNORECASE,
+        )
+        if mnome and mnome.group(2) not in CNPJS_EMISSORES:
+            cand = _limpar_razao_ate_cnpj_ou_data(mnome.group(1))
+            cand = re.sub(r'^(?:NOME\s*/\s*RAZ[AÃ]O\s+SOCIAL\s*)', '', cand or '', flags=re.IGNORECASE).strip()
+            if cand and len(cand) > 3 and not _eh_linha_cabecalho_pagador(cand) and not _eh_nome_emitente_comercial_mf(cand):
+                nome = cand
+    if nome:
+        nome = nome[:200]
+    return nome, cnpj
+
+
+def _aplicar_perfil_comercial_mf(texto, cnpj, razao):
+    """Preenche pagador (destinatário) e, se o nome lido for o emitente, normaliza.
+
+    `documentos.razao_social` e `documentos.cnpj` são o pagador usado na fila e
+    no vínculo com o cliente. Na NF da Comercial MF o pagador é o destinatário
+    (ex.: Supermercado Estrela, CNPJ 31.022.721/0001-26). Se a leitura grudar
+    no emitente, a razão cai no nome fantasia cadastrado ou na razão oficial.
+    """
+    if not texto or ('COMERCIAL MF' not in texto.upper() and CNPJ_COMERCIAL_MF not in texto):
+        return cnpj, razao
+    nome_dest, cnpj_dest = _extrair_destinatario_danfe(texto)
+    if cnpj_dest:
+        cnpj = cnpj_dest
+    elif cnpj in CNPJS_EMISSORES:
+        cnpj = None
+    if nome_dest:
+        razao = nome_dest
+    elif _eh_nome_emitente_comercial_mf(razao) or not (razao or '').strip():
+        razao = _nome_fornecedor_comercial_mf()
+    return cnpj, razao
+
+
 def _extrair_razao_social(texto):
     """Extrai razão social do PAGADOR (boletos) ou DESTINATÁRIO (NF-e)."""
+    nome_dest, _ = _extrair_destinatario_danfe(texto)
+    if nome_dest:
+        return nome_dest
+
     # DANFE: priorizar bloco do destinatário para evitar capturar "Transportador / Volumes Transportados"
     bloco_dest = re.search(
-        r'Destinat[áa]rio\s*/\s*Remetente([\s\S]{0,1200}?)(?:Endere[cç]o|CNPJ\s*/\s*CPF)',
+        r'Destinat[áa]rio\s*/\s*Remetente([\s\S]{0,1800}?)(?:C[aá]lculo\s+do\s+Imposto|Fatura\s*/\s*Duplicata|Transportador\s*/\s*Volumes|Endere[cç]o|CNPJ\s*/\s*CPF)',
         texto,
         re.IGNORECASE,
     )
@@ -939,15 +1132,39 @@ def _detectar_empresa_destak(texto):
 
 
 def _parse_valor_monetario(s):
-    """Converte string 'R$ 1.234,56' ou '-R$ 120,00' para float. Retorna None se inválido. Preserva sinal negativo."""
-    if not s or not isinstance(s, str):
+    """Converte 'R$ 1.234,56', '1.800,00' ou '1.800.00' para float.
+
+    DANFE da Comercial MF mistura ponto de milhar com ponto no lugar da
+    vírgula decimal (1.800.00). Vários pontos: o último grupo de 2 dígitos
+    é o centavo. Preserva sinal negativo.
+    """
+    if s is None or isinstance(s, bool):
         return None
+    if isinstance(s, (int, float)):
+        return float(s)
+    if not isinstance(s, str):
+        s = str(s)
     s = str(s).strip()
-    negativo = s.lstrip().startswith('-')
+    if not s:
+        return None
+    negativo = bool(re.match(r'^\s*-', s))
     s = re.sub(r'R\$\s*', '', s, flags=re.IGNORECASE).replace(' ', '')
     s = s.lstrip('-').strip()
-    if ',' in s:
+    if not re.search(r'\d', s):
+        return None
+    if ',' in s and '.' in s:
+        if s.rfind(',') > s.rfind('.'):
+            s = s.replace('.', '').replace(',', '.')
+        else:
+            s = s.replace(',', '')
+    elif ',' in s:
         s = s.replace('.', '').replace(',', '.')
+    elif s.count('.') > 1:
+        partes = s.split('.')
+        if all(p.isdigit() for p in partes) and len(partes[-1]) == 2:
+            s = ''.join(partes[:-1]) + '.' + partes[-1]
+        elif all(p.isdigit() for p in partes):
+            s = ''.join(partes)
     try:
         n = float(s)
         return -n if negativo else n
@@ -967,6 +1184,9 @@ _RE_VALOR_ACESSORIO = re.compile(
     r'(?:juros|mora|multa|desconto|abatimento|encargos?)[^\n]{0,80}?'
     r'(?:R\$\s*)?\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?',
     re.IGNORECASE,
+)
+_RE_MOEDA_DANFE = re.compile(
+    r'(?<!\d)(\d{1,3}(?:\.\d{3})+,\d{2}|\d{1,3}(?:\.\d{3})+\.\d{2}|\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2}|\d+\.\d{2})(?!\d)'
 )
 
 
@@ -1010,29 +1230,40 @@ def _valor_da_linha_digitavel(texto):
     return v if v > 0 else None
 
 
+def _maior_valor_monetario(trecho):
+    """Maior valor positivo do trecho, inclusive máscara 1.800.00."""
+    if not trecho:
+        return None
+    melhor = None
+    for raw in _RE_MOEDA_DANFE.findall(trecho):
+        v = _parse_valor_monetario(raw)
+        if v is not None and v > 0 and (melhor is None or v > melhor):
+            melhor = v
+    return melhor
+
+
 def _extrair_valor_boleto(texto):
     """Extrai o valor nominal do boleto (ex.: R$ 2.400,00) e, para DANFE, o Valor Total da Nota.
 
     Ordem para boletos: rótulo "Valor do Documento" → linha digitável/código de barras →
     padrões genéricos, ignorando valores de juros/mora/multa/desconto (ex.: "juros de R$ 0,63").
+    DANFE/Comercial MF: ancora em "Valor Total da Nota" (máscara 1.800.00).
     """
     if not texto:
         return None
     # DANFE: ancorar no rótulo "Valor Total da Nota" para não capturar zeros de impostos
     bloco_total_nota = re.search(
-        r'Valor\s+Total\s+da\s+Nota([\s\S]{0,220})',
+        r'([\s\S]{0,180})Valor\s+Total\s+da\s+Nota([\s\S]{0,280})',
         texto,
         re.IGNORECASE
     )
     if bloco_total_nota:
-        trecho = bloco_total_nota.group(1)
-        candidatos = re.findall(r'(\d{1,3}(?:\.\d{3})*,\d{2})', trecho)
-        if candidatos:
-            # Usa o último valor não-zero do bloco (normalmente o total final da nota)
-            for raw in reversed(candidatos):
-                v = _parse_valor_monetario(raw)
-                if v is not None and v > 0:
-                    return v
+        depois = _maior_valor_monetario(bloco_total_nota.group(2))
+        if depois is not None:
+            return depois
+        antes = _maior_valor_monetario(bloco_total_nota.group(1))
+        if antes is not None:
+            return antes
 
     for m in _RE_VALOR_ROTULO_DOCUMENTO.finditer(texto):
         v = _parse_valor_boleto_seguro(m.group(1))
@@ -1092,7 +1323,16 @@ def _classificar_pdf(texto):
     u = (texto or "").upper()
 
     # ── Nota Fiscal ─────────────────────────────────────────────────────────
-    if "DANFE" in u or "NOTA FISCAL" in u or "NOTA FISCAL ELETRONICA" in u:
+    # Comercial MF, DANFE, documento auxiliar ou chave de 44 dígitos (modelo 55)
+    # entram aqui antes das palavras de boleto (a DANFE também traz "vencimento").
+    if (
+        "DANFE" in u
+        or "NOTA FISCAL" in u
+        or "NOTA FISCAL ELETRONICA" in u
+        or "COMERCIAL MF" in u
+        or "DOCUMENTO AUXILIAR" in u
+        or _extrair_chave_nfe(texto)
+    ):
         return "NOTA_FISCAL"
 
     # ── Boleto — palavras-chave diretas ────────────────────────────────────
@@ -1317,6 +1557,87 @@ def _mover_para_bonificacoes(caminho_arquivo):
         return False, None, f"Erro ao mover arquivo para bonificacoes: {str(e)}"
 
 
+def _parse_linha_item_danfe(linha):
+    """Uma linha da tabela DADOS DOS PRODUTOS.
+
+    Separador: pipe ou espaços. A âncora é o NCM de 8 dígitos (ex.: 07032090),
+    com o código à esquerda e quantidade / valor total à direita.
+    """
+    if not linha:
+        return None
+    linha_norm = re.sub(r'\s*\|\s*', ' ', str(linha))
+    linha_norm = re.sub(r'\s+', ' ', linha_norm).strip()
+    m = re.search(
+        r'^(\d{1,10})\s+(.+?)\s+(\d{8})\b\s*(.*)$',
+        linha_norm,
+        re.IGNORECASE,
+    )
+    if not m:
+        return None
+    codigo, descricao, ncm, resto = m.group(1), m.group(2), m.group(3), m.group(4) or ''
+    descricao = re.sub(r'\s+', ' ', descricao).strip(' -')
+    if len(descricao) < 3 or not re.search(r'[A-ZÁÉÍÓÚÃÕÇ]{3,}', descricao, re.IGNORECASE):
+        return None
+    if re.search(r'DESCRI|NCM/SH|C[OÓ]DIGO\s+PRODUTO', descricao, re.IGNORECASE):
+        return None
+    qtd_m = re.search(r'(\d{1,6}[.,]\d{2,4})', resto)
+    if not qtd_m:
+        return None
+    qtd = _parse_valor_monetario(qtd_m.group(1))
+    if qtd is None:
+        return None
+    valores = []
+    for raw in _RE_MOEDA_DANFE.findall(resto):
+        v = _parse_valor_monetario(raw)
+        if v is not None and v > 0:
+            valores.append(v)
+    if not valores:
+        return None
+    return {
+        'codigo': codigo.lstrip('0') or codigo,
+        'descricao': descricao[:200],
+        'ncm': ncm,
+        'quantidade': qtd,
+        'valor_total': max(valores),
+    }
+
+
+def _extrair_itens_danfe(texto):
+    """Itens de DADOS DOS PRODUTOS/SERVIÇOS. Lista vazia se o bloco não existir."""
+    if not texto:
+        return []
+    bloco = re.search(
+        r'DADOS\s+DOS\s+PRODUTOS(?:\s*/\s*SERVI[CÇ]OS)?([\s\S]+?)(?:DADOS\s+ADICIONAIS|C[AÁ]LCULO\s+DO\s+ISSQN|TRANSPORTADOR|RESERVADO\s+AO\s+FISCO|INFORMA[CÇ][OÕ]ES\s+COMPLEMENTARES)',
+        texto,
+        re.IGNORECASE,
+    )
+    trecho = bloco.group(1) if bloco else ''
+    if not trecho:
+        return []
+    linhas = [ln.strip() for ln in re.split(r'[\r\n]+', trecho) if ln and ln.strip()]
+    fundidas = []
+    i = 0
+    while i < len(linhas):
+        atual = linhas[i]
+        if i + 1 < len(linhas) and re.match(r'\d{8}\b', linhas[i + 1]) and not re.search(r'\d{8}', atual):
+            atual = atual + ' ' + linhas[i + 1]
+            i += 1
+        fundidas.append(atual)
+        i += 1
+    itens = []
+    vistos = set()
+    for linha in fundidas:
+        item = _parse_linha_item_danfe(linha)
+        if not item:
+            continue
+        chave = (item['codigo'], item['ncm'], item['descricao'])
+        if chave in vistos:
+            continue
+        vistos.add(chave)
+        itens.append(item)
+    return itens
+
+
 def _processar_pdf(caminho_arquivo, tipo_documento):
     """Processa um arquivo PDF e extrai informações relevantes.
     
@@ -1332,19 +1653,24 @@ def _processar_pdf(caminho_arquivo, tipo_documento):
         return None
     try:
         nome_arquivo = os.path.basename(caminho_arquivo)
+        eh_nota = (tipo_documento or '').upper() == 'NOTA_FISCAL'
         with pdfplumber.open(caminho_arquivo) as pdf:
             texto_completo = ""
             texto_pagina_inteira = ""
             eh_boleto = (tipo_documento or '').upper() == 'BOLETO'
             for pagina in pdf.pages:
-                h = float(pagina.height) or 842
-                w = float(pagina.width) or 595
-                crop_bottom = max(0, h * 0.75)
-                if crop_bottom <= 0:
-                    cropped = pagina
+                # DANFE: a tabela de produtos e o total ficam abaixo dos 75% usados no boleto.
+                if eh_nota:
+                    texto_pagina = pagina.extract_text()
                 else:
-                    cropped = pagina.crop((0, 0, w, crop_bottom))
-                texto_pagina = cropped.extract_text()
+                    h = float(pagina.height) or 842
+                    w = float(pagina.width) or 595
+                    crop_bottom = max(0, h * 0.75)
+                    if crop_bottom <= 0:
+                        cropped = pagina
+                    else:
+                        cropped = pagina.crop((0, 0, w, crop_bottom))
+                    texto_pagina = cropped.extract_text()
                 if texto_pagina:
                     texto_completo += texto_pagina + "\n"
                 if eh_boleto:
@@ -1381,15 +1707,36 @@ def _processar_pdf(caminho_arquivo, tipo_documento):
         )
         
         debug_vencimento = eh_paty_bradesco and tipo_documento == 'BOLETO'
-        
+
+        cnpj = _extrair_cnpj(texto_completo, nome_arquivo=nome_arquivo)
+        razao = _extrair_razao_social(texto_completo)
+        cnpj, razao = _aplicar_perfil_comercial_mf(texto_completo, cnpj, razao)
+        itens = _extrair_itens_danfe(texto_completo) if eh_nota else []
+        valor = _extrair_valor_boleto(texto_boleto if eh_boleto else texto_completo)
+        if valor is None and itens:
+            soma_itens = sum((it.get('valor_total') or 0) for it in itens)
+            if soma_itens > 0:
+                valor = soma_itens
+        if itens:
+            app.logger.info(
+                "DANFE itens extraídos (%s): %s",
+                nome_arquivo,
+                "; ".join(
+                    f"{it['codigo']} {it['descricao'][:48]} NCM {it['ncm']} "
+                    f"qtd={it['quantidade']} total={it['valor_total']}"
+                    for it in itens
+                ),
+            )
+
         resultado = {
-            'cnpj': _extrair_cnpj(texto_completo, nome_arquivo=nome_arquivo),
+            'cnpj': cnpj,
             'numero_nf': numero_nf,
-            'razao_social': _extrair_razao_social(texto_completo),
+            'razao_social': razao,
             'data_vencimento': _extrair_data_vencimento(texto_completo, debug_paty=debug_vencimento),
             'empresa_destak': _detectar_empresa_destak(texto_completo),
-            'valor_boleto': _extrair_valor_boleto(texto_boleto),
+            'valor_boleto': valor,
             'apenas_emissor': apenas_emissor,
+            'itens': itens,
         }
         return resultado
     except FileNotFoundError:
@@ -1466,6 +1813,29 @@ def _vendas_da_empresa(vendas, empresa_id):
     if empresa_id is None:
         return []
     return [v for v in vendas if v.empresa_id == empresa_id]
+
+
+def _documento_precisa_reextrair(doc, tipo):
+    """Relê o PDF se a NF gravada ainda tem máscara ou se faltam campos da fila.
+
+    Cobre o documento 1179 e reenvios do modelo Comercial MF: `000.000.244`
+    ou `000000244` voltam a ser lidos como 244, e valor/CNPJ/razão vazios
+    (ou CNPJ do emitente) não ficam presos no cache do OCR.
+    """
+    if doc is None:
+        return True
+    nf = (doc.numero_nf or getattr(doc, 'nf_extraida', None) or '').strip()
+    if not nf or re.search(r'\D', nf) or nf != (nf.lstrip('0') or '0'):
+        return True
+    if getattr(doc, 'valor', None) is None:
+        return True
+    if (tipo or '').upper() != 'NOTA_FISCAL':
+        return False
+    if not (doc.cnpj or '').strip() or not (doc.razao_social or '').strip():
+        return True
+    if _normalizar_cnpj(doc.cnpj) == _normalizar_cnpj(CNPJ_COMERCIAL_MF):
+        return True
+    return False
 
 
 def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado=None):
@@ -1576,7 +1946,7 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
                         db.session.flush()
                 nf_cached = (getattr(doc_existente, 'nf_extraida', None) or doc_existente.numero_nf)
                 nf_cached = (nf_cached or '').strip() or None
-                if nf_cached:
+                if nf_cached and not _documento_precisa_reextrair(doc_existente, tipo):
                     # Cache OCR: usar nf_extraida/numero_nf armazenado, não rodar OCR de novo
                     dados_extraidos = {
                         'numero_nf': nf_cached,
