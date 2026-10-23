@@ -820,7 +820,12 @@
                     {% elif nf_nao %}
                     <p class="text-sm text-amber-700 font-medium mt-0.5">NF {{ doc.numero_nf or '?' }} lida, mas não encontrada nas Vendas.</p>
                     {% endif %}
-                    <p class="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
+                    <p class="doc-meta-dados text-sm text-gray-600 dark:text-gray-400 mt-0.5"
+                       data-cnpj="{{ doc.cnpj or '' }}"
+                       data-numero-nf="{{ doc.numero_nf or '' }}"
+                       data-razao-social="{{ doc.razao_social or '' }}"
+                       data-vencimento="{% if doc.data_vencimento %}{{ doc.data_vencimento.strftime('%d/%m/%Y') }}{% endif %}"
+                       data-valor="{% if doc.valor is not none %}{{ doc.valor }}{% endif %}">
                         {% if ok %}
                         {% if doc.cnpj %}<span class="font-medium text-emerald-700">Pagador: {{ doc.cnpj }}</span>{% endif %}
                         {% if doc.numero_nf %} · NF {{ doc.numero_nf }}{% endif %}
@@ -869,11 +874,17 @@
                 {% if doc.razao_social %}{% set _ = criar_venda_params.update({'cliente': doc.razao_social}) %}{% endif %}
                 {% if doc.numero_nf %}{% set _ = criar_venda_params.update({'nf': doc.numero_nf}) %}{% endif %}
                 {% if doc.data_vencimento %}{% set _ = criar_venda_params.update({'data': doc.data_vencimento.strftime('%Y-%m-%d')}) %}{% endif %}
-                <a href="{{ url_for('vendas.listar_vendas', **criar_venda_params) }}" class="inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-gray-600 text-white hover:bg-gray-700 transition">
+                <a href="{{ url_for('vendas.listar_vendas', **criar_venda_params) }}" class="btn-criar-venda-doc inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-gray-600 text-white hover:bg-gray-700 transition" data-venc-iso="{% if doc.data_vencimento %}{{ doc.data_vencimento.strftime('%Y-%m-%d') }}{% endif %}">
                     <i data-lucide="plus-circle" class="w-4 h-4 mr-2"></i>Criar venda
                 </a>
                 {% endif %}
-                <button type="button" class="btn-vincular-doc inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 transition" data-doc-id="{{ doc.id }}" data-doc-nome="{{ nome }}" data-pagador="{{ (doc.razao_social or doc.cnpj) | default('', true) }}" {% if item.diagnostico is defined and item.diagnostico %}title="NF: {{ item.diagnostico.nf_lida or doc.numero_nf or 'N/A' }}"{% elif doc.numero_nf %}title="NF: {{ doc.numero_nf }}"{% endif %}>
+                <button type="button"
+                    onclick="abrirModalEditarDocumento({{ doc.id }}, {{ (doc.numero_nf or '')|tojson }}, {{ (doc.razao_social or '')|tojson }}, {{ (doc.valor|float if doc.valor is not none else 0)|tojson }})"
+                    class="btn-editar-doc inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-500/30 transition-all"
+                    title="Corrigir NF, razão social ou valor antes de vincular">
+                    <i data-lucide="pencil" class="w-4 h-4 mr-2"></i>Editar
+                </button>
+                <button type="button" class="btn-vincular-doc inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 transition" data-doc-id="{{ doc.id }}" data-doc-nome="{{ nome }}" data-pagador="{{ (doc.razao_social or doc.cnpj) | default('', true) }}" data-numero-nf="{{ doc.numero_nf or '' }}" {% if item.diagnostico is defined and item.diagnostico %}title="NF: {{ item.diagnostico.nf_lida or doc.numero_nf or 'N/A' }}"{% elif doc.numero_nf %}title="NF: {{ doc.numero_nf }}"{% endif %}>
                     <i data-lucide="link" class="w-4 h-4 mr-2"></i>Vincular à Venda
                 </button>
                 <button type="button" class="inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-700 transition" onclick="confirmarExclusaoArquivo({{ doc.id }}, this)" title="Excluir arquivo definitivamente">
@@ -6806,6 +6817,206 @@ window._swalInboxTheme = function() {
         confirmButtonColor: '#10b981',
         cancelButtonColor: '#64748b'
     };
+};
+
+function _escapeHtmlDoc(str) {
+    return String(str == null ? '' : str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function _formatarMoedaDoc(valor) {
+    var n = Number(valor);
+    if (!isFinite(n)) n = 0;
+    return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function _parseValorEdicaoDoc(raw) {
+    if (raw === null || raw === undefined) return null;
+    if (typeof raw === 'number') return isFinite(raw) ? raw : null;
+    var s = String(raw).trim();
+    if (!s) return null;
+    s = s.replace(/R\$\s*/gi, '').replace(/\s/g, '');
+    if (s.indexOf(',') >= 0) {
+        s = s.replace(/\./g, '').replace(',', '.');
+    }
+    var n = parseFloat(s);
+    return isFinite(n) ? n : null;
+}
+
+function _atualizarLinhaDocumentoEditado(id, dados) {
+    var card = document.getElementById('doc-' + id);
+    if (!card || !dados) return;
+
+    var numeroNf = (dados.numero_nf == null ? '' : String(dados.numero_nf)).trim();
+    var razao = (dados.razao_social == null ? '' : String(dados.razao_social)).trim();
+    var valor = dados.valor;
+
+    var meta = card.querySelector('.doc-meta-dados');
+    if (meta) {
+        var cnpj = (meta.getAttribute('data-cnpj') || '').trim();
+        var venc = (meta.getAttribute('data-vencimento') || '').trim();
+        meta.setAttribute('data-numero-nf', numeroNf);
+        meta.setAttribute('data-razao-social', razao);
+        if (valor === null || valor === undefined || valor === '') {
+            meta.removeAttribute('data-valor');
+        } else {
+            meta.setAttribute('data-valor', String(valor));
+        }
+
+        var partes = [];
+        if (cnpj) {
+            partes.push('<span class="font-medium text-emerald-700">Pagador: ' + _escapeHtmlDoc(cnpj) + '</span>');
+        }
+        if (numeroNf) partes.push('NF ' + _escapeHtmlDoc(numeroNf));
+        if (razao) partes.push(_escapeHtmlDoc(razao));
+        if (venc) partes.push('Venc. ' + _escapeHtmlDoc(venc));
+        if (valor !== null && valor !== undefined && valor !== '' && Number(valor) !== 0) {
+            partes.push('<span class="font-bold text-green-600 dark:text-green-400">Valor: ' + _escapeHtmlDoc(_formatarMoedaDoc(valor)) + '</span>');
+        } else if (valor === null || valor === undefined || valor === '') {
+            partes.push('<span class="text-gray-400 dark:text-gray-500">Valor não identificado</span>');
+        }
+        meta.innerHTML = partes.length ? partes.join(' · ') : '—';
+    }
+
+    var btnVincular = card.querySelector('.btn-vincular-doc');
+    if (btnVincular) {
+        var pagador = razao || (meta ? (meta.getAttribute('data-cnpj') || '') : '');
+        btnVincular.setAttribute('data-pagador', pagador);
+        btnVincular.setAttribute('data-numero-nf', numeroNf);
+        btnVincular.setAttribute('title', numeroNf ? ('NF: ' + numeroNf) : 'Vincular à Venda');
+    }
+
+    var btnCriar = card.querySelector('.btn-criar-venda-doc');
+    if (btnCriar) {
+        var params = new URLSearchParams();
+        if (razao) params.set('cliente', razao);
+        if (numeroNf) params.set('nf', numeroNf);
+        var vencIso = (btnCriar.getAttribute('data-venc-iso') || '').trim();
+        if (vencIso) params.set('data', vencIso);
+        var qs = params.toString();
+        btnCriar.setAttribute('href', qs ? ('/vendas?' + qs) : '/vendas');
+    }
+
+    var btnEditar = card.querySelector('.btn-editar-doc');
+    if (btnEditar) {
+        var valorAttr = (valor === null || valor === undefined || valor === '') ? 0 : Number(valor);
+        if (!isFinite(valorAttr)) valorAttr = 0;
+        btnEditar.setAttribute(
+            'onclick',
+            'abrirModalEditarDocumento(' + id + ', ' + JSON.stringify(numeroNf) + ', ' + JSON.stringify(razao) + ', ' + JSON.stringify(valorAttr) + ')'
+        );
+    }
+}
+
+window.abrirModalEditarDocumento = function(id, nfAtual, razaoAtual, valorAtual) {
+    if (!id || typeof Swal === 'undefined') {
+        if (typeof showToast === 'function') {
+            showToast('Não foi possível abrir o editor de documento.', 'error');
+        } else {
+            alert('Não foi possível abrir o editor de documento.');
+        }
+        return;
+    }
+
+    var nfIni = (nfAtual == null ? '' : String(nfAtual));
+    var razaoIni = (razaoAtual == null ? '' : String(razaoAtual));
+    var valorNum = _parseValorEdicaoDoc(valorAtual);
+    var valorIni = (valorNum === null) ? '' : _formatarMoedaDoc(valorNum).replace(/^R\$\s*/, '');
+
+    Swal.fire(Object.assign(window._swalInboxTheme(), {
+        title: 'Editar documento',
+        html:
+            '<label for="swal-doc-nf" style="display:block;text-align:left;margin:0.4em 2em 0.15em;font-size:12px;opacity:0.8;">Número da NF</label>' +
+            '<input id="swal-doc-nf" class="swal2-input" value="' + _escapeHtmlDoc(nfIni) + '" placeholder="Ex: 123456" maxlength="50" style="margin-top:0;">' +
+            '<label for="swal-doc-razao" style="display:block;text-align:left;margin:0.6em 2em 0.15em;font-size:12px;opacity:0.8;">Razão Social / Pagador</label>' +
+            '<input id="swal-doc-razao" class="swal2-input" value="' + _escapeHtmlDoc(razaoIni) + '" placeholder="Razão social" maxlength="200" style="margin-top:0;">' +
+            '<label for="swal-doc-valor" style="display:block;text-align:left;margin:0.6em 2em 0.15em;font-size:12px;opacity:0.8;">Valor Total (R$)</label>' +
+            '<input id="swal-doc-valor" class="swal2-input" value="' + _escapeHtmlDoc(valorIni) + '" placeholder="1.800,00" inputmode="decimal" style="margin-top:0;">',
+        focusConfirm: false,
+        showCancelButton: true,
+        showLoaderOnConfirm: true,
+        confirmButtonText: 'Salvar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#f59e0b',
+        allowOutsideClick: function() { return !Swal.isLoading(); },
+        allowEscapeKey: function() { return !Swal.isLoading(); },
+        preConfirm: async function() {
+            var nfEl = document.getElementById('swal-doc-nf');
+            var razaoEl = document.getElementById('swal-doc-razao');
+            var valorEl = document.getElementById('swal-doc-valor');
+            var numero_nf = ((nfEl && nfEl.value) || '').trim();
+            var razao_social = ((razaoEl && razaoEl.value) || '').trim();
+            var valorRaw = ((valorEl && valorEl.value) || '').trim();
+            var valor = valorRaw === '' ? null : _parseValorEdicaoDoc(valorRaw);
+
+            if (valorRaw !== '' && (valor === null || !isFinite(valor))) {
+                Swal.showValidationMessage('Valor inválido. Use formato como 1.800,00');
+                return false;
+            }
+            if (valor !== null && valor < 0) {
+                Swal.showValidationMessage('Valor não pode ser negativo.');
+                return false;
+            }
+
+            try {
+                var headers = Object.assign(
+                    { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                    window.getCsrfHeaders ? window.getCsrfHeaders() : {}
+                );
+                var resp = await fetch('/api/documentos/' + encodeURIComponent(id) + '/editar', {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify({
+                        numero_nf: numero_nf,
+                        razao_social: razao_social,
+                        valor: valor
+                    }),
+                    credentials: 'same-origin',
+                    redirect: 'manual'
+                });
+
+                if (resp.type === 'opaqueredirect' || (resp.status >= 300 && resp.status < 400)) {
+                    throw new Error('Sessão expirada ou CSRF inválido. Recarregue a página.');
+                }
+
+                var ct = (resp.headers.get('content-type') || '').toLowerCase();
+                var data = null;
+                if (ct.indexOf('application/json') >= 0) {
+                    data = await resp.json().catch(function() { return null; });
+                } else {
+                    throw new Error('Resposta inválida do servidor (HTTP ' + resp.status + ').');
+                }
+
+                if (!resp.ok || !data || data.status !== 'success') {
+                    throw new Error((data && (data.mensagem || data.erro)) || ('Falha ao salvar (HTTP ' + resp.status + ').'));
+                }
+                return data;
+            } catch (error) {
+                var msg = (error && error.message) ? error.message : 'Erro desconhecido';
+                Swal.showValidationMessage(msg);
+                return false;
+            }
+        }
+    })).then(function(result) {
+        if (!result.isConfirmed || !result.value) return;
+        var data = result.value;
+        _atualizarLinhaDocumentoEditado(id, data.dados || {});
+        if (typeof showToast === 'function') {
+            showToast(data.mensagem || 'Documento atualizado com sucesso!', 'success');
+        } else {
+            Swal.fire(Object.assign(window._swalInboxTheme(), {
+                icon: 'success',
+                title: data.mensagem || 'Documento atualizado com sucesso!',
+                timer: 1600,
+                showConfirmButton: false
+            }));
+        }
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    });
 };
 
 window.desvincularDocumento = function(id, tipo) {

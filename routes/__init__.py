@@ -29,6 +29,7 @@ Estado atual:
                            /logistica/bulk_update, /api/calendario/feed.ics (Webcal)
     * ``documentos_bp``  → /upload, /processar_documentos, /reprocessar_boletos,
                            /documento/visualizar, /documento/<id>/vincular,
+                           /api/documentos/<id>/editar,
                            /arquivo/<id>/deletar, /arquivos/deletar_em_massa,
                            /arquivos/upload_massa, /arquivos/<id>/debug_texto,
                            /admin/arquivos, /admin/arquivos/deletar_massa,
