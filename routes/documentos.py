@@ -18,6 +18,7 @@ Rotas extraídas do legado ``app.py`` (Fase 3 da refatoração):
     * POST /admin/arquivos/deletar_massa         admin_arquivos_deletar_massa
     * GET/POST /admin/reprocessar-vencimentos    admin_reprocessar_vencimentos (master)
     * POST /documento/<id>/vincular              vincular_documento_venda
+    * POST /api/documentos/<id>/editar           editar_documento
     * POST /venda/<id>/desvincular_documento     desvincular_documento_venda
     * GET  /admin/raio_x                         raio_x               (master)
     * POST /admin/resgatar_orfaos                resgatar_orfaos      (master)
@@ -42,6 +43,7 @@ Auditoria P0: TODAS as queries usam ``query_documentos_tenant()`` ou
 tenants (debug de OCR, raio-x, limpeza global).
 """
 from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 import html
 import io
 import os
@@ -1462,6 +1464,112 @@ def admin_reprocessar_vencimentos():
 </html>'''
 
     return _impl()
+
+
+def _parse_valor_edicao_documento(valor_raw):
+    """Aceita float/int/Decimal ou string BR ('1.800,00', 'R$ 1.800,00').
+
+    Retorna ``(Decimal|None, mensagem_erro|None)``. ``None`` no valor
+    significa "campo omitido / limpar" — o caller decide se limpa ou ignora.
+    """
+    if valor_raw is None:
+        return None, None
+    if isinstance(valor_raw, bool):
+        return None, 'Valor inválido.'
+    if isinstance(valor_raw, Decimal):
+        return valor_raw, None
+    if isinstance(valor_raw, (int, float)):
+        try:
+            return Decimal(str(valor_raw)), None
+        except (InvalidOperation, ValueError):
+            return None, 'Valor inválido.'
+
+    s = str(valor_raw).strip()
+    if not s:
+        return None, None
+    s = re.sub(r'R\$\s*', '', s, flags=re.IGNORECASE).replace(' ', '')
+    if ',' in s:
+        s = s.replace('.', '').replace(',', '.')
+    try:
+        return Decimal(s), None
+    except (InvalidOperation, ValueError):
+        return None, 'Valor inválido. Use formato como 1800.00 ou 1.800,00.'
+
+
+@documentos_bp.route('/api/documentos/<int:id>/editar', methods=['POST', 'PUT'])
+def editar_documento(id):
+    """Corrige dados OCR do documento (NF, razão social, valor) antes do vínculo.
+
+    Body JSON esperado:
+        - numero_nf: string
+        - razao_social: string
+        - valor: float ou string monetária BR ('1.800,00')
+    """
+    documento = query_documentos_tenant().filter_by(id=id).first_or_404()
+    if not _usuario_pode_gerenciar_documento(documento):
+        return _resposta_sem_permissao()
+
+    dados = request.get_json(silent=True) or {}
+    if not isinstance(dados, dict):
+        return jsonify(status='error', mensagem='JSON inválido.'), 400
+
+    numero_nf = dados.get('numero_nf', documento.numero_nf)
+    razao_social = dados.get('razao_social', documento.razao_social)
+    valor_raw = dados.get('valor', documento.valor)
+
+    if numero_nf is not None:
+        numero_nf = str(numero_nf).strip() or None
+    if razao_social is not None:
+        razao_social = str(razao_social).strip() or None
+        if razao_social and len(razao_social) > 200:
+            return jsonify(
+                status='error',
+                mensagem='Razão social muito longa (máx. 200 caracteres).',
+            ), 400
+    if numero_nf and len(numero_nf) > 50:
+        return jsonify(
+            status='error',
+            mensagem='Número da NF muito longo (máx. 50 caracteres).',
+        ), 400
+
+    valor, erro_valor = _parse_valor_edicao_documento(valor_raw)
+    if erro_valor:
+        return jsonify(status='error', mensagem=erro_valor), 400
+    if valor is not None and valor < 0:
+        return jsonify(status='error', mensagem='Valor não pode ser negativo.'), 400
+
+    try:
+        documento.numero_nf = numero_nf
+        # Mantém o cache OCR alinhado com a correção manual (auto-vínculo
+        # e diagnósticos leem nf_extraida || numero_nf).
+        documento.nf_extraida = numero_nf
+        documento.razao_social = razao_social
+        if 'valor' in dados:
+            documento.valor = valor
+        db.session.commit()
+        limpar_cache_dashboard()
+    except Exception as e:
+        db.session.rollback()
+        return erro_json(
+            e,
+            'Erro ao atualizar o documento.',
+            status=500,
+            chave_mensagem='mensagem',
+            extras={'status': 'error'},
+            contexto='editar_documento',
+        )
+
+    valor_out = float(documento.valor) if documento.valor is not None else None
+    return jsonify(
+        status='success',
+        mensagem='Documento atualizado com sucesso!',
+        dados={
+            'id': documento.id,
+            'numero_nf': documento.numero_nf,
+            'razao_social': documento.razao_social,
+            'valor': valor_out,
+        },
+    )
 
 
 @documentos_bp.route('/documento/<int:id>/vincular', methods=['POST'])
