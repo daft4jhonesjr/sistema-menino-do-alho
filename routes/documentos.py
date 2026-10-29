@@ -252,13 +252,32 @@ def _quer_visualizacao_embutida():
     )
 
 
-def _resposta_pdf_bytes(dados, nome):
-    resp = Response(dados, mimetype='application/pdf')
+def _aplicar_headers_pdf_inline(resp, nome):
+    """Garante PDF embutível no iframe (Safari/iOS e same-origin)."""
     nome_seguro = nome_pdf_seguro(nome)
     resp.headers['Content-Disposition'] = f'inline; filename="{nome_seguro}"'
     resp.headers['X-Content-Type-Options'] = 'nosniff'
+    # Permite o modal same-origin; evita DENY implícito de proxies/middlewares.
+    resp.headers['X-Frame-Options'] = 'SAMEORIGIN'
     resp.headers['Cache-Control'] = 'private, max-age=120'
     return resp
+
+
+def _resposta_pdf_bytes(dados, nome):
+    resp = Response(dados, mimetype='application/pdf')
+    return _aplicar_headers_pdf_inline(resp, nome)
+
+
+def _resposta_pdf_arquivo(caminho, nome=None):
+    """Serve arquivo local com Content-Disposition inline para o modal."""
+    nome_seguro = nome_pdf_seguro(nome or os.path.basename(caminho))
+    resp = send_file(
+        caminho,
+        mimetype='application/pdf',
+        as_attachment=False,
+        download_name=nome_seguro,
+    )
+    return _aplicar_headers_pdf_inline(resp, nome_seguro)
 
 
 def _responder_ausencia_pdf(mensagem, destino=None, status=404):
@@ -485,7 +504,7 @@ def ver_boleto_venda(id):
     if not os.path.isfile(full):
         return _responder_ausencia_pdf('Arquivo do boleto não encontrado no servidor.')
     try:
-        return send_file(full, mimetype='application/pdf', as_attachment=False)
+        return _resposta_pdf_arquivo(full, f'boleto-{venda.id}.pdf')
     except FileNotFoundError:
         return _responder_ausencia_pdf('Arquivo do boleto não encontrado no disco do servidor.')
     except Exception as e:
@@ -568,7 +587,7 @@ def ver_nf_venda(id):
     if not os.path.isfile(full):
         return _responder_ausencia_pdf('Arquivo da nota fiscal não encontrado no servidor.')
     try:
-        return send_file(full, mimetype='application/pdf', as_attachment=False)
+        return _resposta_pdf_arquivo(full, f'nf-{venda.id}.pdf')
     except FileNotFoundError:
         if _quer_visualizacao_embutida():
             return html_embed_erro(
