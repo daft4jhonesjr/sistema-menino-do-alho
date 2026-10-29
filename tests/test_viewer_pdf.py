@@ -88,6 +88,16 @@ def test_html_de_erro_escapa_markup():
     assert '&lt;script&gt;' in corpo
 
 
+def test_rota_pdf_define_headers_inline_e_sameorigin():
+    fonte = (ROOT / 'routes' / 'documentos.py').read_text(encoding='utf-8')
+    assert "Content-Disposition'] = f'inline; filename=" in fonte
+    assert "X-Frame-Options'] = 'SAMEORIGIN'" in fonte
+    assert 'def _resposta_pdf_arquivo(' in fonte
+    assert 'def _headers_pdf_inline(' in fonte
+    assert '_resposta_pdf_arquivo(full, f\'boleto-' in fonte
+    assert '_resposta_pdf_arquivo(full, f\'nf-' in fonte
+
+
 class _Resp:
     def __init__(self, dados):
         self._dados = dados
@@ -187,8 +197,14 @@ def test_ancoras_de_documento_abrem_o_modal():
     assert 'id="modal-viewer-pdf"' in base
     assert 'id="viewer-pdf-frame"' in base
     assert 'id="viewer-pdf-titulo"' in base
+    assert 'id="viewer-pdf-external-link"' in base
+    assert 'id="viewer-pdf-fallback"' in base
+    assert 'id="viewer-pdf-fallback-btn"' in base
+    assert '-webkit-overflow-scrolling: touch' in base
+    assert 'min-h-[70vh]' in base
     assert 'fecharViewerPDF()' in base
     assert 'window.abrirViewerPDF' in base
+    assert '/iPhone|iPad|iPod|Android/i' in base
 
 
 def _executar_onclick(onclick):
@@ -294,6 +310,11 @@ const titulo = new El('viewer-pdf-titulo', []);
 titulo.innerText = '';
 const novaAba = new El('viewer-pdf-nova-aba', []);
 novaAba.href = '#';
+const externalLink = new El('viewer-pdf-external-link', []);
+externalLink.href = '#';
+const fallback = new El('viewer-pdf-fallback', ['hidden', 'flex']);
+const fallbackBtn = new El('viewer-pdf-fallback-btn', []);
+fallbackBtn.href = '#';
 const loader = new El('viewer-pdf-loader', ['hidden', 'flex']);
 const icone = new El('viewer-pdf-icone', ['text-blue-400']);
 const painel = new El('viewer-pdf-painel', ['animate-in']);
@@ -303,12 +324,23 @@ const mapa = {
   'viewer-pdf-frame': frame,
   'viewer-pdf-titulo': titulo,
   'viewer-pdf-nova-aba': novaAba,
+  'viewer-pdf-external-link': externalLink,
+  'viewer-pdf-fallback': fallback,
+  'viewer-pdf-fallback-btn': fallbackBtn,
   'viewer-pdf-loader': loader,
   'viewer-pdf-icone': icone,
   'viewer-pdf-painel': painel,
 };
 const teclas = [];
 global.window = global;
+function definirNavigator(ua, platform, maxTouchPoints) {
+  Object.defineProperty(globalThis, 'navigator', {
+    value: { userAgent: ua, platform: platform, maxTouchPoints: maxTouchPoints },
+    configurable: true,
+    writable: true,
+  });
+}
+definirNavigator('Mozilla/5.0 (X11; Linux x86_64) Chrome/120.0.0.0', 'Linux', 0);
 global.document = {
   getElementById(id) { return mapa[id] || null; },
   addEventListener(tipo, fn) { if (tipo === 'keydown') teclas.push(fn); },
@@ -335,6 +367,9 @@ abrirViewerPDF('/venda/3/ver_nf', 'Nota Fiscal - NF 99');
 if (modal.classList.contains('hidden')) throw new Error('modal continuou oculto');
 if (frame.src !== '/venda/3/ver_nf?embed=1') throw new Error('src do iframe: ' + frame.src);
 if (novaAba.href !== '/venda/3/ver_nf') throw new Error('nova aba deveria manter a url original');
+if (externalLink.href !== '/venda/3/ver_nf') throw new Error('external-link deveria receber a url');
+if (fallbackBtn.href !== '/venda/3/ver_nf') throw new Error('fallback-btn deveria receber a url');
+if (!fallback.classList.contains('hidden')) throw new Error('fallback desktop nao deveria aparecer no load imediato');
 if (titulo.innerText !== 'Nota Fiscal - NF 99') throw new Error('titulo: ' + titulo.innerText);
 if (!body.classList.contains('overflow-hidden')) throw new Error('scroll da pagina nao foi travado');
 if (!global.travou) throw new Error('travarFundo nao foi chamado');
@@ -366,6 +401,21 @@ fecharViewerPDF();
 
 abrirViewerPDF('javascript:alert(1)', 'Nota Fiscal');
 if (!modal.classList.contains('hidden')) throw new Error('javascript: abriu o modal');
+
+definirNavigator(
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+  'iPhone',
+  5
+);
+const timers = [];
+global.setTimeout = function(fn, ms) { timers.push({ fn, ms: ms || 0 }); return timers.length; };
+global.clearTimeout = function(id) { if (id) timers[id - 1] = null; };
+abrirViewerPDF('/venda/9/ver_nf', 'Nota Fiscal - NF 13065');
+if (externalLink.href !== '/venda/9/ver_nf') throw new Error('ios external-link: ' + externalLink.href);
+const fallbackTimer = timers.find(t => t && t.ms === 800);
+if (!fallbackTimer) throw new Error('ios deveria agendar fallback em 800ms');
+fallbackTimer.fn();
+if (fallback.classList.contains('hidden')) throw new Error('ios deveria exibir o fallback');
 
 teclas[0]({ key: 'Enter' });
 process.stdout.write('ok');
