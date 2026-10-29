@@ -2804,7 +2804,7 @@
          aria-hidden="true"
          aria-labelledby="viewer-pdf-titulo"
          onclick="if (event.target === this) fecharViewerPDF()">
-        <div id="viewer-pdf-painel" class="bg-gray-900 border border-gray-700 w-full max-w-5xl h-[92vh] rounded-xl flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div id="viewer-pdf-painel" class="bg-gray-900 border border-gray-700 w-full max-w-5xl h-[92vh] min-h-[70vh] rounded-xl flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div class="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-700 shrink-0">
                 <span class="min-w-0 flex-1 flex items-center gap-2">
                     <svg id="viewer-pdf-icone" class="w-4 h-4 flex-shrink-0 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -2812,9 +2812,13 @@
                     </svg>
                     <span id="viewer-pdf-titulo" class="text-sm font-semibold text-gray-200 flex items-center gap-2 min-w-0 truncate">Visualização de Documento</span>
                 </span>
-                <div class="flex items-center gap-1 flex-shrink-0">
+                <div class="flex items-center gap-1.5 flex-shrink-0">
+                    <a id="viewer-pdf-external-link" href="#" target="_blank" rel="noopener noreferrer"
+                       class="px-2.5 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-md flex items-center gap-1 font-medium">
+                        Abrir PDF ↗
+                    </a>
                     <a id="viewer-pdf-nova-aba" href="#" target="_blank" rel="noopener noreferrer"
-                       class="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-gray-800 transition-colors"
+                       class="hidden sm:inline-flex text-gray-400 hover:text-white p-1 rounded-lg hover:bg-gray-800 transition-colors"
                        title="Abrir em nova aba" aria-label="Abrir em nova aba">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
@@ -2823,11 +2827,19 @@
                     <button type="button" onclick="fecharViewerPDF()" class="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-gray-800 transition-colors" aria-label="Fechar">✕</button>
                 </div>
             </div>
-            <div class="flex-1 w-full bg-gray-950 relative min-h-0">
+            <div class="flex-1 w-full bg-gray-950 relative min-h-[70vh] overflow-auto" style="-webkit-overflow-scrolling: touch;">
                 <div id="viewer-pdf-loader" class="absolute inset-0 z-10 hidden flex items-center justify-center bg-gray-950" aria-hidden="true">
                     <div class="h-8 w-8 rounded-full border-2 border-gray-700 border-t-emerald-400 animate-spin"></div>
                 </div>
-                <iframe id="viewer-pdf-frame" src="about:blank" class="w-full h-full border-none" title="Visualizador de PDF"></iframe>
+                <div id="viewer-pdf-fallback" class="absolute inset-0 z-[5] flex flex-col items-center justify-center p-4 text-center text-gray-400 gap-3 hidden" aria-hidden="true">
+                    <span class="text-3xl" aria-hidden="true">📄</span>
+                    <p class="text-sm">Se o documento não carregar automaticamente no seu navegador:</p>
+                    <a id="viewer-pdf-fallback-btn" href="#" target="_blank" rel="noopener noreferrer"
+                       class="bg-blue-600 hover:bg-blue-500 text-white text-xs px-4 py-2 rounded-lg font-semibold">
+                        Toque aqui para abrir o PDF diretamente
+                    </a>
+                </div>
+                <iframe id="viewer-pdf-frame" src="about:blank" class="w-full h-full min-h-[70vh] border-none" title="Visualizador de PDF"></iframe>
             </div>
         </div>
     </div>
@@ -2836,6 +2848,19 @@
         var viewerReq = 0;
         var viewerTravaScroll = false;
         var viewerLoaderTimer = null;
+        var viewerFallbackTimer = null;
+
+        function ehMobile() {
+            return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || '');
+        }
+
+        function ehIOSSafari() {
+            var ua = navigator.userAgent || '';
+            var ios = /iPhone|iPad|iPod/i.test(ua);
+            var safari = /Safari/i.test(ua) && !/CriOS|FxiOS|OPiOS|EdgiOS|Chrome|Android/i.test(ua);
+            var iPadDesktopUA = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+            return (ios && safari) || iPadDesktopUA;
+        }
 
         function urlParaEmbed(url) {
             try {
@@ -2860,6 +2885,29 @@
             loader.setAttribute('aria-hidden', 'true');
         }
 
+        function mostrarFallback(fallback) {
+            if (!fallback) return;
+            fallback.classList.remove('hidden');
+            fallback.setAttribute('aria-hidden', 'false');
+        }
+
+        function ocultarFallback(fallback) {
+            if (!fallback) return;
+            fallback.classList.add('hidden');
+            fallback.setAttribute('aria-hidden', 'true');
+        }
+
+        function limparTimersViewer() {
+            if (viewerLoaderTimer) {
+                clearTimeout(viewerLoaderTimer);
+                viewerLoaderTimer = null;
+            }
+            if (viewerFallbackTimer) {
+                clearTimeout(viewerFallbackTimer);
+                viewerFallbackTimer = null;
+            }
+        }
+
         window.abrirViewerPDF = function(url, titulo) {
             url = String(url == null ? '' : url).trim();
             if (!url || url === '#' || url === 'None' || /^\s*(javascript|data):/i.test(url)) {
@@ -2881,6 +2929,9 @@
             var frame = document.getElementById('viewer-pdf-frame');
             var tituloEl = document.getElementById('viewer-pdf-titulo');
             var novaAba = document.getElementById('viewer-pdf-nova-aba');
+            var externalLink = document.getElementById('viewer-pdf-external-link');
+            var fallback = document.getElementById('viewer-pdf-fallback');
+            var fallbackBtn = document.getElementById('viewer-pdf-fallback-btn');
             var loader = document.getElementById('viewer-pdf-loader');
             var icone = document.getElementById('viewer-pdf-icone');
             if (!modal || !frame || !tituloEl) return;
@@ -2893,15 +2944,29 @@
                 icone.classList.toggle('text-blue-400', !ehBoleto);
             }
             if (novaAba) novaAba.href = url;
+            if (externalLink) externalLink.href = url;
+            if (fallbackBtn) fallbackBtn.href = url;
 
             var req = ++viewerReq;
-            if (viewerLoaderTimer) {
-                clearTimeout(viewerLoaderTimer);
-                viewerLoaderTimer = null;
-            }
+            limparTimersViewer();
+            ocultarFallback(fallback);
             mostrarLoader(loader);
+
+            var mobile = ehMobile();
+            var iosSafari = ehIOSSafari();
             var embedUrl = urlParaEmbed(url);
+
+            // Safari iOS costuma deixar o iframe preto com PDF — oferece fallback cedo.
+            if (iosSafari || mobile) {
+                viewerFallbackTimer = setTimeout(function() {
+                    if (req !== viewerReq) return;
+                    mostrarFallback(fallback);
+                    ocultarLoader(loader);
+                }, iosSafari ? 800 : 3000);
+            }
+
             frame.onload = null;
+            frame.onerror = null;
             frame.src = 'about:blank';
             window.setTimeout(function() {
                 if (req !== viewerReq) return;
@@ -2914,12 +2979,25 @@
                         clearTimeout(viewerLoaderTimer);
                         viewerLoaderTimer = null;
                     }
+                    // Em desktop o onload indica sucesso; no iOS o onload pode disparar
+                    // mesmo com área preta — mantém o fallback já agendado.
+                    if (!iosSafari && !mobile && viewerFallbackTimer) {
+                        clearTimeout(viewerFallbackTimer);
+                        viewerFallbackTimer = null;
+                        ocultarFallback(fallback);
+                    }
+                };
+                frame.onerror = function() {
+                    if (req !== viewerReq) return;
+                    ocultarLoader(loader);
+                    mostrarFallback(fallback);
                 };
                 frame.src = embedUrl;
             }, 0);
             viewerLoaderTimer = setTimeout(function() {
                 if (req !== viewerReq) return;
                 ocultarLoader(loader);
+                if (mobile || iosSafari) mostrarFallback(fallback);
             }, 12000);
             var painel = document.getElementById('viewer-pdf-painel');
             if (painel) {
@@ -2943,19 +3021,18 @@
             var modal = document.getElementById('modal-viewer-pdf');
             if (!modal || modal.classList.contains('hidden')) return;
             viewerReq += 1;
-            if (viewerLoaderTimer) {
-                clearTimeout(viewerLoaderTimer);
-                viewerLoaderTimer = null;
-            }
+            limparTimersViewer();
             modal.classList.add('hidden');
             modal.setAttribute('aria-hidden', 'true');
             var frame = document.getElementById('viewer-pdf-frame');
             if (frame) {
                 frame.onload = null;
+                frame.onerror = null;
                 frame.src = 'about:blank';
             }
             var loader = document.getElementById('viewer-pdf-loader');
             ocultarLoader(loader);
+            ocultarFallback(document.getElementById('viewer-pdf-fallback'));
             document.body.classList.remove('overflow-hidden');
             if (viewerTravaScroll && typeof liberarFundo === 'function') {
                 liberarFundo();
