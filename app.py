@@ -656,6 +656,60 @@ def _extrair_numero_nf(texto, chave_acesso=None):
     return _normalizar_numero_nf(texto, chave_acesso=chave_acesso)
 
 
+NF_BOLETO_MIN_DIGITOS = 3
+
+_RE_NF_INSTRUCAO_BOLETO = re.compile(
+    r'(?<![A-Za-z])(?:NF|NOTA\s*FISCAL)[\s:._\-]*([0-9]{3,7})(?![0-9])',
+    re.IGNORECASE,
+)
+_RE_ROTULO_NUMERO_DOCUMENTO = re.compile(
+    r'(?:N[úu]mero|N[úu]m\.?|N[º°o]\.?|Nr\.?)\s*(?:do\s*)?Documento\b',
+    re.IGNORECASE,
+)
+_RE_TOKEN_NUMERO_DOCUMENTO = re.compile(
+    r'(?<![\d/.,\-])(\d{3,12})(?:\s*[/\-]\s*\d{1,3})?(?![\d/.,])'
+)
+
+
+def _nf_boleto_valida(raw):
+    """Normaliza candidato a NF de boleto: tira parcela (``13084/1``), zeros à esquerda
+    e rejeita números curtos demais (ex.: dia '03' de uma data) ou na blacklist."""
+    if raw is None:
+        return None
+    base = re.split(r'[/\-]', str(raw).strip(), maxsplit=1)[0].strip()
+    nf = _limpar_digitos_nf(base)
+    if not nf or len(nf) < NF_BOLETO_MIN_DIGITOS:
+        return None
+    return nf
+
+
+def _extrair_nf_boleto(texto):
+    """Extrai a NF de um boleto, na ordem:
+
+    1. Instrução explícita ``NF: 13084`` / ``Nota Fiscal 13084``.
+    2. Campo "Número do Documento" (``13084/1`` → ``13084``), ignorando datas.
+    3. Parser genérico, descartando resultados com menos de 3 dígitos.
+    """
+    if not texto:
+        return None
+
+    for m in _RE_NF_INSTRUCAO_BOLETO.finditer(texto):
+        nf = _nf_boleto_valida(m.group(1))
+        if nf:
+            return nf
+
+    for rotulo in _RE_ROTULO_NUMERO_DOCUMENTO.finditer(texto):
+        janela = texto[rotulo.end():rotulo.end() + 160]
+        linhas = janela.split('\n')
+        janela = '\n'.join(linhas[:3])
+        for tok in _RE_TOKEN_NUMERO_DOCUMENTO.finditer(janela):
+            nf = _nf_boleto_valida(tok.group(1))
+            if nf:
+                return nf
+
+    return _nf_boleto_valida(_extrair_numero_nf(texto))
+
+
 def _extrair_nf_do_nome_arquivo(nome_arquivo):
     """Extrai número da NF diretamente do nome do arquivo.
     Procura sequências de 4-6 dígitos após termos como 'CB', 'BONIF', 'NF' ou após hífens.
@@ -901,8 +955,69 @@ def _parse_valor_monetario(s):
         return None
 
 
+_RE_VALOR_ROTULO_DOCUMENTO = re.compile(
+    r'(?:\(\s*=\s*\)\s*)?Valor\s*do\s*Documento[\s:$R]*([0-9][0-9.,]*)',
+    re.IGNORECASE,
+)
+_RE_LINHA_DIGITAVEL = re.compile(
+    r'(?<!\d)(\d{5}[.\s]?\d{5}\s+\d{5}[.\s]?\d{6}\s+\d{5}[.\s]?\d{6}\s+\d\s+\d{14})(?!\d)'
+)
+_RE_CODIGO_BARRAS = re.compile(r'(?<!\d)(\d{44})(?!\d)')
+_RE_VALOR_ACESSORIO = re.compile(
+    r'(?:juros|mora|multa|desconto|abatimento|encargos?)[^\n]{0,80}?'
+    r'(?:R\$\s*)?\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?',
+    re.IGNORECASE,
+)
+
+
+def _parse_valor_boleto_seguro(raw):
+    """Converte '1.900,00', '1900,00', '1900.00' ou '1.900' em float; None se inválido."""
+    if raw is None:
+        return None
+    s = re.sub(r'[^0-9.,]', '', str(raw)).strip('.,')
+    if not s:
+        return None
+    if ',' in s:
+        s = s.replace('.', '').replace(',', '.')
+    elif '.' in s:
+        if re.fullmatch(r'\d{1,3}(?:\.\d{3})+', s):
+            s = s.replace('.', '')
+        elif s.count('.') > 1:
+            return None
+    try:
+        return float(s)
+    except (ValueError, TypeError):
+        return None
+
+
+def _valor_da_linha_digitavel(texto):
+    """Valor nominal embutido na linha digitável (47 díg.: últimos 10) ou no
+    código de barras (44 díg.: posições 10–19). Ex.: ``...1649 0000190000`` → 1900.0."""
+    if not texto:
+        return None
+    m = _RE_LINHA_DIGITAVEL.search(texto)
+    if m:
+        digitos = re.sub(r'\D', '', m.group(1))
+        valor_cent = digitos[37:47]
+    else:
+        m = _RE_CODIGO_BARRAS.search(texto)
+        if not m:
+            return None
+        valor_cent = m.group(1)[9:19]
+    if not valor_cent.isdigit():
+        return None
+    v = int(valor_cent) / 100
+    return v if v > 0 else None
+
+
 def _extrair_valor_boleto(texto):
-    """Extrai valor principal do boleto (ex.: R$ 2.400,00) e, para DANFE, o Valor Total da Nota."""
+    """Extrai o valor nominal do boleto (ex.: R$ 2.400,00) e, para DANFE, o Valor Total da Nota.
+
+    Ordem para boletos: rótulo "Valor do Documento" → linha digitável/código de barras →
+    padrões genéricos, ignorando valores de juros/mora/multa/desconto (ex.: "juros de R$ 0,63").
+    """
+    if not texto:
+        return None
     # DANFE: ancorar no rótulo "Valor Total da Nota" para não capturar zeros de impostos
     bloco_total_nota = re.search(
         r'Valor\s+Total\s+da\s+Nota([\s\S]{0,220})',
@@ -919,6 +1034,16 @@ def _extrair_valor_boleto(texto):
                 if v is not None and v > 0:
                     return v
 
+    for m in _RE_VALOR_ROTULO_DOCUMENTO.finditer(texto):
+        v = _parse_valor_boleto_seguro(m.group(1))
+        if v is not None and v > 0:
+            return v
+
+    v_barras = _valor_da_linha_digitavel(texto)
+    if v_barras is not None:
+        return v_barras
+
+    texto_sem_acessorios = _RE_VALOR_ACESSORIO.sub(' ', texto)
     padroes = [
         r'Valor\s*(?:do\s*Documento)?\s*[:\s]*R\$\s*([\d\.]+,\d{2})',
         r'Valor\s*[:\s]*R\$\s*([\d\.]+,\d{2})',
@@ -926,13 +1051,13 @@ def _extrair_valor_boleto(texto):
         r'(?:Valor|Total)\s+([\d\.]+,\d{2})\b',
     ]
     for p in padroes:
-        m = re.search(p, texto, re.IGNORECASE)
+        m = re.search(p, texto_sem_acessorios, re.IGNORECASE)
         if m:
             raw = m.group(1)
             v = _parse_valor_monetario(raw)
             if v is not None and v > 0:
                 return v
-    for m in re.finditer(r'R\$\s*([\d\.]+,\d{2})', texto):
+    for m in re.finditer(r'R\$\s*([\d\.]+,\d{2})', texto_sem_acessorios):
         v = _parse_valor_monetario(m.group(1))
         if v is not None and v > 0:
             return v
@@ -1209,6 +1334,8 @@ def _processar_pdf(caminho_arquivo, tipo_documento):
         nome_arquivo = os.path.basename(caminho_arquivo)
         with pdfplumber.open(caminho_arquivo) as pdf:
             texto_completo = ""
+            texto_pagina_inteira = ""
+            eh_boleto = (tipo_documento or '').upper() == 'BOLETO'
             for pagina in pdf.pages:
                 h = float(pagina.height) or 842
                 w = float(pagina.width) or 595
@@ -1220,6 +1347,13 @@ def _processar_pdf(caminho_arquivo, tipo_documento):
                 texto_pagina = cropped.extract_text()
                 if texto_pagina:
                     texto_completo += texto_pagina + "\n"
+                if eh_boleto:
+                    # Instruções, valor do documento e linha digitável da ficha de
+                    # compensação ficam abaixo dos 75% da página.
+                    texto_inteiro = pagina.extract_text()
+                    if texto_inteiro:
+                        texto_pagina_inteira += texto_inteiro + "\n"
+        texto_boleto = texto_pagina_inteira if (eh_boleto and texto_pagina_inteira.strip()) else texto_completo
         
         # Extrai NF, vencimento, valor do boleto, etc.
         padrao_cnpj = r'\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}'
@@ -1227,7 +1361,10 @@ def _processar_pdf(caminho_arquivo, tipo_documento):
         apenas_emissor = len(todos_cnpjs) > 0 and len([c for c in todos_cnpjs if c not in CNPJS_EMISSORES]) == 0
         
         # Tentar extrair NF do PDF primeiro
-        numero_nf = _extrair_numero_nf(texto_completo)
+        if eh_boleto:
+            numero_nf = _extrair_nf_boleto(texto_boleto)
+        else:
+            numero_nf = _extrair_numero_nf(texto_completo)
         
         # Se não encontrou no PDF, tentar extrair do nome do arquivo (fallback para arquivos CB/BONIF)
         if not numero_nf:
@@ -1251,7 +1388,7 @@ def _processar_pdf(caminho_arquivo, tipo_documento):
             'razao_social': _extrair_razao_social(texto_completo),
             'data_vencimento': _extrair_data_vencimento(texto_completo, debug_paty=debug_vencimento),
             'empresa_destak': _detectar_empresa_destak(texto_completo),
-            'valor_boleto': _extrair_valor_boleto(texto_completo),
+            'valor_boleto': _extrair_valor_boleto(texto_boleto),
             'apenas_emissor': apenas_emissor,
         }
         return resultado
