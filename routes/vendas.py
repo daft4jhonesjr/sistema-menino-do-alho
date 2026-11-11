@@ -4298,6 +4298,8 @@ def api_pedidos():
             'nf': nf,
             'data_formatada': data_formatada,
             'valor': valor,
+            'caminho_boleto': (v.caminho_boleto or '').strip() or None,
+            'caminho_nf': (v.caminho_nf or '').strip() or None,
         })
     return jsonify(pedidos=pedidos)
 

@@ -884,7 +884,7 @@
                     title="Corrigir NF, razão social ou valor antes de vincular">
                     <i data-lucide="pencil" class="w-4 h-4 mr-2"></i>Editar
                 </button>
-                <button type="button" class="btn-vincular-doc inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 transition" data-doc-id="{{ doc.id }}" data-doc-nome="{{ nome }}" data-pagador="{{ (doc.razao_social or doc.cnpj) | default('', true) }}" data-numero-nf="{{ doc.numero_nf or '' }}" {% if item.diagnostico is defined and item.diagnostico %}title="NF: {{ item.diagnostico.nf_lida or doc.numero_nf or 'N/A' }}"{% elif doc.numero_nf %}title="NF: {{ doc.numero_nf }}"{% endif %}>
+                <button type="button" class="btn-vincular-doc inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 transition" data-doc-id="{{ doc.id }}" data-doc-nome="{{ nome }}" data-pagador="{{ (doc.razao_social or doc.cnpj) | default('', true) }}" data-numero-nf="{{ doc.numero_nf or '' }}" data-doc-tipo="{{ doc.tipo }}" {% if item.diagnostico is defined and item.diagnostico %}title="NF: {{ item.diagnostico.nf_lida or doc.numero_nf or 'N/A' }}"{% elif doc.numero_nf %}title="NF: {{ doc.numero_nf }}"{% endif %}>
                     <i data-lucide="link" class="w-4 h-4 mr-2"></i>Vincular à Venda
                 </button>
                 <button type="button" class="inline-flex items-center justify-center w-full sm:w-32 px-4 py-2 rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-700 transition" onclick="confirmarExclusaoArquivo({{ doc.id }}, this)" title="Excluir arquivo definitivamente">
@@ -913,13 +913,20 @@
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <input type="hidden" name="doc_id" id="input-vincular-doc-id" />
                 <div class="p-6 flex-1 overflow-y-auto">
-                    <div class="relative">
-                        <label for="input-busca-pedido" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Buscar Pedido (Cliente, NF ou Data):</label>
-                        <input type="text" id="input-busca-pedido" list="lista-pedidos" autocomplete="off" class="w-full rounded-lg border border-gray-300 dark:border-gray-700 dark:bg-gray-700 dark:text-gray-100 px-4 py-2 shadow-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 uppercase" placeholder="Digite para filtrar...">
-                        <datalist id="lista-pedidos">
-                            <!-- As options serão injetadas via JS -->
-                        </datalist>
-                        <input type="hidden" id="venda-id-selecionada" name="venda_id">
+                    <div class="flex flex-col gap-3">
+                        <div>
+                            <label for="select-cliente-vinculo" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">1. Selecione o Cliente:</label>
+                            <select id="select-cliente-vinculo" class="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-200 rounded-md shadow-sm focus:ring-emerald-500 focus:border-emerald-500 p-2 uppercase">
+                                <option value="">Selecione um cliente...</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="select-pedido-vinculo" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">2. Selecione o Pedido Disponível:</label>
+                            <select id="select-pedido-vinculo" disabled class="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-200 rounded-md shadow-sm focus:ring-emerald-500 focus:border-emerald-500 p-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                                <option value="">Aguardando seleção do cliente...</option>
+                            </select>
+                            <input type="hidden" id="venda-id-selecionada" name="venda_id">
+                        </div>
                     </div>
                     <div class="mt-3 flex items-start gap-2 bg-blue-500/10 p-2.5 rounded-md border border-blue-500/20">
                         <span class="text-blue-400 text-lg leading-none">ℹ️</span>
@@ -8149,17 +8156,20 @@ function enviarPedidoWhatsApp(elemento) {
      ═══════════════════════════════════════════════════════════════════════ -->
 
 <script>
-// Modal de vínculo de documentos
+// Modal de vínculo de documentos — seleção em duas etapas (Cliente → Pedido)
+// com filtro restrito por tipo de documento (BOLETO ou NOTA_FISCAL).
 (function() {
     var modal = document.getElementById('modal-vincular-doc');
     var form = document.getElementById('form-vincular-doc');
     var inputDocId = document.getElementById('input-vincular-doc-id');
-    var inputBusca = document.getElementById('input-busca-pedido');
-    var listaPedidos = document.getElementById('lista-pedidos');
+    var selectCliente = document.getElementById('select-cliente-vinculo');
+    var selectPedido = document.getElementById('select-pedido-vinculo');
     var hiddenVendaId = document.getElementById('venda-id-selecionada');
     var docNomeEl = document.getElementById('modal-vincular-doc-nome');
     var tokenMeta = document.querySelector('meta[name="csrf-token"]');
-    var pendingFilterTerm = '';
+
+    // Pedidos elegíveis para o documento atualmente aberto no modal
+    var _pedidosElegiveis = [];
 
     function garantirCsrfNoForm(formEl) {
         if (!formEl) return;
@@ -8178,84 +8188,169 @@ function enviarPedidoWhatsApp(elemento) {
     function showModal() { modal.classList.remove('hidden'); travarFundo(); }
     function hideModal() { modal.classList.add('hidden'); liberarFundo(); }
 
-    function extrairTermoPagador(pagadorCompleto) {
-        var palavras = (pagadorCompleto || '')
-            .split(/\s+/)
-            .filter(function(p) { return p.length > 2; });
-        return palavras.length > 0 ? palavras[0] : '';
+    // Reseta os dois selects ao estado inicial
+    function resetSelects() {
+        if (selectCliente) {
+            selectCliente.innerHTML = '<option value="">Selecione um cliente...</option>';
+            selectCliente.disabled = false;
+        }
+        if (selectPedido) {
+            selectPedido.innerHTML = '<option value="">Aguardando seleção do cliente...</option>';
+            selectPedido.disabled = true;
+        }
+        if (hiddenVendaId) hiddenVendaId.value = '';
     }
 
-    function sincronizarVendaIdSelecionada() {
-        if (!inputBusca || !listaPedidos || !hiddenVendaId) return;
-        hiddenVendaId.value = '';
-        var valor = inputBusca.value || '';
-        for (var i = 0; i < listaPedidos.options.length; i++) {
-            var option = listaPedidos.options[i];
-            if (option.value === valor) {
-                hiddenVendaId.value = option.getAttribute('data-id') || '';
-                break;
+    // Popula o select de clientes com os nomes únicos dos pedidos elegíveis.
+    // Se pagadorSugerido for fornecido, tenta auto-selecionar e dispara o cascade.
+    function popularSelectCliente(pedidosElegiveis, pagadorSugerido) {
+        if (!selectCliente) return;
+        var clientesVistos = {};
+        var clientes = [];
+        pedidosElegiveis.forEach(function(p) {
+            var nome = (p.cliente_nome || '').trim().toUpperCase();
+            if (nome && !clientesVistos[nome]) {
+                clientesVistos[nome] = true;
+                clientes.push(nome);
+            }
+        });
+        clientes.sort();
+
+        selectCliente.innerHTML = '<option value="">Selecione um cliente...</option>';
+        clientes.forEach(function(nome) {
+            var opt = document.createElement('option');
+            opt.value = nome;
+            opt.textContent = nome;
+            selectCliente.appendChild(opt);
+        });
+
+        // Tentar auto-selecionar pelo pagador sugerido (razão social do OCR)
+        if (pagadorSugerido) {
+            var termoUpper = pagadorSugerido.trim().toUpperCase();
+            // 1ª tentativa: correspondência exata
+            for (var i = 1; i < selectCliente.options.length; i++) {
+                if (selectCliente.options[i].value === termoUpper) {
+                    selectCliente.value = termoUpper;
+                    selectCliente.dispatchEvent(new Event('change'));
+                    return;
+                }
+            }
+            // 2ª tentativa: correspondência parcial pela primeira palavra relevante
+            var palavras = termoUpper.split(/\s+/).filter(function(w) { return w.length > 2; });
+            if (palavras.length > 0) {
+                for (var j = 1; j < selectCliente.options.length; j++) {
+                    if (selectCliente.options[j].value.indexOf(palavras[0]) !== -1) {
+                        selectCliente.value = selectCliente.options[j].value;
+                        selectCliente.dispatchEvent(new Event('change'));
+                        return;
+                    }
+                }
             }
         }
     }
 
-    function aplicarFiltroInicial(btn) {
-        if (!inputBusca || !hiddenVendaId) return;
-        var pagadorCompleto = btn.getAttribute('data-pagador') || '';
-        var termoBusca = extrairTermoPagador(pagadorCompleto);
-        pendingFilterTerm = termoBusca;
-        inputBusca.value = termoBusca;
-        hiddenVendaId.value = '';
+    // Popula o select de pedidos com os pedidos elegíveis do cliente selecionado
+    function popularSelectPedido(clienteNome) {
+        if (!selectPedido) return;
+        var pedidosDoCliente = _pedidosElegiveis.filter(function(p) {
+            return (p.cliente_nome || '').trim().toUpperCase() === clienteNome.toUpperCase();
+        });
+
+        if (pedidosDoCliente.length === 0) {
+            selectPedido.innerHTML = '<option value="">Nenhum pedido disponível para este cliente</option>';
+            selectPedido.disabled = true;
+            if (hiddenVendaId) hiddenVendaId.value = '';
+            return;
+        }
+
+        selectPedido.innerHTML = '<option value="">Selecione um pedido...</option>';
+        pedidosDoCliente.forEach(function(p) {
+            var opt = document.createElement('option');
+            opt.value = String(p.id);
+            opt.textContent = 'Data: ' + (p.data_formatada || 'S/D') +
+                              ' | R$ ' + (p.valor || '0,00') +
+                              ' | NF: ' + (p.nf || 'S/N');
+            selectPedido.appendChild(opt);
+        });
+        selectPedido.disabled = false;
+        if (hiddenVendaId) hiddenVendaId.value = '';
+
+        // Se só há um pedido disponível, auto-seleciona
+        if (pedidosDoCliente.length === 1) {
+            selectPedido.value = String(pedidosDoCliente[0].id);
+            if (hiddenVendaId) hiddenVendaId.value = String(pedidosDoCliente[0].id);
+        }
     }
 
-    function loadPedidos() {
-        if (!listaPedidos) return;
-        listaPedidos.innerHTML = '';
-        if (inputBusca) {
-            inputBusca.placeholder = 'Carregando pedidos…';
+    // Busca os pedidos elegíveis da API e aplica o filtro restrito por tipo de documento
+    function loadPedidosElegiveis(docTipo, pagadorSugerido) {
+        resetSelects();
+        if (selectCliente) {
+            selectCliente.innerHTML = '<option value="">Carregando pedidos...</option>';
+            selectCliente.disabled = true;
         }
+
         fetch('/api/pedidos', { headers: { 'Accept': 'application/json' } })
             .then(function(r) { return r.json(); })
             .then(function(data) {
-                listaPedidos.innerHTML = '';
-                (data.pedidos || []).forEach(function(p) {
-                    var label = p.label || (
-                        (p.cliente_nome || '') +
-                        ' | NF: ' + (p.nf || 'S/N') +
-                        ' | ' + (p.data_formatada || '') +
-                        ' | R$ ' + (p.valor || '0,00')
-                    );
-                    var opt = document.createElement('option');
-                    opt.value = label;
-                    opt.setAttribute('data-id', String(p.id));
-                    listaPedidos.appendChild(opt);
-                });
-                if (inputBusca) {
-                    inputBusca.placeholder = 'Digite para filtrar...';
-                    if (pendingFilterTerm) {
-                        inputBusca.value = pendingFilterTerm;
+                var todos = data.pedidos || [];
+                var tipoNorm = (docTipo || '').toUpperCase();
+
+                // FILTRO RESTRITO: mantém apenas pedidos que NÃO possuem o tipo de documento
+                _pedidosElegiveis = todos.filter(function(p) {
+                    if (tipoNorm === 'BOLETO') {
+                        return !p.caminho_boleto; // sem boleto vinculado
+                    } else {
+                        return !p.caminho_nf;     // sem NF vinculada (NOTA_FISCAL / NFE)
                     }
-                }
-                sincronizarVendaIdSelecionada();
+                });
+
+                if (selectCliente) selectCliente.disabled = false;
+                popularSelectCliente(_pedidosElegiveis, pagadorSugerido);
                 if (typeof lucide !== 'undefined') lucide.createIcons();
             })
             .catch(function() {
-                listaPedidos.innerHTML = '';
-                if (inputBusca) {
-                    inputBusca.placeholder = 'Erro ao carregar pedidos.';
+                if (selectCliente) {
+                    selectCliente.innerHTML = '<option value="">Erro ao carregar pedidos.</option>';
+                    selectCliente.disabled = false;
                 }
             });
     }
 
+    // ── Cascata: Cliente → Pedido ──────────────────────────────────────────
+    if (selectCliente) {
+        selectCliente.addEventListener('change', function() {
+            var clienteSelecionado = this.value;
+            if (!clienteSelecionado) {
+                if (selectPedido) {
+                    selectPedido.innerHTML = '<option value="">Aguardando seleção do cliente...</option>';
+                    selectPedido.disabled = true;
+                }
+                if (hiddenVendaId) hiddenVendaId.value = '';
+                return;
+            }
+            popularSelectPedido(clienteSelecionado);
+        });
+    }
+
+    if (selectPedido) {
+        selectPedido.addEventListener('change', function() {
+            if (hiddenVendaId) hiddenVendaId.value = this.value || '';
+        });
+    }
+
+    // ── Abrir Modal ────────────────────────────────────────────────────────
     function abrirModalVincular(btn, arquivoId) {
         var id = arquivoId || btn.getAttribute('data-doc-id');
         var nome = btn.getAttribute('data-doc-nome') || '';
+        var pagador = btn.getAttribute('data-pagador') || '';
+        var docTipo = btn.getAttribute('data-doc-tipo') || '';
         inputDocId.value = id;
         docNomeEl.textContent = nome;
-        aplicarFiltroInicial(btn);
-        loadPedidos();
+        loadPedidosElegiveis(docTipo, pagador);
         showModal();
-        if (inputBusca) {
-            setTimeout(function() { inputBusca.focus(); }, 50);
+        if (selectCliente) {
+            setTimeout(function() { selectCliente.focus(); }, 80);
         }
     }
 
@@ -8267,30 +8362,22 @@ function enviarPedidoWhatsApp(elemento) {
         });
     });
 
-    if (inputBusca) {
-        inputBusca.addEventListener('input', function() {
-            sincronizarVendaIdSelecionada();
-        });
-        inputBusca.addEventListener('change', function() {
-            sincronizarVendaIdSelecionada();
-        });
-    }
-
     document.querySelectorAll('[data-dismiss="modal-vincular-doc"]').forEach(function(el) {
         el.addEventListener('click', hideModal);
     });
 
+    // ── Submit ─────────────────────────────────────────────────────────────
     form.addEventListener('submit', function(e) {
         e.preventDefault();
-        sincronizarVendaIdSelecionada();
         var vendaId = hiddenVendaId ? hiddenVendaId.value : '';
         if (!vendaId) {
             if (typeof showToast === 'function') {
-                showToast('Selecione um pedido da lista para vincular.', 'error');
+                showToast('Selecione um pedido para vincular.', 'error');
             } else {
-                alert('Selecione um pedido da lista para vincular.');
+                alert('Selecione um pedido para vincular.');
             }
-            if (inputBusca) inputBusca.focus();
+            if (selectPedido && !selectPedido.disabled) selectPedido.focus();
+            else if (selectCliente) selectCliente.focus();
             return;
         }
         garantirCsrfNoForm(form);
@@ -8318,18 +8405,12 @@ function enviarPedidoWhatsApp(elemento) {
                 if (resp.ok && (data.ok || data.sucesso)) {
                     hideModal();
                     var card = document.getElementById('doc-' + docId);
-                    if (card) {
-                        card.remove();
-                    }
+                    if (card) card.remove();
                     var okMsg = data.mensagem || 'Documento vinculado com sucesso.';
                     if (typeof Swal !== 'undefined') {
                         Swal.fire(Object.assign(window._swalInboxTheme ? window._swalInboxTheme() : {
                             background: '#1e293b', color: '#f8fafc', confirmButtonColor: '#10b981'
-                        }, {
-                            icon: 'success',
-                            title: 'Vinculado!',
-                            text: okMsg
-                        }));
+                        }, { icon: 'success', title: 'Vinculado!', text: okMsg }));
                     } else if (typeof showToast === 'function') {
                         showToast(okMsg, 'success');
                     } else {
@@ -8342,11 +8423,7 @@ function enviarPedidoWhatsApp(elemento) {
                     if (typeof Swal !== 'undefined') {
                         Swal.fire(Object.assign(window._swalInboxTheme ? window._swalInboxTheme() : {
                             background: '#1e293b', color: '#f8fafc', confirmButtonColor: '#10b981'
-                        }, {
-                            icon: 'error',
-                            title: 'Não foi possível vincular',
-                            text: msg
-                        }));
+                        }, { icon: 'error', title: 'Não foi possível vincular', text: msg }));
                     } else if (typeof showToast === 'function') {
                         showToast(msg, 'error');
                     } else {
@@ -8358,11 +8435,7 @@ function enviarPedidoWhatsApp(elemento) {
                 if (typeof Swal !== 'undefined') {
                     Swal.fire(Object.assign(window._swalInboxTheme ? window._swalInboxTheme() : {
                         background: '#1e293b', color: '#f8fafc', confirmButtonColor: '#10b981'
-                    }, {
-                        icon: 'error',
-                        title: 'Erro',
-                        text: 'Erro de comunicação ao vincular documento.'
-                    }));
+                    }, { icon: 'error', title: 'Erro', text: 'Erro de comunicação ao vincular documento.' }));
                 } else if (typeof showToast === 'function') {
                     showToast('Erro de comunicação ao vincular documento.', 'error');
                 } else {
