@@ -94,6 +94,7 @@ from services.documentos_services import (
     _empresa_id_para_documento, _resolver_caminho_documento_seguro,
     _reprocessar_boletos_atualizar_extracao,
     _reprocessar_vencimentos_vendas,
+    _doc_processing_lock,
 )
 
 
@@ -913,14 +914,32 @@ def api_receber_automatico():
 
                 def _upload_cloudinary_bg(caminho, documento_id):
                     with app_obj.app_context():
+                        # Upload Cloudinary (não precisa de lock — não acessa o BD)
                         try:
                             with open(caminho, 'rb') as f:
                                 resultado_nuvem = cloudinary.uploader.upload(
                                     f, resource_type='raw', timeout=_EXTERNAL_TIMEOUT,
                                 )
-                            url_nuvem = resultado_nuvem.get('secure_url')
-                            pub_id = resultado_nuvem.get('public_id')
-                            if url_nuvem:
+                        except Exception as err:
+                            app_obj.logger.error(
+                                '[CLOUDINARY-BG] api_receber_automatico: falha no upload: %s',
+                                err, exc_info=True,
+                            )
+                            return
+
+                        url_nuvem = resultado_nuvem.get('secure_url')
+                        pub_id = resultado_nuvem.get('public_id')
+                        if not url_nuvem:
+                            return
+
+                        # Atualização no BD: serializada com o mesmo lock do pipeline
+                        # OCR para evitar deadlock (DeadlockDetected) na tabela documentos.
+                        # Retry com backoff exponencial como camada extra de segurança.
+                        _MAX_RETRIES = 3
+                        for _tentativa in range(_MAX_RETRIES):
+                            # Aguarda a vez: libera ao final de cada iteração
+                            _doc_processing_lock.acquire(blocking=True)
+                            try:
                                 doc = (
                                     Documento.query
                                     .filter_by(id=documento_id)
@@ -934,15 +953,34 @@ def api_receber_automatico():
                                         '[CLOUDINARY-BG] api_receber_automatico:'
                                         ' doc_id=%s → %s', documento_id, url_nuvem,
                                     )
-                        except Exception as err:
-                            try:
-                                db.session.rollback()
-                            except Exception:
-                                pass
-                            app_obj.logger.error(
-                                '[CLOUDINARY-BG] api_receber_automatico: %s',
-                                err, exc_info=True,
-                            )
+                                break  # sucesso
+                            except Exception as err:
+                                import psycopg2.errors as _pg_errors
+                                try:
+                                    db.session.rollback()
+                                except Exception:
+                                    pass
+                                _is_deadlock = isinstance(
+                                    getattr(err, 'orig', None),
+                                    _pg_errors.DeadlockDetected,
+                                )
+                                if _is_deadlock and _tentativa < _MAX_RETRIES - 1:
+                                    _wait = 0.2 * (2 ** _tentativa)  # 0.2 s, 0.4 s, 0.8 s
+                                    app_obj.logger.warning(
+                                        '[CLOUDINARY-BG] Deadlock detectado (tentativa %d/%d).'
+                                        ' Aguardando %.1fs antes de retry.',
+                                        _tentativa + 1, _MAX_RETRIES, _wait,
+                                    )
+                                    import time as _time
+                                    _time.sleep(_wait)
+                                else:
+                                    app_obj.logger.error(
+                                        '[CLOUDINARY-BG] api_receber_automatico: %s',
+                                        err, exc_info=True,
+                                    )
+                                    break
+                            finally:
+                                _doc_processing_lock.release()
 
                 threading.Thread(
                     target=_upload_cloudinary_bg,

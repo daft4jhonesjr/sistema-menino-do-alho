@@ -1873,6 +1873,15 @@ def _documento_precisa_reextrair(doc, tipo):
     return False
 
 
+# ---------------------------------------------------------------------------
+# Trava de concorrência: garante que apenas uma thread por vez execute o
+# pipeline de OCR + flush em lote na tabela `documentos`, evitando deadlock
+# (psycopg2.errors.DeadlockDetected) quando múltiplas threads do bot/OCR
+# tentam atualizar as mesmas linhas simultaneamente.
+# ---------------------------------------------------------------------------
+_doc_processing_lock = threading.Lock()
+
+
 def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado=None):
     """Verifica as pastas de documentos e processa novos arquivos PDF que ainda não foram registrados.
     
@@ -1883,6 +1892,28 @@ def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado
     Returns:
         dict com: {'processados': int, 'erros': int, 'mensagens': list, 'logs': list (se capturar_logs_memoria=True)}
     """
+    # Controle de concorrência: impede execuções simultâneas por múltiplas
+    # threads do OCR/bot que causariam deadlock na tabela `documentos`.
+    if not _doc_processing_lock.acquire(blocking=False):
+        app.logger.info(
+            "[OCR-BG] Processamento já em andamento por outra thread. "
+            "Pulando execução redundante."
+        )
+        return {'processados': 0, 'erros': 0, 'vinculos_novos': 0, 'mensagens': [
+            'Skipped: another processing thread is already running.'
+        ]}
+
+    try:
+        return _processar_documentos_pendentes_impl(
+            capturar_logs_memoria=capturar_logs_memoria,
+            user_id_forcado=user_id_forcado,
+        )
+    finally:
+        _doc_processing_lock.release()
+
+
+def _processar_documentos_pendentes_impl(capturar_logs_memoria=False, user_id_forcado=None):
+    """Implementação interna — chamada apenas quando o lock foi adquirido."""
     # Lista para capturar logs em memória (usado pelo endpoint de debug)
     logs_memoria = []
     
