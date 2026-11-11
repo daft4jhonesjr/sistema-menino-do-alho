@@ -37,6 +37,7 @@ from app import (
     _resolver_caminho_documento_seguro,
     _reprocessar_boletos_atualizar_extracao,
     _reprocessar_vencimentos_vendas,
+    _doc_processing_lock,
 )
 
 __all__ = [
@@ -48,4 +49,5 @@ __all__ = [
     '_resolver_caminho_documento_seguro',
     '_reprocessar_boletos_atualizar_extracao',
     '_reprocessar_vencimentos_vendas',
+    '_doc_processing_lock',
 ]
