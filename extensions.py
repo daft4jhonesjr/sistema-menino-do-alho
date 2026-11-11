@@ -122,12 +122,15 @@ def init_extensions(app):
     # falha no limiter derrube rotas críticas como /api/logistica/dados.
     app.config['RATELIMIT_STRATEGY'] = 'fixed-window'
     app.config['RATELIMIT_SWALLOW_ERRORS'] = True
+    # Fallback automático para MemoryStorage quando Redis ficar indisponível,
+    # evitando que uma queda temporária do Redis bloqueie todas as requisições.
+    app.config['RATELIMIT_IN_MEMORY_FALLBACK_ENABLED'] = True
     if redis_url:
         app.config['RATELIMIT_STORAGE_URI'] = redis_url
-        app.logger.info('🟢 Rate Limiter configurado usando Redis (fixed-window, fail-open)')
+        app.logger.info('🟢 Rate Limiter: Redis (fixed-window, fail-open, memory-fallback)')
     else:
         app.config['RATELIMIT_STORAGE_URI'] = 'memory://'
-        app.logger.info('🟡 Rate Limiter configurado usando MemoryStorage (fixed-window, fail-open)')
+        app.logger.info('🟡 Rate Limiter: MemoryStorage (fixed-window, fail-open)')
     limiter.init_app(app)
 
 
