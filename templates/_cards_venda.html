@@ -217,6 +217,14 @@
                     title="Desvincular NF"
                     class="hidden md:inline-flex absolute -top-0.5 -right-0.5 leading-none text-[10px] font-bold text-red-500 hover:text-red-400 bg-transparent border-none p-0 cursor-pointer z-10 transition-colors">×</button>
         </div>
+        {# Re-upload manual — card mobile (substitui NF vinculada) #}
+        <button type="button"
+                onclick="event.preventDefault(); event.stopPropagation(); document.getElementById('upload-nf-card-{{ pedido.primeira_venda_id }}').click()"
+                title="Substituir PDF da NF (upload manual)"
+                class="p-1.5 rounded inline-flex text-gray-400 dark:text-gray-500 hover:text-emerald-400 dark:hover:text-emerald-400 transition-colors bg-transparent border-none cursor-pointer">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+        </button>
+        <input type="file" id="upload-nf-card-{{ pedido.primeira_venda_id }}" accept="application/pdf" class="hidden" onchange="uploadManualNF({{ pedido.primeira_venda_id }}, this)">
         {% elif pedido.nf and pedido.nf != '-' %}
         <button type="button"
                 class="btn-buscar-doc-existente p-1.5 rounded inline-flex text-gray-400 dark:text-gray-500 cursor-pointer hover:text-blue-400 transition-colors bg-transparent border-none"
@@ -226,6 +234,14 @@
                 onclick="event.preventDefault(); event.stopPropagation(); buscarDocumentoExistente({{ pedido.primeira_venda_id }}, '{{ pedido.nf }}')">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
         </button>
+        {# Upload manual de NF (pula fila OCR) — cards mobile #}
+        <button type="button"
+                onclick="event.preventDefault(); event.stopPropagation(); document.getElementById('upload-nf-card-{{ pedido.primeira_venda_id }}').click()"
+                title="Fazer upload manual de PDF (pula fila OCR)"
+                class="p-1.5 rounded inline-flex text-gray-400 dark:text-gray-500 hover:text-emerald-400 dark:hover:text-emerald-400 transition-colors bg-transparent border-none cursor-pointer">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+        </button>
+        <input type="file" id="upload-nf-card-{{ pedido.primeira_venda_id }}" accept="application/pdf" class="hidden" onchange="uploadManualNF({{ pedido.primeira_venda_id }}, this)">
         {% endif %}
         {% if pedido.caminho_boleto %}
         {% set _url_boleto = url_for('documentos.ver_boleto_venda', id=pedido.primeira_venda_id) %}

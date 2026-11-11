@@ -4533,6 +4533,119 @@ def clonar_documentos_por_nf(id):
     })
 
 
+@vendas_bp.route('/api/vendas/<int:id>/upload_manual_nf', methods=['POST'])
+def upload_manual_nf(id):
+    """Recebe um PDF enviado manualmente pelo usuário e o vincula como NF à venda/pedido.
+
+    Pula a fila de OCR — útil para layouts não reconhecidos automaticamente.
+    Salva o arquivo em ``documentos_entrada/notas_fiscais/`` (disco local) e,
+    se o Cloudinary estiver configurado, envia uma cópia para a nuvem.
+    Atualiza ``caminho_nf`` em todas as vendas do pedido e registra o
+    ``Documento`` no banco.
+    """
+    venda = query_tenant(Venda).filter_by(id=id).first_or_404()
+    if not _usuario_pode_gerenciar_venda(venda):
+        return _resposta_sem_permissao()
+
+    arquivo = request.files.get('file')
+    if not arquivo or arquivo.filename == '':
+        return jsonify({'status': 'error', 'mensagem': 'Nenhum arquivo enviado.'}), 400
+
+    nome_original = secure_filename(arquivo.filename or '')
+    if not nome_original.lower().endswith('.pdf'):
+        return jsonify({'status': 'error', 'mensagem': 'Apenas arquivos PDF são aceitos.'}), 400
+
+    # ── Montar caminho de destino ──────────────────────────────────────────
+    import uuid as _uuid_mod
+    sufixo = _uuid_mod.uuid4().hex[:8]
+    nome_base, _ = os.path.splitext(nome_original)
+    nome_final = f"{nome_base}_{sufixo}.pdf"
+
+    pasta_nfs = os.path.join(current_app.root_path, 'documentos_entrada', 'notas_fiscais')
+    os.makedirs(pasta_nfs, exist_ok=True)
+
+    caminho_absoluto = os.path.join(pasta_nfs, nome_final)
+    caminho_relativo = os.path.join('documentos_entrada', 'notas_fiscais', nome_final)
+
+    try:
+        arquivo.save(caminho_absoluto)
+    except Exception as exc:
+        current_app.logger.error(f'[upload_manual_nf] Erro ao salvar arquivo: {exc}')
+        return jsonify({'status': 'error', 'mensagem': 'Falha ao salvar o arquivo no servidor.'}), 500
+
+    # ── Upload opcional para Cloudinary ───────────────────────────────────
+    url_nuvem = None
+    public_id_nuvem = None
+    _cloudinary_ok = bool(
+        os.environ.get('CLOUDINARY_URL')
+        or current_app.config.get('CLOUDINARY_URL')
+        or (current_app.config.get('CLOUDINARY_CLOUD_NAME') and current_app.config.get('CLOUDINARY_API_KEY'))
+    )
+    if _cloudinary_ok:
+        try:
+            import cloudinary.uploader as _cld_uploader
+            _TIMEOUT = current_app.config.get('EXTERNAL_TIMEOUT', 30)
+            res_cld = _cld_uploader.upload(
+                caminho_absoluto,
+                folder='menino_do_alho/notas_fiscais',
+                resource_type='raw',
+                timeout=_TIMEOUT,
+            )
+            url_nuvem = res_cld.get('secure_url') or res_cld.get('url')
+            public_id_nuvem = res_cld.get('public_id')
+        except Exception as exc_cld:
+            current_app.logger.warning(f'[upload_manual_nf] Upload Cloudinary falhou (mantendo cópia local): {exc_cld}')
+
+    # Preferir URL da nuvem como caminho persistido; fallback para path relativo
+    path_persistido = url_nuvem or caminho_relativo
+
+    # ── Persistir Documento e vincular ao pedido ───────────────────────────
+    try:
+        vendas_pedido = _vendas_do_pedido(venda)
+
+        empresa_id = getattr(venda, 'empresa_id', None)
+        usuario_id = current_user.id if current_user.is_authenticated else None
+
+        documento = Documento(
+            caminho_arquivo=caminho_relativo,
+            url_arquivo=url_nuvem,
+            public_id=public_id_nuvem,
+            tipo='NOTA_FISCAL',
+            venda_id=venda.id,
+            usuario_id=usuario_id,
+            empresa_id=empresa_id,
+        )
+        db.session.add(documento)
+        db.session.flush()  # garante documento.id antes do commit
+
+        for vv in vendas_pedido:
+            vv.caminho_nf = path_persistido
+
+        db.session.commit()
+        limpar_cache_dashboard()
+        registrar_log(
+            'EDITAR',
+            'VENDAS',
+            f'Upload manual de NF para venda#{id}: {nome_final}',
+        )
+    except Exception as exc_db:
+        db.session.rollback()
+        # Limpar arquivo salvo para não deixar lixo no disco
+        try:
+            os.remove(caminho_absoluto)
+        except OSError:
+            pass
+        current_app.logger.error(f'[upload_manual_nf] Erro ao salvar no banco: {exc_db}')
+        return jsonify({'status': 'error', 'mensagem': 'Falha ao registrar o documento no banco de dados.'}), 500
+
+    return jsonify({
+        'status': 'success',
+        'ok': True,
+        'mensagem': 'Upload e vínculo realizados com sucesso!',
+        'arquivo': nome_final,
+    })
+
+
 @vendas_bp.route('/api/vendas/<int:id>/desvincular/<tipo_documento>', methods=['POST'])
 def desvincular_documento_rapido(id, tipo_documento):
     """Desvincula NF ou boleto de um pedido (todas as linhas do agrupamento).

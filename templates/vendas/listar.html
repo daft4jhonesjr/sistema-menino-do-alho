@@ -7114,6 +7114,104 @@ window.desvincularDocumento = function(id, tipo) {
     }
 };
 
+// ── Upload Manual de NF (pula fila OCR) ─────────────────────────────────────
+window.uploadManualNF = async function(id, inputElement) {
+    if (!id || !inputElement || !inputElement.files || !inputElement.files.length) return;
+
+    var arquivo = inputElement.files[0];
+
+    // Validação client-side
+    if (!arquivo.name.toLowerCase().endsWith('.pdf')) {
+        if (typeof Swal !== 'undefined') {
+            Swal.fire(Object.assign(window._swalInboxTheme ? window._swalInboxTheme() : {}, {
+                icon: 'error',
+                title: 'Arquivo inválido',
+                text: 'Apenas arquivos PDF são aceitos.'
+            }));
+        } else {
+            alert('Apenas arquivos PDF são aceitos.');
+        }
+        inputElement.value = '';
+        return;
+    }
+
+    // Loading
+    if (typeof Swal !== 'undefined') {
+        Swal.fire(Object.assign(window._swalInboxTheme ? window._swalInboxTheme() : {}, {
+            title: 'Enviando arquivo...',
+            text: 'Aguarde enquanto o PDF é enviado e vinculado ao pedido.',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            didOpen: function() { Swal.showLoading(); }
+        }));
+    }
+
+    var formData = new FormData();
+    formData.append('file', arquivo);
+
+    // Incluir CSRF token se disponível
+    var csrfToken = (window.getCsrfHeaders ? window.getCsrfHeaders()['X-CSRFToken'] : null)
+        || (document.querySelector('meta[name="csrf-token"]') || {}).content
+        || '';
+    if (csrfToken) formData.append('csrf_token', csrfToken);
+
+    try {
+        var fetchHeaders = { 'X-Requested-With': 'XMLHttpRequest' };
+        if (csrfToken) fetchHeaders['X-CSRFToken'] = csrfToken;
+
+        var response = await fetch('/api/vendas/' + encodeURIComponent(id) + '/upload_manual_nf', {
+            method: 'POST',
+            headers: fetchHeaders,
+            body: formData
+        });
+
+        var data = {};
+        try { data = await response.json(); } catch (_) { data = {}; }
+
+        if (!response.ok) {
+            var apiErr = data.mensagem || data.error || data.message || ('Erro HTTP ' + response.status);
+            throw new Error(apiErr);
+        }
+
+        if (data.status === 'success' || data.ok) {
+            var okMsg = data.mensagem || 'Upload e vínculo realizados com sucesso!';
+            if (typeof Swal !== 'undefined') {
+                await Swal.fire(Object.assign(window._swalInboxTheme ? window._swalInboxTheme() : {}, {
+                    icon: 'success',
+                    title: 'Sucesso!',
+                    text: okMsg
+                }));
+            } else if (typeof showToast === 'function') {
+                showToast(okMsg, 'success');
+            } else {
+                alert(okMsg);
+            }
+            inputElement.value = '';
+            window.location.reload();
+            return;
+        }
+
+        throw new Error(data.mensagem || data.error || 'Resposta inesperada do servidor.');
+
+    } catch (error) {
+        console.error('[uploadManualNF]', error);
+        var msgErro = (error && error.message) ? error.message : 'Ocorreu um erro ao enviar o arquivo.';
+        if (typeof Swal !== 'undefined') {
+            Swal.fire(Object.assign(window._swalInboxTheme ? window._swalInboxTheme() : {}, {
+                icon: 'error',
+                title: 'Ops...',
+                text: msgErro
+            }));
+        } else if (typeof showToast === 'function') {
+            showToast(msgErro, 'error');
+        } else {
+            alert(msgErro);
+        }
+    } finally {
+        inputElement.value = '';
+    }
+};
+
 window.buscarDocumentoExistente = async function(id, nf) {
     if (!id) return;
 
