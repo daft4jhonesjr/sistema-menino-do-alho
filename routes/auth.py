@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 import json
 import os
 import threading
+import time
 import traceback
 import urllib.request
 import uuid
@@ -460,30 +461,80 @@ def _extrair_credenciais_login():
     return username, password, remember, next_url
 
 
+MSG_LOGIN_BLOQUEADO = (
+    'Muitas tentativas incorretas. Por segurança, tente novamente em 5 minutos.'
+)
+_LOGIN_MAX_FALHAS = 5
+_LOGIN_JANELA_SEGUNDOS = 300  # 5 minutos
+_LOGIN_FALHAS_LOCK = threading.Lock()
+# chave "ip|username" -> {'count': int, 'window_start': float}
+_LOGIN_FALHAS = {}
+
+
+def _chave_falha_login(username):
+    ip = _extrair_ip_cliente() or 'unknown'
+    user_norm = (username or '').strip().lower()
+    return f'{ip}|{user_norm}'
+
+
+def _login_esta_bloqueado(username):
+    """True se IP+username já atingiu o limite de falhas na janela atual."""
+    chave = _chave_falha_login(username)
+    agora = time.time()
+    with _LOGIN_FALHAS_LOCK:
+        info = _LOGIN_FALHAS.get(chave)
+        if not info:
+            return False
+        if agora - info['window_start'] >= _LOGIN_JANELA_SEGUNDOS:
+            _LOGIN_FALHAS.pop(chave, None)
+            return False
+        return info['count'] >= _LOGIN_MAX_FALHAS
+
+
+def _registrar_falha_login(username):
+    """Incrementa falhas consecutivas; retorna True se passou a estar bloqueado."""
+    chave = _chave_falha_login(username)
+    agora = time.time()
+    with _LOGIN_FALHAS_LOCK:
+        info = _LOGIN_FALHAS.get(chave)
+        if not info or agora - info['window_start'] >= _LOGIN_JANELA_SEGUNDOS:
+            _LOGIN_FALHAS[chave] = {'count': 1, 'window_start': agora}
+            return False
+        info['count'] += 1
+        return info['count'] >= _LOGIN_MAX_FALHAS
+
+
+def _zerar_falhas_login(username):
+    """Zera o contador após login bem-sucedido (bloqueio nunca é permanente)."""
+    chave = _chave_falha_login(username)
+    with _LOGIN_FALHAS_LOCK:
+        _LOGIN_FALHAS.pop(chave, None)
+
+
 def _responder_erro_login(mensagem, status=401):
     if _login_wants_json():
         return _login_json(False, error=mensagem, status=status)
     flash(mensagem, 'error')
-    http_status = status if status >= 500 else 200
+    # 429 deve preservar o status HTTP (bloqueio temporário).
+    http_status = status if status >= 500 or status == 429 else 200
     return render_template('auth/login.html'), http_status
 
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 @limiter.limit(
-    "5 per minute",
+    "30 per minute",
     methods=['POST'],
-    error_message='Muitas tentativas de login. Aguarde 1 minuto e tente novamente.',
+    error_message='Muitas requisições. Aguarde um momento e tente novamente.',
 )
 def login():
     """Login do sistema.
 
-    Segurança (Fase 4 — P0):
-        * Rate limit ESTRITO de 5 POST/minuto por IP (proteção contra
-          brute-force). GET é livre — recarregar a página de login não
-          consome a cota.
-        * Em caso de excesso, ``flask_limiter`` retorna HTTP 429 com a
-          ``error_message`` definida (renderizada como JSON ou HTML
-          dependendo do Accept header).
+    Segurança (brute-force):
+        * Até 5 senhas incorretas consecutivas por IP + username numa
+          janela de 5 minutos. Excedeu → HTTP 429 (temporário).
+        * Login bem-sucedido zera o contador imediatamente.
+        * Flask-Limiter (30 POST/min por IP) cobre flood de requisições.
+        * GET é livre — recarregar a página de login não consome a cota.
 
     Fluxo:
         * Se o usuário já estiver autenticado → redireciona para landing.
@@ -504,9 +555,18 @@ def login():
             if not username or not password:
                 return _responder_erro_login('Preencha usuário e senha.', status=400)
 
+            if _login_esta_bloqueado(username):
+                return _responder_erro_login(MSG_LOGIN_BLOQUEADO, status=429)
+
             user = Usuario.query.filter_by(username=username).first()
             if not user or not check_password_hash(user.password_hash, password):
+                # Conta a falha; o bloqueio 429 vale nas próximas tentativas
+                # (máx. 5 erros na janela). Esta resposta permanece 401.
+                _registrar_falha_login(username)
                 return _responder_erro_login('Usuário ou senha incorretos.', status=401)
+
+            # Senha correta: libera imediatamente o contador de erros.
+            _zerar_falhas_login(username)
 
             # Bloqueia login em tenants suspensos (exceto MASTER).
             if not getattr(user, 'is_master', lambda: False)():

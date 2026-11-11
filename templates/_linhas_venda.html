@@ -199,6 +199,7 @@
                 data-cliente="{{ pedido.cliente_nome }}"
                 data-total="{{ pedido.total_valor|formato_moeda }}"
                 data-itens='{{ itens_nf|tojson }}'
+                data-url-recibo="{{ url_for('vendas.recibo_venda', id=pedido.primeira_venda_id, _external=True) }}"
                 data-nf="{{ pedido.nf if pedido.nf and pedido.nf != '-' else '' }}"
                 data-tem-nf="{{ '1' if tem_nf_wa else '0' }}"
                 data-url-nf="{% if pedido.caminho_nf %}{{ url_for('documentos.ver_nf_venda', id=pedido.primeira_venda_id, _external=True) }}{% endif %}"

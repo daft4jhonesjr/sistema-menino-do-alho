@@ -7606,7 +7606,7 @@ window.marcarComoEntregueRapido = function(id, elementoBadge) {
             <div class="p-3 flex flex-col gap-2">
                 <button type="button" id="wa-opt-resumo"
                         class="w-full text-left px-4 py-3 rounded-lg border border-gray-700 bg-gray-800/80 text-gray-100 text-sm font-medium hover:bg-emerald-600/20 hover:border-emerald-500/50 hover:text-emerald-300 transition-colors">
-                    📄 Resumo do Pedido
+                    📄 Comprovante do Pedido
                 </button>
                 <button type="button" id="wa-opt-nf"
                         class="hidden w-full text-left px-4 py-3 rounded-lg border border-gray-700 bg-gray-800/80 text-gray-100 text-sm font-medium hover:bg-emerald-600/20 hover:border-emerald-500/50 hover:text-emerald-300 transition-colors">
@@ -7704,20 +7704,17 @@ function _waAbrirLink(telefoneLimpo, mensagem) {
 }
 
 function _waMontarResumo(ctx) {
-    var itens = ctx.itens || [];
-    var linhasItens = itens.map(function(item) {
-        var qtd = item.q != null ? item.q : (item.qtd != null ? item.qtd : '');
-        var nome = String(item.n || item.nome || '').trim();
-        if (!nome && qtd === '') return '';
-        return '• ' + qtd + 'x ' + nome;
-    }).filter(Boolean);
-    var blocoItens = linhasItens.length ? linhasItens.join('\n') : '• (sem itens)';
-    return (
+    var urlRecibo = (ctx.urlRecibo || '').trim();
+    var msg = (
         'Olá *' + ctx.cliente + '*, aqui é do *Menino do Alho*! 🧄\n\n' +
-        'Segue o resumo do seu pedido:\n' +
-        blocoItens + '\n\n' +
-        '*Valor Total:* ' + ctx.total
+        'Segue o comprovante em PDF do seu pedido:\n'
     );
+    if (urlRecibo) {
+        msg += '📄 Acesse ou baixe o pedido aqui:\n' + urlRecibo;
+    }
+    msg += '\n\n*Valor Total:* ' + ctx.total;
+    msg += '\n\nQualquer dúvida, estamos à disposição!';
+    return msg;
 }
 
 function _waMontarNf(ctx) {
@@ -7795,6 +7792,7 @@ function abrirModalWhatsApp(elemento) {
         cliente: (elemento.getAttribute('data-cliente') || '').trim() || 'cliente',
         total: (elemento.getAttribute('data-total') || '').trim() || '—',
         itens: itens,
+        urlRecibo: (elemento.getAttribute('data-url-recibo') || '').trim(),
         nf: (elemento.getAttribute('data-nf') || '').trim(),
         temNf: elemento.getAttribute('data-tem-nf') === '1',
         urlNf: (elemento.getAttribute('data-url-nf') || '').trim(),

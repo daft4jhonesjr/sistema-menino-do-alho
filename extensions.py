@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import os
 
+from flask import request
 from flask_login import LoginManager
 from flask_wtf.csrf import CSRFProtect
 from flask_caching import Cache
@@ -52,13 +53,22 @@ login_manager = LoginManager()
 csrf = CSRFProtect()
 cache = Cache(config={'CACHE_TYPE': 'SimpleCache'})
 
+
+def _get_client_ip():
+    """IP real do cliente atrás de proxy reverso (Render, nginx, etc.)."""
+    forwarded = request.headers.get('X-Forwarded-For', request.remote_addr) or ''
+    ip = forwarded.split(',')[0].strip()
+    return ip or get_remote_address()
+
+
 # Rate Limiting global. Defaults: 200/dia, 50/hora — limites largos por
 # IP, suficientes para uso humano normal sem incomodar o usuário, mas que
 # barram scrapers e brute-force massivos. Limites mais agressivos (ex.
-# ``5 per minute`` em /login POST) são aplicados nas próprias rotas via
-# ``@limiter.limit(...)``.
+# falhas de senha em /login POST) são aplicados nas próprias rotas.
+# key_func usa X-Forwarded-For para não agrupar todos os usuários atrás
+# do mesmo IP do proxy.
 limiter = Limiter(
-    key_func=get_remote_address,
+    key_func=_get_client_ip,
     storage_uri='memory://',
     default_limits=['200 per day', '50 per hour'],
 )

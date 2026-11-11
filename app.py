@@ -63,6 +63,8 @@ import hashlib
 import traceback
 import urllib.request
 import logging
+import threading
+import time
 from logging.handlers import RotatingFileHandler
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import HTTPException
@@ -872,6 +874,23 @@ def _limpar_razao_ate_cnpj_ou_data(linha):
     return linha.strip()
 
 
+def _limpar_rotulos_nome_danfe(nome):
+    """Tira rótulos do cabeçalho quando o pdfplumber cola 'CPF DATA DA EMISSÃO' no nome."""
+    if not nome:
+        return None
+    nome = _limpar_razao_ate_cnpj_ou_data(str(nome))
+    anterior = None
+    while nome and nome != anterior:
+        anterior = nome
+        nome = re.sub(
+            r'^(?:NOME\s*/\s*RAZ[AÃ]O\s+SOCIAL|CNPJ\s*/\s*CPF|CPF\s*/\s*CNPJ|DATA\s+DA\s+EMISS[AÃ]O|CNPJ|CPF)\s*',
+            '',
+            nome,
+            flags=re.IGNORECASE,
+        ).strip(' /-|')
+    return nome.strip() or None
+
+
 def _nome_fornecedor_comercial_mf():
     """Nome fantasia cadastrado para o CNPJ da Comercial MF, ou a razão social oficial."""
     try:
@@ -928,12 +947,17 @@ def _extrair_destinatario_danfe(texto):
     nome = None
     linhas = [re.sub(r'\s+', ' ', linha).strip() for linha in re.split(r'[\r\n]+', trecho) if linha and linha.strip()]
     for i, linha in enumerate(linhas):
-        if re.search(r'Nome\s*/\s*Raz[ãa]o\s+Social', linha, re.IGNORECASE) and i + 1 < len(linhas):
-            cand = _limpar_razao_ate_cnpj_ou_data(linhas[i + 1])
-            cand = re.sub(r'^(?:NOME\s*/\s*RAZ[AÃ]O\s+SOCIAL\s*)', '', cand or '', flags=re.IGNORECASE).strip()
-            if cand and len(cand) > 3 and not _eh_linha_cabecalho_pagador(cand) and not _eh_nome_emitente_comercial_mf(cand):
-                nome = cand
-                break
+        if not re.search(r'Nome\s*/\s*Raz[ãa]o\s+Social', linha, re.IGNORECASE):
+            continue
+        if re.search(r'\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}', linha):
+            cand = _limpar_rotulos_nome_danfe(linha)
+        elif i + 1 < len(linhas):
+            cand = _limpar_rotulos_nome_danfe(linhas[i + 1])
+        else:
+            cand = None
+        if cand and len(cand) > 3 and not _eh_linha_cabecalho_pagador(cand) and not _eh_nome_emitente_comercial_mf(cand):
+            nome = cand
+            break
     if not nome:
         mnome = re.search(
             r'([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ0-9\s&\.\-]{4,}?)\s+(\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2})',
@@ -941,8 +965,7 @@ def _extrair_destinatario_danfe(texto):
             re.IGNORECASE,
         )
         if mnome and mnome.group(2) not in CNPJS_EMISSORES:
-            cand = _limpar_razao_ate_cnpj_ou_data(mnome.group(1))
-            cand = re.sub(r'^(?:NOME\s*/\s*RAZ[AÃ]O\s+SOCIAL\s*)', '', cand or '', flags=re.IGNORECASE).strip()
+            cand = _limpar_rotulos_nome_danfe(mnome.group(1))
             if cand and len(cand) > 3 and not _eh_linha_cabecalho_pagador(cand) and not _eh_nome_emitente_comercial_mf(cand):
                 nome = cand
     if nome:
@@ -1619,11 +1642,23 @@ def _extrair_itens_danfe(texto):
     i = 0
     while i < len(linhas):
         atual = linhas[i]
-        if i + 1 < len(linhas) and re.match(r'\d{8}\b', linhas[i + 1]) and not re.search(r'\d{8}', atual):
-            atual = atual + ' ' + linhas[i + 1]
-            i += 1
+        j = i
+        # pdfplumber quebra "ALHO CHINES ... CX" / "C/10KG 07032090 ... 1.800,00"
+        while (
+            j + 1 < len(linhas)
+            and j - i < 2
+            and re.match(r'^\d{1,10}\b', atual)
+            and not re.search(r'\b\d{8}\b', atual)
+        ):
+            proxima = linhas[j + 1]
+            if not re.search(r'\b\d{8}\b', proxima):
+                break
+            if re.match(r'^\d{1,6}\s+[A-Za-zÀ-ÿ]', proxima):
+                break
+            atual = atual + ' ' + proxima
+            j += 1
         fundidas.append(atual)
-        i += 1
+        i = j + 1
     itens = []
     vistos = set()
     for linha in fundidas:

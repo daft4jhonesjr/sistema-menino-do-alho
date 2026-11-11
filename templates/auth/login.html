@@ -357,9 +357,32 @@
         var msg = data.error
             || data.message
             || (response.status === 429
-                ? 'Muitas tentativas de login. Aguarde 1 minuto e tente novamente.'
+                ? 'Muitas tentativas incorretas. Por segurança, tente novamente em 5 minutos.'
                 : 'Credenciais inválidas ou falha de autenticação.');
-        throw new Error(msg);
+        var err = new Error(msg);
+        err.status = response.status;
+        throw err;
+    }
+
+    function showLoginBloqueado(message) {
+        var texto = message
+            || 'Muitas tentativas incorretas. Por segurança, aguarde 5 minutos antes de tentar novamente.';
+        if (typeof Swal === 'undefined') {
+            alert(texto);
+            return;
+        }
+        Swal.fire({
+            title: 'Acesso Temporariamente Bloqueado',
+            text: texto,
+            icon: 'warning',
+            background: '#1e293b',
+            color: '#f8fafc',
+            confirmButtonColor: '#10b981',
+            confirmButtonText: 'Entendi',
+            showCancelButton: false,
+            allowOutsideClick: true,
+            allowEscapeKey: true
+        });
     }
 
     function redirecionarAposLogin(data) {
@@ -411,10 +434,14 @@
                 return;
             }
             console.error('Erro no login biométrico:', error);
-            showLoginError(
-                mensagemErroLogin(error) ||
-                'Não foi possível autenticar com Face ID. Use usuário e senha.'
-            );
+            if (error && error.status === 429) {
+                showLoginBloqueado(mensagemErroLogin(error));
+            } else {
+                showLoginError(
+                    mensagemErroLogin(error) ||
+                    'Não foi possível autenticar com Face ID. Use usuário e senha.'
+                );
+            }
         } finally {
             if (btnFace) {
                 btnFace.disabled = false;
@@ -483,7 +510,9 @@
 
                 console.error('Erro no login:', error);
 
-                if (typeof Swal !== 'undefined') {
+                if (error && error.status === 429) {
+                    showLoginBloqueado(mensagemErroLogin(error));
+                } else if (typeof Swal !== 'undefined') {
                     Swal.fire({
                         title: 'Falha no Acesso',
                         text: mensagemErroLogin(error) || 'Credenciais inválidas ou falha de autenticação.',
@@ -509,8 +538,8 @@
                     if (pwdFallback) { pwdFallback.value = ''; pwdFallback.focus(); }
                 }
             } finally {
-                // Camada 3 — segurança absoluta: executa sempre, mesmo que o
-                // catch lance uma exceção inesperada
+                // Camada 3 — segurança absoluta: executa sempre (reabilita "Entrar"
+                // e remove o spinner "Verificando..."), mesmo se o catch falhar.
                 enviando = false;
                 resetarBotaoLogin(btnSubmit, textoOriginal);
             }
