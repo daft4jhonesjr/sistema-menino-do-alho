@@ -236,37 +236,51 @@ document.addEventListener('DOMContentLoaded', function() {
         {% endif %}
     }
 
+    // Fonte única: fornecedores do banco (Jinja). Não sobrescrever com lista estática.
+    const FORNECEDORES_CADASTRADOS = [
+        {% for f in fornecedores or [] %}
+        {{ f.nome|tojson }}{% if not loop.last %},{% endif %}
+        {% endfor %}
+    ];
+
     function atualizarEmpresasPorProduto() {
         if (!produtoSelect || !empresaSelect) return;
 
         const opcaoSelecionada = produtoSelect.options[produtoSelect.selectedIndex];
         const textoProduto = String(opcaoSelecionada ? opcaoSelecionada.text : '').toUpperCase();
         const valorAtual = empresaSelect.value;
+        const nomes = (FORNECEDORES_CADASTRADOS || []).slice();
 
-        empresaSelect.innerHTML = '<option value="">Selecione...</option>';
-
-        let empresasPermitidas = [];
+        let preferidas = [];
         if (textoProduto.includes('ALHO')) {
-            empresasPermitidas = ['DESTAK', 'PATY'];
+            preferidas = ['DESTAK', 'PATY'];
         } else if (textoProduto.includes('BACALHAU')) {
-            empresasPermitidas = ['ARMAZEM LACERDA'];
+            preferidas = ['ARMAZEM LACERDA'];
         } else if (textoProduto.includes('CAFÉ') || textoProduto.includes('CAFE')) {
-            empresasPermitidas = ['SERVE BEM'];
-        } else {
-            empresasPermitidas = ['DESTAK', 'PATY', 'ARMAZEM LACERDA', 'SERVE BEM'];
+            preferidas = ['SERVE BEM'];
         }
 
-        empresasPermitidas.push('NENHUM');
-
-        empresasPermitidas.forEach(function(empresa) {
+        empresaSelect.innerHTML = '<option value="">Selecione...</option>';
+        nomes.forEach(function(empresa) {
             const opt = document.createElement('option');
             opt.value = empresa;
             opt.textContent = empresa;
             empresaSelect.appendChild(opt);
         });
+        const optNenhum = document.createElement('option');
+        optNenhum.value = 'NENHUM';
+        optNenhum.textContent = 'NENHUM';
+        empresaSelect.appendChild(optNenhum);
 
-        if (empresasPermitidas.includes(valorAtual)) {
+        if (valorAtual && (nomes.indexOf(valorAtual) !== -1 || valorAtual === 'NENHUM')) {
             empresaSelect.value = valorAtual;
+            return;
+        }
+        for (let i = 0; i < preferidas.length; i++) {
+            if (nomes.indexOf(preferidas[i]) !== -1) {
+                empresaSelect.value = preferidas[i];
+                return;
+            }
         }
     }
 

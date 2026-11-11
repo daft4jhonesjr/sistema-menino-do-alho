@@ -2929,6 +2929,14 @@ document.addEventListener('DOMContentLoaded', function() {
         erroDiv.classList.remove('hidden');
     }
 
+    // Fonte única: fornecedores cadastrados no banco (Jinja). Evita lista estática
+    // DESTAK/PATY/... que sobrescrevia o <select> e escondia novos cadastros.
+    var FORNECEDORES_CADASTRADOS = [
+        {% for f in fornecedores or [] %}
+        {{ f.nome|tojson }}{% if not loop.last %},{% endif %}
+        {% endfor %}
+    ];
+
     function aplicarEmpresaPorProduto() {
         if (!produtoSelect || !empresaSelect) return;
 
@@ -2937,30 +2945,39 @@ document.addEventListener('DOMContentLoaded', function() {
 
         var textoProduto = String(opcaoSelecionada.text || '').toUpperCase();
         var valorAtual = empresaSelect.value;
-        var empresasPermitidas = [];
+        var nomes = (FORNECEDORES_CADASTRADOS || []).slice();
 
+        // Preferência suave por tipo de produto (só auto-seleciona se existir no cadastro).
+        var preferidas = [];
         if (textoProduto.indexOf('ALHO') !== -1) {
-            empresasPermitidas = ['DESTAK', 'PATY'];
+            preferidas = ['DESTAK', 'PATY'];
         } else if (textoProduto.indexOf('BACALHAU') !== -1) {
-            empresasPermitidas = ['ARMAZEM LACERDA'];
+            preferidas = ['ARMAZEM LACERDA'];
         } else if (textoProduto.indexOf('CAFÉ') !== -1 || textoProduto.indexOf('CAFE') !== -1) {
-            empresasPermitidas = ['SERVE BEM'];
-        } else {
-            empresasPermitidas = ['DESTAK', 'PATY', 'ARMAZEM LACERDA', 'SERVE BEM'];
+            preferidas = ['SERVE BEM'];
         }
 
-        empresasPermitidas.push('NENHUM');
-
         empresaSelect.innerHTML = '<option value="">--</option>';
-        empresasPermitidas.forEach(function(empresa) {
+        nomes.forEach(function(empresa) {
             var opt = document.createElement('option');
             opt.value = empresa;
             opt.textContent = empresa;
             empresaSelect.appendChild(opt);
         });
+        var optNenhum = document.createElement('option');
+        optNenhum.value = 'NENHUM';
+        optNenhum.textContent = 'NENHUM';
+        empresaSelect.appendChild(optNenhum);
 
-        if (empresasPermitidas.indexOf(valorAtual) !== -1) {
+        if (valorAtual && (nomes.indexOf(valorAtual) !== -1 || valorAtual === 'NENHUM')) {
             empresaSelect.value = valorAtual;
+            return;
+        }
+        for (var i = 0; i < preferidas.length; i++) {
+            if (nomes.indexOf(preferidas[i]) !== -1) {
+                empresaSelect.value = preferidas[i];
+                return;
+            }
         }
     }
 

@@ -2860,7 +2860,16 @@ def nova_venda():
 
     def _render_form():
         clientes, produtos = _carregar_listas_form()
-        return render_template('vendas/formulario.html', venda=None, clientes=clientes, produtos=produtos)
+        fornecedores = Fornecedor.query.filter_by(
+            empresa_id=empresa_id_atual()
+        ).order_by(Fornecedor.nome.asc()).all()
+        return render_template(
+            'vendas/formulario.html',
+            venda=None,
+            clientes=clientes,
+            produtos=produtos,
+            fornecedores=fornecedores,
+        )
 
     if request.method == 'POST':
         try:
