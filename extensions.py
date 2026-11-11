@@ -115,13 +115,19 @@ def init_extensions(app):
     # Quando REDIS_URL está disponível, usa Redis como backend distribuído
     # (correto para múltiplos workers Gunicorn); caso contrário mantém
     # memória mas com fixed-window, que é thread-safe sem timers externos.
+    #
+    # RATELIMIT_SWALLOW_ERRORS=True → fail-open: se o backend de storage
+    # falhar (ex.: Redis indisponível, MemoryStorage corrompido), a
+    # requisição é PERMITIDA em vez de retornar HTTP 500. Impede que uma
+    # falha no limiter derrube rotas críticas como /api/logistica/dados.
     app.config['RATELIMIT_STRATEGY'] = 'fixed-window'
+    app.config['RATELIMIT_SWALLOW_ERRORS'] = True
     if redis_url:
         app.config['RATELIMIT_STORAGE_URI'] = redis_url
-        app.logger.info('🟢 Rate Limiter configurado usando Redis (fixed-window)')
+        app.logger.info('🟢 Rate Limiter configurado usando Redis (fixed-window, fail-open)')
     else:
         app.config['RATELIMIT_STORAGE_URI'] = 'memory://'
-        app.logger.info('🟡 Rate Limiter configurado usando MemoryStorage (fixed-window)')
+        app.logger.info('🟡 Rate Limiter configurado usando MemoryStorage (fixed-window, fail-open)')
     limiter.init_app(app)
 
 
