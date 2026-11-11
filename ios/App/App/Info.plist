@@ -2,12 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CAPACITOR_DEBUG</key>
+	<key>CAPACITOR_DEBUG</key>
 	<string>$(CAPACITOR_DEBUG)</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-        <string>Menino do Alho</string>
+	<string>Menino do Alho</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -20,40 +20,51 @@
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.meninodoalho.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>meninodoalho</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Usamos sua localização para registrar cidade e bairro nos logs de acesso e apoiar rotas de entrega.</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Usamos sua localização para registrar cidade e bairro nos logs de acesso e apoiar rotas de entrega.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Usamos a câmera para fotografar cheques, comprovantes e documentos no Caixa Diário.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Usamos a galeria para anexar fotos de cheques, comprovantes e documentos.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Utilize o Face ID para acessar o sistema com rapidez e segurança.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Usamos sua localização para registrar cidade e bairro nos logs de acesso e apoiar rotas de entrega.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Usamos sua localização para registrar cidade e bairro nos logs de acesso e apoiar rotas de entrega.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Usamos a galeria para anexar fotos de cheques, comprovantes e documentos.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
-    <false/>
-    <key>UISceneConfigurations</key>
-    <dict>
-      <key>UIWindowSceneSessionRoleApplication</key>
-      <array>
-        <dict>
-            <key>UISceneConfigurationName</key>
-            <string>Default Configuration</string>
-            <key>UISceneDelegateClassName</key>
-            <string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
-            <key>UISceneStoryboardFile</key>
-            <string>Main</string>
-        </dict>
-      </array>
-    </dict>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneConfigurationName</key>
+					<string>Default Configuration</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
 	</dict>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
@@ -78,16 +89,5 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleURLName</key>
-			<string>com.meninodoalho.app</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>meninodoalho</string>
-			</array>
-		</dict>
-	</array>
 </dict>
 </plist>

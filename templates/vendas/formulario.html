@@ -103,10 +103,9 @@
                 <select id="empresa_faturadora" name="empresa_faturadora" required
                         class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-verde-floresta focus:border-transparent">
                     <option value="">Selecione...</option>
-                    <option value="DESTAK" {% if venda and venda.empresa_faturadora == 'DESTAK' %}selected{% endif %}>DESTAK</option>
-                    <option value="PATY" {% if venda and venda.empresa_faturadora == 'PATY' %}selected{% endif %}>PATY</option>
-                    <option value="ARMAZEM LACERDA" {% if venda and venda.empresa_faturadora == 'ARMAZEM LACERDA' %}selected{% endif %}>ARMAZEM LACERDA</option>
-                    <option value="SERVE BEM" {% if venda and venda.empresa_faturadora == 'SERVE BEM' %}selected{% endif %}>SERVE BEM</option>
+                    {% for f in fornecedores %}
+                    <option value="{{ f.nome }}" {% if venda and venda.empresa_faturadora == f.nome %}selected{% endif %}>{{ f.nome }}</option>
+                    {% endfor %}
                     <option value="NENHUM" {% if venda and venda.empresa_faturadora == 'NENHUM' %}selected{% endif %}>NENHUM</option>
                 </select>
             </div>

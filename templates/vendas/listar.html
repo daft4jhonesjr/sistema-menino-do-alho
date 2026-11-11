@@ -425,9 +425,10 @@
                             <label for="filtro_empresa" class="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Empresa Faturadora</label>
                             <select id="filtro_empresa" name="filtro_empresa" class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm px-3 py-2 focus:ring-2 focus:ring-emerald-500">
                                 <option value="TODAS">Todas</option>
-                                <option value="DESTAK">Destak</option>
-                                <option value="PATY">Paty</option>
-                                <option value="NENHUM">Nenhum</option>
+                                {% for f in fornecedores %}
+                                <option value="{{ f.nome }}" {% if request.args.get('filtro_empresa') == f.nome %}selected{% endif %}>{{ f.nome }}</option>
+                                {% endfor %}
+                                <option value="NENHUM" {% if request.args.get('filtro_empresa') == 'NENHUM' %}selected{% endif %}>Nenhum</option>
                             </select>
                         </div>
                         <div>
@@ -644,10 +645,9 @@
                     <label for="inline-empresa_faturadora" class="block text-xs font-medium text-gray-600 dark:text-gray-200 mb-1">Empresa</label>
                     <select id="inline-empresa_faturadora" name="empresa_faturadora" required class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:focus:ring-emerald-500 dark:focus:border-emerald-500 shadow-sm">
                         <option value="">--</option>
-                        <option value="DESTAK">DESTAK</option>
-                        <option value="PATY">PATY</option>
-                        <option value="ARMAZEM LACERDA">ARMAZEM LACERDA</option>
-                        <option value="SERVE BEM">SERVE BEM</option>
+                        {% for f in fornecedores %}
+                        <option value="{{ f.nome }}">{{ f.nome }}</option>
+                        {% endfor %}
                         <option value="NENHUM">NENHUM</option>
                     </select>
                 </div>
@@ -1360,9 +1360,9 @@
                         <label for="edit_empresa_faturadora" class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Empresa Faturadora <span class="text-red-500">*</span></label>
                         <select id="edit_empresa_faturadora" name="empresa_faturadora" required class="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100">
                             <option value="">Selecione...</option>
-                            <option value="DESTAK">DESTAK</option>
-                            <option value="PATY">PATY</option>
-                            <option value="ARMAZEM LACERDA">ARMAZÉM LACERDA</option>
+                            {% for f in fornecedores %}
+                            <option value="{{ f.nome }}">{{ f.nome }}</option>
+                            {% endfor %}
                             <option value="NENHUM">NENHUM</option>
                         </select>
                     </div>

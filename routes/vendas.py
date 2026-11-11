@@ -62,7 +62,7 @@ from sqlalchemy.orm import joinedload
 import pandas as pd
 from werkzeug.utils import secure_filename
 
-from models import db, Cliente, Produto, Venda, Documento, LancamentoCaixa, Lembrete, ItemOrcamento
+from models import db, Cliente, Produto, Venda, Documento, LancamentoCaixa, Lembrete, ItemOrcamento, Fornecedor
 from quotes import frase_do_dia, FRASES
 from services.auth_utils import (
     tenant_required, admin_required, _is_ajax,
@@ -2171,6 +2171,10 @@ def listar_vendas():
         current_app.logger.exception('Falha ao injetar radar de recompra na agenda')
         db.session.rollback()
 
+    fornecedores = Fornecedor.query.filter_by(
+        empresa_id=empresa_id_atual()
+    ).order_by(Fornecedor.nome.asc()).all()
+
     return render_template(
         'vendas/listar.html',
         pedidos=pedidos_paginados,
@@ -2212,6 +2216,7 @@ def listar_vendas():
         webcal_url=_webcal_url_calendario(),
         frase_do_dia=frase_do_dia(),
         todas_frases=[{"texto": t, "autor": a} for t, a in FRASES],
+        fornecedores=fornecedores,
     )
 
 
@@ -3698,7 +3703,17 @@ def editar_venda(id):
         .all()
     )
     venda_nf = venda.nf if venda.nf else ''
-    return render_template('vendas/formulario.html', venda=venda, venda_nf=venda_nf, clientes=clientes, produtos=produtos)
+    fornecedores = Fornecedor.query.filter_by(
+        empresa_id=empresa_id_atual()
+    ).order_by(Fornecedor.nome.asc()).all()
+    return render_template(
+        'vendas/formulario.html',
+        venda=venda,
+        venda_nf=venda_nf,
+        clientes=clientes,
+        produtos=produtos,
+        fornecedores=fornecedores,
+    )
 
 
 @vendas_bp.route('/venda/excluir_item/<int:id>', methods=['POST'])
