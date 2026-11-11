@@ -37,8 +37,13 @@ from app import (
     _resolver_caminho_documento_seguro,
     _reprocessar_boletos_atualizar_extracao,
     _reprocessar_vencimentos_vendas,
-    _doc_processing_lock,
 )
+
+# O lock vive em services.concorrencia (sem dependências do projeto) para
+# evitar ImportError circular: este módulo já importa de app.py, então
+# importar _doc_processing_lock de app.py causaria falha no Render quando
+# app.py ainda não terminou de carregar.
+from services.concorrencia import _doc_processing_lock
 
 __all__ = [
     '_processar_documento',

@@ -1874,12 +1874,11 @@ def _documento_precisa_reextrair(doc, tipo):
 
 
 # ---------------------------------------------------------------------------
-# Trava de concorrência: garante que apenas uma thread por vez execute o
-# pipeline de OCR + flush em lote na tabela `documentos`, evitando deadlock
-# (psycopg2.errors.DeadlockDetected) quando múltiplas threads do bot/OCR
-# tentam atualizar as mesmas linhas simultaneamente.
+# Trava de concorrência — importada de services.concorrencia para evitar
+# ImportError circular: services/documentos_services.py → app.py → lock
+# (o lock precisa existir antes de app.py terminar de carregar no Render).
 # ---------------------------------------------------------------------------
-_doc_processing_lock = threading.Lock()
+from services.concorrencia import _doc_processing_lock  # noqa: E402
 
 
 def _processar_documentos_pendentes(capturar_logs_memoria=False, user_id_forcado=None):
