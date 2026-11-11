@@ -7608,6 +7608,10 @@ window.marcarComoEntregueRapido = function(id, elementoBadge) {
                         class="w-full text-left px-4 py-3 rounded-lg border border-gray-700 bg-gray-800/80 text-gray-100 text-sm font-medium hover:bg-emerald-600/20 hover:border-emerald-500/50 hover:text-emerald-300 transition-colors">
                     📄 Comprovante do Pedido
                 </button>
+                <button type="button" id="wa-opt-pedido-pdf"
+                        class="w-full text-left px-4 py-3 rounded-lg border border-gray-700 bg-gray-800/80 text-gray-100 text-sm font-medium hover:bg-emerald-600/20 hover:border-emerald-500/50 hover:text-emerald-300 transition-colors">
+                    📎 Pedido em PDF <span class="text-xs text-gray-400 ml-1">(baixa o arquivo e abre o WhatsApp)</span>
+                </button>
                 <button type="button" id="wa-opt-nf"
                         class="hidden w-full text-left px-4 py-3 rounded-lg border border-gray-700 bg-gray-800/80 text-gray-100 text-sm font-medium hover:bg-emerald-600/20 hover:border-emerald-500/50 hover:text-emerald-300 transition-colors">
                     🧾 Nota Fiscal
@@ -7813,12 +7817,64 @@ function abrirModalWhatsApp(elemento) {
     wrap.setAttribute('aria-hidden', 'false');
 }
 
-function enviarWhatsAppOpcao(tipo) {
+function _waDownloadPdf(urlPdf) {
+    /* Dispara o download do PDF sem navegação: cria um <a> temporário,
+       simula o clique e remove imediatamente o elemento do DOM. */
+    var a = document.createElement('a');
+    a.href = urlPdf;
+    a.download = '';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+}
+
+function enviarWhatsAppOpcao(tipo, _telefonePre) {
     if (!_waEnvioCtx) return;
     var ctx = _waEnvioCtx;
-    var telefone = _waObterTelefoneSelecionado(ctx.telefone);
+    /* _telefonePre pode vir do initModalWhatsApp (já resolvido pelo helper);
+       caso não venha, resolve aqui como fallback — compatibilidade total. */
+    var telefone = _telefonePre || _waObterTelefoneSelecionado(ctx.telefone);
     if (!telefone) {
         _waToast('Selecione um contato para enviar.', 'error');
+        return;
+    }
+
+    /* ── Pedido em PDF: baixa o arquivo e abre o WhatsApp ─────────────── */
+    if (tipo === 'pedido_pdf') {
+        // Deriva a URL da rota de PDF a partir da URL do recibo HTML
+        var urlPdf = (ctx.urlRecibo || '').replace(/\/$/, '') + '/pdf';
+        if (!urlPdf || urlPdf === '/pdf') {
+            _waToast('URL do recibo não encontrada.', 'error');
+            return;
+        }
+
+        fecharModalWhatsApp();
+
+        // 1. Dispara o download do PDF
+        _waDownloadPdf(urlPdf);
+
+        // 2. Monta a mensagem do WhatsApp
+        var nomeCliente = ctx.cliente || 'cliente';
+        var valorTotal  = ctx.total   || '—';
+        var mensagemPdf =
+            'Olá *' + nomeCliente + '*, aqui é do *Menino do Alho*! 🧄\n' +
+            'Segue em anexo o arquivo PDF com o espelho do seu pedido.\n' +
+            '*Valor Total:* ' + valorTotal + '\n' +
+            'Qualquer dúvida, estamos à disposição!';
+
+        // 3. Abre o WhatsApp após um breve delay (dá tempo ao browser iniciar o download)
+        setTimeout(function () {
+            _waAbrirLink(telefone, mensagemPdf);
+        }, 600);
+
+        // 4. Notifica o operador
+        setTimeout(function () {
+            _waToast(
+                '📎 PDF baixado! Anexe o arquivo na conversa do WhatsApp que foi aberta.',
+                'success'
+            );
+        }, 1000);
         return;
     }
 
@@ -7852,20 +7908,43 @@ function enviarPedidoWhatsApp(elemento) {
 (function initModalWhatsApp() {
     var wrap = document.getElementById('modal-whatsapp-envio-wrap');
     if (!wrap) return;
+
+    /* ── Dismiss (overlay + botão ×): registra apenas uma vez por elemento ─ */
     wrap.querySelectorAll('[data-dismiss-wa]').forEach(function(el) {
+        if (el.dataset.listenerBound) return;
+        el.dataset.listenerBound = 'true';
         el.addEventListener('click', fecharModalWhatsApp);
     });
-    var btnResumo = document.getElementById('wa-opt-resumo');
-    var btnNf = document.getElementById('wa-opt-nf');
-    var btnBoleto = document.getElementById('wa-opt-boleto');
-    if (btnResumo) btnResumo.addEventListener('click', function() { enviarWhatsAppOpcao('resumo'); });
-    if (btnNf) btnNf.addEventListener('click', function() { enviarWhatsAppOpcao('nf'); });
-    if (btnBoleto) btnBoleto.addEventListener('click', function() { enviarWhatsAppOpcao('boleto'); });
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape' && wrap && !wrap.classList.contains('hidden')) {
-            fecharModalWhatsApp();
-        }
-    });
+
+    /* ── Helpers locais ─────────────────────────────────────────────────── */
+    function _bindOpcao(id, tipo) {
+        var btn = document.getElementById(id);
+        if (!btn || btn.dataset.listenerBound) return;
+        btn.dataset.listenerBound = 'true';
+        btn.addEventListener('click', function () {
+            /* Passa o telefone selecionado para que a lógica de múltiplos
+               contatos funcione corretamente em todos os tipos de envio. */
+            var telefone = (typeof _waObterTelefoneSelecionado === 'function')
+                ? _waObterTelefoneSelecionado()
+                : (_waEnvioCtx ? _waEnvioCtx.telefone : '');
+            enviarWhatsAppOpcao(tipo, telefone);
+        });
+    }
+
+    _bindOpcao('wa-opt-resumo',     'resumo');
+    _bindOpcao('wa-opt-pedido-pdf', 'pedido_pdf');  /* ← Pedido em PDF */
+    _bindOpcao('wa-opt-nf',         'nf');
+    _bindOpcao('wa-opt-boleto',     'boleto');
+
+    /* ── Fechar com Escape ──────────────────────────────────────────────── */
+    if (!wrap.dataset.escListenerBound) {
+        wrap.dataset.escListenerBound = 'true';
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && wrap && !wrap.classList.contains('hidden')) {
+                fecharModalWhatsApp();
+            }
+        });
+    }
 })();
 </script>
 

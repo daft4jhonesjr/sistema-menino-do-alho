@@ -53,7 +53,7 @@ import urllib.request
 
 from flask import (
     Blueprint, render_template, request, redirect, url_for,
-    flash, jsonify, session, current_app, Response,
+    flash, jsonify, session, current_app, Response, make_response,
 )
 from flask_login import current_user
 from sqlalchemy import and_, asc, case, desc, func, nulls_last, or_
@@ -4099,6 +4099,83 @@ def recibo_venda(id):
         qtd_total=qtd_total,
         data_emissao=data_emissao,
     )
+
+
+@vendas_bp.route('/venda/recibo/<int:id>/pdf')
+def recibo_venda_pdf(id):
+    """Gera recibo de venda em PDF para download direto.
+
+    Utilizado pelo fluxo de envio via WhatsApp: o navegador baixa o arquivo
+    automaticamente e o operador o anexa na conversa aberta no WhatsApp.
+    Requer a biblioteca ``weasyprint`` (e as dependências de sistema pango,
+    cairo e fontconfig). Em ambientes Linux instale via:
+        apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libcairo2
+    Em macOS via Homebrew:
+        brew install pango
+    """
+    import re as _re
+
+    # ── Tenta importar weasyprint ────────────────────────────────────────────
+    try:
+        from weasyprint import HTML as _WP_HTML  # noqa: N811
+    except ImportError:
+        return (
+            'Geração de PDF indisponível: instale weasyprint '
+            '(pip install weasyprint) e as dependências de sistema (pango).',
+            501,
+        )
+
+    # ── Busca a venda e monta o contexto idêntico ao recibo HTML ────────────
+    venda_base = query_tenant(Venda).options(
+        joinedload(Venda.cliente),
+        joinedload(Venda.produto),
+    ).filter_by(id=id).first_or_404()
+    cliente = venda_base.cliente
+
+    vendas_pedido = _vendas_do_pedido(venda_base)
+    vendas_ids = [v.id for v in vendas_pedido]
+    if vendas_ids:
+        itens_pedido = (
+            query_tenant(Venda)
+            .options(joinedload(Venda.produto))
+            .filter(Venda.id.in_(vendas_ids))
+            .order_by(Venda.id)
+            .all()
+        )
+    else:
+        itens_pedido = [venda_base]
+
+    total_recibo = sum(float(v.calcular_total()) for v in itens_pedido)
+    qtd_total = sum(int(v.quantidade_venda or 0) for v in itens_pedido)
+    data_emissao = date.today()
+
+    # ── Renderiza o template do recibo como string HTML ─────────────────────
+    html_string = render_template(
+        'vendas/recibo.html',
+        cliente=cliente,
+        venda_base=venda_base,
+        itens_pedido=itens_pedido,
+        total_recibo=total_recibo,
+        qtd_total=qtd_total,
+        data_emissao=data_emissao,
+    )
+
+    # ── Converte HTML → PDF (base_url resolve as URLs das imagens estáticas) ─
+    pdf_bytes = _WP_HTML(string=html_string, base_url=request.url_root).write_pdf()
+
+    # ── Monta nome de arquivo seguro ─────────────────────────────────────────
+    nome_cliente = (
+        (cliente.razao_social or '').strip()
+        or (cliente.nome_cliente or '').strip()
+        or 'Cliente'
+    )
+    nome_arquivo = f'Pedido_{id}_{nome_cliente}.pdf'
+    nome_arquivo = _re.sub(r'[^\w\s\-\.]', '', nome_arquivo).replace(' ', '_')
+
+    response = make_response(pdf_bytes)
+    response.headers['Content-Type'] = 'application/pdf'
+    response.headers['Content-Disposition'] = f'attachment; filename="{nome_arquivo}"'
+    return response
 
 
 @vendas_bp.route('/logistica/remanejo')

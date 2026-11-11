@@ -34,3 +34,4 @@ pywebpush
 APScheduler==3.10.4
 icalendar==6.3.2
 sentry-sdk[flask]
+weasyprint
