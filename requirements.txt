@@ -1,7 +1,7 @@
 blinker==1.9.0
 click==8.3.1
 et_xmlfile==2.0.0
-Flask==3.1.2
+Flask==3.1.3
 Flask-Login==0.6.3
 Flask-WTF==1.2.1
 Flask-SQLAlchemy==3.1.1
@@ -17,13 +17,13 @@ setuptools==80.10.2
 six==1.17.0
 SQLAlchemy==2.0.46
 typing_extensions==4.15.0
-Werkzeug==3.1.5
+Werkzeug==3.1.9
 wheel==0.46.3
 pdfplumber==0.11.4
 pytz
 flask-compress==1.14
 Flask-Caching==2.1.0
-Pillow==10.4.0
+Pillow==13.0.0
 Flask-Limiter==3.5.0
 gunicorn
 cloudinary
