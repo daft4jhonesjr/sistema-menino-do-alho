@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_file, send_from_directory, Response, current_app
 from flask_login import login_user, logout_user, login_required, current_user
-from flask_wtf.csrf import generate_csrf
+from flask_wtf.csrf import generate_csrf, CSRFError
 from flask_compress import Compress
 # Singletons (db, login_manager, csrf, limiter, cache) vivem em extensions.py
 # desde a Fase 4. Re-exportamos no namespace de app.py para preservar
@@ -5665,6 +5665,30 @@ def baixar_backup_historico(log_id):
 
 
 # ========== ROTAS PRINCIPAIS ==========
+
+# ---------------------------------------------------------------------------
+# Handler CSRF — responde JSON para requisições AJAX (fetch do login.html)
+# e redireciona para o login com mensagem flash para navegação normal.
+# Sem isso, o frontend recebe HTML 400 onde espera JSON, quebra o parse
+# e exibe "Credenciais inválidas" em vez de orientar o usuário a recarregar.
+# ---------------------------------------------------------------------------
+@app.errorhandler(CSRFError)
+def handle_csrf_error(e):
+    is_xhr = (
+        request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        or request.is_json
+    )
+    if is_xhr:
+        return jsonify(
+            success=False,
+            error='Sessão expirada. A página será atualizada.',
+            csrf_expired=True,
+        ), 400
+    # Navegação normal (formulário sem JS): redireciona de volta ao login
+    # com mensagem flash para que o usuário tente novamente com token novo.
+    flash('Sua sessão expirou. Por favor, tente fazer login novamente.', 'warning')
+    return redirect(url_for('auth.login'))
+
 
 @app.errorhandler(Exception)
 def handle_exception(e):

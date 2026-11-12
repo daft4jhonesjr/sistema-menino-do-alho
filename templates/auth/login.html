@@ -210,11 +210,31 @@
         if (typeof lucide !== 'undefined') lucide.createIcons();
     }
 
-    function showLoginError(message) {
+    function showLoginError(message, opts) {
+        opts = opts || {};
+        var ehCsrf = !!(opts.csrf_expired);
         if (typeof Swal === 'undefined') {
             alert(message);
+            if (ehCsrf) { window.location.reload(); return; }
             var elFallback = document.getElementById('password');
             if (elFallback) { elFallback.value = ''; elFallback.focus(); }
+            return;
+        }
+        if (ehCsrf) {
+            Swal.fire({
+                title: 'Sessão Expirada',
+                text: message || 'Sua sessão expirou. A página será recarregada.',
+                icon: 'warning',
+                background: '#1e293b',
+                color: '#f8fafc',
+                confirmButtonColor: '#10b981',
+                confirmButtonText: 'Recarregar Página',
+                showCancelButton: false,
+                allowOutsideClick: false,
+                allowEscapeKey: false
+            }).then(function() {
+                window.location.reload();
+            });
             return;
         }
         Swal.fire({
@@ -344,10 +364,12 @@
         );
 
         var data = {};
+        var jsonParsed = true;
         try {
             data = await response.json();
         } catch (parseErr) {
             data = {};
+            jsonParsed = false;
         }
 
         if (response.ok && data.success) {
@@ -361,6 +383,15 @@
                 : 'Credenciais inválidas ou falha de autenticação.');
         var err = new Error(msg);
         err.status = response.status;
+        // Marca como expiração de sessão/CSRF:
+        //   • flag explícita do backend (handler CSRFError)
+        //   • JSON não parseável num 400 (backend devolveu HTML de erro CSRF legado)
+        //   • mensagem do backend contém palavras-chave de sessão/token
+        err.csrf_expired = !!(
+            data.csrf_expired
+            || (!jsonParsed && response.status === 400)
+            || /csrf|token|sess[aã]o\s+expir/i.test(msg)
+        );
         throw err;
     }
 
@@ -439,7 +470,8 @@
             } else {
                 showLoginError(
                     mensagemErroLogin(error) ||
-                    'Não foi possível autenticar com Face ID. Use usuário e senha.'
+                    'Não foi possível autenticar com Face ID. Use usuário e senha.',
+                    { csrf_expired: !!(error && error.csrf_expired) }
                 );
             }
         } finally {
@@ -512,6 +544,28 @@
 
                 if (error && error.status === 429) {
                     showLoginBloqueado(mensagemErroLogin(error));
+                } else if (error && error.csrf_expired) {
+                    // ── Sessão/CSRF expirado: avisa e recarrega para token novo ──
+                    var msgCsrf = 'Sua sessão expirou. A página será recarregada automaticamente para que você possa tentar novamente.';
+                    if (typeof Swal !== 'undefined') {
+                        Swal.fire({
+                            title: 'Sessão Expirada',
+                            text: msgCsrf,
+                            icon: 'warning',
+                            background: '#1e293b',
+                            color: '#f8fafc',
+                            confirmButtonColor: '#10b981',
+                            confirmButtonText: 'Recarregar Página',
+                            showCancelButton: false,
+                            allowOutsideClick: false,
+                            allowEscapeKey: false
+                        }).then(function() {
+                            window.location.reload();
+                        });
+                    } else {
+                        alert(msgCsrf);
+                        window.location.reload();
+                    }
                 } else if (typeof Swal !== 'undefined') {
                     Swal.fire({
                         title: 'Falha no Acesso',
